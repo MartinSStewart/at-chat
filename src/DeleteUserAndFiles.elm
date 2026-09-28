@@ -5,23 +5,23 @@ import Codec
 import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord
 import DiscordSync
-import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DiscordUserData exposing (DiscordUserData(..))
+import DmChannel exposing (BackendDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
-import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
+import FileStatus exposing (BackendFileData, FileHash)
 import Game
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
+import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..), WebsocketClosedEvent(..))
+import List.Nonempty
+import LocalState exposing (BackendGuild, DiscordBackendGuild, FrontendGuild, WebsocketClosedEvent(..))
 import Maybe.Extra
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
+import Message exposing (Message(..))
 import MessageArray exposing (MessageArray)
-import NonemptyDict exposing (NonemptyDict)
+import NonemptyDict
 import Pages.Home
 import PersonName
 import SecretId exposing (SecretId, ServerSecret)
@@ -29,11 +29,10 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SheepGame
 import Sticker exposing (StickerData, StickerUrl(..))
-import Thread
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
-import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
-import UserAgent exposing (UserAgent)
-import UserSession exposing (DiscordFrontendUser, UserSession)
+import Types exposing (BackendModel, BackendMsg(..), LoginData, ToFrontend)
+import User exposing (BackendUserStatus(..))
+import UserAgent
+import UserSession exposing (UserSession)
 
 
 deleteAccounts : Time.Posix -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -123,20 +122,21 @@ deleteAccounts time model =
                     )
                     model.users
             , sessions = SeqDict.filter (\_ session -> not (SeqSet.member session.userId usersToDelete)) model.sessions
-            , guilds =
+            , guilds = SeqDict.map (\_ guild -> deleteMessagesInGuild usersToDelete guild) model.guilds
+            , deletedGuilds =
                 SeqDict.map
-                    (\_ guild ->
-                        { guild
-                            | channels =
-                                SeqDict.map (\_ channel -> deleteMessagesInChannel usersToDelete channel) guild.channels
-                        }
-                    )
-                    model.guilds
+                    (\_ deleted -> { deleted | guild = deleteMessagesInGuild usersToDelete deleted.guild })
+                    model.deletedGuilds
             , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model.dmChannels
             , discordUsers = discordUsers
           }
         , Command.batch closeWebsockets
         )
+
+
+deleteMessagesInGuild : SeqSet (Id UserId) -> BackendGuild -> BackendGuild
+deleteMessagesInGuild usersToDelete guild =
+    { guild | channels = SeqDict.map (\_ channel -> deleteMessagesInChannel usersToDelete channel) guild.channels }
 
 
 deleteMessagesInChannel :
@@ -263,6 +263,7 @@ usedFiles model =
         , SeqDict.values model.stickers |> List.filterMap stickerFile
         , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile
         , SeqDict.values previewLoginData.guilds |> List.concatMap frontendGuildFiles
+        , SeqDict.values previewLoginData.discordGuilds |> List.filterMap .icon
         , Maybe.Extra.toList previewLoginData.user.icon ++ List.filterMap .icon (SeqDict.values previewLoginData.otherUsers)
         ]
 

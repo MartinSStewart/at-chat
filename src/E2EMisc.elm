@@ -2467,8 +2467,10 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         , user.click 100 (Dom.id "userOptions_closeUserOptions")
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
 
-                        -- Once closed, the banner stays closed.
-                        , user.click 100 (Dom.id "guild_showUserOptions")
+                        -- Once closed, the banner stays closed. Waiting an hour first makes the deletion
+                        -- land on an hourly update that doesn't also start a backup export, as the two
+                        -- take different paths through HourlyUpdate.
+                        , user.click (Duration.hour |> Duration.inMilliseconds) (Dom.id "guild_showUserOptions")
                         , user.click 100 UserOptions.deleteAccountButtonId
                         , T.checkState 100 (checkAccountDeletionEmails 2)
                         , user.click 100 (Dom.id "userOptions_closeUserOptions")
@@ -2582,7 +2584,12 @@ checkAccountIsStillScheduled userId state =
 
 checkAccountWasDeleted : Id.Id Id.UserId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
 checkAccountWasDeleted userId state =
-    case NonemptyDict.get userId (E2EHelper.unwrapBackend state.backend).users of
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend state.backend
+    in
+    case NonemptyDict.get userId backend.users of
         Just user ->
             if PersonName.toString user.name /= "<delete_user_" ++ Id.toString userId ++ ">" then
                 Err ("The deleted account should have been renamed but is called " ++ PersonName.toString user.name)
@@ -2592,6 +2599,9 @@ checkAccountWasDeleted userId state =
 
             else if user.deleteAccountAt /= Nothing then
                 Err "The deleted account shouldn't be scheduled for deletion again"
+
+            else if List.any (\session -> session.userId == userId) (SeqDict.values backend.sessions) then
+                Err "The deleted account shouldn't have any sessions left"
 
             else
                 Ok ()

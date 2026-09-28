@@ -65,7 +65,6 @@ import Codec exposing (Codec)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
-import Duration
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)

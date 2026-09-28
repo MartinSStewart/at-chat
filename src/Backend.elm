@@ -21,7 +21,6 @@ import ChannelDescription
 import ChannelExport
 import ChannelImport
 import ChannelName exposing (ChannelName)
-import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import DeleteUserAndFiles
 import Discord exposing (OptionalData(..))
@@ -46,7 +45,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -73,7 +72,7 @@ import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
-import SecretId exposing (SecretId, ServerSecret)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -2078,9 +2077,9 @@ updateHelper msg model =
               else
                 { model2
                     | lastScheduledExportTime =
-                        case model.lastScheduledExportTime of
+                        case model2.lastScheduledExportTime of
                             Just _ ->
-                                model.lastScheduledExportTime
+                                model2.lastScheduledExportTime
 
                             Nothing ->
                                 Just time
@@ -2089,19 +2088,19 @@ updateHelper msg model =
                             (\_ deletedGuild ->
                                 Duration.from deletedGuild.deletedAt time |> Quantity.lessThan (Duration.days 30)
                             )
-                            model.deletedGuilds
-                    , connections = List.foldl SeqDict.remove model.connections expiredSessions
-                    , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
+                            model2.deletedGuilds
+                    , connections = List.foldl SeqDict.remove model2.connections expiredSessions
+                    , sessions = List.foldl SeqDict.remove model2.sessions expiredSessions
                 }
             , Command.batch
                 [ Discord.getStickerPacksPayload
-                    |> DiscordSync.http model.serverSecret
+                    |> DiscordSync.http model2.serverSecret
                     |> Task.attempt (GotDiscordStandardStickerPacks time)
                 , if SeqSet.isEmpty filesToDelete then
                     Command.none
 
                   else
-                    DeleteUserAndFiles.deleteFiles model.serverSecret (SeqSet.toList filesToDelete)
+                    DeleteUserAndFiles.deleteFiles model2.serverSecret (SeqSet.toList filesToDelete)
                         |> Task.attempt (HourlyDeletedOrphanedFiles time (SeqSet.toList filesToDelete))
                 , deleteAccountsCmd
                 ]
