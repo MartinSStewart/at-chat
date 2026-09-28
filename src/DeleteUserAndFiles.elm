@@ -1,4 +1,4 @@
-module DeleteUserAndFiles exposing (..)
+module DeleteUserAndFiles exposing (deleteAccounts, deleteFiles, orphanedFiles, removeDeletedFiles)
 
 import Array
 import Codec
@@ -34,7 +34,6 @@ import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), C
 import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
-import WordSpellingGame exposing (WordList(..))
 
 
 deleteAccounts : Time.Posix -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -123,6 +122,7 @@ deleteAccounts time model =
                             user
                     )
                     model.users
+            , sessions = SeqDict.filter (\_ session -> not (SeqSet.member session.userId usersToDelete)) model.sessions
             , guilds =
                 SeqDict.map
                     (\_ guild ->
@@ -239,9 +239,6 @@ removeDeletedFiles deleted model =
     }
 
 
-{-| Uploaded files that nothing refers to anymore. `discordAttachments` doesn't count as a
-reference since it only remembers which Discord attachments have already been uploaded.
--}
 orphanedFiles : BackendModel -> SeqDict FileHash BackendFileData
 orphanedFiles model =
     List.foldl SeqDict.remove model.files (usedFiles model)

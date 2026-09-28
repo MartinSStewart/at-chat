@@ -8,7 +8,7 @@ module User exposing
     , LastDmViewed(..)
     , LocalUser
     , NotificationLevel(..)
-    , accountDeletionTime
+    , accountDeletionDelayInWeeks
     , addDirectMention
     , addDiscordDirectMention
     , addNewCustomEmojis
@@ -236,9 +236,9 @@ addRecentlyUsedEmojis emojis user =
     List.foldl addRecentlyUsedEmoji user emojis
 
 
-accountDeletionTime : Time.Posix -> Time.Posix
-accountDeletionTime requestedAt =
-    Duration.addTo requestedAt (Duration.weeks 2)
+accountDeletionDelayInWeeks : number
+accountDeletionDelayInWeeks =
+    2
 
 
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }

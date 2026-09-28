@@ -3112,7 +3112,7 @@ updateLoaded msg model =
                         Nothing ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Just (Local_ScheduleAccountDeletion (User.accountDeletionTime model.time)))
+                                (Just (Local_ScheduleAccountDeletion (Duration.addTo model.time (Duration.weeks User.accountDeletionDelayInWeeks))))
                                 { loggedIn | accountDeletionBannerClosed = False }
                                 Command.none
                 )

@@ -11085,7 +11085,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
                     [ single
                     , Ui.el
-                        [ Ui.Font.size 14, Ui.padding 8 ]
+                        [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
                         (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
                     ]
 

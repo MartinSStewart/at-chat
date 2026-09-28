@@ -440,8 +440,8 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         SelectedEmbedVisibility
                         (Just local.localUser.user.embedVisibility)
                         (Ui.text "Link embeds")
-                        [ ( User.ShowEmbeds, "Show embeds for links" )
-                        , ( User.HideEmbeds, "Don't show embeds for links" )
+                        [ ( User.ShowEmbeds, "Show embeds (embedded images and videos may allow 3rd parties to track your IP address)" )
+                        , ( User.HideEmbeds, "Don't show embeds" )
                         ]
                         |> Ui.el [ Ui.paddingXY 16 0 ]
                     , Ui.column
@@ -504,7 +504,18 @@ view windowSize textInputFocus time local loggedIn loaded model =
 
                             Nothing ->
                                 [ Ui.el [ Ui.Font.bold ] (Ui.text "Account deletion")
-                                , Ui.text "Pressing this will, two weeks from now, delete your account and all your messages. The two weeks delay is to give other users a chance to export their conversation with you should they want a personal copy."
+                                , Ui.text
+                                    ("Pressing this will delete your account and all your messages"
+                                        ++ (if SeqDict.isEmpty (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers) then
+                                                ""
+
+                                            else
+                                                " (excluding Discord messages)"
+                                           )
+                                        ++ " in "
+                                        ++ String.fromInt User.accountDeletionDelayInWeeks
+                                        ++ " weeks. The delay is to give other users a chance to export their conversation with you should they want a personal copy."
+                                    )
                                 , MyUi.elButton
                                     deleteAccountButtonId
                                     PressedDeleteAccount

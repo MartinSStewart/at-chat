@@ -2022,14 +2022,6 @@ updateHelper msg model =
                 filesToDelete =
                     SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
 
-                ( withNewOrphanedFiles, deleteAccountsCmd ) =
-                    DeleteUserAndFiles.deleteAccounts
-                        time
-                        { model
-                            | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
-                            , logs = deleteOldLogs time model.logs
-                        }
-
                 shouldExport : Bool
                 shouldExport =
                     case model.lastScheduledExportTime of
@@ -2071,12 +2063,20 @@ updateHelper msg model =
                                 Just sessionId
                         )
                         (SeqDict.toList model.sessions)
+
+                ( model2, deleteAccountsCmd ) =
+                    DeleteUserAndFiles.deleteAccounts
+                        time
+                        { model
+                            | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
+                            , logs = deleteOldLogs time model.logs
+                        }
             in
             ( if shouldExport then
-                startExport time withNewOrphanedFiles
+                startExport time model2
 
               else
-                { withNewOrphanedFiles
+                { model2
                     | lastScheduledExportTime =
                         case model.lastScheduledExportTime of
                             Just _ ->
@@ -5672,7 +5672,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         deleteAt : Time.Posix
                                         deleteAt =
-                                            User.accountDeletionTime time
+                                            Duration.addTo time (Duration.weeks User.accountDeletionDelayInWeeks)
                                     in
                                     ( { model
                                         | users =

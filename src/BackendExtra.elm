@@ -255,13 +255,18 @@ sendAccountDeletionEmail msg emailAddress deleteAt postmarkServerToken =
     let
         text : String
         text =
-            "You have chosen to have your at-chat account deleted. It will be permanently deleted in 2 weeks, on "
+            "You have chosen to have your at-chat account and all your messages deleted in "
+                ++ String.fromInt User.accountDeletionDelayInWeeks
+                ++ " weeks, on "
                 ++ MyUi.datestamp Time.utc deleteAt
-                ++ " (UTC).\n\nIf you change your mind, open User settings, go to Account settings, and press \"Cancel account deletion\" before then.\n\nIf you didn't ask for this, log in and cancel the deletion the same way."
+                ++ ".\n\nIf you change your mind, open User settings and press \"Cancel account deletion\"."
     in
     { from = { name = "", email = noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
-    , subject = NonemptyString 'Y' "our at-chat account will be deleted in 2 weeks"
+    , subject =
+        NonemptyString
+            'Y'
+            ("our at-chat account will be deleted in " ++ String.fromInt User.accountDeletionDelayInWeeks ++ " weeks")
     , body = Postmark.BodyText text
     , messageStream = "outbound"
     }

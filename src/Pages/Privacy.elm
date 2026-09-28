@@ -13,6 +13,7 @@ import SeqSet
 import Sticker exposing (AnimationMode(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Ui
+import User
 import UserColor
 
 
@@ -55,7 +56,9 @@ Sensitive data can be access by 3rd parties in the following ways:
 
 ## When is it deleted
 
-Your email address, name, messages, and Discord session tokens, will all be automatically deleted if you delete your account. Account deletion takes 2 weeks in order to give other users a chance to backup any conversations they want a personal copy of.
+Your email address, name, messages, and Discord session tokens, will all be automatically deleted if you delete your account. Account deletion takes """
+            ++ String.fromInt User.accountDeletionDelayInWeeks
+            ++ """ weeks in order to give other users a chance to backup any conversations they want a personal copy of.
 
 Uploaded files are automatically deleted after a few days once they are no longer referenced in at-chat. Note that, this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
 
