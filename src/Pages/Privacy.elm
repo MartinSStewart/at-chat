@@ -42,7 +42,7 @@ at-chat stores the following sensitive data:
 
 ## What it is for
 
-Sensitive data is stored in order to provide you chat app features. It is not used for marketing, advertising, AI training, and is not sold to 3rd parties.
+Sensitive data is stored in order to provide you chat app features. It is not used for marketing, advertising, AI training, and it is not sold to 3rd parties.
 
 Sensitive data may be used by an administrator for the sole purpose of fixing software issues within at-chat. If this is a concern, you can [enable end-to-end encryption]("""
             ++ Env.domain

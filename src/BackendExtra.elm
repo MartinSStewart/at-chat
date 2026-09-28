@@ -76,6 +76,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
+import Env
 import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
 import Hex
 import Http
@@ -231,7 +232,11 @@ sendLoginEmail msg emailAddress loginCode postmarkServerToken =
             String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode)
 
         _ =
-            Debug.log "login" loginCode2
+            if Env.isProduction then
+                loginCode2
+
+            else
+                Debug.log "login" loginCode2
     in
     { from = { name = "", email = noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
