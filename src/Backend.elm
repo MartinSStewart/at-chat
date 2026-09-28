@@ -23,6 +23,7 @@ import ChannelImport
 import ChannelName exposing (ChannelName)
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
+import DeleteUserAndFiles
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -2015,14 +2016,14 @@ updateHelper msg model =
             let
                 orphanedFiles : SeqSet FileHash
                 orphanedFiles =
-                    SeqDict.keys (BackendExtra.orphanedFiles model) |> SeqSet.fromList
+                    SeqDict.keys (DeleteUserAndFiles.orphanedFiles model) |> SeqSet.fromList
 
                 filesToDelete : SeqSet FileHash
                 filesToDelete =
                     SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
 
                 ( withNewOrphanedFiles, deleteAccountsCmd ) =
-                    deleteAccounts
+                    DeleteUserAndFiles.deleteAccounts
                         time
                         { model
                             | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
@@ -2100,7 +2101,7 @@ updateHelper msg model =
                     Command.none
 
                   else
-                    deleteFiles model.serverSecret (SeqSet.toList filesToDelete)
+                    DeleteUserAndFiles.deleteFiles model.serverSecret (SeqSet.toList filesToDelete)
                         |> Task.attempt (HourlyDeletedOrphanedFiles time (SeqSet.toList filesToDelete))
                 , deleteAccountsCmd
                 ]
@@ -2175,7 +2176,7 @@ updateHelper msg model =
             in
             case result of
                 Ok () ->
-                    ( removeDeletedFiles deleted model, responseCmd )
+                    ( DeleteUserAndFiles.removeDeletedFiles deleted model, responseCmd )
 
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
@@ -2183,7 +2184,7 @@ updateHelper msg model =
         HourlyDeletedOrphanedFiles time deleted result ->
             case result of
                 Ok () ->
-                    ( removeDeletedFiles deleted model, Command.none )
+                    ( DeleteUserAndFiles.removeDeletedFiles deleted model, Command.none )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToDeleteOrphanedFiles error) model
@@ -2712,208 +2713,6 @@ deleteOldLogs time logs =
                 log
         )
         logs
-
-
-deleteAccounts : Time.Posix -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-deleteAccounts time model =
-    let
-        usersToDelete : SeqSet (Id UserId)
-        usersToDelete =
-            NonemptyDict.foldl
-                (\userId user set ->
-                    case user.deleteAccountAt of
-                        Just deleteAt ->
-                            if not user.isAdmin && Time.posixToMillis deleteAt <= Time.posixToMillis time then
-                                SeqSet.insert userId set
-
-                            else
-                                set
-
-                        Nothing ->
-                            set
-                )
-                SeqSet.empty
-                model.users
-    in
-    if SeqSet.isEmpty usersToDelete then
-        ( model, Command.none )
-
-    else
-        let
-            ( discordUsers, closeWebsockets ) =
-                SeqDict.foldl
-                    (\discordUserId discordUser ( dict, cmds ) ->
-                        case discordUser of
-                            FullData data ->
-                                if SeqSet.member data.linkedTo usersToDelete then
-                                    ( SeqDict.insert
-                                        discordUserId
-                                        (BasicData { user = Discord.userToPartialUser data.user, icon = data.icon })
-                                        dict
-                                    , case data.connection.websocketHandle of
-                                        Just connection ->
-                                            Task.perform
-                                                (WebsocketClosedByBackendForUser discordUserId Nothing)
-                                                (DiscordSync.websocketClose
-                                                    (WebsocketClosed_UnlinkDiscordUser discordUserId)
-                                                    connection
-                                                )
-                                                :: cmds
-
-                                        Nothing ->
-                                            cmds
-                                    )
-
-                                else
-                                    ( dict, cmds )
-
-                            NeedsAuthAgain data ->
-                                if SeqSet.member data.linkedTo usersToDelete then
-                                    ( SeqDict.insert
-                                        discordUserId
-                                        (BasicData { user = Discord.userToPartialUser data.user, icon = data.icon })
-                                        dict
-                                    , cmds
-                                    )
-
-                                else
-                                    ( dict, cmds )
-
-                            BasicData _ ->
-                                ( dict, cmds )
-                    )
-                    ( model.discordUsers, [] )
-                    model.discordUsers
-        in
-        ( { model
-            | users =
-                NonemptyDict.map
-                    (\userId user ->
-                        if SeqSet.member userId usersToDelete then
-                            User.init
-                                user.createdAt
-                                (PersonName.fromStringLossy ("<delete_user_" ++ Id.toString userId ++ ">"))
-                                DeletedUser
-                                False
-
-                        else
-                            user
-                    )
-                    model.users
-            , guilds =
-                SeqDict.map
-                    (\_ guild ->
-                        { guild
-                            | channels =
-                                SeqDict.map (\_ channel -> deleteMessagesInChannel usersToDelete channel) guild.channels
-                        }
-                    )
-                    model.guilds
-            , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model.dmChannels
-            , discordUsers = discordUsers
-          }
-        , Command.batch closeWebsockets
-        )
-
-
-deleteMessagesInChannel :
-    SeqSet (Id UserId)
-    ->
-        { a
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , threads : SeqDict (Id ChannelMessageId) { b | messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId)) }
-        }
-    ->
-        { a
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , threads : SeqDict (Id ChannelMessageId) { b | messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId)) }
-        }
-deleteMessagesInChannel usersToDelete channel =
-    { channel
-        | messages = IdArray.map (\_ message -> deleteMessageBy usersToDelete message) channel.messages
-        , threads =
-            SeqDict.map
-                (\_ thread -> { thread | messages = IdArray.map (\_ message -> deleteMessageBy usersToDelete message) thread.messages })
-                channel.threads
-    }
-
-
-deleteMessageBy : SeqSet (Id UserId) -> Message messageId (Id UserId) channelId -> Message messageId (Id UserId) channelId
-deleteMessageBy usersToDelete message =
-    case message of
-        UserTextMessage data ->
-            if SeqSet.member data.createdBy usersToDelete then
-                DeletedMessage data.createdAt
-
-            else
-                message
-
-        EncryptedUserTextMessage data ->
-            if SeqSet.member data.createdBy usersToDelete then
-                DeletedMessage data.createdAt
-
-            else
-                message
-
-        UserJoinedMessage _ _ _ _ ->
-            message
-
-        DeletedMessage _ ->
-            message
-
-        CallStarted _ ->
-            message
-
-        GameStarted _ ->
-            message
-
-
-deleteFiles : SecretId ServerSecret -> List FileHash -> Task BackendOnly Http.Error ()
-deleteFiles serverSecret fileHashes =
-    Http.task
-        { method = "POST"
-        , url = FileStatus.domain ++ "/file/internal/delete-files"
-        , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) fileHashes)
-        , headers = [ FileStatus.secretKeyHeader serverSecret ]
-        , resolver =
-            Http.stringResolver
-                (\result ->
-                    case result of
-                        Http.BadStatus_ metadata body ->
-                            Http.BadBody
-                                ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
-                                |> Err
-
-                        Http.GoodStatus_ _ _ ->
-                            Ok ()
-
-                        Http.BadUrl_ string ->
-                            Err (Http.BadUrl string)
-
-                        Http.Timeout_ ->
-                            Err Http.Timeout
-
-                        Http.NetworkError_ ->
-                            Err Http.NetworkError
-                )
-        , timeout = Just Duration.minute
-        }
-
-
-removeDeletedFiles : List FileHash -> BackendModel -> BackendModel
-removeDeletedFiles deleted model =
-    let
-        deletedSet : SeqSet FileHash
-        deletedSet =
-            SeqSet.fromList deleted
-    in
-    { model
-        | files = List.foldl SeqDict.remove model.files deleted
-        , discordAttachments =
-            SeqDict.filter
-                (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
-                model.discordAttachments
-    }
 
 
 startExport : Time.Posix -> BackendModel -> BackendModel
@@ -9406,7 +9205,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , adminDataResponse
                 changeId
                 clientId
-                (Pages.Admin.LoadOrphanedFiles (FilledInByBackend (BackendExtra.orphanedFiles model)))
+                (Pages.Admin.LoadOrphanedFiles (FilledInByBackend (DeleteUserAndFiles.orphanedFiles model)))
             )
 
         Pages.Admin.LoadToBackendLogs _ ->
@@ -9720,10 +9519,10 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             let
                 orphanedFiles : List FileHash
                 orphanedFiles =
-                    SeqDict.keys (BackendExtra.orphanedFiles model)
+                    SeqDict.keys (DeleteUserAndFiles.orphanedFiles model)
             in
             ( model
-            , deleteFiles model.serverSecret orphanedFiles
+            , DeleteUserAndFiles.deleteFiles model.serverSecret orphanedFiles
                 |> Task.attempt (DeletedOrphanedFiles time changeId clientId orphanedFiles)
             )
 
