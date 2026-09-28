@@ -3375,8 +3375,8 @@ while the reader is still sitting in it.
 incrementLastViewedMessageFrontend :
     AnyGuildOrDmId
     -> ThreadRouteWithMessage
-    -> ( UserSession.Viewing, BackendUser )
-    -> ( UserSession.Viewing, BackendUser )
+    -> ( UserSession.Viewing, FrontendCurrentUser )
+    -> ( UserSession.Viewing, FrontendCurrentUser )
 incrementLastViewedMessageFrontend guildOrDmId threadRoute ( viewing, user ) =
     if hasCaughtUp guildOrDmId threadRoute user then
         ( case threadRoute of
@@ -3400,8 +3400,8 @@ doesn't quietly clear a divider they still have messages to read under.
 ownMessageIsReadFrontend :
     AnyGuildOrDmId
     -> ThreadRouteWithMessage
-    -> ( UserSession.Viewing, BackendUser )
-    -> ( UserSession.Viewing, BackendUser )
+    -> ( UserSession.Viewing, FrontendCurrentUser )
+    -> ( UserSession.Viewing, FrontendCurrentUser )
 ownMessageIsReadFrontend guildOrDmId threadRoute ( viewing, user ) =
     ( if hasCaughtUp guildOrDmId threadRoute user then
         case threadRoute of
@@ -3417,7 +3417,15 @@ ownMessageIsReadFrontend guildOrDmId threadRoute ( viewing, user ) =
     )
 
 
-hasCaughtUp : AnyGuildOrDmId -> ThreadRouteWithMessage -> BackendUser -> Bool
+hasCaughtUp :
+    AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    ->
+        { a
+            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    -> Bool
 hasCaughtUp guildOrDmId threadRoute user =
     case threadRoute of
         NoThreadWithMessage messageId ->

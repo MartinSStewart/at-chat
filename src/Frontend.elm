@@ -104,7 +104,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..), UserOptionSection(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -548,6 +548,11 @@ initLoadedFrontend loading clientId time startupData loginResult =
             FrontendExtra.routeReplace model2 route
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion
+        , if callPreviewShown model2 then
+            Pages.Home.callPreviewImages
+
+          else
+            Command.none
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -675,7 +680,11 @@ update _ msg model =
 
                         NotLoggedIn _ ->
                             Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    , Command.batch
+                        [ cmd
+                        , checkCallDisplayModeChange loaded loadedNew
+                        , checkCallPreviewShown loaded loadedNew
+                        ]
                     , Audio.cmdNone
                     )
 
@@ -685,9 +694,27 @@ update _ msg model =
                             updateLoaded msg loaded
                     in
                     ( Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    , Command.batch
+                        [ cmd
+                        , checkCallDisplayModeChange loaded loadedNew
+                        , checkCallPreviewShown loaded loadedNew
+                        ]
                     , Audio.cmdNone
                     )
+
+
+{-| Opening or closing the virtual keyboard changes how much bottom padding the conversation has,
+and resizing it doesn't move the scroll position with it, so someone reading the newest messages
+would otherwise end up scrolled a little way up.
+-}
+stayAtBottomOfConversation : LoadedFrontend -> Command FrontendOnly toMsg FrontendMsg_
+stayAtBottomOfConversation model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+        NotLoggedIn _ ->
+            Command.none
 
 
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
@@ -759,7 +786,7 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             model.loginStatus
               }
-            , Ports.requestDevicePixelRatio
+            , Command.batch [ Ports.requestDevicePixelRatio, stayAtBottomOfConversation model ]
             )
 
         PressedShowLogin ->
@@ -3060,6 +3087,69 @@ updateLoaded msg model =
                 )
                 model
 
+        SelectedEmbedVisibility embedVisibility ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetEmbedVisibility embedVisibility |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedDeleteAccount ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case (Local.model loggedIn.localState).localUser.user.deleteAccountAt of
+                        Just _ ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Just Local_CancelAccountDeletion)
+                                loggedIn
+                                Command.none
+
+                        Nothing ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Just (Local_ScheduleAccountDeletion (Duration.addTo model.time (Duration.weeks User.accountDeletionDelayInWeeks))))
+                                { loggedIn | accountDeletionBannerClosed = False }
+                                Command.none
+                )
+                model
+
+        PressedAccountDeletionBanner ->
+            let
+                ( expandedModel, expandCmd ) =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (if
+                                    SeqSet.member
+                                        UserOption_Settings
+                                        (Local.model loggedIn.localState).localUser.session.expandedUserOptions
+                                 then
+                                    Nothing
+
+                                 else
+                                    Just (Local_ExpandUserOptionSection UserOption_Settings)
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                ( routedModel, routeCmd ) =
+                    FrontendExtra.routePush expandedModel (Route.setOverlay (Just Route.UserOptionsOverlay) expandedModel.route)
+            in
+            ( routedModel, Command.batch [ expandCmd, routeCmd ] )
+
+        PressedCloseAccountDeletionBanner ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | accountDeletionBannerClosed = True }, Command.none ))
+                model
+
         ProfilePictureEditorMsg imageEditorMsg ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3687,7 +3777,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         VisualViewportResized height ->
-            ( { model | visualViewportHeight = round height }, Command.none )
+            ( { model | visualViewportHeight = round height }, stayAtBottomOfConversation model )
 
         SafeAreaInsetsChanged insets ->
             ( setSafeAreaInsets insets model, Command.none )
@@ -6299,6 +6389,27 @@ checkCallDisplayModeChange modelOld modelNew =
             Command.none
 
 
+{-| The preview's video nodes are new and blank each time it's shown, so the images are sent again.
+-}
+checkCallPreviewShown : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallPreviewShown modelOld modelNew =
+    if not (callPreviewShown modelOld) && callPreviewShown modelNew then
+        Pages.Home.callPreviewImages
+
+    else
+        Command.none
+
+
+callPreviewShown : LoadedFrontend -> Bool
+callPreviewShown model =
+    case ( model.route, model.loginStatus ) of
+        ( HomePageRoute _, NotLoggedIn { loginForm } ) ->
+            loginForm == Nothing
+
+        _ ->
+            False
+
+
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
 removePartialStickers textInputFocus htmlId text =
     case
@@ -7838,7 +7949,7 @@ updateFromBackend _ msg model =
 
         Loaded loaded ->
             let
-                ( loaded2, cmds ) =
+                ( loadedNew, cmds ) =
                     updateLoadedFromBackend
                         msg
                         (case loaded.toFrontendLogs of
@@ -7849,7 +7960,10 @@ updateFromBackend _ msg model =
                                 loaded
                         )
             in
-            ( Loaded loaded2, cmds, Audio.cmdNone )
+            ( Loaded loadedNew
+            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew ]
+            , Audio.cmdNone
+            )
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -7938,6 +8052,15 @@ updateLoadedFromBackend msg model =
                                             | recoveryLogin =
                                                 RecoveryLogin.incorrectPassword notLoggedIn.recoveryLogin
                                         }
+                              }
+                            , Command.none
+                            )
+
+                        UserIsDeleted ->
+                            ( { model
+                                | loginStatus =
+                                    NotLoggedIn
+                                        { notLoggedIn | loginForm = Maybe.map LoginForm.userIsDeleted notLoggedIn.loginForm }
                               }
                             , Command.none
                             )
@@ -8817,6 +8940,23 @@ view _ model =
                                                 |> Ui.inFront
 
                                         _ ->
+                                            Ui.noAttr
+                                    , case ( local.localUser.user.deleteAccountAt, Route.toOverlay loaded.route ) of
+                                        ( Just _, Just Route.UserOptionsOverlay ) ->
+                                            Ui.noAttr
+
+                                        ( Just deleteAt, _ ) ->
+                                            if loggedIn.accountDeletionBannerClosed then
+                                                Ui.noAttr
+
+                                            else
+                                                FrontendExtra.accountDeletionBanner
+                                                    local.localUser.safeAreaInsetTop
+                                                    loaded.time
+                                                    deleteAt
+                                                    |> Ui.inFront
+
+                                        ( Nothing, _ ) ->
                                             Ui.noAttr
                                     , case loggedIn.externalLinkWarning of
                                         Just url ->

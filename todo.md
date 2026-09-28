@@ -26,6 +26,8 @@
 * Video attachments not decoding when message is encrypted
 * Swiping quickly should move image more quickly so it can leave the screen for certain
 * Trying to join a guild and failing should tell the user what the error was
+* Adding a reaction to a word spelling game causes the moves to scroll to the bottom even if the user wasn't scrolled to
+  the bottom before
 
 Won't do:
 

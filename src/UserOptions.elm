@@ -1,6 +1,8 @@
 module UserOptions exposing
-    ( closeButton
+    ( cancelAccountDeletionText
+    , closeButton
     , currentDeviceText
+    , deleteAccountButtonId
     , discordBookmarkletId
     , domainWhitelistToString
     , init
@@ -64,6 +66,16 @@ currentDeviceText =
 loadingUserDataText : String
 loadingUserDataText =
     "Loading user data"
+
+
+deleteAccountButtonId : HtmlId
+deleteAccountButtonId =
+    Dom.id "userOptions_deleteAccount"
+
+
+cancelAccountDeletionText : String
+cancelAccountDeletionText =
+    "Cancel account deletion"
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
@@ -423,6 +435,15 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
                         |> Ui.el [ Ui.paddingXY 16 0 ]
+                    , MyUi.radioColumn
+                        (Dom.id "userOptions_embedVisibility")
+                        SelectedEmbedVisibility
+                        (Just local.localUser.user.embedVisibility)
+                        (Ui.text "Link embeds")
+                        [ ( User.ShowEmbeds, "Show embeds (embedded images and videos may allow 3rd parties to track your IP address)" )
+                        , ( User.HideEmbeds, "Don't show embeds" )
+                        ]
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , Ui.column
                         [ Ui.spacing 8 ]
                         (Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Color")
@@ -462,6 +483,53 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                             ]
                                         ]
                                )
+                        )
+                    , Ui.column
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                        (case local.localUser.user.deleteAccountAt of
+                            Just deleteAt ->
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text "Account deletion")
+                                , Ui.text
+                                    ("Your account and all your messages will be permanently deleted on "
+                                        ++ MyUi.datestamp local.localUser.timezone time
+                                        ++ " (in "
+                                        ++ MyUi.timeElapsed time deleteAt
+                                        ++ ")"
+                                    )
+                                , MyUi.secondaryButtonTall
+                                    deleteAccountButtonId
+                                    PressedDeleteAccount
+                                    cancelAccountDeletionText
+                                ]
+
+                            Nothing ->
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text "Account deletion")
+                                , Ui.text
+                                    ("Pressing this will delete your account and all your messages"
+                                        ++ (if SeqDict.isEmpty (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers) then
+                                                ""
+
+                                            else
+                                                " (excluding Discord messages)"
+                                           )
+                                        ++ " in "
+                                        ++ String.fromInt User.accountDeletionDelayInWeeks
+                                        ++ " weeks. The delay is to give other users a chance to export their conversation with you should they want a personal copy."
+                                    )
+                                , MyUi.elButton
+                                    deleteAccountButtonId
+                                    PressedDeleteAccount
+                                    [ Ui.paddingXY 16 8
+                                    , Ui.background MyUi.deleteButtonBackground
+                                    , Ui.width Ui.shrink
+                                    , Ui.rounded 4
+                                    , Ui.Font.color MyUi.deleteButtonFont
+                                    , Ui.Font.weight 500
+                                    , Ui.borderColor MyUi.deleteButtonBorder
+                                    , Ui.border 1
+                                    ]
+                                    (Ui.text "Delete your account")
+                                ]
                         )
                     ]
                 , MyUi.container
@@ -810,7 +878,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     (PressedExpandContainer UserOption_Privacy)
                     MyUi.background1
                     isMobile
-                    "Privacy"
+                    "Privacy policy"
                     [ Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.paddingXY 16 0 ] ]
                 ]
             )

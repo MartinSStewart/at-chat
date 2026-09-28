@@ -27,6 +27,7 @@ module LoginForm exposing
     , twoFactorCodeLength
     , typedCode
     , update
+    , userIsDeleted
     , validateCode
     , view
     )
@@ -112,6 +113,7 @@ type alias EnterEmail2 =
     , pressedSubmitEmail : Bool
     , rateLimited : Bool
     , showSignupsDisabled : Bool
+    , showUserIsDeleted : Bool
     }
 
 
@@ -723,9 +725,7 @@ enterLoginCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.Prose.paragraph
-                                    []
-                                    [ Ui.text "Submitting..." ]
+                                submitting
 
                     Err error ->
                         errorView error
@@ -737,6 +737,11 @@ enterLoginCodeView windowSize textSelection model =
             [ Ui.centerX, Ui.width Ui.shrink ]
             (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
         ]
+
+
+submitting : Element msg
+submitting =
+    Ui.Prose.paragraph [ Ui.paddingXY 16 0 ] [ Ui.text "Submitting..." ]
 
 
 enterTwoFactorCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
@@ -774,9 +779,7 @@ enterTwoFactorCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.Prose.paragraph
-                                    []
-                                    [ Ui.text "Submitting..." ]
+                                submitting
 
                     Err error ->
                         errorView error
@@ -827,11 +830,12 @@ rateLimited loginForm =
                 , pressedSubmitEmail = False
                 , rateLimited = True
                 , showSignupsDisabled = False
+                , showUserIsDeleted = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = True, showSignupsDisabled = False }
+                { email = "", pressedSubmitEmail = False, rateLimited = True, showSignupsDisabled = False, showUserIsDeleted = False }
 
         EnterUserData _ ->
             loginForm
@@ -849,11 +853,35 @@ signupsDisabled loginForm =
                 , pressedSubmitEmail = False
                 , rateLimited = False
                 , showSignupsDisabled = True
+                , showUserIsDeleted = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = True }
+                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = True, showUserIsDeleted = False }
+
+        EnterUserData _ ->
+            loginForm
+
+
+userIsDeleted : LoginForm -> LoginForm
+userIsDeleted loginForm =
+    case loginForm of
+        EnterEmail enterEmail ->
+            EnterEmail { enterEmail | showUserIsDeleted = True }
+
+        EnterLoginCode enterLoginCode ->
+            EnterEmail
+                { email = EmailAddress.toString enterLoginCode.sentTo
+                , pressedSubmitEmail = False
+                , rateLimited = False
+                , showSignupsDisabled = False
+                , showUserIsDeleted = True
+                }
+
+        EnterTwoFactorCode _ ->
+            EnterEmail
+                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = False, showUserIsDeleted = True }
 
         EnterUserData _ ->
             loginForm
@@ -922,6 +950,9 @@ enterEmailView model =
           else if model.showSignupsDisabled then
             errorView "New sign ups are currently disabled."
 
+          else if model.showUserIsDeleted then
+            errorView "Your account was deleted as you were logging in."
+
           else
             Ui.none
         ]
@@ -946,4 +977,5 @@ init =
         , pressedSubmitEmail = False
         , rateLimited = False
         , showSignupsDisabled = False
+        , showUserIsDeleted = False
         }

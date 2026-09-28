@@ -108,7 +108,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (BackendUser, EmailNotifications(..), LocalUser)
+import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 
@@ -382,6 +382,7 @@ type alias EditedBackendUser =
     , email : String
     , isAdmin : Bool
     , createdAt : Time.Posix
+    , deleteAccountAt : Maybe Time.Posix
     }
 
 
@@ -1113,6 +1114,7 @@ update navigationKey time adminData localState msg model =
                                 , email = ""
                                 , isAdmin = False
                                 , createdAt = time
+                                , deleteAccountAt = Nothing
                                 }
                                 userTable.newUsers
                       }
@@ -1560,9 +1562,16 @@ adminUser userId adminData =
 userToEditUser : BackendUser -> EditedBackendUser
 userToEditUser user =
     { name = PersonName.toString user.name
-    , email = EmailAddress.toString user.email
+    , email =
+        case user.email of
+            UserHasEmail email ->
+                EmailAddress.toString email
+
+            DeletedUser ->
+                ""
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , deleteAccountAt = user.deleteAccountAt
     }
 
 
@@ -2593,6 +2602,7 @@ filesSection isMobile expandedSections adminData =
                                                         FileStatus.fileUrl FileStatus.unknownContentType fileHash
                                                 )
                                             , Ui.Font.color MyUi.textLinkColor
+                                            , Ui.width Ui.shrink
                                             ]
                                             (Ui.text (FileStatus.fileHashToString fileHash))
                                         ]
@@ -4861,6 +4871,37 @@ userTableColumns timezone tableState users twoFactorAuthentication =
                         )
           , sortBy = Nothing
           }
+        , { title = "Marked for deletion"
+          , view =
+                \( userTableId, user ) ->
+                    Ui.el
+                        [ cellBackgroundColor userTableId tableState
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 4
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        , Ui.contentCenterX
+                        ]
+                        (case user.deleteAccountAt of
+                            Just deleteAt ->
+                                MyUi.datestamp timezone deleteAt |> Ui.text
+
+                            Nothing ->
+                                Ui.text ""
+                        )
+          , sortBy =
+                Just
+                    (List.sortBy
+                        (\( _, user ) ->
+                            case user.deleteAccountAt of
+                                Just deleteAt ->
+                                    Time.posixToMillis deleteAt
+
+                                Nothing ->
+                                    -9999
+                        )
+                    )
+          }
         ]
 
 
@@ -5243,7 +5284,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))
-                                (User.init time name email a.isAdmin)
+                                (User.init time name (UserHasEmail email) a.isAdmin)
                                 dict
                                 |> Ok
 
@@ -5272,8 +5313,17 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                         let
                             emailAddresses : Set String
                             emailAddresses =
-                                SeqDict.values allUsers
-                                    |> List.map (\user -> EmailAddress.toString user.email)
+                                SeqDict.toList allUsers
+                                    |> List.map
+                                        (\( userId, user ) ->
+                                            case user.email of
+                                                UserHasEmail email ->
+                                                    EmailAddress.toString email
+
+                                                DeletedUser ->
+                                                    -- Just need a unique value here
+                                                    Id.toString userId
+                                        )
                                     |> Set.fromList
                         in
                         case ( NonemptyDict.fromSeqDict allUsers, Set.size emailAddresses == SeqDict.size allUsers ) of
@@ -5306,12 +5356,17 @@ applyChangeToBackendUser :
 applyChangeToBackendUser change user =
     case T2 (PersonName.fromString change.name) (EmailAddress.fromString change.email) of
         T2 (Ok name) (Just email) ->
-            { user
-                | name = name
-                , isAdmin = change.isAdmin
-                , email = email
-            }
-                |> Ok
+            case user.email of
+                UserHasEmail _ ->
+                    { user
+                        | name = name
+                        , isAdmin = change.isAdmin
+                        , email = UserHasEmail email
+                    }
+                        |> Ok
+
+                DeletedUser ->
+                    Err ()
 
         _ ->
             Err ()

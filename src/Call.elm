@@ -20,6 +20,7 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , connectionIdToString
     , conversationOffset
     , debugDataSubscription
     , defaultRemoteCallData
@@ -33,7 +34,9 @@ port module Call exposing
     , initModel
     , insideThumbnail
     , isPressMsg
+    , joinedUsers
     , leaveVoiceChatCmds
+    , localVideoNodeId
     , memberColumnOffset
     , serverChangeCmd
     , startCallCmd
@@ -70,8 +73,10 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import OneOrGreater exposing (OneOrGreater)
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
@@ -162,6 +167,31 @@ init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
     }
+
+
+{-| Everyone in a call and how many of their devices have joined it. The current user
+is only known to be in it through `currentRoom`, so they're counted from that.
+-}
+joinedUsers : Id UserId -> CallId -> Local -> SeqDict (Id UserId) OneOrGreater
+joinedUsers currentUserId roomId calls =
+    let
+        others : SeqDict (Id UserId) OneOrGreater
+        others =
+            case SeqDict.get roomId calls.voiceChats of
+                Just voiceChat ->
+                    NonemptyDict.foldl
+                        (\( userId, _ ) _ dict -> SeqDictHelper.increment userId dict)
+                        SeqDict.empty
+                        voiceChat
+
+                Nothing ->
+                    SeqDict.empty
+    in
+    if calls.currentRoom == Just roomId then
+        SeqDictHelper.increment currentUserId others
+
+    else
+        others
 
 
 initModel : Model
@@ -497,8 +527,9 @@ videoNodes localUser config loggedIn local =
 
         maxHeight : Int
         maxHeight =
+            -- The panel starts below the channel header, so only the gap between them is lost
             viewHeight config.windowSize
-                - voiceChatY
+                - (voiceChatY - MyUi.channelHeaderHeight)
                 - (if isMobile then
                     150
 
@@ -1174,8 +1205,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> CallId -> Local -> Model -> Element Msg
-view windowSize roomId calls model =
+view : Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
+view isAdmin windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
         ongoingCall =
@@ -1223,17 +1254,21 @@ view windowSize roomId calls model =
                         , Ui.width Ui.shrink
                         , Ui.spacing 8
                         ]
-                        [ MyUi.simpleButton
-                            (Dom.id "voiceChat_toggleDebugData")
-                            PressedToggleDebugData
-                            (Ui.text
-                                (if model.pollDebugData then
-                                    "Stop\u{00A0}polling\u{00A0}JS"
+                        [ if isAdmin then
+                            MyUi.simpleButton
+                                (Dom.id "voiceChat_toggleDebugData")
+                                PressedToggleDebugData
+                                (Ui.text
+                                    (if model.pollDebugData then
+                                        "Stop\u{00A0}polling\u{00A0}JS"
 
-                                 else
-                                    "Poll\u{00A0}JS\u{00A0}state"
+                                     else
+                                        "Poll\u{00A0}JS\u{00A0}state"
+                                    )
                                 )
-                            )
+
+                          else
+                            Ui.none
                         , MyUi.rowButton
                             (if hasJoined2 then
                                 Dom.id "guild_leaveVoiceChat"

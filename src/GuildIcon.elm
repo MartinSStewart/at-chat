@@ -10,7 +10,6 @@ module GuildIcon exposing
     , discordUserView
     , discordView
     , iconFontColor
-    , notificationHelper
     , notificationView
     , showFriendsButton
     , userView

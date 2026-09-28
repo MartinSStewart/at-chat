@@ -64,6 +64,9 @@ type ToBackendLog
     | ToBackendLog_Local_SetSheepGameQuestions
     | ToBackendLog_Local_CollapseUserOptionSection
     | ToBackendLog_Local_SetEmailNotifications
+    | ToBackendLog_Local_SetEmbedVisibility
+    | ToBackendLog_Local_ScheduleAccountDeletion
+    | ToBackendLog_Local_CancelAccountDeletion
     | ToBackendLog_Local_RegisterPushSubscription
     | ToBackendLog_Local_TextEditor
     | ToBackendLog_Local_UnlinkDiscordUser
@@ -262,6 +265,15 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetEmailNotifications ->
             "Local_SetEmailNotifications"
+
+        ToBackendLog_Local_SetEmbedVisibility ->
+            "Local_SetEmbedVisibility"
+
+        ToBackendLog_Local_ScheduleAccountDeletion ->
+            "Local_ScheduleAccountDeletion"
+
+        ToBackendLog_Local_CancelAccountDeletion ->
+            "Local_CancelAccountDeletion"
 
         ToBackendLog_Local_RegisterPushSubscription ->
             "Local_RegisterPushSubscription"

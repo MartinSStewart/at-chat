@@ -22,7 +22,6 @@ import DmChannelId
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Game
-import GuildIcon
 import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
@@ -32,11 +31,9 @@ import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
-import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
-import SeqDictHelper
 import SeqSet
 import Thread
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
@@ -664,53 +661,11 @@ gameButton isMobile currentTab =
 callTab : Bool -> Maybe ChannelHeaderTab -> CallId -> LocalUser -> Call.Local -> Element FrontendMsg_
 callTab isMobile currentTab roomId localUser calls =
     let
-        joinedUsers : SeqDict (Id UserId) OneOrGreater
-        joinedUsers =
-            case SeqDict.get roomId calls.voiceChats of
-                Just voiceChat ->
-                    NonemptyDict.foldl
-                        (\( userId, _ ) _ dict -> SeqDictHelper.increment userId dict)
-                        SeqDict.empty
-                        voiceChat
-
-                Nothing ->
-                    SeqDict.empty
-
-        joinedUsers2 =
-            if calls.currentRoom == Just roomId then
-                SeqDictHelper.increment localUser.session.userId joinedUsers
-
-            else
-                joinedUsers
-
         joined : Element msg
         joined =
-            SeqDict.toList joinedUsers2
-                |> List.map
-                    (\( userId, count ) ->
-                        case User.getUser userId localUser of
-                            Just user ->
-                                Ui.el
-                                    [ if OneOrGreater.toInt count > 1 then
-                                        GuildIcon.notificationHelper
-                                            MyUi.background1
-                                            MyUi.white
-                                            MyUi.border1
-                                            2
-                                            -2
-                                            count
-
-                                      else
-                                        Ui.noAttr
-                                    , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
-                                        |> Ui.htmlAttribute
-                                    ]
-                                    (User.smallProfileImage False (Just user))
-
-                            Nothing ->
-                                Ui.none
-                    )
-                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
+            SeqDict.toList (Call.joinedUsers localUser.session.userId roomId calls)
+                |> List.filterMap (\( userId, _ ) -> User.getUser userId localUser)
+                |> User.multipleProfileImages
     in
     Ui.row
         [ Ui.width Ui.shrink, Ui.spacing 8, Ui.height Ui.fill, Ui.contentCenterY ]
@@ -771,7 +726,12 @@ tabBodyView isMobile local loggedIn model =
                                     Nothing
 
                         ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (GuildRoomId { guildId = guildId, channelId = channelId }) local.calls loggedIn.voiceChat
+                            Call.view
+                                local.localUser.user.isAdmin
+                                model.windowSize
+                                (GuildRoomId { guildId = guildId, channelId = channelId })
+                                local.calls
+                                loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
@@ -820,7 +780,12 @@ tabBodyView isMobile local loggedIn model =
                                 model
 
                         Just ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (DmRoomId { otherUserId = otherUserId }) local.calls loggedIn.voiceChat
+                            Call.view
+                                local.localUser.user.isAdmin
+                                model.windowSize
+                                (DmRoomId { otherUserId = otherUserId })
+                                local.calls
+                                loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 

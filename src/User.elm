@@ -1,11 +1,14 @@
 module User exposing
     ( BackendUser
+    , BackendUserStatus(..)
     , EmailNotifications(..)
+    , EmbedVisibility(..)
     , FrontendCurrentUser
     , FrontendUser
     , LastDmViewed(..)
     , LocalUser
     , NotificationLevel(..)
+    , accountDeletionDelayInWeeks
     , addDirectMention
     , addDiscordDirectMention
     , addNewCustomEmojis
@@ -25,6 +28,7 @@ module User exposing
     , init
     , linkDiscordDataCodec
     , missingName
+    , multipleDiscordProfileImages
     , multipleProfileImages
     , privateKeyForAccount
     , profileImage
@@ -37,6 +41,7 @@ module User exposing
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
+    , setEmbedVisibility
     , setEmojiSkinTone
     , setGuildNotificationLevel
     , setIcon
@@ -103,11 +108,12 @@ type alias BackendUser =
     { name : PersonName
     , color : UserColor
     , isAdmin : Bool
-    , email : EmailAddress
+    , email : BackendUserStatus
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Id PageId
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
+    , embedVisibility : EmbedVisibility
     , lastEmailNotification : Time.Posix
     , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
     , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
@@ -132,7 +138,13 @@ type alias BackendUser =
     , -- Whether the warning about losing your private key has been accepted. Kept on the
       -- account rather than per conversation so that it is only answered once.
       e2eeRisksAccepted : Bool
+    , deleteAccountAt : Maybe Time.Posix
     }
+
+
+type BackendUserStatus
+    = DeletedUser
+    | UserHasEmail EmailAddress
 
 
 setLastViewedMessage :
@@ -223,9 +235,19 @@ addRecentlyUsedEmojis emojis user =
     List.foldl addRecentlyUsedEmoji user emojis
 
 
+accountDeletionDelayInWeeks : number
+accountDeletionDelayInWeeks =
+    2
+
+
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }
 setEmailNotifications emailNotifications user =
     { user | emailNotifications = emailNotifications }
+
+
+setEmbedVisibility : EmbedVisibility -> { a | embedVisibility : EmbedVisibility } -> { a | embedVisibility : EmbedVisibility }
+setEmbedVisibility embedVisibility user =
+    { user | embedVisibility = embedVisibility }
 
 
 setEmojiSkinTone : Maybe SkinTone -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
@@ -256,7 +278,37 @@ type LastDmViewed
 
 
 type alias FrontendCurrentUser =
-    BackendUser
+    { name : PersonName
+    , color : UserColor
+    , isAdmin : Bool
+    , email : EmailAddress
+    , recentLoginEmails : List Time.Posix
+    , lastLogPageViewed : Id PageId
+    , createdAt : Time.Posix
+    , emailNotifications : EmailNotifications
+    , embedVisibility : EmbedVisibility
+    , lastEmailNotification : Time.Posix
+    , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+    , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastDmViewed : LastDmViewed
+    , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+    , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , icon : Maybe FileHash
+    , notifyOnAllMessages : SeqSet (Id GuildId)
+    , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , lastPushNotification : Maybe Time.Posix
+    , linkDiscordAcknowledgementIsChecked : Bool
+    , domainWhitelist : SeqSet Domain
+    , emojiConfig : EmojiConfig
+    , availableStickers : SeqSet (Id StickerId)
+    , availableCustomEmojis : SeqSet (Id CustomEmojiId)
+    , muteSettings : MuteSettings.Model
+    , publicKey : Maybe X25519.PublicKey
+    , e2eeRisksAccepted : Bool
+    , deleteAccountAt : Maybe Time.Posix
+    }
 
 
 redactPrivateKeys : { a | publicKey : Maybe X25519.PublicKey } -> NonemptyString -> NonemptyString
@@ -357,7 +409,7 @@ type NotificationLevel
     | NotifyOnMention
 
 
-init : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
+init : Time.Posix -> PersonName -> BackendUserStatus -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
     , color = UserColor.default
@@ -367,6 +419,7 @@ init createdAt name email userIsAdmin =
     , lastLogPageViewed = Id.fromInt 0
     , createdAt = createdAt
     , emailNotifications = NeverNotifyMe
+    , embedVisibility = ShowEmbeds
     , lastEmailNotification = createdAt
     , lastViewedMessage = SeqDict.empty
     , lastViewedThreadMessage = SeqDict.empty
@@ -387,6 +440,7 @@ init createdAt name email userIsAdmin =
     , muteSettings = MuteSettings.init
     , publicKey = Nothing
     , e2eeRisksAccepted = False
+    , deleteAccountAt = Nothing
     }
 
 
@@ -752,6 +806,11 @@ type EmailNotifications
     | NotifyMeWhenMentioned
 
 
+type EmbedVisibility
+    = ShowEmbeds
+    | HideEmbeds
+
+
 {-| User containing only publicly visible data
 -}
 type alias FrontendUser =
@@ -857,16 +916,17 @@ discordFullDataUserToFrontendCurrentUser users needsAuthAgain data isLoadingData
     }
 
 
-backendToFrontendCurrent : BackendUser -> FrontendCurrentUser
-backendToFrontendCurrent user =
+backendToFrontendCurrent : EmailAddress -> BackendUser -> FrontendCurrentUser
+backendToFrontendCurrent email user =
     { name = user.name
     , color = user.color
     , isAdmin = user.isAdmin
-    , email = user.email
+    , email = email
     , recentLoginEmails = user.recentLoginEmails
     , lastLogPageViewed = user.lastLogPageViewed
     , createdAt = user.createdAt
     , emailNotifications = user.emailNotifications
+    , embedVisibility = user.embedVisibility
     , lastEmailNotification = user.lastEmailNotification
     , lastViewedMessage = user.lastViewedMessage
     , lastViewedThreadMessage = user.lastViewedThreadMessage
@@ -887,6 +947,7 @@ backendToFrontendCurrent user =
     , muteSettings = user.muteSettings
     , publicKey = user.publicKey
     , e2eeRisksAccepted = user.e2eeRisksAccepted
+    , deleteAccountAt = user.deleteAccountAt
     }
 
 
@@ -1125,8 +1186,89 @@ profileImageNoRounding user =
             GuildIcon.defaultUser profileImageSize Ui.noAttr UserColor.default
 
 
-multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+multipleProfileImagesY : number
+multipleProfileImagesY =
+    12
+
+
+multipleProfileImages : List FrontendUser -> Element msg
 multipleProfileImages profileImages =
+    case profileImages of
+        [] ->
+            Ui.none
+
+        [ one ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two, three ] ->
+            Ui.el
+                [ Ui.width (Ui.px 55)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two, three, four ] ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just four)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        one :: two :: three :: rest ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 45, y = multipleProfileImagesY, z = 0 }
+                        , Ui.background MyUi.background1
+                        , Ui.width (Ui.px smallProfileImageSize)
+                        , Ui.height (Ui.px smallProfileImageSize)
+                        , Ui.Font.center
+                        , Ui.Font.bold
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.Font.size 14
+                        , Ui.contentCenterY
+                        , MyUi.htmlStyle "white-space" "pre"
+                        ]
+                        (Ui.text ("+" ++ String.fromInt (List.length rest)))
+                    )
+                , Ui.alignRight
+                ]
+                Ui.none
+
+
+multipleDiscordProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+multipleDiscordProfileImages profileImages =
     case profileImages of
         [] ->
             Ui.none

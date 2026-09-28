@@ -1,11 +1,14 @@
 module Pages.Home exposing
-    ( header
+    ( callPreviewImages
+    , header
     , loginButtonId
     , loginSignupText
+    , previewLoginData
     , view
     )
 
 import Array exposing (Array)
+import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
@@ -16,20 +19,25 @@ import DmChannel
 import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Command exposing (Command, FrontendOnly)
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji
 import FileName
 import FileStatus exposing (IsEncrypted(..))
 import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
+import Html
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
+import IdString exposing (IdString)
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import List.Nonempty exposing (Nonempty(..))
 import Local
-import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild)
+import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import MembersAndOwner
 import Message exposing (GameType(..), Message(..), RepliedTo(..))
 import MessageArray exposing (MessageArray)
@@ -56,7 +64,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Shadow
 import Unsafe
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, BackendUserStatus(..), FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserColor
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..), Viewing(..))
@@ -206,6 +214,11 @@ previewChannelId =
     Id.fromInt 0
 
 
+previewPetPicsChannelId : Id ChannelId
+previewPetPicsChannelId =
+    Id.fromInt 1
+
+
 previewGuildName : GuildName
 previewGuildName =
     Unsafe.guildName "Friends & chat"
@@ -231,11 +244,20 @@ newsChannelName =
     Unsafe.channelName "the-news"
 
 
-previewUser : BackendUser
+previewUser : FrontendCurrentUser
 previewUser =
     let
+        email : EmailAddress
+        email =
+            Unsafe.emailAddress "you@at-chat.app"
+
+        user : BackendUser
         user =
-            User.init (Time.millisToPosix 0) (Unsafe.personName "Sven Svensson") (Unsafe.emailAddress "you@at-chat.app") False
+            User.init
+                (Time.millisToPosix 0)
+                (Unsafe.personName "Sven Svensson")
+                (UserHasEmail email)
+                False
     in
     { user
         | lastViewedMessage =
@@ -247,6 +269,14 @@ previewUser =
                             }
                         )
                   , Id.fromInt 6
+                  )
+                , ( GuildOrDmId
+                        (GuildOrDmId_Guild
+                            { guildId = previewGuildId
+                            , channelId = previewPetPicsChannelId
+                            }
+                        )
+                  , Id.fromInt 2
                   )
                 , ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = Id.fromInt 1 })
                   , Id.fromInt 5
@@ -266,6 +296,7 @@ previewUser =
                   )
                 ]
     }
+        |> User.backendToFrontendCurrent email
 
 
 previewOtherUsers : SeqDict.SeqDict (Id UserId) FrontendUser
@@ -652,20 +683,7 @@ previewGuild time =
     , channels =
         SeqDict.fromList
             [ ( previewChannelId, previewChannel time )
-            , ( Id.fromInt 1
-              , { createdAt = previewMinutesAgo time 39000
-                , createdBy = Id.fromInt 1
-                , name = petPicsChannelName
-                , description = ChannelDescription.empty
-                , messages = MessageArray.empty
-                , visibleMessages = VisibleMessages.init True 0
-                , isArchived = Nothing
-                , lastTypedAt = SeqDict.empty
-                , threads = SeqDict.empty
-                , dateDividerDrawings = SeqDict.empty
-                , games = SeqDict.empty
-                }
-              )
+            , ( previewPetPicsChannelId, previewPetPicsChannel time )
             , ( Id.fromInt 2
               , { createdAt = previewMinutesAgo time 39000
                 , createdBy = Id.fromInt 1
@@ -725,15 +743,51 @@ previewGameGuild time =
     }
 
 
-previewLoginData : Time.Posix -> UserAgent -> LoginData
-previewLoginData time userAgent =
+{-| The channel the preview call is in. Whoever asks if they can be heard is `previewCallMutedPeer`.
+-}
+previewPetPicsChannel : Time.Posix -> FrontendChannel
+previewPetPicsChannel time =
+    let
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+        messages =
+            List.foldl
+                MessageArray.push
+                MessageArray.empty
+                [ CallStarted
+                    { startedAt = previewMinutesAgo time 4
+                    , endedAt = Nothing
+                    , startedBy = Id.fromInt 1
+                    , reactions = SeqDict.empty
+                    , timestampDrawings = Drawing.emptyDrawing
+                    , cardDrawings = Drawing.emptyDrawing
+                    }
+                , previewMessage (previewMinutesAgo time 2) (Tuple.first previewCallMutedPeer) (NonemptyString 'C' "an anyone hear me?")
+                , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")
+                ]
+    in
+    { createdAt = previewMinutesAgo time 39000
+    , createdBy = Id.fromInt 1
+    , name = petPicsChannelName
+    , description = ChannelDescription.empty
+    , messages = messages
+    , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
+    , isArchived = Nothing
+    , lastTypedAt = SeqDict.empty
+    , threads = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    , games = SeqDict.empty
+    }
+
+
+previewLoginData : UserAgent -> LoginData
+previewLoginData userAgent =
     { session =
         { userId = previewUserId
         , notificationMode = UserSession.NoNotifications
         , pushSubscription = UserSession.NotSubscribed
         , userAgent = userAgent
         , sessionIdHash = SessionIdHash.fromString ""
-        , signedInAt = previewMinutesAgo time 120
+        , signedInAt = previewMinutesAgo previewTime 120
         , lastClientDisconnect = Nothing
         , expandedUserOptions = SeqSet.empty
         , savedSheepGameQuestions = IdArray.empty
@@ -744,12 +798,12 @@ previewLoginData time userAgent =
     , twoFactorAuthenticationEnabled = Nothing
     , guilds =
         SeqDict.fromList
-            [ ( previewGuildId, previewGuild time )
-            , ( previewGameGuildId, previewGameGuild time )
+            [ ( previewGuildId, previewGuild previewTime )
+            , ( previewGameGuildId, previewGameGuild previewTime )
             ]
-    , dmChannels = previewDmChannels time
-    , discordDmChannels = previewDiscordDmChannels time
-    , discordGuilds = previewDiscordGuilds time
+    , dmChannels = previewDmChannels previewTime
+    , discordDmChannels = previewDiscordDmChannels previewTime
+    , discordGuilds = previewDiscordGuilds previewTime
     , user = previewUser
     , otherUsers = previewOtherUsers
     , discordUsers = previewDiscordUsers
@@ -765,14 +819,14 @@ previewLoginData time userAgent =
 {-| The unread overview preview is of an inbox with nothing in it, so this reader has caught up
 with every channel, DM and thread rather than stopping partway like `previewUser` does.
 -}
-previewReadLoginData : Time.Posix -> UserAgent -> LoginData
-previewReadLoginData time userAgent =
+previewReadLoginData : UserAgent -> LoginData
+previewReadLoginData userAgent =
     let
         loginData : LoginData
         loginData =
-            previewLoginData time userAgent
+            previewLoginData userAgent
 
-        user : BackendUser
+        user : FrontendCurrentUser
         user =
             loginData.user
 
@@ -972,6 +1026,7 @@ previewGameModels time =
 type PreviewPage
     = PreviewChannel (Id GuildId) Route.ChannelRoute
     | PreviewUnreadOverview
+    | PreviewCall
 
 
 previewPages : List PreviewPage
@@ -994,7 +1049,61 @@ previewPages =
                     []
            )
     )
-        ++ [ PreviewUnreadOverview ]
+        ++ [ PreviewCall, PreviewUnreadOverview ]
+
+
+previewCallId : CallId
+previewCallId =
+    GuildRoomId { guildId = previewGuildId, channelId = previewPetPicsChannelId }
+
+
+{-| Everyone in the preview call other than the reader. A call tells its connections apart by
+client ID, so each one needs its own.
+-}
+previewCallPeers : Nonempty ( Id UserId, ClientId )
+previewCallPeers =
+    Nonempty
+        ( Id.fromInt 1, Lamdera.clientIdFromString "previewCall1" )
+        [ previewCallMutedPeer
+        , ( Id.fromInt 3, Lamdera.clientIdFromString "previewCall3" )
+        ]
+
+
+{-| The one in the call who is asking if anyone can hear them.
+-}
+previewCallMutedPeer : ( Id UserId, ClientId )
+previewCallMutedPeer =
+    ( Id.fromInt 2, Lamdera.clientIdFromString "previewCall2" )
+
+
+previewMicrophoneId : IdString Call.MediaDeviceId
+previewMicrophoneId =
+    IdString.fromString "previewMicrophone"
+
+
+previewCameraId : IdString Call.MediaDeviceId
+previewCameraId =
+    IdString.fromString "previewCamera"
+
+
+previewCallConnectionId : ( Id UserId, ClientId ) -> Call.ConnectionId
+previewCallConnectionId peer =
+    { roomId = previewCallId, otherClientId = peer }
+
+
+{-| What each person in the preview call shows in place of a camera.
+-}
+callPreviewImages : Command FrontendOnly toMsg msg
+callPreviewImages =
+    { htmlId = Call.localVideoNodeId, url = "/cacheable/call-preview/0.svg" }
+        :: List.indexedMap
+            (\index peer ->
+                { htmlId = Call.connectionIdToString (previewCallConnectionId peer)
+                , url = "/cacheable/call-preview/" ++ String.fromInt (index + 1) ++ ".svg"
+                }
+            )
+            (List.Nonempty.toList previewCallPeers)
+        |> Ports.setCallPreviewImages previewContainerId
 
 
 previewIntervalMillis : Int
@@ -1094,7 +1203,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 previewStartupData
                 loaded.emojiData
-                (previewLoginData previewTime loaded.startupData.userAgent)
+                (previewLoginData loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 
@@ -1195,7 +1304,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 previewStartupData
                 loaded.emojiData
-                (previewReadLoginData previewTime loaded.startupData.userAgent)
+                (previewReadLoginData loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 
@@ -1228,6 +1337,92 @@ view loaded =
                         }
                         { previewReadLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
                         (Local.model previewReadLoggedIn.localState)
+
+                PreviewCall ->
+                    let
+                        callRoute : Route.ChannelRoute
+                        callRoute =
+                            Route.ChannelRoute
+                                previewPetPicsChannelId
+                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
+                                (Just ChannelHeaderTab_VoiceChat)
+
+                        callLoaded : LoadedFrontend
+                        callLoaded =
+                            { loaded
+                                | windowSize = innerSize
+                                , route = GuildRoute previewGuildId callRoute ChannelsHiddenOnMobile Nothing
+                                , time = previewTime
+                                , startupData = previewStartupData
+                            }
+
+                        callLoggedIn : Types.LoggedIn2
+                        callLoggedIn =
+                            { previewLoggedIn
+                                | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
+                                , voiceChat =
+                                    { voiceChat
+                                        | isSpeaking =
+                                            SeqSet.singleton (previewCallConnectionId (List.Nonempty.head previewCallPeers))
+                                        , userMediaDevices =
+                                            Call.HasMediaDevices
+                                                [ { deviceId = previewMicrophoneId
+                                                  , groupId = ""
+                                                  , kind = Call.AudioInput
+                                                  , label = "Default microphone"
+                                                  }
+                                                , { deviceId = previewCameraId
+                                                  , groupId = ""
+                                                  , kind = Call.VideoInput
+                                                  , label = "Default camera"
+                                                  }
+                                                ]
+                                        , selectedAudioInputDevice = Just previewMicrophoneId
+                                        , selectedVideoInputDevice = Just previewCameraId
+                                    }
+                            }
+
+                        voiceChat : Call.Model
+                        voiceChat =
+                            previewLoggedIn.voiceChat
+
+                        local : LocalState
+                        local =
+                            Local.model previewLoggedIn.localState
+
+                        callLocal : LocalState
+                        callLocal =
+                            { local
+                                | calls =
+                                    { currentRoom = Just previewCallId
+                                    , voiceChats =
+                                        List.Nonempty.map
+                                            (\peer ->
+                                                ( peer
+                                                , if peer == previewCallMutedPeer then
+                                                    { audioInputEnabled = False, videoInputEnabled = True }
+
+                                                  else
+                                                    Call.defaultRemoteCallData
+                                                )
+                                            )
+                                            previewCallPeers
+                                            |> NonemptyDict.fromNonemptyList
+                                            |> SeqDict.singleton previewCallId
+                                    }
+                            }
+                    in
+                    Pages.Guild.guildView callLoaded previewGuildId callRoute callLoggedIn callLocal
+                        |> Ui.el
+                            [ Ui.height Ui.fill
+                            , Ui.heightMin 0
+                            , Call.videoNodes callLocal.localUser callLoaded callLoggedIn callLocal.calls
+                                |> Html.map VoiceChatMsg
+                                |> Ui.html
+                                -- Above the voice chat panel, which has a z-index of 20
+                                |> Ui.el [ MyUi.htmlStyle "z-index" "21" ]
+                                |> Ui.inFront
+                            ]
             )
                 |> Ui.el
                     [ Ui.width (Ui.px (Coord.xRaw innerSize))

@@ -38,9 +38,9 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
-    , orphanedFiles
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
+    , sendAccountDeletionEmail
     , sendDm
     , sendEncryptedDm
     , sendGuildMessage
@@ -61,7 +61,6 @@ import Broadcast
 import Bytes.Decode
 import Bytes.Encode
 import Call exposing (CallId(..))
-import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -78,7 +77,6 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
-import Game
 import Hex
 import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
@@ -94,6 +92,7 @@ import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pagination exposing (PageId)
@@ -106,14 +105,12 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import SheepGame
-import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
@@ -185,7 +182,12 @@ adminEmailAddress model =
     List.Extra.findMap
         (\( _, user ) ->
             if user.isAdmin then
-                Just user.email
+                case user.email of
+                    UserHasEmail email ->
+                        Just email
+
+                    DeletedUser ->
+                        Nothing
 
             else
                 Nothing
@@ -238,6 +240,31 @@ sendLoginEmail msg emailAddress loginCode postmarkServerToken =
         Postmark.BodyBoth
             (loginEmailContent loginCode2)
             ("Here is your code " ++ loginCode2 ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
+    , messageStream = "outbound"
+    }
+        |> Postmark.sendEmail msg postmarkServerToken
+
+
+sendAccountDeletionEmail :
+    (Result Postmark.SendEmailError () -> backendMsg)
+    -> EmailAddress
+    -> Time.Posix
+    -> Postmark.ApiKey
+    -> Command BackendOnly toFrontend backendMsg
+sendAccountDeletionEmail msg emailAddress deleteAt postmarkServerToken =
+    { from = { name = "", email = noReplyEmailAddress }
+    , to = List.Nonempty.fromElement { name = "", email = emailAddress }
+    , subject =
+        NonemptyString
+            'Y'
+            ("our at-chat account will be deleted in " ++ String.fromInt User.accountDeletionDelayInWeeks ++ " weeks")
+    , body =
+        "You have chosen to have your at-chat account and all your messages deleted in "
+            ++ String.fromInt User.accountDeletionDelayInWeeks
+            ++ " weeks ("
+            ++ MyUi.datestamp Time.utc deleteAt
+            ++ ").\n\nIf you change your mind, open User settings and press \"Cancel account deletion\"."
+            |> Postmark.BodyText
     , messageStream = "outbound"
     }
         |> Postmark.sendEmail msg postmarkServerToken
@@ -767,41 +794,46 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                             )
 
                         ( Just user, Nothing ) ->
-                            let
-                                currentlyViewing : UserSession.Viewing
-                                currentlyViewing =
-                                    requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+                            case user.email of
+                                UserHasEmail email ->
+                                    let
+                                        currentlyViewing : UserSession.Viewing
+                                        currentlyViewing =
+                                            requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
-                                session : UserSession
-                                session =
-                                    UserSession.init time sessionId pendingLogin.userId userAgent
-                                        |> UserSession.setLastViewedGuild currentlyViewing
-                            in
-                            ( { model
-                                | sessions = SeqDict.insert sessionId session model.sessions
-                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                              }
-                            , Command.batch
-                                [ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
-                                    |> LoginSuccess
-                                    |> LoginWithTokenResponse
-                                    |> Lamdera.sendToFrontends sessionId
-                                , Broadcast.toUser
-                                    (Just clientId)
-                                    Nothing
-                                    pendingLogin.userId
-                                    (Server_NewSession
-                                        session.sessionIdHash
-                                        { notificationMode = session.notificationMode
-                                        , currentlyViewing = SeqDict.singleton clientId currentlyViewing
-                                        , userAgent = session.userAgent
-                                        , lastActiveAt = time
-                                        }
-                                        |> ServerChange
+                                        session : UserSession
+                                        session =
+                                            UserSession.init time sessionId pendingLogin.userId userAgent
+                                                |> UserSession.setLastViewedGuild currentlyViewing
+                                    in
+                                    ( { model
+                                        | sessions = SeqDict.insert sessionId session model.sessions
+                                        , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                                      }
+                                    , Command.batch
+                                        [ getLoginData sessionId clientId currentlyViewing session email user requestMessagesFor model
+                                            |> LoginSuccess
+                                            |> LoginWithTokenResponse
+                                            |> Lamdera.sendToFrontends sessionId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            pendingLogin.userId
+                                            (Server_NewSession
+                                                session.sessionIdHash
+                                                { notificationMode = session.notificationMode
+                                                , currentlyViewing = SeqDict.singleton clientId currentlyViewing
+                                                , userAgent = session.userAgent
+                                                , lastActiveAt = time
+                                                }
+                                                |> ServerChange
+                                            )
+                                            model
+                                        ]
                                     )
-                                    model
-                                ]
-                            )
+
+                                DeletedUser ->
+                                    ( model, LoginWithTokenResponse UserIsDeleted |> Lamdera.sendToFrontend clientId )
 
                         ( Nothing, _ ) ->
                             ( model
@@ -934,11 +966,12 @@ getLoginData :
     -> ClientId
     -> UserSession.Viewing
     -> UserSession
+    -> EmailAddress
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model =
+getLoginData sessionId clientId currentlyViewing session email user requestMessagesFor model =
     let
         linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
@@ -1061,7 +1094,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             )
             model.discordDmChannels
     , dmChannels = dmChannels
-    , user = User.backendToFrontendCurrent user
+    , user = User.backendToFrontendCurrent email user
     , otherUsers = visibleUsers session.userId guilds dmChannels model.users
     , discordUsers = linkedAndOtherDiscordUsers
     , otherSessions =
@@ -1508,6 +1541,22 @@ adminData model lastLogPageViewed =
     }
 
 
+wordListStatus : WordList -> LocalState.WordSpellingGameStatus
+wordListStatus wordList =
+    case wordList of
+        WordList_NotLoaded ->
+            LocalState.WordSpellingGameStatus_NotLoaded
+
+        WordList_Loading ->
+            LocalState.WordSpellingGameStatus_Loading
+
+        WordList_Error error ->
+            LocalState.WordSpellingGameStatus_Error error
+
+        WordList_Loaded _ ->
+            LocalState.WordSpellingGameStatus_Loaded
+
+
 {-| The parts of the admin page that aren't sent when it loads. Each is built when the admin
 opens a section that shows it, so the size of what the backend has stored doesn't decide how
 long the admin page takes to open.
@@ -1625,162 +1674,6 @@ adminSessions model =
     SeqDict.values model.sessions
         |> List.map (\session -> ( session.sessionIdHash, session ))
         |> SeqDict.fromList
-
-
-{-| Uploaded files that nothing refers to anymore. `discordAttachments` doesn't count as a
-reference since it only remembers which Discord attachments have already been uploaded.
--}
-orphanedFiles : BackendModel -> SeqDict FileHash BackendFileData
-orphanedFiles model =
-    List.foldl SeqDict.remove model.files (usedFiles model)
-
-
-usedFiles : BackendModel -> List FileHash
-usedFiles model =
-    List.concat
-        [ NonemptyDict.values model.users |> List.Nonempty.toList |> List.filterMap .icon
-        , SeqDict.values model.discordUsers |> List.filterMap DiscordUserData.icon
-        , SeqDict.values model.guilds |> List.concatMap guildFiles
-        , SeqDict.values model.deletedGuilds |> List.concatMap (\deleted -> guildFiles deleted.guild)
-        , SeqDict.values model.discordGuilds |> List.concatMap discordGuildFiles
-        , SeqDict.values model.dmChannels |> List.concatMap dmChannelFiles
-        , SeqDict.values model.discordDmChannels |> List.concatMap (\dmChannel -> messagesFiles dmChannel.messages)
-        , SeqDict.values model.sessions |> List.concatMap savedSheepGameQuestionFiles
-        , SeqDict.values model.stickers |> List.filterMap stickerFile
-        , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile
-        ]
-
-
-guildFiles : BackendGuild -> List FileHash
-guildFiles guild =
-    Maybe.Extra.toList guild.icon
-        ++ List.concatMap
-            (\channel ->
-                messagesFiles channel.messages
-                    ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
-                    ++ List.concatMap gameFiles (SeqDict.values channel.games)
-            )
-            (SeqDict.values guild.channels)
-
-
-discordGuildFiles : DiscordBackendGuild -> List FileHash
-discordGuildFiles guild =
-    Maybe.Extra.toList guild.icon
-        ++ List.concatMap
-            (\channel ->
-                messagesFiles channel.messages
-                    ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
-            )
-            (SeqDict.values guild.channels)
-
-
-dmChannelFiles : BackendDmChannel -> List FileHash
-dmChannelFiles dmChannel =
-    messagesFiles dmChannel.messages
-        ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values dmChannel.threads)
-        ++ List.concatMap gameFiles (SeqDict.values dmChannel.games)
-
-
-messagesFiles : IdArray messageId (Message messageId userId channelId) -> List FileHash
-messagesFiles messages =
-    IdArray.toList messages |> List.concatMap messageFiles
-
-
-messageFiles : Message messageId userId channelId -> List FileHash
-messageFiles message =
-    case message of
-        UserTextMessage data ->
-            SeqDict.values data.content.attachedFiles |> List.map .fileHash
-
-        EncryptedUserTextMessage data ->
-            SeqSet.toList data.fileHashes
-
-        UserJoinedMessage _ _ _ _ ->
-            []
-
-        DeletedMessage _ ->
-            []
-
-        CallStarted _ ->
-            []
-
-        GameStarted _ ->
-            []
-
-
-gameFiles : Game.BackendGameData -> List FileHash
-gameFiles gameData =
-    case gameData of
-        Game.GameData_Go _ _ ->
-            []
-
-        Game.GameData_WordSpellingGame _ _ _ ->
-            []
-
-        Game.GameData_SheepGame setup actions shared ->
-            List.Nonempty.toList setup.questions
-                ++ List.filterMap sheepGameActionInput (Array.toList actions)
-                ++ List.concatMap (\answers -> List.filterMap identity (IdArray.toList answers)) (SeqDict.values shared.answers)
-                ++ List.filterMap identity (SeqDict.values shared.notes)
-                |> List.concatMap (\input -> SeqDict.values input.attachedFiles |> List.map .fileHash)
-
-
-sheepGameActionInput : SheepGame.ActionWithTime -> Maybe SheepGame.ValidatedInput
-sheepGameActionInput action =
-    case action.change of
-        SheepGame.SubmittedAnswer _ input ->
-            input
-
-        SheepGame.ChangedNotes _ input ->
-            input
-
-        _ ->
-            Nothing
-
-
-savedSheepGameQuestionFiles : UserSession -> List FileHash
-savedSheepGameQuestionFiles session =
-    IdArray.toList session.savedSheepGameQuestions
-        |> List.concatMap (\question -> FileStatus.onlyUploadedFiles question.attachedFiles |> SeqDict.values |> List.map .fileHash)
-
-
-stickerFile : StickerData -> Maybe FileHash
-stickerFile sticker =
-    case sticker.url of
-        StickerInternal fileHash _ ->
-            Just fileHash
-
-        DiscordStandardSticker _ ->
-            Nothing
-
-        StickerLoading ->
-            Nothing
-
-
-customEmojiFile : CustomEmojiData -> Maybe FileHash
-customEmojiFile customEmoji =
-    case customEmoji.url of
-        CustomEmojiInternal fileHash _ ->
-            Just fileHash
-
-        CustomEmojiLoading ->
-            Nothing
-
-
-wordListStatus : WordList -> LocalState.WordSpellingGameStatus
-wordListStatus wordList =
-    case wordList of
-        WordList_NotLoaded ->
-            LocalState.WordSpellingGameStatus_NotLoaded
-
-        WordList_Loading ->
-            LocalState.WordSpellingGameStatus_Loading
-
-        WordList_Error error ->
-            LocalState.WordSpellingGameStatus_Error error
-
-        WordList_Loaded _ ->
-            LocalState.WordSpellingGameStatus_Loaded
 
 
 sendGuildMessage :
@@ -2830,6 +2723,9 @@ backendMsgLog msg =
         DeletedOrphanedFiles _ _ _ _ _ ->
             BackendMsgLog_DeletedOrphanedFiles
 
+        HourlyDeletedOrphanedFiles _ _ _ ->
+            BackendMsgLog_HourlyDeletedOrphanedFiles
+
         ReloadedDiscordGuildForAdmin _ _ _ _ _ _ ->
             BackendMsgLog_ReloadedDiscordGuildForAdmin
 
@@ -2988,6 +2884,15 @@ toBackendLog toBackend =
 
                 Local_SetEmailNotifications _ ->
                     ToBackendLog_Local_SetEmailNotifications
+
+                Local_SetEmbedVisibility _ ->
+                    ToBackendLog_Local_SetEmbedVisibility
+
+                Local_ScheduleAccountDeletion _ ->
+                    ToBackendLog_Local_ScheduleAccountDeletion
+
+                Local_CancelAccountDeletion ->
+                    ToBackendLog_Local_CancelAccountDeletion
 
                 Local_RegisterPushSubscription _ _ ->
                     ToBackendLog_Local_RegisterPushSubscription

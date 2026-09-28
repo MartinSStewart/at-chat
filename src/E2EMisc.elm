@@ -5,11 +5,13 @@ module E2EMisc exposing
     , channelSuggestionTest
     , codeBlockInputTest
     , colorPickerTest
+    , deleteAccountTest
     , dmThreadsTest
     , emojiSuggestionTest
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
+    , hourlyOrphanedFilesTest
     , importChannelTest
     , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
@@ -37,6 +39,7 @@ import Audio
 import Broadcast
 import ChannelExport
 import Color
+import DiscordUserData
 import DmChannel
 import DmChannelId
 import Drawing
@@ -46,6 +49,7 @@ import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
 import Expect
@@ -66,6 +70,8 @@ import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
+import PersonName
+import Quantity
 import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
@@ -77,7 +83,9 @@ import Test.Html.Selector
 import TimeInMinutes
 import Touch
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ImportChannelError(..), ToBackend, ToFrontend)
+import User
 import UserColor
+import UserOptions
 import UserSession
 
 
@@ -762,6 +770,33 @@ orphanedFilesTest config =
                         ]
                     )
                 ]
+            )
+        ]
+
+
+{-| An upload that nothing uses is noticed on one hourly update and deleted on the next, while
+one that only became unused since the last update is left for another hour.
+-}
+hourlyOrphanedFilesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+hourlyOrphanedFilesTest config =
+    E2EHelper.startTest
+        "Hourly update deletes files that stayed orphaned for an hour"
+        E2EHelper.startTime
+        config
+        [ T.backendUpdate 0 (Types.Rpc_GotFileUpload (FileStatus.fileHash "firstFile") 5000 Nothing)
+        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+        , T.backendUpdate 100 (Types.Rpc_GotFileUpload (FileStatus.fileHash "secondFile") 5000 Nothing)
+        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+        , T.checkBackend
+            100
+            (\backend ->
+                if SeqDict.keys (E2EHelper.unwrapBackend backend).files == [ FileStatus.fileHash "secondFile" ] then
+                    Ok ()
+
+                else
+                    Err "Only the file orphaned since the last hourly update should be left"
             )
         ]
 
@@ -2369,6 +2404,298 @@ colorPickerTest config =
                 ]
             )
         ]
+
+
+{-| Deleting an account only schedules it, so the same button cancels it again, and until then a
+banner counts down the time left and leads back to the button. Once the time is up, the next
+hourly update resets the account, renames it, replaces everything it wrote with deleted
+messages and unlinks its Discord account. Admins can't delete their account.
+-}
+deleteAccountTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> String
+    -> String
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
+    T.start
+        "Delete account"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 UserOptions.deleteAccountButtonId
+                , T.checkState 100 (checkAccountDeletion E2EHelper.adminEmail False)
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.writeMessage user 100 "In the guild"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.writeMessage admin 100 "From the admin"
+                        , E2EHelper.openDm user 100 "0"
+                        , E2EHelper.writeMessage user 100 "In a DM"
+                        , E2EHelper.createThread user (Id.fromInt 0)
+                        , E2EHelper.writeMessage user 100 "In a thread"
+                        , user.click 100 (Dom.id "guild_showUserOptions")
+                        , user.click 100 UserOptions.deleteAccountButtonId
+                        , T.checkState 100 (checkAccountDeletion E2EHelper.userEmail True)
+                        , T.checkState 100 (checkAccountDeletionEmails 1)
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text UserOptions.cancelAccountDeletionText ])
+
+                        -- The banner leads to the user options, so it stays out of the way while they're open.
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+                        , user.click 100 (Dom.id "userOptions_settings")
+                        , user.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , user.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "accountDeletionBanner" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.containing [ Test.Html.Selector.text "14\u{00A0}days" ] ]
+                            )
+
+                        -- Pressing the banner opens the account settings, even though they were collapsed.
+                        , user.click 100 (Dom.id "accountDeletionBanner")
+                        , user.click 100 UserOptions.deleteAccountButtonId
+                        , T.checkState 100 (checkAccountDeletion E2EHelper.userEmail False)
+                        , user.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+
+                        -- Once closed, the banner stays closed. Waiting an hour first makes the deletion
+                        -- land on an hourly update that doesn't also start a backup export, as the two
+                        -- take different paths through HourlyUpdate.
+                        , user.click (Duration.hour |> Duration.inMilliseconds) (Dom.id "guild_showUserOptions")
+                        , user.click 100 UserOptions.deleteAccountButtonId
+                        , T.checkState 100 (checkAccountDeletionEmails 2)
+                        , user.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , user.click 100 (Dom.id "accountDeletionBanner_close")
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+                        , E2EHelper.linkSecondDiscordAccount E2EHelper.sessionId1 discordOp0Ready discordOp0ReadySupplemental
+                        , T.checkState 1000 (checkDiscordAccountIsLinked True)
+                        ]
+                    )
+                ]
+            )
+
+        -- Nothing happens until the two weeks are up. The frontends are gone by now so that
+        -- simulating two weeks of their timers doesn't slow the test down, which is also why
+        -- this test uses T.start instead of E2EHelper.startTest and its attacker frontend.
+        , T.andThen
+            0
+            (\data ->
+                case userIdByEmail E2EHelper.userEmail data of
+                    Just ( userId, _ ) ->
+                        [ T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) (checkAccountIsStillScheduled userId)
+                        , T.checkState 0 (checkDeletedMessages userId 0)
+                        , T.checkState 0 (checkDiscordAccountIsLinked True)
+                        , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) (checkAccountWasDeleted userId)
+                        , T.checkState 0 (checkDeletedMessages userId 3)
+                        , T.checkState 0 (checkDiscordAccountIsLinked False)
+                        ]
+
+                    Nothing ->
+                        [ T.checkState 0 (\_ -> Err "Expected the user to exist on the backend") ]
+            )
+        ]
+
+
+{-| A linked Discord account has its gateway open, and deleting the at-chat account it's linked to
+turns it back into basic data and closes the gateway.
+-}
+checkDiscordAccountIsLinked : Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkDiscordAccountIsLinked isLinked data =
+    case
+        ( SeqDict.get E2EHelper.secondDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers
+        , E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data
+        , isLinked
+        )
+    of
+        ( Just (DiscordUserData.FullData _), Just _, True ) ->
+            Ok ()
+
+        ( Just (DiscordUserData.BasicData _), Nothing, False ) ->
+            Ok ()
+
+        ( Nothing, _, _ ) ->
+            Err "Expected the Discord account to exist"
+
+        _ ->
+            if isLinked then
+                Err "The Discord account should be linked with its gateway open"
+
+            else
+                Err "The Discord account should have been unlinked and its gateway closed"
+
+
+userIdByEmail : EmailAddress -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.UserId, User.BackendUser )
+userIdByEmail email state =
+    NonemptyDict.toList (E2EHelper.unwrapBackend state.backend).users
+        |> List.filter (\( _, user ) -> user.email == User.UserHasEmail email)
+        |> List.head
+
+
+checkAccountDeletion : EmailAddress -> Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountDeletion email isScheduled state =
+    case ( userIdByEmail email state |> Maybe.map (\( _, user ) -> user.deleteAccountAt), isScheduled ) of
+        ( Just (Just deleteAt), True ) ->
+            let
+                weeksLeft : Float
+                weeksLeft =
+                    Duration.from state.time deleteAt |> Duration.inWeeks
+            in
+            if weeksLeft > 1.99 && weeksLeft <= 2 then
+                Ok ()
+
+            else
+                Err "The account should be deleted 2 weeks after it was asked for"
+
+        ( Just Nothing, False ) ->
+            Ok ()
+
+        ( Just (Just _), False ) ->
+            Err "The account shouldn't be scheduled for deletion"
+
+        ( Just Nothing, True ) ->
+            Err "The account should be scheduled for deletion"
+
+        ( Nothing, _ ) ->
+            Err "Expected the user to exist on the backend"
+
+
+checkAccountIsStillScheduled : Id.Id Id.UserId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountIsStillScheduled userId state =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend state.backend).users of
+        Just user ->
+            if user.deleteAccountAt == Nothing then
+                Err "The account should still be scheduled for deletion"
+
+            else
+                Ok ()
+
+        Nothing ->
+            Err "Expected the user to exist on the backend"
+
+
+checkAccountWasDeleted : Id.Id Id.UserId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountWasDeleted userId state =
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend state.backend
+    in
+    case NonemptyDict.get userId backend.users of
+        Just user ->
+            if PersonName.toString user.name /= "<delete_user_" ++ Id.toString userId ++ ">" then
+                Err ("The deleted account should have been renamed but is called " ++ PersonName.toString user.name)
+
+            else if user.email /= User.DeletedUser then
+                Err "The deleted account shouldn't have an email address"
+
+            else if user.deleteAccountAt /= Nothing then
+                Err "The deleted account shouldn't be scheduled for deletion again"
+
+            else if List.any (\session -> session.userId == userId) (SeqDict.values backend.sessions) then
+                Err "The deleted account shouldn't have any sessions left"
+
+            else
+                Ok ()
+
+        Nothing ->
+            Err "Expected the user to exist on the backend"
+
+
+{-| Counts the deleted messages in every guild and DM, and checks nothing the invited user wrote
+is left while the admin's message still is.
+-}
+checkDeletedMessages : Id.Id Id.UserId -> Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkDeletedMessages userId expectedDeleted state =
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend state.backend
+
+        allMessages : List ( Maybe (Id.Id Id.UserId), Bool )
+        allMessages =
+            List.concatMap
+                (\guild -> List.concatMap messagesInChannel (SeqDict.values guild.channels))
+                (SeqDict.values backend.guilds)
+                ++ List.concatMap messagesInChannel (SeqDict.values backend.dmChannels)
+
+        deletedCount : Int
+        deletedCount =
+            List.filter Tuple.second allMessages |> List.length
+
+        authors : List (Id.Id Id.UserId)
+        authors =
+            List.filterMap Tuple.first allMessages
+    in
+    if deletedCount /= expectedDeleted then
+        Err ("Expected " ++ String.fromInt expectedDeleted ++ " deleted messages but got " ++ String.fromInt deletedCount)
+
+    else if expectedDeleted > 0 && List.member userId authors then
+        Err "A message written by the deleted account is left"
+
+    else if not (List.member Broadcast.adminUserId authors) then
+        Err "The admin's message should be left alone"
+
+    else
+        Ok ()
+
+
+messagesInChannel :
+    { a
+        | messages : IdArray.IdArray Id.ChannelMessageId (Message.Message Id.ChannelMessageId (Id.Id Id.UserId) (Id.Id Id.ChannelId))
+        , threads : SeqDict.SeqDict (Id.Id Id.ChannelMessageId) { b | messages : IdArray.IdArray Id.ThreadMessageId (Message.Message Id.ThreadMessageId (Id.Id Id.UserId) (Id.Id Id.ChannelId)) }
+    }
+    -> List ( Maybe (Id.Id Id.UserId), Bool )
+messagesInChannel channel =
+    List.map authorAndIsDeleted (IdArray.toList channel.messages)
+        ++ List.concatMap
+            (\thread -> List.map authorAndIsDeleted (IdArray.toList thread.messages))
+            (SeqDict.values channel.threads)
+
+
+authorAndIsDeleted : Message.Message messageId (Id.Id Id.UserId) channelId -> ( Maybe (Id.Id Id.UserId), Bool )
+authorAndIsDeleted message =
+    case message of
+        Message.UserTextMessage data ->
+            ( Just data.createdBy, False )
+
+        Message.EncryptedUserTextMessage data ->
+            ( Just data.createdBy, False )
+
+        Message.DeletedMessage _ ->
+            ( Nothing, True )
+
+        Message.UserJoinedMessage _ _ _ _ ->
+            ( Nothing, False )
+
+        Message.CallStarted _ ->
+            ( Nothing, False )
+
+        Message.GameStarted _ ->
+            ( Nothing, False )
+
+
+checkAccountDeletionEmails : Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountDeletionEmails expected state =
+    let
+        count : Int
+        count =
+            List.filterMap (E2EHelper.isAccountDeletionEmail E2EHelper.userEmail) state.httpRequests
+                |> List.length
+    in
+    if count == expected then
+        Ok ()
+
+    else
+        Err ("Expected " ++ String.fromInt expected ++ " account deletion emails but got " ++ String.fromInt count)
 
 
 hasStrokeSelector : UserColor.UserColor -> Test.Html.Selector.Selector

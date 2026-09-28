@@ -143,7 +143,7 @@ import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, EmailNotifications, EmbedVisibility, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, ToBeFilledInByBackend, UserOptionSection, UserSession)
@@ -284,6 +284,7 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    , accountDeletionBannerClosed : Bool
     }
 
 
@@ -472,6 +473,7 @@ type alias BackendModel =
     , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
     , slackToken : Maybe Slack.AuthToken
     , files : SeqDict FileHash BackendFileData
+    , orphanedFilesLastHour : SeqSet FileHash
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
@@ -654,6 +656,10 @@ type FrontendMsg_
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
     | SelectedEmailNotifications EmailNotifications
+    | SelectedEmbedVisibility EmbedVisibility
+    | PressedDeleteAccount
+    | PressedAccountDeletionBanner
+    | PressedCloseAccountDeletionBanner
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | GotStartupData (Result String Ports.StartupData)
@@ -918,6 +924,7 @@ type BackendMsg
     | ScheduledExportUploadResult Time.Posix Int (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | DeletedOrphanedFiles Time.Posix ChangeId ClientId (List FileHash) (Result Http.Error ())
+    | HourlyDeletedOrphanedFiles Time.Posix (List FileHash) (Result Http.Error ())
     | ReloadedDiscordGuildForAdmin Time.Posix ChangeId ClientId (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Result Discord.HttpError ( Discord.Guild, List Discord.Channel2 ))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
     | Rpc_GotFileUpload FileHash Int (Maybe (Coord CssPixels))
@@ -1005,6 +1012,7 @@ type LoginResult
     | NeedsTwoFactorToken
     | NeedsAccountSetup
     | RecoveryPasswordInvalid
+    | UserIsDeleted
 
 
 type ToFrontend
@@ -1208,6 +1216,9 @@ type LocalChange
     | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
+    | Local_SetEmbedVisibility EmbedVisibility
+    | Local_ScheduleAccountDeletion Time.Posix
+    | Local_CancelAccountDeletion
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)

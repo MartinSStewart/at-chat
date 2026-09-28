@@ -53,6 +53,7 @@ type Log
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
     | ReceivedTypeThatIsAlwaysInvalid
+    | DeletedLog
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -147,6 +148,9 @@ shouldNotifyAdmin log =
 
         ReceivedTypeThatIsAlwaysInvalid ->
             Just "ReceivedTypeThatIsAlwaysInvalid"
+
+        DeletedLog ->
+            Nothing
 
 
 monthToString : Month -> String
@@ -589,6 +593,9 @@ logContent onPressCopy emojiData customEmojis log =
                     "Error"
                     (Ui.text "A ToBackend message that should have failed wire validation reached the backend")
                 ]
+
+        DeletedLog ->
+            tag infoTag "Deleted after 30 days"
 
 
 type alias TagStyle =

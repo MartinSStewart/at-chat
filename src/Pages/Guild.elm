@@ -120,7 +120,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import Ui.Table
-import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import User exposing (EmbedVisibility(..), FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
@@ -1686,7 +1686,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , channelColumnLazy True canScroll2 model loggedIn local.localUser guildId guild channelRoute
+                                , channelColumnLazy True canScroll2 model loggedIn local.localUser local.calls guildId guild channelRoute
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1701,7 +1701,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , channelColumnLazy False True model loggedIn local.localUser guildId guild channelRoute
+                                    , channelColumnLazy False True model loggedIn local.localUser local.calls guildId guild channelRoute
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -8570,7 +8570,13 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                 IsHoveredWhileSelectingAnchor ->
                                     False
                         }
-                        embeds
+                        (case localUser.user.embedVisibility of
+                            ShowEmbeds ->
+                                embeds
+
+                            HideEmbeds ->
+                                Array.empty
+                        )
                         content
                         ++ (if isBeingEdited then
                                 [ Html.span
@@ -8738,7 +8744,13 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                 IsHoveredWhileSelectingAnchor ->
                                     False
                         }
-                        embeds
+                        (case localUser.user.embedVisibility of
+                            ShowEmbeds ->
+                                embeds
+
+                            HideEmbeds ->
+                                Array.empty
+                        )
                         content
                         ++ (case message2.editedAt of
                                 Just editedAt ->
@@ -9505,6 +9517,7 @@ previewThreadLastMessage timezone time emojiData customEmojis allUsers channels 
         , Html.Attributes.id ("guild_threadStarterIndicator_" ++ Id.toString messageId)
         , Html.Events.onClick MessageView_PressedViewThreadLink
         , Html.Attributes.style "cursor" "pointer"
+        , Html.Attributes.style "position" "relative"
         ]
         (Html.div
             [ Html.Attributes.style "display" "flex"
@@ -9607,17 +9620,19 @@ channelColumnLazy :
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalUser
+    -> Call.Local
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild channelRoute =
+channelColumnLazy isMobile canScroll2 model loggedIn localUser calls guildId guild channelRoute =
     if loggedIn.channelSearch /= "" then
         -- The search text changes too often for laziness to be worth it here
         channelColumn
             isMobile
             (Time.millisToPosix (nearestHour model.time))
             localUser
+            calls
             guildId
             guild
             channelRoute
@@ -9625,7 +9640,7 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
             loggedIn.channelSearch
 
     else
-        Ui.Lazy.lazy5
+        Ui.Lazy.lazy6
             (if isMobile then
                 if canScroll2 then
                     channelColumnCanScrollMobile
@@ -9637,6 +9652,7 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
                 channelColumnNotMobile
             )
             localUser
+            calls
             (nearestHour model.time)
             guildId
             guild
@@ -9684,13 +9700,14 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
 
 channelColumnNotMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnNotMobile localUser time guildId guild channelRoute =
-    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnNotMobile localUser calls time guildId guild channelRoute =
+    channelColumn False (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
 
 
 discordChannelColumnNotMobile :
@@ -9705,24 +9722,26 @@ discordChannelColumnNotMobile time localUser routeData guild =
 
 channelColumnCanScrollMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCanScrollMobile localUser time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnCanScrollMobile localUser calls time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
 
 
 channelColumnCannotScrollMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCannotScrollMobile localUser time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute False ""
+channelColumnCannotScrollMobile localUser calls time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute False ""
 
 
 discordChannelColumnCanScrollMobile :
@@ -9780,13 +9799,14 @@ channelColumn :
     Bool
     -> Time.Posix
     -> LocalUser
+    -> Call.Local
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Bool
     -> String
     -> Element FrontendMsg_
-channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser calls guildId guild channelRoute canScroll2 channelSearch =
     let
         channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
@@ -9895,6 +9915,13 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                                 isMobile
                                 channelMuted
                                 hasNotifications
+                                (Call.joinedUsers
+                                    localUser.session.userId
+                                    (Call.GuildRoomId { guildId = guildId, channelId = channelId })
+                                    calls
+                                    |> SeqDict.keys
+                                    |> List.filterMap (\userId -> User.getUser userId localUser)
+                                )
                                 channelRoute
                                 guildId
                                 channelId
@@ -10533,12 +10560,13 @@ channelColumnRow :
     Bool
     -> IsMuted
     -> ChannelNotificationType
+    -> List FrontendUser
     -> ChannelRoute
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg_
-channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId channel =
+channelColumnRow isMobile isMuted hasNotification usersInCall channelRoute guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -10586,6 +10614,7 @@ channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId
         , MyUi.noShrinking
         ]
         [ Ui.text (ChannelName.toString channel.name)
+        , User.multipleProfileImages usersInCall
         , channelIsMuted isMuted
         ]
 
@@ -10829,6 +10858,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         matchesSearch name =
             String.contains searchFilter (String.toLower (PersonName.toString name))
 
+        columnItems : List ( Time.Posix, Element FrontendMsg_ )
         columnItems =
             List.filterMap
                 (\( otherUserId, dmChannel ) ->
@@ -11048,6 +11078,15 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     ]
                     [ Ui.text "No results found for "
                     , Ui.el [ Ui.Font.bold ] (Ui.text friendsSearch)
+                    ]
+
+            [ ( _, single ) ] ->
+                Ui.column
+                    [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
+                    [ single
+                    , Ui.el
+                        [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                        (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
                     ]
 
             _ ->
@@ -11436,7 +11475,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                         Nothing
                             )
                             members2
-                            |> User.multipleProfileImages
+                            |> User.multipleDiscordProfileImages
                             |> Ui.el
                                 [ GuildIcon.discordNotificationView 4 -3 notification
                                 , Ui.width Ui.shrink
