@@ -266,11 +266,6 @@ thumbnailWindowWidth isMobile =
         300
 
 
-thumbnailSize : Bool -> Coord CssPixels
-thumbnailSize isMobile =
-    Coord.xy (thumbnailWindowWidth isMobile) (round (thumbnailWindowWidth isMobile / aspectRatio))
-
-
 gotUserMediaDevices : List MediaDevice -> List (IdString MediaDeviceId) -> Model -> Model
 gotUserMediaDevices devices selectedDevices model =
     { model
@@ -549,15 +544,15 @@ videoNodes localUser config loggedIn local =
         spacing =
             8
 
-        posAndSizes : Int -> List ( Coord CssPixels, Coord CssPixels )
+        posAndSizes : Int -> List ( Coord CssPixels, Int )
         posAndSizes total =
             videoPosAndSize
                 { containerWidth = maxWidth, containerHeight = maxHeight, spacing = spacing }
                 (List.range 1 total |> List.map (\index -> { id = Id.fromInt index, aspectRatio = aspectRatio }))
-                |> List.map (\a -> ( Coord.xy (a.x + voiceChatX) (a.y + voiceChatY), Coord.xy a.width a.height ))
+                |> List.map (\a -> ( Coord.xy (a.x + voiceChatX) (a.y + voiceChatY), a.width ))
 
         getPosAndSize index list =
-            List.Extra.getAt index list |> Maybe.withDefault ( Coord.origin, thumbnailSize isMobile )
+            List.Extra.getAt index list |> Maybe.withDefault ( Coord.origin, 100 )
 
         isMobile : Bool
         isMobile =
@@ -618,7 +613,7 @@ videoNodes localUser config loggedIn local =
                 total =
                     List.length sessions + 1
 
-                list : List ( Coord CssPixels, Coord CssPixels )
+                list : List ( Coord CssPixels, Int )
                 list =
                     posAndSizes total
 
@@ -690,7 +685,7 @@ videoNodes localUser config loggedIn local =
                  else
                     VideoNodeHidden
                 )
-                ( thumbnailPosition isMobile config.windowSize model, thumbnailSize isMobile )
+                ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                 model.localIsSpeaking
                 model
                 :: List.indexedMap
@@ -711,7 +706,7 @@ videoNodes localUser config loggedIn local =
                              else
                                 VideoNodeHidden
                             )
-                            ( thumbnailPosition isMobile config.windowSize model, thumbnailSize isMobile )
+                            ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                             (SeqSet.member connectionId model.isSpeaking)
                             model
                     )
@@ -885,9 +880,6 @@ layoutScore container videos cols =
             videos
 
 
-{-| Every video gets the whole of its grid cell, so they fill the container between them
-and are cropped to fit rather than letterboxed. A last row with fewer videos is centered.
--}
 layoutVideos :
     { containerWidth : Int, containerHeight : Int, spacing : Int }
     -> List { id : Id VideoNodeId, aspectRatio : Float }
@@ -895,55 +887,100 @@ layoutVideos :
     -> List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int }
 layoutVideos container videos cols =
     let
+        count : Int
+        count =
+            List.length videos
+
         rows : Int
         rows =
-            (List.length videos + cols - 1) // cols
+            (count + cols - 1) // cols
 
         spacing : Float
         spacing =
             toFloat container.spacing
 
-        cellWidth : Float
-        cellWidth =
-            (toFloat container.containerWidth - toFloat (cols - 1) * spacing) / toFloat cols
-
-        cellHeight : Float
-        cellHeight =
+        rowBudget : Float
+        rowBudget =
             (toFloat container.containerHeight - toFloat (rows - 1) * spacing) / toFloat rows
+
+        videoRows : List (List { id : Id VideoNodeId, aspectRatio : Float })
+        videoRows =
+            List.Extra.greedyGroupsOf cols videos
+
+        rowHeight : List { id : Id VideoNodeId, aspectRatio : Float } -> Float
+        rowHeight rowVideos =
+            let
+                k : Int
+                k =
+                    List.length rowVideos
+
+                sumAspectRatio : Float
+                sumAspectRatio =
+                    List.sum (List.map .aspectRatio rowVideos)
+
+                availableWidth : Float
+                availableWidth =
+                    toFloat container.containerWidth - toFloat (k - 1) * spacing
+            in
+            if sumAspectRatio <= 0 || availableWidth <= 0 then
+                0
+
+            else
+                min rowBudget (availableWidth / sumAspectRatio)
+
+        rowsWithHeights : List ( List { id : Id VideoNodeId, aspectRatio : Float }, Float )
+        rowsWithHeights =
+            List.map (\rowVideos -> ( rowVideos, rowHeight rowVideos )) videoRows
+
+        totalHeight : Float
+        totalHeight =
+            List.sum (List.map Tuple.second rowsWithHeights) + toFloat (rows - 1) * spacing
+
+        yStart : Float
+        yStart =
+            (toFloat container.containerHeight - totalHeight) / 2
+
+        layoutRow : ( List { id : Id VideoNodeId, aspectRatio : Float }, Float ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } )
+        layoutRow ( rowVideos, height ) ( y, acc ) =
+            let
+                k : Int
+                k =
+                    List.length rowVideos
+
+                rowWidth : Float
+                rowWidth =
+                    height * List.sum (List.map .aspectRatio rowVideos) + toFloat (k - 1) * spacing
+
+                xStart : Float
+                xStart =
+                    (toFloat container.containerWidth - rowWidth) / 2
+
+                ( _, rowResults ) =
+                    List.foldl
+                        (\video ( x, list ) ->
+                            let
+                                w : Float
+                                w =
+                                    height * video.aspectRatio
+                            in
+                            ( x + w + spacing
+                            , { id = video.id
+                              , x = round x
+                              , y = round y
+                              , width = round w
+                              , height = round height
+                              }
+                                :: list
+                            )
+                        )
+                        ( xStart, [] )
+                        rowVideos
+            in
+            ( y + height + spacing, rowResults ++ acc )
     in
-    List.Extra.greedyGroupsOf cols videos
-        |> List.indexedMap
-            (\row rowVideos ->
-                let
-                    rowWidth : Float
-                    rowWidth =
-                        toFloat (List.length rowVideos) * (cellWidth + spacing) - spacing
-
-                    xStart : Float
-                    xStart =
-                        (toFloat container.containerWidth - rowWidth) / 2
-
-                    y : Float
-                    y =
-                        toFloat row * (cellHeight + spacing)
-                in
-                List.indexedMap
-                    (\column video ->
-                        let
-                            x : Float
-                            x =
-                                xStart + toFloat column * (cellWidth + spacing)
-                        in
-                        { id = video.id
-                        , x = round x
-                        , y = round y
-                        , width = round (x + cellWidth) - round x
-                        , height = round (y + cellHeight) - round y
-                        }
-                    )
-                    rowVideos
-            )
-        |> List.concat
+    List.foldl layoutRow ( yStart, [] ) rowsWithHeights
+        |> Tuple.second
+        |> List.reverse
 
 
 videoNode :
@@ -952,14 +989,15 @@ videoNode :
     -> LocalOrConnection
     -> RemoteCallData
     -> VideoNodeState
-    -> ( Coord CssPixels, Coord CssPixels )
+    -> ( Coord CssPixels, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode userId localUser id remoteCallData videoNodeState ( position, size ) isSpeaking model =
+videoNode userId localUser id remoteCallData videoNodeState ( position, width ) isSpeaking model =
     let
-        ( width, height ) =
-            Coord.toTuple size
+        height : Float
+        height =
+            toFloat width / aspectRatio
 
         idString =
             case id of
@@ -972,7 +1010,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, size ) i
     ( idString
     , Html.div
         ([ Html.Attributes.style "width" (String.fromInt width ++ "px")
-         , Html.Attributes.style "height" (String.fromInt height ++ "px")
+         , Html.Attributes.style "height" (String.fromFloat height ++ "px")
          , Html.Attributes.style "position" "absolute"
          , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
          , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position) ++ "px")
@@ -1010,7 +1048,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, size ) i
         [ Html.div
             [ Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
-            , Html.Attributes.style "top" (String.fromInt ((height - User.profileImageSize) // 2) ++ "px")
+            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
             , Html.Attributes.style
                 "opacity"
                 (if remoteCallData.videoInputEnabled then
@@ -1031,12 +1069,11 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, size ) i
                     [ Html.Attributes.id idString
                     , Html.Attributes.style "background-color" "rgba(0,0,0)"
                     , Html.Attributes.style "width" (String.fromInt width ++ "px")
-                    , Html.Attributes.style "height" (String.fromInt height ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
                     , Html.Attributes.style "outline" (speakingOutline isSpeaking)
                     , Html.Attributes.style "transition" "outline-width 50ms ease-out"
                     , Html.Attributes.style "border-radius" "8px"
                     , Html.Attributes.style "pointer-events" "none"
-                    , Html.Attributes.style "object-fit" "cover"
                     , Html.Attributes.attribute "playsinline" ""
                     , Html.Attributes.attribute "webkit-playsinline" ""
                     ]
@@ -1047,7 +1084,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, size ) i
                     [ Html.Attributes.id idString
                     , Html.Attributes.style "background-color" "rgba(0,0,0)"
                     , Html.Attributes.style "width" (String.fromInt width ++ "px")
-                    , Html.Attributes.style "height" (String.fromInt height ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
                     , Html.Attributes.style "outline" (speakingOutline isSpeaking)
                     , Html.Attributes.style "transition" "outline-width 50ms ease-out"
                     , Html.Attributes.style "border-radius" "8px"
@@ -1090,7 +1127,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, size ) i
                     , Html.Attributes.style "z-index" "999"
                     , Html.Attributes.style
                         "top"
-                        (String.fromInt (height - containerHeight - 8) ++ "px")
+                        (String.fromInt (round height - containerHeight - 8) ++ "px")
                     , Html.Attributes.style "display" "flex"
                     , Html.Attributes.style "flex-direction" "column"
                     , Html.Attributes.style "align-items" "center"
