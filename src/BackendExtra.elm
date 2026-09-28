@@ -252,22 +252,19 @@ sendAccountDeletionEmail :
     -> Postmark.ApiKey
     -> Command BackendOnly toFrontend backendMsg
 sendAccountDeletionEmail msg emailAddress deleteAt postmarkServerToken =
-    let
-        text : String
-        text =
-            "You have chosen to have your at-chat account and all your messages deleted in "
-                ++ String.fromInt User.accountDeletionDelayInWeeks
-                ++ " weeks, on "
-                ++ MyUi.datestamp Time.utc deleteAt
-                ++ ".\n\nIf you change your mind, open User settings and press \"Cancel account deletion\"."
-    in
     { from = { name = "", email = noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
     , subject =
         NonemptyString
             'Y'
             ("our at-chat account will be deleted in " ++ String.fromInt User.accountDeletionDelayInWeeks ++ " weeks")
-    , body = Postmark.BodyText text
+    , body =
+        "You have chosen to have your at-chat account and all your messages deleted in "
+            ++ String.fromInt User.accountDeletionDelayInWeeks
+            ++ " weeks ("
+            ++ MyUi.datestamp Time.utc deleteAt
+            ++ ").\n\nIf you change your mind, open User settings and press \"Cancel account deletion\"."
+            |> Postmark.BodyText
     , messageStream = "outbound"
     }
         |> Postmark.sendEmail msg postmarkServerToken

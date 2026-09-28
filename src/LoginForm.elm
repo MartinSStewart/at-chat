@@ -741,7 +741,7 @@ enterLoginCodeView windowSize textSelection model =
 
 submitting : Element msg
 submitting =
-    Ui.Prose.paragraph [ Ui.Font.center ] [ Ui.text "Submitting..." ]
+    Ui.Prose.paragraph [ Ui.paddingXY 16 0 ] [ Ui.text "Submitting..." ]
 
 
 enterTwoFactorCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg

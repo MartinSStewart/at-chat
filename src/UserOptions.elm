@@ -878,7 +878,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     (PressedExpandContainer UserOption_Privacy)
                     MyUi.background1
                     isMobile
-                    "Privacy"
+                    "Privacy policy"
                     [ Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.paddingXY 16 0 ] ]
                 ]
             )
