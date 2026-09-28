@@ -9265,12 +9265,14 @@ privacyPage isMobile loaded =
     FrontendExtra.layout
         loaded
         [ Ui.background MyUi.background3
-        , Ui.scrollable
-        , Ui.heightMin 0
         , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
         ]
         (Ui.el
-            [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
+            [ MyUi.notoSans
+            , Ui.scrollable
+            , Ui.heightMin 0
+            , Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 }
+            ]
             (Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.centerX, Ui.widthMax 1000, Ui.paddingXY 16 32 ])
         )
 
