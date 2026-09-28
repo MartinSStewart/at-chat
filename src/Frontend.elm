@@ -548,8 +548,11 @@ initLoadedFrontend loading clientId time startupData loginResult =
             FrontendExtra.routeReplace model2 route
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion
-        , -- Sent even when logged in, since logging out shows the homepage without reloading it
-          Pages.Home.callPreviewImages
+        , if callPreviewShown model2 then
+            Pages.Home.callPreviewImages
+
+          else
+            Command.none
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -677,7 +680,11 @@ update _ msg model =
 
                         NotLoggedIn _ ->
                             Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    , Command.batch
+                        [ cmd
+                        , checkCallDisplayModeChange loaded loadedNew
+                        , checkCallPreviewShown loaded loadedNew
+                        ]
                     , Audio.cmdNone
                     )
 
@@ -687,7 +694,11 @@ update _ msg model =
                             updateLoaded msg loaded
                     in
                     ( Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    , Command.batch
+                        [ cmd
+                        , checkCallDisplayModeChange loaded loadedNew
+                        , checkCallPreviewShown loaded loadedNew
+                        ]
                     , Audio.cmdNone
                     )
 
@@ -6364,6 +6375,27 @@ checkCallDisplayModeChange modelOld modelNew =
             Command.none
 
 
+{-| The preview's video nodes are new and blank each time it's shown, so the images are sent again.
+-}
+checkCallPreviewShown : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallPreviewShown modelOld modelNew =
+    if not (callPreviewShown modelOld) && callPreviewShown modelNew then
+        Pages.Home.callPreviewImages
+
+    else
+        Command.none
+
+
+callPreviewShown : LoadedFrontend -> Bool
+callPreviewShown model =
+    case ( model.route, model.loginStatus ) of
+        ( HomePageRoute _, NotLoggedIn { loginForm } ) ->
+            loginForm == Nothing
+
+        _ ->
+            False
+
+
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
 removePartialStickers textInputFocus htmlId text =
     case
@@ -7903,7 +7935,7 @@ updateFromBackend _ msg model =
 
         Loaded loaded ->
             let
-                ( loaded2, cmds ) =
+                ( loadedNew, cmds ) =
                     updateLoadedFromBackend
                         msg
                         (case loaded.toFrontendLogs of
@@ -7914,7 +7946,10 @@ updateFromBackend _ msg model =
                                 loaded
                         )
             in
-            ( Loaded loaded2, cmds, Audio.cmdNone )
+            ( Loaded loadedNew
+            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew ]
+            , Audio.cmdNone
+            )
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
