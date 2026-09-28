@@ -375,6 +375,9 @@ handlePortToJs requestAndData =
         "clear_browser_storage_to_js" ->
             Nothing
 
+        "call_preview_images_to_js" ->
+            Nothing
+
         _ ->
             let
                 _ =
