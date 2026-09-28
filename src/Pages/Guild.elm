@@ -10614,54 +10614,9 @@ channelColumnRow isMobile isMuted hasNotification usersInCall channelRoute guild
         , MyUi.noShrinking
         ]
         [ Ui.text (ChannelName.toString channel.name)
-        , channelCallUsers usersInCall
+        , User.multipleProfileImages usersInCall
         , channelIsMuted isMuted
         ]
-
-
-{-| Beyond three people only the first two are shown, followed by how many more there are.
--}
-channelCallUsers : List FrontendUser -> Element msg
-channelCallUsers users =
-    let
-        profileImage : FrontendUser -> Element msg
-        profileImage user =
-            Ui.el
-                [ Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
-                    |> Ui.htmlAttribute
-                ]
-                (User.smallProfileImage False (Just user))
-    in
-    case users of
-        [] ->
-            Ui.none
-
-        _ ->
-            (if List.length users > 3 then
-                List.map profileImage (List.take 2 users)
-                    ++ [ Ui.el
-                            [ Ui.width (Ui.px User.smallProfileImageSize)
-                            , Ui.height (Ui.px User.smallProfileImageSize)
-                            , Ui.rounded User.smallProfileImageRounding
-                            , Ui.background MyUi.background1
-                            , Ui.Font.color MyUi.font2
-                            , Ui.Font.size 12
-                            , Ui.contentCenterX
-                            , Ui.contentCenterY
-                            ]
-                            (Ui.text ("+" ++ String.fromInt (List.length users - 2)))
-                       ]
-
-             else
-                List.map profileImage users
-            )
-                |> Ui.row
-                    [ Ui.width Ui.shrink
-                    , Ui.spacing 4
-                    , Ui.alignRight
-                    , MyUi.noShrinking
-                    , Ui.paddingWith { left = 8, right = 0, top = 0, bottom = 0 }
-                    ]
 
 
 channelIsMuted : IsMuted -> Element msg
@@ -11520,7 +11475,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                         Nothing
                             )
                             members2
-                            |> User.multipleProfileImages
+                            |> User.multipleDiscordProfileImages
                             |> Ui.el
                                 [ GuildIcon.discordNotificationView 4 -3 notification
                                 , Ui.width Ui.shrink

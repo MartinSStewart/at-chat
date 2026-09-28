@@ -28,6 +28,7 @@ module User exposing
     , init
     , linkDiscordDataCodec
     , missingName
+    , multipleDiscordProfileImages
     , multipleProfileImages
     , privateKeyForAccount
     , profileImage
@@ -1187,8 +1188,89 @@ profileImageNoRounding user =
             GuildIcon.defaultUser profileImageSize Ui.noAttr UserColor.default
 
 
-multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+multipleProfileImagesY : number
+multipleProfileImagesY =
+    12
+
+
+multipleProfileImages : List FrontendUser -> Element msg
 multipleProfileImages profileImages =
+    case profileImages of
+        [] ->
+            Ui.none
+
+        [ one ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two, three ] ->
+            Ui.el
+                [ Ui.width (Ui.px 55)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        [ one, two, three, four ] ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just four)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.alignRight
+                ]
+                Ui.none
+
+        one :: two :: three :: rest ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = multipleProfileImagesY, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 45, y = multipleProfileImagesY, z = 0 }
+                        , Ui.background MyUi.background1
+                        , Ui.width (Ui.px smallProfileImageSize)
+                        , Ui.height (Ui.px smallProfileImageSize)
+                        , Ui.Font.center
+                        , Ui.Font.bold
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.Font.size 14
+                        , Ui.contentCenterY
+                        , MyUi.htmlStyle "white-space" "pre"
+                        ]
+                        (Ui.text ("+" ++ String.fromInt (List.length rest)))
+                    )
+                , Ui.alignRight
+                ]
+                Ui.none
+
+
+multipleDiscordProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+multipleDiscordProfileImages profileImages =
     case profileImages of
         [] ->
             Ui.none

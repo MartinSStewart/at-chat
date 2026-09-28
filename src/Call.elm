@@ -1168,8 +1168,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> CallId -> Local -> Model -> Element Msg
-view windowSize roomId calls model =
+view : Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
+view isAdmin windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
         ongoingCall =
@@ -1217,17 +1217,21 @@ view windowSize roomId calls model =
                         , Ui.width Ui.shrink
                         , Ui.spacing 8
                         ]
-                        [ MyUi.simpleButton
-                            (Dom.id "voiceChat_toggleDebugData")
-                            PressedToggleDebugData
-                            (Ui.text
-                                (if model.pollDebugData then
-                                    "Stop\u{00A0}polling\u{00A0}JS"
+                        [ if isAdmin then
+                            MyUi.simpleButton
+                                (Dom.id "voiceChat_toggleDebugData")
+                                PressedToggleDebugData
+                                (Ui.text
+                                    (if model.pollDebugData then
+                                        "Stop\u{00A0}polling\u{00A0}JS"
 
-                                 else
-                                    "Poll\u{00A0}JS\u{00A0}state"
+                                     else
+                                        "Poll\u{00A0}JS\u{00A0}state"
+                                    )
                                 )
-                            )
+
+                          else
+                            Ui.none
                         , MyUi.rowButton
                             (if hasJoined2 then
                                 Dom.id "guild_leaveVoiceChat"

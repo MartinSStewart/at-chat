@@ -665,33 +665,9 @@ callTab isMobile currentTab roomId localUser calls =
     let
         joined : Element msg
         joined =
-            Call.joinedUsers localUser.session.userId roomId calls
-                |> SeqDict.toList
-                |> List.map
-                    (\( userId, count ) ->
-                        case User.getUser userId localUser of
-                            Just user ->
-                                Ui.el
-                                    [ if OneOrGreater.toInt count > 1 then
-                                        GuildIcon.notificationHelper
-                                            MyUi.background1
-                                            MyUi.white
-                                            MyUi.border1
-                                            2
-                                            -2
-                                            count
-
-                                      else
-                                        Ui.noAttr
-                                    , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
-                                        |> Ui.htmlAttribute
-                                    ]
-                                    (User.smallProfileImage False (Just user))
-
-                            Nothing ->
-                                Ui.none
-                    )
-                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
+            SeqDict.toList (Call.joinedUsers localUser.session.userId roomId calls)
+                |> List.filterMap (\( userId, _ ) -> User.getUser userId localUser)
+                |> User.multipleProfileImages
     in
     Ui.row
         [ Ui.width Ui.shrink, Ui.spacing 8, Ui.height Ui.fill, Ui.contentCenterY ]
@@ -752,7 +728,12 @@ tabBodyView isMobile local loggedIn model =
                                     Nothing
 
                         ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (GuildRoomId { guildId = guildId, channelId = channelId }) local.calls loggedIn.voiceChat
+                            Call.view
+                                local.localUser.user.isAdmin
+                                model.windowSize
+                                (GuildRoomId { guildId = guildId, channelId = channelId })
+                                local.calls
+                                loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
@@ -801,7 +782,12 @@ tabBodyView isMobile local loggedIn model =
                                 model
 
                         Just ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (DmRoomId { otherUserId = otherUserId }) local.calls loggedIn.voiceChat
+                            Call.view
+                                local.localUser.user.isAdmin
+                                model.windowSize
+                                (DmRoomId { otherUserId = otherUserId })
+                                local.calls
+                                loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
