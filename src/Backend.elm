@@ -54,7 +54,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
 import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
-import Log
+import Log exposing (Log)
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
@@ -519,11 +519,8 @@ updateHelper msg model =
                                 )
                            )
 
-        SentLoginEmail time userId result ->
-            BackendExtra.addLog time (Log.LoginEmail (withoutRecipients result) userId) model
-
-        SentSignupEmail time result ->
-            BackendExtra.addLog time (Log.SignupEmail (withoutRecipients result)) model
+        SentLoginEmail time emailAddress result ->
+            BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
 
         SentLogErrorEmail time email result ->
             case result of
@@ -533,13 +530,13 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        SentNotificationEmail time userId result ->
-            case withoutRecipients result of
+        SentNotificationEmail time email result ->
+            case result of
                 Ok _ ->
                     ( model, Command.none )
 
                 Err error ->
-                    BackendExtra.addLog time (Log.FailedToSendNotificationEmail error userId) model
+                    BackendExtra.addLog time (Log.FailedToSendNotificationEmail error email) model
 
         DiscordUserWebsocketMsg discordUserId result ->
             let
@@ -2025,7 +2022,12 @@ updateHelper msg model =
                     SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
 
                 ( withNewOrphanedFiles, deleteAccountsCmd ) =
-                    deleteAccounts time { model | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete }
+                    deleteAccounts
+                        time
+                        { model
+                            | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
+                            , logs = deleteOldLogs time model.logs
+                        }
 
                 shouldExport : Bool
                 shouldExport =
@@ -2696,6 +2698,22 @@ disconnectClient time sessionId clientId model =
             ( model, Command.none )
 
 
+deleteOldLogs :
+    Time.Posix
+    -> Array { time : Time.Posix, log : Log, isHidden : Bool }
+    -> Array { time : Time.Posix, log : Log, isHidden : Bool }
+deleteOldLogs time logs =
+    Array.map
+        (\log ->
+            if Duration.from log.time time |> Quantity.greaterThan (Duration.days 30) then
+                { log | log = Log.DeletedLog }
+
+            else
+                log
+        )
+        logs
+
+
 deleteAccounts : Time.Posix -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 deleteAccounts time model =
     let
@@ -2848,22 +2866,6 @@ deleteMessageBy usersToDelete message =
 
         GameStarted _ ->
             message
-
-
-{-| Postmark's errors list who the email was for, which would put the email address in the log.
--}
-withoutRecipients : Result Postmark.SendEmailError () -> Result Postmark.SendEmailError ()
-withoutRecipients result =
-    Result.mapError
-        (\error ->
-            case error of
-                Postmark.PostmarkError response ->
-                    Postmark.PostmarkError { response | to = [] }
-
-                _ ->
-                    error
-        )
-        result
 
 
 deleteFiles : SecretId ServerSecret -> List FileHash -> Task BackendOnly Http.Error ()
@@ -3374,7 +3376,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
                                     model3.users
                           }
-                        , BackendExtra.sendLoginEmail (SentLoginEmail time userId) email loginCode model3.postmarkApiKey
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
                         )
 
                 ( Nothing, Ok loginCode ) ->
@@ -3392,7 +3394,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                     model3.pendingLogins
                           }
-                        , BackendExtra.sendLoginEmail (SentSignupEmail time) email loginCode model3.postmarkApiKey
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
                         )
 
                     else
@@ -5890,7 +5892,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
                                             model
                                         , BackendExtra.sendAccountDeletionEmail
-                                            (SentNotificationEmail time session.userId)
+                                            (SentNotificationEmail time email)
                                             email
                                             deleteAt
                                             model.postmarkApiKey

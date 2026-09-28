@@ -2711,9 +2711,6 @@ backendMsgLog msg =
         SentLoginEmail _ _ _ ->
             BackendMsgLog_SentLoginEmail
 
-        SentSignupEmail _ _ ->
-            BackendMsgLog_SentSignupEmail
-
         UserConnected _ _ ->
             BackendMsgLog_UserConnected
 

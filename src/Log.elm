@@ -23,9 +23,8 @@ import Ui.Prose
 
 
 type Log
-    = LoginEmail (Result Postmark.SendEmailError ()) (Id UserId)
-    | SignupEmail (Result Postmark.SendEmailError ())
-    | FailedToSendNotificationEmail Postmark.SendEmailError (Id UserId)
+    = LoginEmail (Result Postmark.SendEmailError ()) EmailAddress
+    | FailedToSendNotificationEmail Postmark.SendEmailError EmailAddress
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
@@ -54,15 +53,13 @@ type Log
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
     | ReceivedTypeThatIsAlwaysInvalid
+    | DeletedLog
 
 
 shouldNotifyAdmin : Log -> Maybe String
 shouldNotifyAdmin log =
     case log of
         LoginEmail _ _ ->
-            Nothing
-
-        SignupEmail _ ->
             Nothing
 
         FailedToSendNotificationEmail _ _ ->
@@ -151,6 +148,9 @@ shouldNotifyAdmin log =
 
         ReceivedTypeThatIsAlwaysInvalid ->
             Just "ReceivedTypeThatIsAlwaysInvalid"
+
+        DeletedLog ->
+            Nothing
 
 
 monthToString : Month -> String
@@ -311,13 +311,13 @@ emojiOrCustomEmojiView emojiData customEmojis emoji =
 logContent : (String -> msg) -> Maybe Emoji.CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Log -> Element msg
 logContent onPressCopy emojiData customEmojis log =
     case log of
-        LoginEmail result userId ->
+        LoginEmail result emailAddress ->
             case result of
                 Ok () ->
                     Ui.column
                         [ Ui.spacing 4 ]
                         [ tag successTag "Login Email"
-                        , fieldRow "User" (Ui.text (Id.toString userId))
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
                         , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
                         ]
 
@@ -325,31 +325,15 @@ logContent onPressCopy emojiData customEmojis log =
                     Ui.column
                         [ Ui.spacing 4 ]
                         [ tag errorTag "Login Email Failed"
-                        , fieldRow "User" (Ui.text (Id.toString userId))
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
                         , errorDetails (sendEmailErrorToString error)
                         ]
 
-        SignupEmail result ->
-            case result of
-                Ok () ->
-                    Ui.column
-                        [ Ui.spacing 4 ]
-                        [ tag successTag "Signup Email"
-                        , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
-                        ]
-
-                Err error ->
-                    Ui.column
-                        [ Ui.spacing 4 ]
-                        [ tag errorTag "Signup Email Failed"
-                        , errorDetails (sendEmailErrorToString error)
-                        ]
-
-        FailedToSendNotificationEmail error userId ->
+        FailedToSendNotificationEmail error emailAddress ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Notification Email Failed"
-                , fieldRow "User" (Ui.text (Id.toString userId))
+                , fieldRow "To" (MyUi.emailAddress emailAddress)
                 , errorDetails (sendEmailErrorToString error)
                 ]
 
@@ -609,6 +593,9 @@ logContent onPressCopy emojiData customEmojis log =
                     "Error"
                     (Ui.text "A ToBackend message that should have failed wire validation reached the backend")
                 ]
+
+        DeletedLog ->
+            tag infoTag "Deleted after 30 days"
 
 
 type alias TagStyle =

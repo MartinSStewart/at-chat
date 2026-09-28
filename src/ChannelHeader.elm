@@ -22,7 +22,6 @@ import DmChannelId
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Game
-import GuildIcon
 import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
@@ -32,7 +31,6 @@ import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
-import OneOrGreater
 import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)

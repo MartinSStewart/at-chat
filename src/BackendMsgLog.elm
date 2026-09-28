@@ -12,7 +12,6 @@ kind of update runs and how long it takes without holding on to the messages the
 -}
 type BackendMsgLog
     = BackendMsgLog_SentLoginEmail
-    | BackendMsgLog_SentSignupEmail
     | BackendMsgLog_UserConnected
     | BackendMsgLog_UserDisconnected
     | BackendMsgLog_UserDisconnectedWithTime
@@ -89,9 +88,6 @@ backendMsgLogToString log =
     case log of
         BackendMsgLog_SentLoginEmail ->
             "SentLoginEmail"
-
-        BackendMsgLog_SentSignupEmail ->
-            "SentSignupEmail"
 
         BackendMsgLog_UserConnected ->
             "UserConnected"

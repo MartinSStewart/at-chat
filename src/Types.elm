@@ -819,14 +819,13 @@ type ToBackend
 
 
 type BackendMsg
-    = SentLoginEmail Time.Posix (Id UserId) (Result Postmark.SendEmailError ())
-    | SentSignupEmail Time.Posix (Result Postmark.SendEmailError ())
+    = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | UserConnected SessionId ClientId
     | UserDisconnected SessionId ClientId
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | SentNotificationEmail Time.Posix (Id UserId) (Result Postmark.SendEmailError ())
+    | SentNotificationEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)

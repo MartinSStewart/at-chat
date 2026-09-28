@@ -915,7 +915,6 @@ notification time userToNotify title senderIcon userToString channels plainText 
                         ( NotifyMeWhenMentioned, UserHasEmail email ) ->
                             [ messageNotificationEmail
                                 time
-                                userToNotify
                                 email
                                 title
                                 senderIcon
@@ -998,7 +997,7 @@ notificationAlt time userToNotify title icon pushNotificationText emailText emai
                     case ( user.emailNotifications, user.email ) of
                         ( NotifyMeWhenMentioned, UserHasEmail email ) ->
                             [ Postmark.sendEmail
-                                (SentNotificationEmail time userToNotify)
+                                (SentNotificationEmail time email)
                                 model.postmarkApiKey
                                 { from = { name = "", email = notificationEmailFrom }
                                 , to = List.Nonempty.fromElement { name = "", email = email }
@@ -1051,7 +1050,6 @@ Sent when the user has enabled email notifications in their settings.
 -}
 messageNotificationEmail :
     Time.Posix
-    -> Id UserId
     -> EmailAddress
     -> String
     -> Maybe FileHash
@@ -1062,11 +1060,11 @@ messageNotificationEmail :
     -> Message messageId userId channelId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-messageNotificationEmail time userId email senderName senderIcon userToString channels navigateTo plainText message postmarkApiKey =
+messageNotificationEmail time email senderName senderIcon userToString channels navigateTo plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
-                (SentNotificationEmail time userId)
+                (SentNotificationEmail time email)
                 postmarkApiKey
                 { from = { name = "", email = notificationEmailFrom }
                 , to = List.Nonempty.fromElement { name = "", email = email }

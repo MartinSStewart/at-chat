@@ -53,7 +53,6 @@ module User exposing
     , setName
     , smallProfileImage
     , smallProfileImageRounding
-    , smallProfileImageSize
     , toString
     , toStringAlt
     , toStringView
