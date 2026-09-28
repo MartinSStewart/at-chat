@@ -10842,6 +10842,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         matchesSearch name =
             String.contains searchFilter (String.toLower (PersonName.toString name))
 
+        columnItems : List ( Time.Posix, Element FrontendMsg_ )
         columnItems =
             List.filterMap
                 (\( otherUserId, dmChannel ) ->
@@ -11061,6 +11062,15 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     ]
                     [ Ui.text "No results found for "
                     , Ui.el [ Ui.Font.bold ] (Ui.text friendsSearch)
+                    ]
+
+            [ ( _, single ) ] ->
+                Ui.column
+                    [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
+                    [ single
+                    , Ui.el
+                        [ Ui.Font.size 14, Ui.padding 8 ]
+                        (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
                     ]
 
             _ ->
