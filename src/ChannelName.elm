@@ -18,9 +18,8 @@ fromString text =
         Just nonempty ->
             if String.Nonempty.length nonempty > maxLength then
                 Err "Too long"
-
-            else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}' || char == ' ') nonempty then
-                Err "Name can't contain line breaks or whitespace"
+                --else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}' || char == ' ') nonempty then
+                --    Err "Name can't contain line breaks or whitespace"
 
             else
                 ChannelName nonempty |> Ok
