@@ -1,8 +1,10 @@
-module PersonName exposing (PersonName(..), fromString, fromStringLossy, maxLength, toString, widestName)
+module PersonName exposing (PersonName(..), fromString, fromStringLossy, maxLength, toNonemptyString, toString, widestName)
 
 import String.Nonempty exposing (NonemptyString(..))
 
 
+{-| OpaqueVariants
+-}
 type PersonName
     = PersonName NonemptyString
 
@@ -71,3 +73,8 @@ fromStringLossy text =
 toString : PersonName -> String
 toString (PersonName a) =
     String.Nonempty.toString a
+
+
+toNonemptyString : PersonName -> NonemptyString
+toNonemptyString (PersonName a) =
+    a

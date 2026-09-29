@@ -1821,10 +1821,7 @@ encryptedDmNotification time senderId { otherUserId } notificationText model =
                 notificationAlt
                     time
                     otherUserId
-                    (case senderUser.name of
-                        PersonName.PersonName name ->
-                            name
-                    )
+                    (PersonName.toNonemptyString senderUser.name)
                     (case senderUser.icon of
                         Just icon ->
                             FileStatus.fileUrl FileStatus.pngContent icon
@@ -1878,10 +1875,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                 notificationAlt
                     time
                     otherUserId
-                    (case requestedByUser.name of
-                        PersonName.PersonName name ->
-                            name
-                    )
+                    (PersonName.toNonemptyString requestedByUser.name)
                     (case requestedByUser.icon of
                         Just icon ->
                             FileStatus.fileUrl FileStatus.pngContent icon

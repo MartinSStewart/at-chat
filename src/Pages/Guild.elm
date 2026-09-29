@@ -9907,8 +9907,26 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
                                     NoThread
                                     (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })) localUser.user.lastViewedMessage)
                                     channel
+
+                            threadNotifications : List ChannelNotificationType
+                            threadNotifications =
+                                SeqDict.toList channel.threads
+                                    |> List.map
+                                        (\( threadId, thread ) ->
+                                            GuildColumn.channelOrThreadHasNotifications
+                                                (MuteSettings.isChannelMuted localUser.user.muteSettings guildId channelId (ViewThread threadId))
+                                                directMentions
+                                                (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+                                                channelId
+                                                (ViewThread threadId)
+                                                (SeqDict.get
+                                                    ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }), threadId )
+                                                    localUser.user.lastViewedThreadMessage
+                                                )
+                                                thread
+                                        )
                         in
-                        ( channelSortName hasNotifications channel
+                        ( channelSortName (hasNotifications :: threadNotifications) channel
                         , Ui.column
                             []
                             [ channelColumnRow
@@ -9964,17 +9982,26 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
         )
 
 
-channelSortName : ChannelNotificationType -> { a | name : ChannelName } -> String
-channelSortName hasNotifications channel =
-    (case hasNotifications of
-        NoNotification ->
-            "c"
+{-| Takes the notifications of the channel and each of its threads, so that unread thread
+messages also move a channel up.
+-}
+channelSortName : List ChannelNotificationType -> { a | name : ChannelName } -> String
+channelSortName notifications channel =
+    (List.map
+        (\notification ->
+            case notification of
+                NoNotification ->
+                    "c"
 
-        NewMessage _ ->
-            "b"
+                NewMessage _ ->
+                    "b"
 
-        NewMessageForUser _ ->
-            "a"
+                NewMessageForUser _ ->
+                    "a"
+        )
+        notifications
+        |> List.minimum
+        |> Maybe.withDefault "c"
     )
         ++ ChannelName.toString channel.name
 
@@ -10176,8 +10203,28 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                                     NoThread
                                     (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })) localUser.user.lastViewedMessage)
                                     channel
+
+                            threadNotifications : List ChannelNotificationType
+                            threadNotifications =
+                                SeqDict.toList channel.threads
+                                    |> List.map
+                                        (\( threadId, thread ) ->
+                                            GuildColumn.channelOrThreadHasNotifications
+                                                (MuteSettings.isDiscordChannelMuted localUser.user.muteSettings routeData.guildId channelId (ViewThread threadId))
+                                                directMentions
+                                                (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
+                                                channelId
+                                                (ViewThread threadId)
+                                                (SeqDict.get
+                                                    ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })
+                                                    , threadId
+                                                    )
+                                                    localUser.user.lastViewedThreadMessage
+                                                )
+                                                thread
+                                        )
                         in
-                        ( channelSortName hasNotifications channel
+                        ( channelSortName (hasNotifications :: threadNotifications) channel
                         , Ui.column
                             []
                             [ discordChannelColumnRow

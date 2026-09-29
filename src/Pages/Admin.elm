@@ -78,7 +78,7 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminData_InvalidChannelName, AdminData_InvalidChannelNameGuild(..), AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -232,7 +232,6 @@ type Msg
     | PressedWebsocketCloseEventsPage Int
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
-    | PressedCountToBackend
     | PressedSendTypeThatIsAlwaysInvalid
 
 
@@ -240,7 +239,6 @@ type ToBackend
     = ExportBackendRequest ExportSubset
     | DownloadLastBackupRequest
     | ImportBackendChunkRequest { totalBytes : Int, offset : Int } Bytes
-    | CountToBackendRequest
     | TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid
 
 
@@ -263,7 +261,6 @@ type ToFrontend
     | ExportBackendProgress ExportSubset ExportProgress
     | ExportBackendFinished
     | DownloadLastBackupChunk BackupContents Int Bytes
-    | CountToFrontend Int
 
 
 type ExportProgress
@@ -292,7 +289,6 @@ type alias Model =
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
-    , countToFrontend : String
     , downloadingBackup : Maybe DownloadingBackup
     }
 
@@ -350,6 +346,7 @@ type alias InitAdminData =
     , checkToFrontendValidation : TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
+    , invalidChannelNames : List AdminData_InvalidChannelName
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
@@ -450,7 +447,6 @@ initForUser =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , countToFrontend = ""
     , downloadingBackup = Nothing
     }
 
@@ -480,7 +476,6 @@ initForAdmin { highlightLog } =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , countToFrontend = ""
     , downloadingBackup = Nothing
     }
 
@@ -1314,12 +1309,6 @@ update navigationKey time adminData localState msg model =
             , NoOutMsg
             )
 
-        PressedCountToBackend ->
-            ( { model | countToFrontend = "" }
-            , Lamdera.sendToBackend CountToBackendRequest
-            , NoOutMsg
-            )
-
         PressedSendTypeThatIsAlwaysInvalid ->
             ( model
             , Lamdera.sendToBackend (TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid)
@@ -1683,9 +1672,6 @@ updateFromBackend toFrontend model =
                   }
                 , Command.none
                 )
-
-        CountToFrontend count ->
-            ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
 
         ImportBackendChunkReceived receivedBytes ->
             case model.importBackendStatus of
@@ -3159,6 +3145,24 @@ exportProgressText progress =
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
 
+invalidChannelNameView : AdminData_InvalidChannelName -> Element msg
+invalidChannelNameView invalid =
+    let
+        guildText : String
+        guildText =
+            case invalid.guild of
+                InvalidChannelName_Guild guildName ->
+                    GuildName.toString guildName
+
+                InvalidChannelName_DeletedGuild guildName ->
+                    GuildName.toString guildName ++ " (deleted)"
+
+                InvalidChannelName_DiscordGuild guildName ->
+                    GuildName.toString guildName ++ " (Discord)"
+    in
+    "\"" ++ ChannelName.toString invalid.channelName ++ "\" in " ++ guildText ++ ": " ++ invalid.error |> Ui.text
+
+
 exportSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
 exportSection isMobile timezone expandedSections adminData model =
     section
@@ -3240,14 +3244,16 @@ exportSection isMobile timezone expandedSections adminData model =
                 ImportedBackendSuccessfully ->
                     Ui.text importedText
             ]
-        , Ui.row
-            [ Ui.spacing 8 ]
-            [ MyUi.simpleButton
-                (Dom.id "admin_countToBackendButton")
-                PressedCountToBackend
-                (Ui.text "Count to 200")
-            , Ui.text model.countToFrontend
-            ]
+        , case adminData.invalidChannelNames of
+            [] ->
+                Ui.text "All channel names pass w3_validate_ChannelName"
+
+            invalidChannelNames ->
+                Ui.column
+                    [ Ui.spacing 4 ]
+                    (Ui.text "Channel names that fail w3_validate_ChannelName:"
+                        :: List.map invalidChannelNameView invalidChannelNames
+                    )
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton

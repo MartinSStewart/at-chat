@@ -890,7 +890,6 @@ type BackendMsg
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep Time.Posix
-    | CountToFrontendStep
     | DownloadBackupChunkStep
     | ScheduledExportBackendStep Time.Posix
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)

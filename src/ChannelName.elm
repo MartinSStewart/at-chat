@@ -1,8 +1,10 @@
-module ChannelName exposing (ChannelName(..), fromString, fromStringLossy, toString)
+module ChannelName exposing (ChannelName(..), fromString, fromStringLossy, toNonemptyString, toString, w3_validate_ChannelName)
 
 import String.Nonempty exposing (NonemptyString(..))
 
 
+{-| OpaqueVariants
+-}
 type ChannelName
     = ChannelName NonemptyString
 
@@ -51,3 +53,8 @@ fromStringLossy text =
 toString : ChannelName -> String
 toString (ChannelName a) =
     String.Nonempty.toString a
+
+
+toNonemptyString : ChannelName -> NonemptyString
+toNonemptyString (ChannelName a) =
+    a

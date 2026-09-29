@@ -8,6 +8,8 @@ module LocalState exposing
     , AdminData_DmChannel
     , AdminData_Guild
     , AdminData_GuildChannel
+    , AdminData_InvalidChannelName
+    , AdminData_InvalidChannelNameGuild(..)
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -990,6 +992,7 @@ type alias AdminData =
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
     , lastBackup : Maybe LastBackup
+    , invalidChannelNames : List AdminData_InvalidChannelName
     , websocketCloseEvents : AdminDataStatus (Array WebsocketClosedEvent)
     , orphanedFiles : AdminDataStatus (SeqDict FileHash BackendFileData)
     , deleteOrphanedFiles : DeleteOrphanedFilesStatus
@@ -1307,6 +1310,22 @@ type alias AdminData_DeletedGuild =
     , memberCount : Int
     , deletedAt : Time.Posix
     }
+
+
+{-| A channel whose name fails `ChannelName.w3_validate_ChannelName`, which stops any backup
+that contains it from being imported.
+-}
+type alias AdminData_InvalidChannelName =
+    { guild : AdminData_InvalidChannelNameGuild
+    , channelName : ChannelName
+    , error : String
+    }
+
+
+type AdminData_InvalidChannelNameGuild
+    = InvalidChannelName_Guild GuildName
+    | InvalidChannelName_DeletedGuild GuildName
+    | InvalidChannelName_DiscordGuild GuildName
 
 
 type alias AdminData_GuildChannel =
