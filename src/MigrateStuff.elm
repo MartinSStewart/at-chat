@@ -5,12 +5,12 @@ import Browser
 import Bytes exposing (Bytes)
 import Bytes.Decode exposing (Decoder)
 import Bytes.Encode
-import Evergreen.V368.Discord
-import Evergreen.V368.DmChannel
-import Evergreen.V368.DmChannelId
-import Evergreen.V368.Id
-import Evergreen.V368.LocalState
-import Evergreen.V368.Types
+import Evergreen.V392.Discord
+import Evergreen.V392.DmChannel
+import Evergreen.V392.DmChannelId
+import Evergreen.V392.Id
+import Evergreen.V392.LocalState
+import Evergreen.V392.Types
 import File.Download
 import Html
 import Html.Attributes
@@ -38,7 +38,7 @@ main =
                 , Http.task
                     { method = "GET"
                     , url =
-                        "/backend-export (13).bin"
+                        "/backend-export(73).bin"
 
                     --"/backend-export-2026-09-05-14:34:56.bin"
                     , headers = []
@@ -56,17 +56,17 @@ main =
                                                 Debug.log "asd2f" ""
                                         in
                                         case Bytes.Decode.decode decodeStreamedBackendModel bytes of
-                                            Just _ ->
+                                            Just asdf ->
                                                 let
                                                     _ =
-                                                        Debug.log "asdf" ""
+                                                        Debug.log "asdf" asdf
 
                                                     bytes2 : Bytes
                                                     bytes2 =
                                                         Bytes.Encode.sequence [] |> Bytes.Encode.encode
 
-                                                    --Evergreen.Migrate.V368.migrate_Types_BackendModel backendModel
-                                                    --    |> Evergreen.V368.Types.w3_encode_BackendModel
+                                                    --Evergreen.Migrate.V392.migrate_Types_BackendModel backendModel
+                                                    --    |> Evergreen.V392.Types.w3_encode_BackendModel
                                                     --    |> Bytes.Encode.encode
                                                 in
                                                 case Bytes.Decode.decode Types.w3_decode_BackendModel bytes2 of
@@ -91,7 +91,7 @@ main =
                                                                 Err "Failed to export"
 
                                                     Nothing ->
-                                                        Err "Failed to decode 2"
+                                                        Err "Decoded streamed backend model but failed on next step"
 
                                             Nothing ->
                                                 let
@@ -138,58 +138,58 @@ main =
         }
 
 
-decodeBackendModel : Decoder Evergreen.V368.Types.BackendModel
+decodeBackendModel : Decoder Evergreen.V392.Types.BackendModel
 decodeBackendModel =
-    Evergreen.V368.Types.w3_decode_BackendModel
+    Evergreen.V392.Types.w3_decode_BackendModel
 
 
-decodeGuild : Decoder ( Evergreen.V368.Id.Id a, Evergreen.V368.LocalState.BackendGuild )
+decodeGuild : Decoder ( Evergreen.V392.Id.Id a, Evergreen.V392.LocalState.BackendGuild )
 decodeGuild =
     Bytes.Decode.map3
         (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
-        (Evergreen.V368.Id.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V368.LocalState.w3_decode_BackendGuild
+        (Evergreen.V392.Id.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V392.LocalState.w3_decode_BackendGuild
         (decodeLengthPrefixedList "Guild channel" decodeGuildChannel)
 
 
-decodeGuildChannel : Decoder ( Evergreen.V368.Id.Id a, Evergreen.V368.LocalState.BackendChannel )
+decodeGuildChannel : Decoder ( Evergreen.V392.Id.Id a, Evergreen.V392.LocalState.BackendChannel )
 decodeGuildChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V368.Id.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V368.LocalState.w3_decode_BackendChannel
+        (Evergreen.V392.Id.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V392.LocalState.w3_decode_BackendChannel
 
 
-decodeDmChannel : Decoder ( Evergreen.V368.DmChannelId.DmChannelId, Evergreen.V368.DmChannel.BackendDmChannel )
+decodeDmChannel : Decoder ( Evergreen.V392.DmChannelId.DmChannelId, Evergreen.V392.DmChannel.BackendDmChannel )
 decodeDmChannel =
     Bytes.Decode.map2 Tuple.pair
-        Evergreen.V368.DmChannelId.w3_decode_DmChannelId
-        Evergreen.V368.DmChannel.w3_decode_BackendDmChannel
+        Evergreen.V392.DmChannelId.w3_decode_DmChannelId
+        Evergreen.V392.DmChannel.w3_decode_BackendDmChannel
 
 
-decodeDiscordGuild : Decoder ( Evergreen.V368.Discord.Id a, Evergreen.V368.LocalState.DiscordBackendGuild )
+decodeDiscordGuild : Decoder ( Evergreen.V392.Discord.Id a, Evergreen.V392.LocalState.DiscordBackendGuild )
 decodeDiscordGuild =
     Bytes.Decode.map3
         (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
-        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V368.LocalState.w3_decode_DiscordBackendGuild
+        (Evergreen.V392.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V392.LocalState.w3_decode_DiscordBackendGuild
         (decodeLengthPrefixedList "DiscordGuild channel" decodeDiscordGuildChannel)
 
 
-decodeDiscordGuildChannel : Decoder ( Evergreen.V368.Discord.Id a, Evergreen.V368.LocalState.DiscordBackendChannel )
+decodeDiscordGuildChannel : Decoder ( Evergreen.V392.Discord.Id a, Evergreen.V392.LocalState.DiscordBackendChannel )
 decodeDiscordGuildChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
-        (Evergreen.V368.LocalState.w3_decode_DiscordBackendChannel |> Bytes.Decode.map (Debug.log "channel"))
+        (Evergreen.V392.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        (Evergreen.V392.LocalState.w3_decode_DiscordBackendChannel |> Bytes.Decode.map (Debug.log "channel"))
 
 
-decodeDiscordDmChannel : Decoder ( Evergreen.V368.Discord.Id Evergreen.V368.Discord.PrivateChannelId, Evergreen.V368.DmChannel.DiscordDmChannel )
+decodeDiscordDmChannel : Decoder ( Evergreen.V392.Discord.Id Evergreen.V392.Discord.PrivateChannelId, Evergreen.V392.DmChannel.DiscordDmChannel )
 decodeDiscordDmChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V368.DmChannel.w3_decode_DiscordDmChannel
+        (Evergreen.V392.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V392.DmChannel.w3_decode_DiscordDmChannel
 
 
-decodeStreamedBackendModel : Decoder Evergreen.V368.Types.BackendModel
+decodeStreamedBackendModel : Decoder Evergreen.V392.Types.BackendModel
 decodeStreamedBackendModel =
     Bytes.Decode.map5
         (\baseModel guilds dmChannels discordGuilds discordDmChannels ->
