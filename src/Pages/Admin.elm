@@ -35,6 +35,7 @@ module Pages.Admin exposing
     , pendingChangesText
     , regeneratingText
     , rolesToDict
+    , splitOffChunk
     , update
     , updateAdmin
     , updateFromBackend
@@ -45,6 +46,7 @@ import Array exposing (Array)
 import Array.Extra
 import BackendMsgLog exposing (BackendMsgLogData, backendMsgLogToString)
 import Bytes exposing (Bytes)
+import Bytes.Decode
 import Bytes.Encode
 import ChannelName
 import Codec
@@ -111,6 +113,33 @@ import Ui.Table
 import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
+
+
+{-| Split off the first `chunkWidth` bytes, along with whatever is left over. Asking for
+more bytes than there are gives back everything and an empty remainder.
+-}
+splitOffChunk : Int -> Bytes -> ( Bytes, Bytes )
+splitOffChunk chunkWidth bytes =
+    let
+        width : Int
+        width =
+            min chunkWidth (Bytes.width bytes)
+    in
+    Bytes.Decode.decode
+        (Bytes.Decode.map2 Tuple.pair
+            (Bytes.Decode.bytes width)
+            (Bytes.Decode.bytes (Bytes.width bytes - width))
+        )
+        bytes
+        |> Maybe.withDefault ( bytes, Bytes.Encode.encode (Bytes.Encode.sequence []) )
+
+
+{-| How much of a backup gets sent in each ToBackend message when importing it. The
+frontend runtime drops a ToBackend over 4 MB without sending it.
+-}
+importBackendChunkSize : Int
+importBackendChunkSize =
+    3 * 1024 * 1024
 
 
 importedText : String
@@ -210,7 +239,7 @@ type Msg
 type ToBackend
     = ExportBackendRequest ExportSubset
     | DownloadLastBackupRequest
-    | ImportBackendRequest Bytes
+    | ImportBackendChunkRequest { totalBytes : Int, offset : Int } Bytes
     | CountToBackendRequest
     | TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid
 
@@ -230,6 +259,7 @@ type alias ExportSubsetSelection =
 
 type ToFrontend
     = ImportBackendResponse (Result () ())
+    | ImportBackendChunkReceived Int
     | ExportBackendProgress ExportSubset ExportProgress
     | ExportBackendFinished
     | DownloadLastBackupChunk BackupContents Int Bytes
@@ -281,7 +311,7 @@ type alias DownloadingBackup =
 type ImportBackendStatus
     = NotImportingBackend
     | ImportBackendFailed
-    | ImportingBackend
+    | ImportingBackend { remainingBytes : Bytes, sentBytes : Int, totalBytes : Int }
     | ImportedBackendSuccessfully
 
 
@@ -1391,7 +1421,7 @@ update navigationKey time adminData localState msg model =
 
         PressedImportBackend ->
             case model.importBackendStatus of
-                ImportingBackend ->
+                ImportingBackend _ ->
                     ( model, Command.none, NoOutMsg )
 
                 _ ->
@@ -1404,8 +1434,19 @@ update navigationKey time adminData localState msg model =
             )
 
         GotImportBackendFileContent content ->
-            ( { model | importBackendStatus = ImportingBackend }
-            , Lamdera.sendToBackend (ImportBackendRequest content)
+            let
+                ( chunk, remainingBytes ) =
+                    splitOffChunk importBackendChunkSize content
+            in
+            ( { model
+                | importBackendStatus =
+                    ImportingBackend
+                        { remainingBytes = remainingBytes
+                        , sentBytes = Bytes.width chunk
+                        , totalBytes = Bytes.width content
+                        }
+              }
+            , Lamdera.sendToBackend (ImportBackendChunkRequest { totalBytes = Bytes.width content, offset = 0 } chunk)
             , NoOutMsg
             )
 
@@ -1645,6 +1686,35 @@ updateFromBackend toFrontend model =
 
         CountToFrontend count ->
             ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
+
+        ImportBackendChunkReceived receivedBytes ->
+            case model.importBackendStatus of
+                ImportingBackend importing ->
+                    if receivedBytes == importing.sentBytes then
+                        let
+                            ( chunk, remainingBytes ) =
+                                splitOffChunk importBackendChunkSize importing.remainingBytes
+                        in
+                        ( { model
+                            | importBackendStatus =
+                                ImportingBackend
+                                    { importing
+                                        | remainingBytes = remainingBytes
+                                        , sentBytes = importing.sentBytes + Bytes.width chunk
+                                    }
+                          }
+                        , Lamdera.sendToBackend
+                            (ImportBackendChunkRequest
+                                { totalBytes = importing.totalBytes, offset = importing.sentBytes }
+                                chunk
+                            )
+                        )
+
+                    else
+                        ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
+
+                _ ->
+                    ( model, Command.none )
 
         ImportBackendResponse result ->
             case result of
@@ -3161,8 +3231,11 @@ exportSection isMobile timezone expandedSections adminData model =
                 ImportBackendFailed ->
                     Ui.text "Failed to import backend"
 
-                ImportingBackend ->
-                    Ui.text "Importing..."
+                ImportingBackend importing ->
+                    "Importing... "
+                        ++ String.fromInt (100 * importing.sentBytes // max 1 importing.totalBytes)
+                        ++ "%"
+                        |> Ui.text
 
                 ImportedBackendSuccessfully ->
                     Ui.text importedText

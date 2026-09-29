@@ -21,6 +21,7 @@ import LocalState
 import Message exposing (Message(..))
 import NonemptyDict
 import OneToOne
+import Pages.Admin
 import SeqDict exposing (SeqDict)
 import Set
 import Test exposing (Test, describe, test)
@@ -96,12 +97,12 @@ tests =
                     |> Expect.equal (Ok [])
         , test "Splitting off a chunk gives back that many bytes plus the rest" <|
             \_ ->
-                Backend.splitOffChunk 4 (bytesFromValues (List.range 1 10))
+                Pages.Admin.splitOffChunk 4 (bytesFromValues (List.range 1 10))
                     |> (\( chunk, rest ) -> ( toByteValues chunk, toByteValues rest ))
                     |> Expect.equal ( List.range 1 4, List.range 5 10 )
         , test "Splitting off more bytes than there are gives back everything and an empty remainder" <|
             \_ ->
-                Backend.splitOffChunk 20 (bytesFromValues (List.range 1 10))
+                Pages.Admin.splitOffChunk 20 (bytesFromValues (List.range 1 10))
                     |> (\( chunk, rest ) -> ( toByteValues chunk, toByteValues rest ))
                     |> Expect.equal ( List.range 1 10, [] )
         , test "A backup is split into chunks that are no larger than the chunk size" <|
@@ -133,7 +134,7 @@ backupChunks chunkWidth backup =
         collect remaining chunksNewestFirst =
             let
                 ( chunk, rest ) =
-                    Backend.splitOffChunk chunkWidth remaining
+                    Pages.Admin.splitOffChunk chunkWidth remaining
             in
             if Bytes.width rest > 0 then
                 collect rest (chunk :: chunksNewestFirst)

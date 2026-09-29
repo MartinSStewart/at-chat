@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , BackupTransfer(..)
     , ChannelDataToDecrypt
     , ChannelDataToEncrypt
     , CountToFrontendState
@@ -55,6 +56,7 @@ module Types exposing
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
+    , UploadBackupState
     , UserOptionsModel
     , WaitingForLoginTokenData
     , messageMenuMobileOffset
@@ -489,7 +491,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
     , countToFrontendState : Maybe CountToFrontendState
-    , downloadBackupState : Maybe DownloadBackupState
+    , downloadBackupState : Maybe BackupTransfer
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
@@ -993,6 +995,19 @@ type alias CountToFrontendState =
     }
 
 
+{-| A backup moving between the backend and the admin page. Only one can be in flight at a
+time.
+
+Downloads and uploads share this field because a backup is the BackendModel encoded as it
+is. A new field would change that encoding and stop earlier backups from decoding, whereas
+this one is always Nothing in a backup, so what it holds can change without breaking them.
+
+-}
+type BackupTransfer
+    = BackupDownload DownloadBackupState
+    | BackupUpload UploadBackupState
+
+
 {-| Sending an entire backup in a single ToFrontend message blocks the websocket long
 enough for the connection to time out, so the backup gets sent to the admin one chunk at
 a time instead. `totalBytes` is the size of the whole backup so that the admin page knows
@@ -1002,6 +1017,17 @@ type alias DownloadBackupState =
     { contents : BackupContents
     , remainingBytes : Bytes
     , totalBytes : Int
+    , clientId : ClientId
+    }
+
+
+{-| The frontend runtime drops a ToBackend over 4 MB without sending it, so an imported
+backup arrives in chunks. `chunks` holds what has arrived so far, most recent first.
+-}
+type alias UploadBackupState =
+    { totalBytes : Int
+    , receivedBytes : Int
+    , chunks : List Bytes
     , clientId : ClientId
     }
 

@@ -4,7 +4,6 @@ module Backend exposing
     , app
     , app_
     , handleExportBackendStep
-    , splitOffChunk
     , startExport
     )
 
@@ -88,7 +87,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserColor
@@ -347,10 +346,10 @@ subscriptions model =
             Nothing ->
                 Subscription.none
         , case model.downloadBackupState of
-            Just _ ->
+            Just (BackupDownload _) ->
                 Time.every (Duration.milliseconds 30) (\_ -> DownloadBackupChunkStep)
 
-            Nothing ->
+            _ ->
                 Subscription.none
         , case model.scheduledExportState of
             Just _ ->
@@ -1708,15 +1707,15 @@ updateHelper msg model =
 
         DownloadBackupChunkStep ->
             case model.downloadBackupState of
-                Just downloadState ->
+                Just (BackupDownload downloadState) ->
                     let
                         ( chunk, remainingBytes ) =
-                            splitOffChunk downloadBackupChunkSize downloadState.remainingBytes
+                            Pages.Admin.splitOffChunk downloadBackupChunkSize downloadState.remainingBytes
                     in
                     ( { model
                         | downloadBackupState =
                             if Bytes.width remainingBytes > 0 then
-                                Just { downloadState | remainingBytes = remainingBytes }
+                                Just (BackupDownload { downloadState | remainingBytes = remainingBytes })
 
                             else
                                 Nothing
@@ -1726,7 +1725,7 @@ updateHelper msg model =
                         |> Lamdera.sendToFrontend downloadState.clientId
                     )
 
-                Nothing ->
+                _ ->
                     ( model, Command.none )
 
         ScheduledExportBackendStep time ->
@@ -9655,12 +9654,13 @@ updateFromFrontendAdmin time clientId toBackend model =
                 Just lastBackup ->
                     { model
                         | downloadBackupState =
-                            Just
+                            BackupDownload
                                 { contents = lastBackup.backup.contents
                                 , remainingBytes = lastBackup.bytes
                                 , totalBytes = Bytes.width lastBackup.bytes
                                 , clientId = clientId
                                 }
+                                |> Just
                     }
 
                 Nothing ->
@@ -9673,15 +9673,56 @@ updateFromFrontendAdmin time clientId toBackend model =
             , Command.none
             )
 
-        Pages.Admin.ImportBackendRequest bytes ->
-            case Bytes.Decode.decode WireHelper.decodeStreamedBackendModel bytes of
-                Just model2 ->
-                    ( model2
-                    , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
-                    )
+        Pages.Admin.ImportBackendChunkRequest { totalBytes, offset } chunk ->
+            let
+                upload : Maybe UploadBackupState
+                upload =
+                    if offset == 0 then
+                        Just { totalBytes = totalBytes, receivedBytes = Bytes.width chunk, chunks = [ chunk ], clientId = clientId }
+
+                    else
+                        case model.downloadBackupState of
+                            Just (BackupUpload upload2) ->
+                                if upload2.receivedBytes == offset && upload2.totalBytes == totalBytes && upload2.clientId == clientId then
+                                    Just
+                                        { upload2
+                                            | receivedBytes = upload2.receivedBytes + Bytes.width chunk
+                                            , chunks = chunk :: upload2.chunks
+                                        }
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+            in
+            case upload of
+                Just upload2 ->
+                    if upload2.receivedBytes < upload2.totalBytes then
+                        ( { model | downloadBackupState = Just (BackupUpload upload2) }
+                        , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendChunkReceived upload2.receivedBytes |> AdminToFrontend)
+                        )
+
+                    else
+                        case
+                            List.reverse upload2.chunks
+                                |> List.map Bytes.Encode.bytes
+                                |> Bytes.Encode.sequence
+                                |> Bytes.Encode.encode
+                                |> Bytes.Decode.decode WireHelper.decodeStreamedBackendModel
+                        of
+                            Just model2 ->
+                                ( model2
+                                , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
+                                )
+
+                            Nothing ->
+                                ( { model | downloadBackupState = Nothing }
+                                , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
+                                )
 
                 Nothing ->
-                    ( model
+                    ( { model | downloadBackupState = Nothing }
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
 
@@ -9695,25 +9736,6 @@ at once blocks the websocket for long enough that the connection times out.
 downloadBackupChunkSize : Int
 downloadBackupChunkSize =
     5 * 1024 * 1024
-
-
-{-| Split off the first `chunkWidth` bytes, along with whatever is left over. Asking for
-more bytes than there are gives back everything and an empty remainder.
--}
-splitOffChunk : Int -> Bytes -> ( Bytes, Bytes )
-splitOffChunk chunkWidth bytes =
-    let
-        width : Int
-        width =
-            min chunkWidth (Bytes.width bytes)
-    in
-    Bytes.Decode.decode
-        (Bytes.Decode.map2 Tuple.pair
-            (Bytes.Decode.bytes width)
-            (Bytes.Decode.bytes (Bytes.width bytes - width))
-        )
-        bytes
-        |> Maybe.withDefault ( bytes, Bytes.Encode.encode (Bytes.Encode.sequence []) )
 
 
 handleExportBackendStep : ExportStateProgress -> ExportStep
