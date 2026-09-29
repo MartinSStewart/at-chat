@@ -6448,6 +6448,7 @@ initAdminData adminData =
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , lastBackup = adminData.lastBackup
+    , invalidChannelNames = adminData.invalidChannelNames
     , websocketCloseEvents = LocalState.AdminDataNotLoaded
     , orphanedFiles = LocalState.AdminDataNotLoaded
     , deleteOrphanedFiles = LocalState.NotDeletingOrphanedFiles

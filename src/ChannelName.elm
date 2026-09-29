@@ -1,4 +1,4 @@
-module ChannelName exposing (ChannelName(..), fromString, fromStringLossy, toNonemptyString, toString)
+module ChannelName exposing (ChannelName(..), fromString, fromStringLossy, toNonemptyString, toString, w3_validate_ChannelName)
 
 import String.Nonempty exposing (NonemptyString(..))
 

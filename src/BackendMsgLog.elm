@@ -48,6 +48,8 @@ type BackendMsgLog
     | BackendMsgLog_ReloadedDiscordGuildChannel
     | BackendMsgLog_ReloadedDiscordDmChannel
     | BackendMsgLog_ExportBackendStep
+      -- No longer created. Removing it would shift the Wire3 tags of the constructors sorting after it
+      -- and break decoding backups that contain backendMsgLogs.
     | BackendMsgLog_CountToFrontendStep
     | BackendMsgLog_DownloadBackupChunkStep
     | BackendMsgLog_ScheduledExportBackendStep
