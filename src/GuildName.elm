@@ -3,6 +3,8 @@ module GuildName exposing (GuildName(..), fromString, fromStringLossy, toString)
 import String.Nonempty exposing (NonemptyString(..))
 
 
+{-| OpaqueVariants
+-}
 type GuildName
     = GuildName NonemptyString
 

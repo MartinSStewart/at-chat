@@ -336,7 +336,17 @@ threadCodec userIdCodec channelIdCodec =
 
 channelNameCodec : Codec ChannelName
 channelNameCodec =
-    Codec.map ChannelName.ChannelName (\(ChannelName.ChannelName a) -> a) nonemptyStringCodec
+    Codec.andThen
+        (\nonempty ->
+            case ChannelName.fromString (String.Nonempty.toString nonempty) of
+                Ok ok ->
+                    Codec.succeed ok
+
+                Err error ->
+                    Codec.fail error
+        )
+        ChannelName.toNonemptyString
+        nonemptyStringCodec
 
 
 nonemptyStringCodec : Codec NonemptyString
