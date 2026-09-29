@@ -36,34 +36,34 @@ at-chat stores the following sensitive data:
 * Any messages you write that contain sensitive data
 * Any files you upload that contain sensitive data
 * Should you choose to use the Discord integration:
-    * A session token with full access to your Discord account (the setup explains the risks in more detail)
-    * Your Discord account's email address
-    * Cached Discord messages and files
+      *-*  A session token with full access to your Discord account (the setup explains the risks in more detail)
+      *-*  Your Discord account's email address
+      *-*  Cached Discord messages and files
 
 ## What it is for
 
-Sensitive data is stored in order to provide you chat app features. It is not used for marketing, advertising, AI training, and is not sold to 3rd parties.
+Sensitive data is stored in order to provide you chat app features. It is not used for marketing, advertising, AI training, and it is not sold to 3rd parties.
 
 Sensitive data may be used by an administrator for the sole purpose of fixing software issues within at-chat. If this is a concern, you can [enable end-to-end encryption]("""
             ++ Env.domain
             ++ Route.encode (Route.HomePageRoute (Just E2eeInfoOverlay))
             ++ """) on direct messages to restrict what is visible to an admin.
 
-Sensitive data can be access by 3rd parties in the following ways:
-* [Hetzner](https://www.hetzner.com/) which owns the hardware at-chat runs on. The server being rented is located in Finland.
+Sensitive data can be accessed by 3rd parties in the following ways:
+* [Hetzner](https://www.hetzner.com/) owns the hardware at-chat runs on. The server being rented is located in Finland.
 * If you use the Discord integration feature, then messages and files sent to a Discord guild or Discord user will of course be available to Discord.
 * If someone you are writing to has enabled email notifications then your messages, profile image, and name will be sent to [Postmark](https://postmarkapp.com/) and that user's email provider.
 * If you have message embeds enabled then the site serving that embedded image or video can potentially store your IP address
 
 ## When is it deleted
 
-Your email address, name, messages, and Discord session tokens, will all be automatically deleted if you delete your account. Account deletion takes """
+Your email address, name, messages, and Discord session tokens, will all be deleted when delete your account. Account deletion takes """
             ++ String.fromInt User.accountDeletionDelayInWeeks
             ++ """ weeks in order to give other users a chance to backup any conversations they want a personal copy of.
 
-Uploaded files are automatically deleted after a few days once they are no longer referenced in at-chat. Note that, this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
+Uploaded files are deleted once they are no longer are attached to any messages. Note that this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
 
-Backups of the server are generated regularly. These are stored for up to 30 days before automatically being deleted.
+Backups of the server are generated regularly. These are stored for up to 30 days before being deleted.
 """
         )
         |> RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty

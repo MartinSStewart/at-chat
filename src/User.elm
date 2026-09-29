@@ -1199,9 +1199,9 @@ multipleProfileImages profileImages =
 
         [ one ] ->
             Ui.el
-                [ Ui.width (Ui.px 40)
+                [ Ui.width (Ui.px smallProfileImageSize)
                 , Ui.height (Ui.px MyUi.channelHeaderHeight)
-                , Ui.inFront (smallProfileImage False (Just one))
+                , Ui.inFront (Ui.el [ Ui.centerY ] (smallProfileImage False (Just one)))
                 , Ui.alignRight
                 ]
                 Ui.none
