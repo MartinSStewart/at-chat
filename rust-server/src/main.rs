@@ -963,7 +963,9 @@ async fn push_notification_endpoint(
 
     let builder = match builder.build() {
         Ok(builder2) => builder2,
-        Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 5")),
+        Err(error) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, format!("Error 5: {error:?}"));
+        }
     };
 
     match web_push::WebPushClient::send(&client, builder).await {

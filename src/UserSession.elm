@@ -29,6 +29,7 @@ module UserSession exposing
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
+    , truncatePushNotificationText
     , unreadOverviewMessageLimit
     )
 
@@ -447,3 +448,21 @@ setLastViewedGuild viewing session =
 setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession
 setSheepGameQuestions questions session =
     { session | savedSheepGameQuestions = questions }
+
+
+{-| Push services refuse a payload over about 3 KB, and the web-push crate refuses anything
+over 3052 bytes before sending it. The text goes into that payload as UTF-8 (up to 4 bytes a
+character) and, in an encrypted DM, is base64 encoded on top, so it's cut well short of that.
+-}
+truncatePushNotificationText : String -> String
+truncatePushNotificationText text =
+    let
+        chars : List Char
+        chars =
+            String.toList text
+    in
+    if List.length chars > 400 then
+        String.fromList (List.take 399 chars) ++ "…"
+
+    else
+        text
