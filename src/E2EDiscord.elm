@@ -16,6 +16,7 @@ import Effect.Test as T
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import Frontend
 import GuildIcon
 import GuildName
 import Html.Attributes
@@ -1171,9 +1172,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\user ->
-                [ user.click 100 (Dom.id "guild_showUserOptions")
-                , user.click 100 (Dom.id "userOptions_discordSection")
-                , user.checkView
+                [ -- Linking opens user options with the Discord section expanded
+                  user.checkView
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "at0232"
@@ -2016,6 +2016,79 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Linking a Discord account past the admin's limit shows an error"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.UsersSection)
+                        , adminPage.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "admin_discordAccounts_a_0_" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.exactText "at28727" ]
+                            )
+                        , adminPage.input 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_label")) "1"
+                        , adminPage.click 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_acceptEdit"))
+                        , T.checkState
+                            100
+                            (\data ->
+                                if (E2EHelper.unwrapBackend data.backend).discordLinkLimit == Just 1 then
+                                    Ok ()
+
+                                else
+                                    Err "The backend didn't store the linked Discord user limit"
+                            )
+                        ]
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondDiscordUserAuth)
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.checkView
+                            200
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText Frontend.discordLinkLimitReachedText ])
+                        , T.checkState
+                            100
+                            (\data ->
+                                if SeqDict.member E2EHelper.secondDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers then
+                                    Err "The second Discord account shouldn't have been linked"
+
+                                else
+                                    Ok ()
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Two linked Discord accounts in same guild produce single message"
         E2EHelper.startTime
         normalConfig
@@ -2169,7 +2242,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
@@ -2202,7 +2277,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ E2EHelper.enableNotifications False admin
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- The admin isn't viewing the Discord guild channel, so a message from
@@ -2260,7 +2337,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ E2EHelper.enableNotifications False admin
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- Positive control: while the admin isn't viewing the DM a message should push.
@@ -2405,7 +2484,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ -- The admin is on the friends page and isn't viewing the Discord DM, so no
+                        [ admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , -- The admin is on the friends page and isn't viewing the Discord DM, so no
                           -- notification icon is shown in the guild column yet.
                           admin.checkView
                             100
@@ -2554,6 +2634,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\connection _ ->
                         [ -- A new Discord group DM (the linked account plus two other users) is created.
                           T.websocketSendString 100 connection discordGroupDmChannelCreate
+                        , admin.click 100 (Dom.id "userOptions_closeUserOptions")
 
                         -- The admin isn't viewing the group DM, and it has no messages, so no
                         -- notification icon is shown in the guild column yet.
@@ -4468,3 +4549,13 @@ lastDiscordDmMessage backend =
 
         Nothing ->
             Nothing
+
+
+secondDiscordUserAuth : Discord.UserAuth
+secondDiscordUserAuth =
+    let
+        auth : Discord.UserAuth
+        auth =
+            E2EHelper.discordUserAuth
+    in
+    { auth | token = E2EHelper.secondDiscordToken }

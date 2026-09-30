@@ -1,4 +1,15 @@
-module UserColor exposing (Selection, UserColor(..), default, fromParts, picked, picker, saturationCount, startPicking, swatchId, toColor, toStyle)
+module UserColor exposing
+    ( Selection
+    , UserColor(..)
+    , fromParts
+    , picked
+    , picker
+    , saturationCount
+    , startPicking
+    , swatchId
+    , toColor
+    , toStyle
+    )
 
 import Color
 import Effect.Browser.Dom as Dom
@@ -17,18 +28,7 @@ type UserColor
 
 w3_validate_UserColor : UserColor -> Result String ()
 w3_validate_UserColor userColor =
-    let
-        parts =
-            toParts userColor
-    in
-    if parts.lightness < minLightness || parts.lightness > maxLightness then
-        Err "Invalid lightness"
-
-    else if toColor userColor |> isReadable then
-        Ok ()
-
-    else
-        Err "Contrast is too low"
+    fromParts (toParts userColor) |> Result.map (\_ -> ())
 
 
 hueCount : number
@@ -60,21 +60,23 @@ swatchSizeMobile =
     17
 
 
-default : UserColor
-default =
-    fromParts
-        { hue = 0
-        , saturation = 0
-        , lightness = 11
-        }
-
-
-fromParts : { hue : Int, saturation : Int, lightness : Int } -> UserColor
+fromParts : { hue : Int, saturation : Int, lightness : Int } -> Result String UserColor
 fromParts parts =
-    modBy hueCount parts.hue
-        + (modBy saturationCount parts.saturation * hueCount)
-        + (modBy lightnessCount parts.lightness * hueCount * saturationCount)
-        |> UserColor
+    let
+        color =
+            modBy hueCount parts.hue
+                + (modBy saturationCount parts.saturation * hueCount)
+                + (modBy lightnessCount parts.lightness * hueCount * saturationCount)
+                |> UserColor
+    in
+    if parts.lightness < minLightness || parts.lightness > maxLightness then
+        Err "Invalid lightness"
+
+    else if toColor color |> isReadable then
+        Ok color
+
+    else
+        Err "Contrast is too low"
 
 
 {-| Nothing stops a client from sending a number that isn't a colour, so this wraps rather
@@ -203,12 +205,12 @@ previewed and saved, so nobody ends up with a colour they can't see.
 
 -}
 type alias Selection =
-    { selected : UserColor, lastValid : UserColor }
+    { selected : { hue : Int, saturation : Int, lightness : Int }, lastValid : UserColor }
 
 
 startPicking : UserColor -> Selection
 startPicking color =
-    { selected = color, lastValid = color }
+    { selected = toParts color, lastValid = color }
 
 
 {-| The colour a selection actually stands for, which is the last usable one it landed on.
@@ -218,25 +220,21 @@ picked selection =
     selection.lastValid
 
 
-select : Selection -> UserColor -> Selection
+select : Selection -> { hue : Int, saturation : Int, lightness : Int } -> Selection
 select selection color =
     { selected = color
     , lastValid =
-        if isReadable (toColor color) then
-            color
+        case fromParts color of
+            Ok ok ->
+                ok
 
-        else
-            selection.lastValid
+            Err _ ->
+                selection.lastValid
     }
 
 
 picker : Bool -> Int -> Selection -> (Selection -> msg) -> Ui.Element msg
 picker isMobile containerSize selection onChange =
-    let
-        parts : { hue : Int, saturation : Int, lightness : Int }
-        parts =
-            toParts selection.selected
-    in
     if isMobile then
         let
             rowSize =
@@ -247,11 +245,11 @@ picker isMobile containerSize selection onChange =
             , Ui.width (Ui.px (swatchSizeMobile * min (saturationCount * 2) rowSize))
             , Ui.centerX
             ]
-            [ Ui.el [ Ui.contentCenterX ] (lightnessSlider selection parts onChange)
+            [ Ui.el [ Ui.contentCenterX ] (lightnessSlider selection selection.selected onChange)
             , Ui.row
                 [ Ui.wrap ]
                 (List.filterMap
-                    (swatchView isMobile (saturationCount * 2 - rowSize) selection parts onChange)
+                    (swatchView isMobile (saturationCount * 2 - rowSize) selection selection.selected onChange)
                     (List.range 0 (hueCount * saturationCount - 1))
                 )
             ]
@@ -264,10 +262,10 @@ picker isMobile containerSize selection onChange =
             [ Ui.row
                 [ Ui.wrap ]
                 (List.filterMap
-                    (swatchView isMobile 0 selection parts onChange)
+                    (swatchView isMobile 0 selection selection.selected onChange)
                     (List.range 0 (hueCount * saturationCount - 1))
                 )
-            , lightnessSlider selection parts onChange
+            , lightnessSlider selection selection.selected onChange
             ]
             |> Ui.el [ Ui.paddingXY 16 0 ]
 
@@ -316,35 +314,42 @@ swatchView isMobile columnsToDrop selection selected onChange index =
                 else
                     saturation
 
-            userColor =
-                fromParts { hue = hue, saturation = saturation2, lightness = selected.lightness }
-
-            color : Ui.Color
-            color =
-                toColor userColor
-
             swatchSize2 =
                 swatchSize isMobile |> Ui.px
 
-            usable : Bool
-            usable =
-                isReadable color
+            parts =
+                { hue = hue, saturation = saturation2, lightness = selected.lightness }
+
+            userColor : Result String UserColor
+            userColor =
+                fromParts parts
         in
         Ui.el
             (Ui.id (Dom.idToString (swatchId index))
                 :: Ui.width swatchSize2
                 :: Ui.height swatchSize2
-                :: (if usable then
-                        [ Ui.background color
-                        , Ui.Events.onClick (onChange (select selection userColor))
-                        , MyUi.htmlStyle "cursor" "pointer"
-                        ]
+                :: (case userColor of
+                        Ok userColor2 ->
+                            let
+                                color : Ui.Color
+                                color =
+                                    toColor userColor2
+                            in
+                            [ Ui.background color
+                            , Ui.Events.onClick
+                                (onChange
+                                    { selected = parts
+                                    , lastValid = userColor2
+                                    }
+                                )
+                            , MyUi.htmlStyle "cursor" "pointer"
+                            ]
 
-                    else
-                        []
+                        Err _ ->
+                            []
                    )
                 ++ (if hue == selected.hue && saturation2 == selected.saturation then
-                        [ Ui.inFront (selectionOutline usable) ]
+                        [ Ui.inFront (selectionOutline userColor) ]
 
                     else
                         []
@@ -354,18 +359,19 @@ swatchView isMobile columnsToDrop selection selected onChange index =
             |> Just
 
 
-selectionOutline : Bool -> Ui.Element msg
+selectionOutline : Result String UserColor -> Ui.Element msg
 selectionOutline usable =
     Ui.el
         (Ui.border 2
             :: Ui.height Ui.fill
-            :: (if usable then
-                    [ Ui.borderColor MyUi.black ]
+            :: (case usable of
+                    Ok _ ->
+                        [ Ui.borderColor MyUi.black ]
 
-                else
-                    [ Ui.borderColor MyUi.white
-                    , MyUi.htmlStyle "background-image" struckOutLine
-                    ]
+                    Err _ ->
+                        [ Ui.borderColor MyUi.white
+                        , MyUi.htmlStyle "background-image" struckOutLine
+                        ]
                )
         )
         Ui.none
@@ -407,7 +413,7 @@ lightnessSlider selection parts onChange =
             , Ui.rounded 4
             ]
             { label = sliderLabel.id
-            , onChange = \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
+            , onChange = \value -> select selection { parts | lightness = round value } |> onChange
             , min = minLightness
             , max = maxLightness
             , value = toFloat parts.lightness

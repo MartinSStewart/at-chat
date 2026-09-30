@@ -1,7 +1,8 @@
 module Frontend exposing
     ( app
     , app_
-    , discordLinkExpiredText
+    , discordLinkLimitReachedText
+    , discordLinkServerErrorText
     , goMatchNotFoundText
     )
 
@@ -78,7 +79,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Overlay(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
@@ -94,7 +95,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication
-import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -108,6 +109,16 @@ import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), Notifica
 import Vector2d
 import WordSpellingGame
 import X25519
+
+
+discordLinkServerErrorText : String
+discordLinkServerErrorText =
+    "Failed to link your Discord account due to a server error"
+
+
+discordLinkLimitReachedText : String
+discordLinkLimitReachedText =
+    "Sorry, too many people have already linked Discord accounts. We starting with only a small number of slots to make sure nothing breaks."
 
 
 discordLinkExpiredText : String
@@ -2193,7 +2204,7 @@ updateLoaded msg model =
                             Local_CollapseUserOptionSection section |> Just
 
                          else
-                            Local_ExpandUserOptionSection section |> Just
+                            Local_ExpandUserOptionSection section { collapseOthers = False } |> Just
                         )
                         loggedIn
                         Command.none
@@ -3119,31 +3130,7 @@ updateLoaded msg model =
                 model
 
         PressedAccountDeletionBanner ->
-            let
-                ( expandedModel, expandCmd ) =
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (if
-                                    SeqSet.member
-                                        UserOption_Settings
-                                        (Local.model loggedIn.localState).localUser.session.expandedUserOptions
-                                 then
-                                    Nothing
-
-                                 else
-                                    Just (Local_ExpandUserOptionSection UserOption_Settings)
-                                )
-                                loggedIn
-                                Command.none
-                        )
-                        model
-
-                ( routedModel, routeCmd ) =
-                    FrontendExtra.routePush expandedModel (Route.setOverlay (Just Route.UserOptionsOverlay) expandedModel.route)
-            in
-            ( routedModel, Command.batch [ expandCmd, routeCmd ] )
+            FrontendExtra.openUserOptionsAndExpandContainer UserOption_Settings model
 
         PressedCloseAccountDeletionBanner ->
             FrontendExtra.updateLoggedIn
@@ -8812,21 +8799,29 @@ updateLoadedFromBackend msg model =
                     FrontendExtra.logout model
 
         LinkDiscordResponse result ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     case ( model.route, loggedIn.userOptions ) of
                         ( LinkDiscord _, Nothing ) ->
                             case result of
                                 Ok () ->
-                                    ( loggedIn, FrontendExtra.routeReplace model (HomePageRoute Nothing) )
+                                    FrontendExtra.openUserOptionsAndExpandContainer UserOption_Discord model
 
-                                Err _ ->
-                                    ( loggedIn, FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordServerError)) )
+                                Err LinkDiscordLimitReached ->
+                                    ( { model | loginStatus = LoggedIn loggedIn }
+                                    , FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordLimitReachedError))
+                                    )
+
+                                Err (LinkDiscordHttpError _) ->
+                                    ( { model | loginStatus = LoggedIn loggedIn }
+                                    , FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordServerError))
+                                    )
 
                         _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         ProfilePictureEditorToFrontend imageEditorToFrontend ->
             FrontendExtra.updateLoggedIn
@@ -9223,10 +9218,13 @@ view _ model =
                                                 discordLinkExpiredText
 
                                             LinkDiscordServerError ->
-                                                "Failed to link your Discord account due to a server error"
+                                                discordLinkServerErrorText
 
                                             LinkDiscordInvalidData ->
                                                 "Failed to link your Discord account due to some problem with the bookmarklet"
+
+                                            LinkDiscordLimitReachedError ->
+                                                discordLinkLimitReachedText
                                         )
                             )
 
@@ -10151,5 +10149,6 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
             (User.allUsers localUser)
             SeqDict.empty
             contentAndEmbeds.content
+            |> UserSession.truncatePushNotificationText
         )
     )

@@ -8795,7 +8795,7 @@ deletedMessageContent messageId isSelectingAnchor createdAt timezone =
             , Ui.Font.size 14
             ]
             (Ui.text LocalState.messageDeleted)
-        , messageTimestamp (\_ -> UserColor.default) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
+        , messageTimestamp (\_ -> RichText.defaultColor) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
         ]
 
 

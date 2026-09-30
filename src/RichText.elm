@@ -19,6 +19,7 @@ module RichText exposing
     , customEmojis
     , customEmojisFromDiscord
     , dateAndTimeToString
+    , defaultColor
     , discordCharsLeft
     , domainToString
     , emailView
@@ -94,6 +95,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import TimeInMinutes exposing (TimeInMinutes)
 import Touch exposing (ScreenCoordinate)
 import UInt64
+import Unsafe
 import Url exposing (Protocol(..), Url)
 import UserColor exposing (UserColor)
 
@@ -3808,7 +3810,7 @@ preview onPressLink config nonempty =
         , time = config.time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
-        , drawingUserColor = \_ -> UserColor.default
+        , drawingUserColor = \_ -> defaultColor
         , isSelectingAnchor = False
         , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
           devicePixelRatio = 1
@@ -3818,6 +3820,15 @@ preview onPressLink config nonempty =
         0
         nonempty
         |> (\( _, _, a ) -> a)
+
+
+defaultColor : UserColor
+defaultColor =
+    Unsafe.userColor
+        { hue = 0
+        , saturation = 0
+        , lightness = 11
+        }
 
 
 type alias Config a userId channelId =

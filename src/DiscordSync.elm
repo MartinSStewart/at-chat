@@ -363,7 +363,7 @@ messageSender author model =
             User.discordUserDataToFrontendUser model.users discordUser
 
         Nothing ->
-            { name = PersonName.fromStringLossy author.username, icon = Nothing, color = UserColor.default }
+            { name = PersonName.fromStringLossy author.username, icon = Nothing, color = RichText.defaultColor }
 
 
 discordChannelIdToChannelIdNoMessage :
@@ -1326,10 +1326,10 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                             user.color
 
                                                                         Nothing ->
-                                                                            UserColor.default
+                                                                            RichText.defaultColor
 
                                                                 BasicData _ ->
-                                                                    UserColor.default
+                                                                    RichText.defaultColor
 
                                                                 NeedsAuthAgain data ->
                                                                     case NonemptyDict.get data.linkedTo model2.users of
@@ -1337,10 +1337,10 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                             user.color
 
                                                                         Nothing ->
-                                                                            UserColor.default
+                                                                            RichText.defaultColor
 
                                                         Nothing ->
-                                                            UserColor.default
+                                                            RichText.defaultColor
                                                     )
                                                     |> ServerChange
                                                 )
@@ -1958,7 +1958,7 @@ forumPostSender userId model =
             User.discordUserDataToFrontendUser model.users discordUser
 
         Nothing ->
-            { name = PersonName.fromStringLossy "Missing", icon = Nothing, color = UserColor.default }
+            { name = PersonName.fromStringLossy "Missing", icon = Nothing, color = RichText.defaultColor }
 
 
 {-| When a snowflake id was created. The top bits of the id hold the number of milliseconds

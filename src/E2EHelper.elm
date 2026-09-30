@@ -2526,7 +2526,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
-                Local_ExpandUserOptionSection _ ->
+                Local_ExpandUserOptionSection _ _ ->
                     False
 
                 Local_SetSheepGameQuestions _ ->
@@ -3086,7 +3086,7 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
-    , Local_ExpandUserOptionSection UserSession.UserOption_Debug
+    , Local_ExpandUserOptionSection UserSession.UserOption_Debug { collapseOthers = False }
     , Local_Invalid
     , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
@@ -3112,7 +3112,7 @@ allAttackerLocalChanges =
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
-    , Local_SetUserColor UserColor.default
+    , Local_SetUserColor RichText.defaultColor
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage

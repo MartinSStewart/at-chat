@@ -480,7 +480,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- lands back on the link-discord error page instead of linking.
                 , user.checkView
                     1000
-                    (Test.Html.Query.has [ Test.Html.Selector.text Frontend.discordLinkExpiredText ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Frontend.discordLinkServerErrorText ])
                 , T.checkState
                     100
                     (\data ->

@@ -5,7 +5,6 @@ module Types exposing
     , BackupTransfer(..)
     , ChannelDataToDecrypt
     , ChannelDataToEncrypt
-    , CountToFrontendState
     , DiscordAttachmentData
     , DownloadBackupState
     , E2eeKeysValid(..)
@@ -26,6 +25,7 @@ module Types exposing
     , ImportChannelStatus(..)
     , InitialLoadRequest(..)
     , LastBackupData
+    , LinkDiscordFailure(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -490,7 +490,7 @@ type alias BackendModel =
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
-    , countToFrontendState : Maybe CountToFrontendState
+    , discordLinkLimit : Maybe Int
     , downloadBackupState : Maybe BackupTransfer
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
@@ -985,13 +985,9 @@ type ExportStep
     | ExportFinished Bytes
 
 
-{-| The next count the admin page is waiting on, sent one update at a time the
-way the export progress is, so the two can be compared against each other.
--}
-type alias CountToFrontendState =
-    { count : Int
-    , clientId : ClientId
-    }
+type LinkDiscordFailure
+    = LinkDiscordHttpError Discord.HttpError
+    | LinkDiscordLimitReached
 
 
 {-| A backup moving between the backend and the admin page. Only one can be in flight at a
@@ -1053,7 +1049,7 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected ClientId
     | ReloadDataResponse (Result () LoginData)
-    | LinkDiscordResponse (Result Discord.HttpError ())
+    | LinkDiscordResponse (Result LinkDiscordFailure ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
     | ExportChannelResponse { fileName : String, json : String }
@@ -1237,7 +1233,7 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
-    | Local_ExpandUserOptionSection UserOptionSection
+    | Local_ExpandUserOptionSection UserOptionSection { collapseOthers : Bool }
     | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications

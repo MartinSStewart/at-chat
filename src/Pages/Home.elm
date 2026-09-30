@@ -304,35 +304,35 @@ previewOtherUsers =
     SeqDict.fromList
         [ ( Id.fromInt 1
           , { name = Unsafe.personName "jobaly Joe"
-            , color = UserColor.default
+            , color = Unsafe.userColor { hue = 16, lightness = 8, saturation = 2 }
             , icon = Nothing
             , publicKey = Nothing
             }
           )
         , ( Id.fromInt 2
           , { name = Unsafe.personName "boog'les_the_spy.jpig"
-            , color = UserColor.fromParts { hue = 0, lightness = 12, saturation = UserColor.saturationCount - 1 }
+            , color = Unsafe.userColor { hue = 0, lightness = 12, saturation = UserColor.saturationCount - 1 }
             , icon = Just (FileStatus.fileHash "defrqz-9TjEnuXDZnPc8zD1VoeugOLHh_7-sWw")
             , publicKey = Nothing
             }
           )
         , ( Id.fromInt 3
           , { name = Unsafe.personName "antichokehards"
-            , color = UserColor.fromParts { hue = 4, lightness = 10, saturation = 2 }
+            , color = Unsafe.userColor { hue = 4, lightness = 10, saturation = 2 }
             , icon = Just (FileStatus.fileHash "7kTsE8OAyWGK_3AsOpZje0ySNF-kqCH_RnemPg")
             , publicKey = Nothing
             }
           )
         , ( Id.fromInt 4
           , { name = Unsafe.personName "ABC*123"
-            , color = UserColor.fromParts { hue = 8, lightness = 8, saturation = 4 }
+            , color = Unsafe.userColor { hue = 8, lightness = 8, saturation = 4 }
             , icon = Nothing
             , publicKey = Nothing
             }
           )
         , ( doodleUserId
           , { name = Unsafe.personName "123"
-            , color = UserColor.fromParts { hue = 10, lightness = 10, saturation = UserColor.saturationCount - 7 }
+            , color = Unsafe.userColor { hue = 10, lightness = 10, saturation = UserColor.saturationCount - 7 }
             , icon = Nothing
             , publicKey = Nothing
             }
@@ -372,13 +372,13 @@ previewDiscordUsers =
             previewOtherDiscordUserId
             { name = Unsafe.personName "rkyle"
             , icon = Nothing
-            , color = UserColor.fromParts { hue = 10, lightness = 11, saturation = 13 }
+            , color = Unsafe.userColor { hue = 10, lightness = 11, saturation = 13 }
             }
         )
         (SeqDict.singleton
             previewDiscordUserId
             { name = Unsafe.personName "Sven Svensson"
-            , color = UserColor.default
+            , color = RichText.defaultColor
             , icon = Nothing
             , email = Nothing
             , needsAuthAgain = False

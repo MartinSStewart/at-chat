@@ -984,6 +984,7 @@ type alias AdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
+    , discordLinkLimit : Maybe Int
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int

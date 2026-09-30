@@ -2363,7 +2363,7 @@ colorPickerTest config =
                         , Test.Html.Selector.text "Hello"
                         ]
                     )
-                , admin.checkView 100 (hasStrokeColored UserColor.default)
+                , admin.checkView 100 (hasStrokeColored RichText.defaultColor)
 
                 -- Nothing to submit until the colour actually changes.
                 , admin.checkView
@@ -2374,7 +2374,7 @@ colorPickerTest config =
                 -- used, so the preview holds onto the last colour that could be and there's
                 -- still nothing to submit.
                 , admin.input 100 (Dom.id "userColor_lightness") "3"
-                , admin.checkView 100 (hasStrokeColored UserColor.default)
+                , admin.checkView 100 (hasStrokeColored RichText.defaultColor)
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
@@ -2384,14 +2384,14 @@ colorPickerTest config =
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_submitColor" ])
-                , admin.checkView 100 (Test.Html.Query.hasNot [ hasStrokeSelector UserColor.default ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ hasStrokeSelector RichText.defaultColor ])
 
                 -- Resetting puts the grid away without having saved anything.
                 , admin.click 100 (Dom.id "userOptions_resetColor")
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
-                , T.checkState 100 (checkSavedColorIs UserColor.default)
+                , T.checkState 100 (checkSavedColorIs RichText.defaultColor)
 
                 -- Submitting saves it and puts the grid away too.
                 , admin.click 100 (Dom.id "userOptions_selectColor")
@@ -2400,7 +2400,7 @@ colorPickerTest config =
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
-                , T.checkState 100 (checkSavedColorIsNot UserColor.default)
+                , T.checkState 100 (checkSavedColorIsNot RichText.defaultColor)
                 ]
             )
         ]

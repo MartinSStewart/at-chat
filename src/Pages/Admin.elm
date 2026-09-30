@@ -23,6 +23,7 @@ module Pages.Admin exposing
     , deleteOrphanedFilesButtonId
     , disconnectClient
     , discordChannelReloadUser
+    , discordLinkLimitId
     , discordLinkingEnabledText
     , expandSectionButtonId
     , importedText
@@ -162,6 +163,11 @@ lastRegeneratedAtText =
     "Last regenerated at "
 
 
+discordLinkLimitId : HtmlId
+discordLinkLimitId =
+    Dom.id "Admin_discordLinkLimit"
+
+
 discordLinkingEnabledText : String
 discordLinkingEnabledText =
     "Discord account linking enabled"
@@ -192,6 +198,7 @@ type Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
     | ToggledDiscordLinkingEnabled Bool
+    | DiscordLinkLimitEditableMsg (Editable.Msg (Maybe Int))
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -284,6 +291,7 @@ type alias Model =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , postmarkKey : Editable.Model
+    , discordLinkLimit : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
@@ -339,6 +347,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
+    , discordLinkLimit : Maybe Int
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
@@ -384,6 +393,7 @@ type AdminChange
     | SetEmailNotificationsEnabled Bool
     | SetSignupsEnabled Bool
     | SetDiscordLinkingEnabled Bool
+    | SetDiscordLinkLimit (Maybe Int)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
@@ -442,6 +452,7 @@ initForUser =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
+    , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -471,6 +482,7 @@ initForAdmin { highlightLog } =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
+    , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -562,6 +574,9 @@ updateAdmin changedBy change adminData local =
 
         SetDiscordLinkingEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | discordLinkingEnabled = isEnabled } }
+
+        SetDiscordLinkLimit limit ->
+            { local | adminData = IsAdmin { adminData | discordLinkLimit = limit } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
@@ -1285,6 +1300,14 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetPostmarkKey value |> AdminChange )
 
+        DiscordLinkLimitEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | discordLinkLimit = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetDiscordLinkLimit value |> AdminChange )
+
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
 
@@ -1806,6 +1829,12 @@ pendingChangesText change =
 
             else
                 "Disabled Discord account linking"
+
+        SetDiscordLinkLimit (Just limit) ->
+            "Set linked Discord user limit to " ++ String.fromInt limit
+
+        SetDiscordLinkLimit Nothing ->
+            "Removed linked Discord user limit"
 
         SetPrivateVapidKey _ ->
             "Set private vapid key"
@@ -3672,6 +3701,39 @@ userSection isMobile timezone expandedSections adminData model =
                 }
             , discordLinkingEnabledLabel.element
             ]
+        , Editable.view
+            discordLinkLimitId
+            False
+            "Maximum linked Discord users (leave empty for no limit)"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    case String.toInt text2 of
+                        Just limit ->
+                            if limit < 0 then
+                                Err "Can't be negative"
+
+                            else
+                                Ok (Just limit)
+
+                        Nothing ->
+                            Err "Not a whole number"
+            )
+            DiscordLinkLimitEditableMsg
+            (case adminData.discordLinkLimit of
+                Just limit ->
+                    String.fromInt limit
+
+                Nothing ->
+                    ""
+            )
+            model.discordLinkLimit
         , case adminData.users of
             AdminDataNotLoaded ->
                 Ui.text loadingText
@@ -3680,7 +3742,7 @@ userSection isMobile timezone expandedSections adminData model =
                 Ui.text loadingText
 
             AdminDataLoaded users ->
-                Ui.Lazy.lazy4 userTableView timezone model.userTable users adminData.twoFactorAuthentication
+                Ui.Lazy.lazy5 userTableView timezone model.userTable users adminData.twoFactorAuthentication adminData.discordUsers
         , Ui.row
             [ Ui.spacing 16 ]
             (MyUi.simpleButton
@@ -4550,11 +4612,12 @@ userTableView :
     -> UserTable
     -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
+    -> AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     -> Element Msg
-userTableView timezone tableState users twoFactorAuthentication =
+userTableView timezone tableState users twoFactorAuthentication discordUsers =
     Ui.Table.viewWithState
         tableAttributes
-        (userTableColumns timezone tableState users twoFactorAuthentication)
+        (userTableColumns timezone tableState users twoFactorAuthentication (linkedDiscordAccounts discordUsers))
         tableState.table
         (List.map
             (\( userId, user ) ->
@@ -4570,6 +4633,35 @@ userTableView timezone tableState users twoFactorAuthentication =
             (NonemptyDict.toList users)
             ++ List.indexedMap (\index user -> ( NewUserId index, user )) (Array.toList tableState.newUsers)
         )
+
+
+linkedDiscordAccounts :
+    AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
+    -> Maybe (SeqDict (Id UserId) (List String))
+linkedDiscordAccounts discordUsers =
+    case discordUsers of
+        AdminDataLoaded discordUsers2 ->
+            SeqDict.foldl
+                (\_ discordUser dict ->
+                    case discordUser of
+                        FullData_ForAdmin data ->
+                            SeqDict.update data.linkedTo (\list -> Just (data.user.username :: Maybe.withDefault [] list)) dict
+
+                        NeedsAuthAgain_ForAdmin data ->
+                            SeqDict.update data.linkedTo (\list -> Just (data.user.username :: Maybe.withDefault [] list)) dict
+
+                        BasicData_ForAdmin _ ->
+                            dict
+                )
+                SeqDict.empty
+                discordUsers2
+                |> Just
+
+        AdminDataLoading ->
+            Nothing
+
+        AdminDataNotLoaded ->
+            Nothing
 
 
 tableAttributes : List (Ui.Attribute msg)
@@ -4788,8 +4880,9 @@ userTableColumns :
     -> UserTable
     -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
+    -> Maybe (SeqDict (Id UserId) (List String))
     -> Ui.Table.Config Table.Model rowState ( UserTableId, EditedBackendUser ) Msg
-userTableColumns timezone tableState users twoFactorAuthentication =
+userTableColumns timezone tableState users twoFactorAuthentication discordAccounts =
     Table.tableConfig
         (Dom.id "Admin_userTable")
         True
@@ -4917,6 +5010,33 @@ userTableColumns timezone tableState users twoFactorAuthentication =
                                         Ui.none
 
                             NewUserId _ ->
+                                Ui.none
+                        )
+          , sortBy = Nothing
+          }
+        , { title = "Discord accounts"
+          , view =
+                \( userTableId, _ ) ->
+                    Ui.el
+                        [ cellBackgroundColor userTableId tableState
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 4
+                        , Ui.height Ui.fill
+                        , Ui.id ("admin_discordAccounts_" ++ userTableIdToDomId userTableId)
+                        ]
+                        (case ( userTableId, discordAccounts ) of
+                            ( ExistingUserId userId, Just discordAccounts2 ) ->
+                                case SeqDict.get userId discordAccounts2 of
+                                    Just usernames ->
+                                        Ui.text (String.join ", " (List.sort usernames))
+
+                                    Nothing ->
+                                        Ui.none
+
+                            ( ExistingUserId _, Nothing ) ->
+                                Ui.text loadingText
+
+                            ( NewUserId _, _ ) ->
                                 Ui.none
                         )
           , sortBy = Nothing
@@ -5105,7 +5225,9 @@ sectionDataToLoad : AdminUiSection -> AdminData -> List AdminChange
 sectionDataToLoad section2 adminData =
     case section2 of
         UsersSection ->
+            -- Each user is shown with the Discord accounts they've linked.
             loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
 
         LogSection ->
             []

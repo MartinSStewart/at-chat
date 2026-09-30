@@ -5,6 +5,7 @@ module Unsafe exposing
     , guildName
     , personName
     , uint64
+    , userColor
     )
 
 import ChannelName exposing (ChannelName)
@@ -13,6 +14,7 @@ import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
 import UInt64
+import UserColor exposing (UserColor)
 
 
 personName : String -> PersonName
@@ -72,6 +74,16 @@ emojiName text =
             b
 
         Err () ->
+            unreachable 0
+
+
+userColor : { hue : Int, saturation : Int, lightness : Int } -> UserColor
+userColor record =
+    case UserColor.fromParts record of
+        Ok ok ->
+            ok
+
+        Err _ ->
             unreachable 0
 
 
