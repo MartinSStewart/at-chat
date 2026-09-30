@@ -1,7 +1,6 @@
 module Frontend exposing
     ( app
     , app_
-    , discordLinkExpiredText
     , discordLinkLimitReachedText
     , discordLinkServerErrorText
     , goMatchNotFoundText

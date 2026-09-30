@@ -1484,7 +1484,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
 -}
 discordLinkLimitReached : Discord.Id Discord.UserId -> BackendModel -> Bool
 discordLinkLimitReached discordUserId model =
-    case model.countToFrontendState of
+    case model.discordLinkLimit of
         Just limit ->
             case SeqDict.get discordUserId model.discordUsers of
                 Just (FullData _) ->
@@ -1519,7 +1519,7 @@ adminData model lastLogPageViewed =
     { emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
     , discordLinkingEnabled = model.discordLinkingEnabled
-    , discordLinkLimit = model.countToFrontendState
+    , discordLinkLimit = model.discordLinkLimit
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret

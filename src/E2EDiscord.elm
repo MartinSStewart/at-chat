@@ -2049,7 +2049,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , T.checkState
                             100
                             (\data ->
-                                if (E2EHelper.unwrapBackend data.backend).countToFrontendState == Just 1 then
+                                if (E2EHelper.unwrapBackend data.backend).discordLinkLimit == Just 1 then
                                     Ok ()
 
                                 else

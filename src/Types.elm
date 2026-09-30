@@ -490,8 +490,7 @@ type alias BackendModel =
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
-    , -- The maximum number of linked Discord users. It reuses the field "Count to 200" in the admin page used to have so that backups made before it existed still decode.
-      countToFrontendState : Maybe Int
+    , discordLinkLimit : Maybe Int
     , downloadBackupState : Maybe BackupTransfer
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix

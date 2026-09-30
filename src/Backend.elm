@@ -273,7 +273,7 @@ init =
       , discordLinkingEnabled = True
       , exportState = Nothing
       , lastBackup = Nothing
-      , countToFrontendState = Nothing
+      , discordLinkLimit = Nothing
       , downloadBackupState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
@@ -9264,7 +9264,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
         Pages.Admin.SetDiscordLinkLimit limit ->
             let
                 model2 =
-                    { model | countToFrontendState = limit }
+                    { model | discordLinkLimit = limit }
             in
             ( model2
             , Command.batch
