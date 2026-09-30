@@ -800,7 +800,7 @@ canChangeUnreadNotificationCount change =
         Local_SetNotificationMode _ ->
             False
 
-        Local_ExpandUserOptionSection _ ->
+        Local_ExpandUserOptionSection _ _ ->
             False
 
         Local_CollapseUserOptionSection _ ->

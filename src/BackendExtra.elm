@@ -2918,7 +2918,7 @@ toBackendLog toBackend =
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
 
-                Local_ExpandUserOptionSection _ ->
+                Local_ExpandUserOptionSection _ _ ->
                     ToBackendLog_Local_ExpandUserOptionSection
 
                 Local_SetSheepGameQuestions _ ->

@@ -404,8 +404,8 @@ init time sessionId userId userAgent =
     }
 
 
-expandUserOptionSection : UserOptionSection -> UserSession -> UserSession
-expandUserOptionSection section session =
+expandUserOptionSection : UserOptionSection -> { collapseOthers : Bool } -> UserSession -> UserSession
+expandUserOptionSection section { collapseOthers } session =
     { session | expandedUserOptions = SeqSet.insert section session.expandedUserOptions }
 
 

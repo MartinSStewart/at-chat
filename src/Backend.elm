@@ -5555,7 +5555,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_ExpandUserOptionSection section ->
+                Local_ExpandUserOptionSection section collapseOthers ->
                     BackendExtra.asUser
                         model
                         sessionId
@@ -5564,7 +5564,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | sessions =
                                     SeqDict.insert
                                         sessionId
-                                        (UserSession.expandUserOptionSection section session)
+                                        (UserSession.expandUserOptionSection section collapseOthers session)
                                         model.sessions
                               }
                             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId

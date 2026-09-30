@@ -1237,7 +1237,7 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
-    | Local_ExpandUserOptionSection UserOptionSection
+    | Local_ExpandUserOptionSection UserOptionSection { collapseOthers : Bool }
     | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications

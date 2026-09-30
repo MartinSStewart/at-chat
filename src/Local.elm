@@ -100,42 +100,48 @@ updateFromBackend userUpdate maybeChangeId msg (Local localModel_) =
         }
 
 
-networkError : (msg -> String) -> Time.Posix -> Local msg model -> Element msg2
+networkError : (msg -> Maybe String) -> Time.Posix -> Local msg model -> Element msg2
 networkError msgToString currentTime (Local localModel_) =
     let
-        hasNetworkIssue : Bool
+        hasNetworkIssue : List (Element msg2)
         hasNetworkIssue =
-            Dict.values localModel_.localMsgs
-                |> List.any (\a -> Duration.from a.createdAt currentTime |> Quantity.greaterThan (Duration.seconds 10))
+            List.filterMap
+                (\( changeId, a ) ->
+                    case ( Duration.from a.createdAt currentTime |> Quantity.greaterThan (Duration.seconds 10), msgToString a.msg ) of
+                        ( True, Just text ) ->
+                            Ui.text (String.fromInt changeId ++ ". " ++ text) |> Just
+
+                        _ ->
+                            Nothing
+                )
+                (Dict.toList localModel_.localMsgs)
     in
-    if hasNetworkIssue then
-        Ui.column
-            [ Ui.background (Ui.rgb 77 42 42)
-            , Ui.centerX
-            , Ui.paddingXY 16 8
-            , Ui.rounded 8
-            , Ui.border 1
-            , Ui.borderColor (Ui.rgb 40 26 26)
-            , Ui.Shadow.shadows
-                [ { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 6, size = -1 }
-                , { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 4, size = -2 }
+    case hasNetworkIssue of
+        [] ->
+            Ui.none
+
+        _ ->
+            Ui.column
+                [ Ui.background (Ui.rgb 77 42 42)
+                , Ui.centerX
+                , Ui.paddingXY 16 8
+                , Ui.rounded 8
+                , Ui.border 1
+                , Ui.borderColor (Ui.rgb 40 26 26)
+                , Ui.Shadow.shadows
+                    [ { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 6, size = -1 }
+                    , { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 4, size = -2 }
+                    ]
+                , Ui.move { x = 0, y = -4, z = 0 }
                 ]
-            , Ui.move { x = 0, y = -4, z = 0 }
-            ]
-            [ Ui.el
-                [ Ui.Font.bold ]
-                (Ui.text "Unable to reach the server. The following are not saved:")
-            , Dict.toList localModel_.localMsgs
-                |> List.map (\( changeId, { msg } ) -> Ui.text (String.fromInt changeId ++ ". " ++ msgToString msg))
-                |> Ui.column
+                [ Ui.el [ Ui.Font.bold ] (Ui.text "Unable to reach the server. The following are not saved:")
+                , Ui.column
                     [ Ui.spacing 4
                     , Ui.Font.size 14
                     , Ui.paddingLeft 16
                     , Ui.scrollable
                     , Ui.heightMax 100
                     ]
-                |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 4 } ]
-            ]
-
-    else
-        Ui.none
+                    hasNetworkIssue
+                    |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 4 } ]
+                ]

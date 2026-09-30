@@ -36,6 +36,7 @@ module FrontendExtra exposing
     , logout
     , mapEncryptionRequests
     , newPrivateKeyWarning
+    , openUserOptionsAndExpandContainer
     , pastedMessageFileName
     , pingUserNameSoFar
     , playNotificationSoundForDiscordMessage
@@ -142,7 +143,7 @@ import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserOptionSection(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
 import X25519
@@ -174,247 +175,246 @@ discordViewMessages backendData =
             EmptyPlaceholder
 
 
-pendingChangesText : LocalChange -> String
+pendingChangesText : LocalChange -> Maybe String
 pendingChangesText localChange =
     case localChange of
         Local_Invalid ->
-            -- We should never have a invalid change in the local msg queue
-            "InvalidChange"
+            Nothing
 
         Local_Admin adminChange ->
-            Pages.Admin.pendingChangesText adminChange
+            Just (Pages.Admin.pendingChangesText adminChange)
 
         Local_SendMessage _ _ _ _ _ _ _ ->
-            "Sent a message"
+            Just "Sent a message"
 
         Local_Discord_SendMessage _ _ _ _ _ _ ->
-            "Sent a message"
+            Just "Sent a message"
 
         Local_NewChannel _ _ _ _ ->
-            "Created new channel"
+            Just "Created new channel"
 
         Local_EditChannel _ _ _ _ ->
-            "Edited channel"
+            Just "Edited channel"
 
         Local_DeleteChannel _ _ ->
-            "Deleted channel"
+            Just "Deleted channel"
 
         Local_EditGuildName _ _ ->
-            "Edited guild name"
+            Just "Edited guild name"
 
         Local_DeleteGuild _ ->
-            "Deleted guild"
+            Just "Deleted guild"
 
         Local_LeaveGuild _ ->
-            "Left guild"
+            Just "Left guild"
 
         Local_NewInviteLink _ _ _ ->
-            "Created invite link"
+            Just "Created invite link"
 
         Local_DeleteInviteLink _ _ ->
-            "Deleted invite link"
+            Just "Deleted invite link"
 
         Local_BanMember _ _ ->
-            "Banned member"
+            Just "Banned member"
 
         Local_NewGuild _ _ _ ->
-            "Created new guild"
+            Just "Created new guild"
 
         Local_MemberTyping _ _ ->
-            "Is typing notification"
+            Nothing
 
         Local_AddReactionEmoji _ _ _ ->
-            "Added reaction emoji"
+            Just "Added reaction emoji"
 
         Local_RemoveReactionEmoji _ _ _ ->
-            "Removed reaction emoji"
+            Just "Removed reaction emoji"
 
         Local_SendEditMessage _ _ _ _ _ _ ->
-            "Edit message"
+            Just "Edit message"
 
         Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
-            "Edit message"
+            Just "Edit message"
 
         Local_Discord_SendEditDmMessage _ _ _ _ _ ->
-            "Edit message"
+            Just "Edit message"
 
         Local_MemberEditTyping _ _ _ ->
-            "Editing message"
+            Just "Editing message"
 
         Local_SetLastViewed _ _ ->
-            "Viewed channel"
+            Nothing
 
         Local_DeleteMessage _ _ ->
-            "Delete message"
+            Just "Delete message"
 
         Local_CurrentlyViewing _ _ ->
-            "Change view"
+            Nothing
 
         Local_SetName _ ->
-            "Set display name"
+            Just "Set display name"
 
         Local_LoadChannelMessages _ _ _ ->
-            "Load channel messages"
+            Just "Load channel messages"
 
         Local_LoadThreadMessages _ _ _ _ ->
-            "Load thread messages"
+            Nothing
 
         Local_Discord_LoadChannelMessages _ _ _ ->
-            "Load channel messages"
+            Nothing
 
         Local_Discord_LoadThreadMessages _ _ _ _ ->
-            "Load thread messages"
+            Nothing
 
         Local_SetGuildNotificationLevel _ notificationLevel ->
             case notificationLevel of
                 NotifyOnEveryMessage ->
-                    "Enabled notifications for all messages"
+                    Just "Enabled notifications for all messages"
 
                 NotifyOnMention ->
-                    "Disabled notifications for all messages"
+                    Just "Disabled notifications for all messages"
 
         Local_SetDiscordGuildNotificationLevel _ _ notificationLevel ->
             case notificationLevel of
                 NotifyOnEveryMessage ->
-                    "Enabled notifications for all messages"
+                    Just "Enabled notifications for all messages"
 
                 NotifyOnMention ->
-                    "Disabled notifications for all messages"
+                    Just "Disabled notifications for all messages"
 
         Local_SetNotificationMode _ ->
-            "Set notification mode"
+            Just "Set notification mode"
 
-        Local_ExpandUserOptionSection _ ->
-            "Expanded a user options section"
+        Local_ExpandUserOptionSection _ _ ->
+            Nothing
 
         Local_CollapseUserOptionSection _ ->
-            "Collapsed a user options section"
+            Nothing
 
         Local_SetSheepGameQuestions _ ->
-            "Saved sheep game questions"
+            Just "Saved sheep game questions"
 
         Local_SetEmailNotifications _ ->
-            "Set email notifications"
+            Just "Set email notifications"
 
         Local_SetEmbedVisibility _ ->
-            "Set embed visibility"
+            Just "Set embed visibility"
 
         Local_ScheduleAccountDeletion _ ->
-            "Scheduled account deletion"
+            Just "Scheduled account deletion"
 
         Local_CancelAccountDeletion ->
-            "Cancelled account deletion"
+            Just "Cancelled account deletion"
 
         Local_RegisterPushSubscription _ _ ->
-            "Register push subscription"
+            Just "Register push subscription"
 
         Local_TextEditor _ ->
-            "Text editor change"
+            Just "Text editor change"
 
         Local_UnlinkDiscordUser _ ->
-            "Unlink Discord user"
+            Just "Unlink Discord user"
 
         Local_StartReloadingDiscordUser _ _ ->
-            "Reload Discord user"
+            Just "Reload Discord user"
 
         Local_LinkDiscordAcknowledgementIsChecked _ ->
-            "Checked link Discord account acknowledgement"
+            Just "Checked link Discord account acknowledgement"
 
         Local_SetDomainWhitelist _ _ ->
-            "Whitelist domain"
+            Just "Whitelist domain"
 
         Local_SetEmojiSkinTone _ ->
-            "Selected emoji skin tone"
+            Just "Selected emoji skin tone"
 
         Local_SetUserColor _ ->
-            "Picked a colour"
+            Just "Picked a colour"
 
         Local_AddCustomEmojisToUser _ ->
-            "Add custom emojis to user"
+            Just "Add custom emojis to user"
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
                 Call.Local_Leave _ ->
-                    "Left voice chat"
+                    Just "Left voice chat"
 
                 Call.Local_SetRemoteCallData _ ->
-                    "Set audio/video input enabled"
+                    Just "Set audio/video input enabled"
 
         Local_Game _ change ->
             case change of
                 Game.CreatePublicLink _ _ ->
-                    "Shared match"
+                    Just "Shared match"
 
                 Game.LoadMatch _ _ ->
-                    "Opened match"
+                    Just "Opened match"
 
                 Game.LocalChange_Go _ goChange ->
                     case goChange of
                         Go.StartMatch _ _ ->
-                            "Started Go match"
+                            Just "Started Go match"
 
                         Go.Action _ ->
-                            "Made a move in Go"
+                            Just "Made a move in Go"
 
                 Game.LocalChange_WordSpellingGame _ _ ->
-                    "Word spelling game change"
+                    Just "Word spelling game change"
 
                 Game.LocalChange_SheepGame _ _ ->
-                    "Sheep game change"
+                    Just "Sheep game change"
 
         Local_Drawing _ _ _ ->
-            "Drew on a message"
+            Just "Drew on a message"
 
         Local_SetMuteChannel _ _ _ ->
-            "Changed channel notifications"
+            Just "Changed channel notifications"
 
         Local_SetMuteThread _ _ _ _ ->
-            "Changed thread notifications"
+            Just "Changed thread notifications"
 
         Local_SetMuteDiscordChannel _ _ _ _ ->
-            "Changed channel notifications"
+            Just "Changed channel notifications"
 
         Local_SetMuteDiscordThread _ _ _ _ _ ->
-            "Changed thread notifications"
+            Just "Changed thread notifications"
 
         Local_SetMuteGuild _ _ ->
-            "Set mute guild"
+            Just "Set mute guild"
 
         Local_SetMuteDiscordGuild _ _ _ ->
-            "Set mute Discord guild"
+            Just "Set mute Discord guild"
 
         Local_RequestE2ee _ ->
-            "Asked to start end-to-end encryption"
+            Just "Asked to start end-to-end encryption"
 
         Local_DeclineE2eeRequestAsInitiator _ ->
-            "Cancelled the end-to-end encryption request"
+            Just "Cancelled the end-to-end encryption request"
 
         Local_DeclineE2eeRequest _ ->
-            "Declined the end-to-end encryption request"
+            Just "Declined the end-to-end encryption request"
 
         Local_SetPublicKey _ _ ->
-            "Added a private key to the account"
+            Just "Added a private key to the account"
 
         Local_EncryptOldMessages _ _ ->
-            "Encrypted the messages written before this conversation was encrypted"
+            Just "Encrypted the messages written before this conversation was encrypted"
 
         Local_DisableE2ee _ _ ->
-            "Turned off end-to-end encryption"
+            Just "Turned off end-to-end encryption"
 
         Local_DecryptOldMessages _ _ _ ->
-            "Removed the encryption from the messages written while this conversation was encrypted"
+            Just "Removed the encryption from the messages written while this conversation was encrypted"
 
         Local_SetE2eeRisksAccepted _ ->
-            "Accepted the end-to-end encryption risks"
+            Just "Accepted the end-to-end encryption risks"
 
         Local_AcceptE2ee _ _ _ ->
-            "Started end-to-end encryption"
+            Just "Started end-to-end encryption"
 
         Local_SendEncryptedMessage _ _ _ _ _ _ ->
-            "Sent an encrypted message"
+            Just "Sent an encrypted message"
 
         Local_SendEncryptedEditMessage _ _ _ _ _ ->
-            "Edited an encrypted message"
+            Just "Edited an encrypted message"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
@@ -468,7 +468,7 @@ layout model attributes child =
                                 pendingChangesText localChange
 
                             ServerChange _ ->
-                                ""
+                                Nothing
                     )
                     model.time
                     loggedIn.localState
@@ -3947,7 +3947,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
 
-                Local_ExpandUserOptionSection section ->
+                Local_ExpandUserOptionSection section collapseOthers ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3955,7 +3955,10 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | session = UserSession.expandUserOptionSection section localUser.session }
+                            { localUser
+                                | session =
+                                    UserSession.expandUserOptionSection section collapseOthers localUser.session
+                            }
                     }
 
                 Local_CollapseUserOptionSection section ->
@@ -8313,3 +8316,32 @@ channelSidebarTarget route =
 
                 PublicGoMatchRoute _ ->
                     2
+
+
+openUserOptionsAndExpandContainer : UserOptionSection -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+openUserOptionsAndExpandContainer section model =
+    let
+        ( expandedModel, expandCmd ) =
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (if
+                            SeqSet.member
+                                section
+                                (Local.model loggedIn.localState).localUser.session.expandedUserOptions
+                         then
+                            Nothing
+
+                         else
+                            Just (Local_ExpandUserOptionSection section { collapseOthers = True })
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        ( routedModel, routeCmd ) =
+            routePush expandedModel (Route.setOverlay (Just Route.UserOptionsOverlay) expandedModel.route)
+    in
+    ( routedModel, Command.batch [ expandCmd, routeCmd ] )
