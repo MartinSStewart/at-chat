@@ -939,7 +939,7 @@ setOverlay overlay route =
             route
 
         LinkDiscord _ ->
-            route
+            HomePageRoute overlay
 
         PublicGoMatchRoute _ ->
             route

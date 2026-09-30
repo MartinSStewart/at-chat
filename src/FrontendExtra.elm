@@ -8322,27 +8322,18 @@ channelSidebarTarget route =
 openUserOptionsAndExpandContainer : UserOptionSection -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 openUserOptionsAndExpandContainer section model =
     let
-        ( expandedModel, expandCmd ) =
+        ( model2, expandCmd ) =
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (if
-                            SeqSet.member
-                                section
-                                (Local.model loggedIn.localState).localUser.session.expandedUserOptions
-                         then
-                            Nothing
-
-                         else
-                            Just (Local_ExpandUserOptionSection section { collapseOthers = True })
-                        )
+                        (Just (Local_ExpandUserOptionSection section { collapseOthers = True }))
                         loggedIn
                         Command.none
                 )
                 model
 
-        ( routedModel, routeCmd ) =
-            routePush expandedModel (Route.setOverlay (Just Route.UserOptionsOverlay) expandedModel.route)
+        ( model3, routeCmd ) =
+            routePush model2 (Route.setOverlay (Just Route.UserOptionsOverlay) model2.route)
     in
-    ( routedModel, Command.batch [ expandCmd, routeCmd ] )
+    ( model3, Command.batch [ expandCmd, routeCmd ] )

@@ -65,7 +65,7 @@ currentDeviceText =
 
 loadingUserDataText : String
 loadingUserDataText =
-    "Loading user data"
+    "Loading data (can take a while)"
 
 
 deleteAccountButtonId : HtmlId
