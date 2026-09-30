@@ -707,10 +707,10 @@ updateHelper msg model =
                                                                         linkedUser.color
 
                                                                     Nothing ->
-                                                                        UserColor.default
+                                                                        RichText.defaultColor
 
                                                             BasicData _ ->
-                                                                UserColor.default
+                                                                RichText.defaultColor
 
                                                             NeedsAuthAgain data ->
                                                                 case NonemptyDict.get data.linkedTo model.users of
@@ -718,7 +718,7 @@ updateHelper msg model =
                                                                         linkedUser.color
 
                                                                     Nothing ->
-                                                                        UserColor.default
+                                                                        RichText.defaultColor
                                                     }
                                                 )
                                                 model
@@ -7237,7 +7237,7 @@ handleGoMatchRequest messageId channel model =
 
                         Nothing ->
                             { name = PersonName.fromStringLossy User.missingName
-                            , color = UserColor.default
+                            , color = RichText.defaultColor
                             , icon = Nothing
                             , publicKey = Nothing
                             }

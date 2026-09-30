@@ -2042,7 +2042,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         , time = time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
-        , drawingUserColor = \_ -> UserColor.default
+        , drawingUserColor = \_ -> RichText.defaultColor
         , isSelectingAnchor = False
         , devicePixelRatio = localUser.devicePixelRatio
         , isHovered = False
@@ -2886,7 +2886,7 @@ userColor userId local =
             UserColor.toColor user.color
 
         Nothing ->
-            UserColor.toColor UserColor.default
+            UserColor.toColor RichText.defaultColor
 
 
 answerGroupPaddingX : number

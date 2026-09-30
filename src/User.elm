@@ -91,6 +91,7 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Font
+import Unsafe
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
@@ -412,7 +413,7 @@ type NotificationLevel
 init : Time.Posix -> PersonName -> BackendUserStatus -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
-    , color = UserColor.default
+    , color = RichText.defaultColor
     , isAdmin = userIsAdmin
     , email = email
     , recentLoginEmails = []
@@ -827,7 +828,7 @@ discordUserDataToFrontendUser users discordUserData =
         DiscordUserData.BasicData data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
-            , color = UserColor.default
+            , color = RichText.defaultColor
             }
 
         DiscordUserData.FullData data ->
@@ -839,7 +840,7 @@ discordUserDataToFrontendUser users discordUserData =
                         linkedUser.color
 
                     Nothing ->
-                        UserColor.default
+                        RichText.defaultColor
             }
 
         DiscordUserData.NeedsAuthAgain data ->
@@ -851,7 +852,7 @@ discordUserDataToFrontendUser users discordUserData =
                         linkedUser.color
 
                     Nothing ->
-                        UserColor.default
+                        RichText.defaultColor
             }
 
 
@@ -897,7 +898,7 @@ discordFullDataUserToFrontendCurrentUser users needsAuthAgain data isLoadingData
                 linkedUser.color
 
             Nothing ->
-                UserColor.default
+                RichText.defaultColor
     , email =
         case data.user.email of
             Included maybeText ->
@@ -1038,7 +1039,7 @@ userColor localUser userId =
             user.color
 
         Nothing ->
-            UserColor.default
+            RichText.defaultColor
 
 
 discordUserColor : LocalUser -> Discord.Id Discord.UserId -> UserColor
@@ -1048,7 +1049,7 @@ discordUserColor localUser userId =
             user.color
 
         Nothing ->
-            UserColor.default
+            RichText.defaultColor
 
 
 profileOutlineColor : UserColor -> String
@@ -1111,7 +1112,7 @@ smallProfileImage roundLeftOnly user =
                     GuildIcon.defaultUser smallProfileImageSize rounding user2.color
 
         Nothing ->
-            GuildIcon.defaultUser smallProfileImageSize rounding UserColor.default
+            GuildIcon.defaultUser smallProfileImageSize rounding RichText.defaultColor
 
 
 profileImageHtml : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Html msg
@@ -1126,7 +1127,7 @@ profileImageHtml user =
                     GuildIcon.defaultUserHtml profileImageSize 8 user2.color
 
         Nothing ->
-            GuildIcon.defaultUserHtml profileImageSize 8 UserColor.default
+            GuildIcon.defaultUserHtml profileImageSize 8 RichText.defaultColor
 
 
 profileImgHtml : FileHash -> UserColor -> Html msg
@@ -1183,7 +1184,7 @@ profileImageNoRounding user =
                     GuildIcon.defaultUser profileImageSize Ui.noAttr user2.color
 
         Nothing ->
-            GuildIcon.defaultUser profileImageSize Ui.noAttr UserColor.default
+            GuildIcon.defaultUser profileImageSize Ui.noAttr RichText.defaultColor
 
 
 multipleProfileImagesY : number

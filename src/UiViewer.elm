@@ -98,7 +98,7 @@ main =
                     , time = Time.millisToPosix 0
                     , drawings = SeqDict.empty
                     , embedDrawings = SeqDict.empty
-                    , drawingUserColor = \_ -> UserColor.default
+                    , drawingUserColor = \_ -> RichText.defaultColor
                     , isSelectingAnchor = False
                     , devicePixelRatio = 1
                     , isHovered = True
@@ -160,7 +160,7 @@ main =
                                             GuildIcon.NewMessageForUser count
                                         )
                                         Nothing
-                                        UserColor.default
+                                        RichText.defaultColor
                                     )
                                     :: items
                                 )
@@ -206,7 +206,7 @@ stickersSection =
             , time = Time.millisToPosix 0
             , drawings = SeqDict.empty
             , embedDrawings = SeqDict.empty
-            , drawingUserColor = \_ -> UserColor.default
+            , drawingUserColor = \_ -> RichText.defaultColor
             , isSelectingAnchor = False
             , devicePixelRatio = 1
             , isHovered = True
@@ -577,7 +577,7 @@ embedExamples whitelistedDomains =
                 , time = Time.millisToPosix 0
                 , drawings = SeqDict.empty
                 , embedDrawings = SeqDict.empty
-                , drawingUserColor = \_ -> UserColor.default
+                , drawingUserColor = \_ -> RichText.defaultColor
                 , isSelectingAnchor = False
                 , devicePixelRatio = 1
                 , isHovered = True

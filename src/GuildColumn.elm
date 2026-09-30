@@ -30,6 +30,7 @@ import MuteSettings exposing (IsMuted(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
+import RichText
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -319,7 +320,7 @@ dmGuildIcon route localUser otherUserId dmChannel =
                                 GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUser.color
 
                             Nothing ->
-                                GuildIcon.userView (NewMessageForUser count) Nothing UserColor.default
+                                GuildIcon.userView (NewMessageForUser count) Nothing RichText.defaultColor
                         )
 
                 Nothing ->

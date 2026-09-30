@@ -252,7 +252,7 @@ The following is not encrypted:
             , time = Time.millisToPosix 0
             , drawings = SeqDict.empty
             , embedDrawings = SeqDict.empty
-            , drawingUserColor = \_ -> UserColor.default
+            , drawingUserColor = \_ -> RichText.defaultColor
             , isSelectingAnchor = False
             , devicePixelRatio = 1
             , isHovered = False
