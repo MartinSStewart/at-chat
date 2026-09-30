@@ -2,6 +2,8 @@ module Frontend exposing
     ( app
     , app_
     , discordLinkExpiredText
+    , discordLinkLimitReachedText
+    , discordLinkServerErrorText
     , goMatchNotFoundText
     )
 
@@ -94,7 +96,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication
-import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -108,6 +110,16 @@ import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), Notifica
 import Vector2d
 import WordSpellingGame
 import X25519
+
+
+discordLinkServerErrorText : String
+discordLinkServerErrorText =
+    "Failed to link your Discord account due to a server error"
+
+
+discordLinkLimitReachedText : String
+discordLinkLimitReachedText =
+    "Can't link your Discord account because the maximum number of linked Discord accounts has been reached"
 
 
 discordLinkExpiredText : String
@@ -8796,7 +8808,12 @@ updateLoadedFromBackend msg model =
                                 Ok () ->
                                     FrontendExtra.openUserOptionsAndExpandContainer UserOption_Discord model
 
-                                Err _ ->
+                                Err LinkDiscordLimitReached ->
+                                    ( { model | loginStatus = LoggedIn loggedIn }
+                                    , FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordLimitReachedError))
+                                    )
+
+                                Err (LinkDiscordHttpError _) ->
                                     ( { model | loginStatus = LoggedIn loggedIn }
                                     , FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordServerError))
                                     )
@@ -9202,10 +9219,13 @@ view _ model =
                                                 discordLinkExpiredText
 
                                             LinkDiscordServerError ->
-                                                "Failed to link your Discord account due to a server error"
+                                                discordLinkServerErrorText
 
                                             LinkDiscordInvalidData ->
                                                 "Failed to link your Discord account due to some problem with the bookmarklet"
+
+                                            LinkDiscordLimitReachedError ->
+                                                discordLinkLimitReachedText
                                         )
                             )
 

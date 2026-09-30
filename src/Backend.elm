@@ -87,7 +87,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserColor
@@ -815,46 +815,15 @@ updateHelper msg model =
         LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
                 Ok discordUser ->
-                    let
-                        backendUser : DiscordFullUserData
-                        backendUser =
-                            { auth = auth
-                            , user = discordUser
-                            , connection = Discord.init (Time.posixToMillis linkedAt)
-                            , linkedTo = userId
-                            , icon = Nothing
-                            , linkedAt = linkedAt
-                            , isLoadingData = DiscordUserLoadingData linkedAt
-                            , markEverythingAsViewedOnceLoaded = True
-                            }
-                    in
-                    ( { model
-                        | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers
-                        , pendingGatewayReconnects =
-                            SeqDict.remove discordUser.id model.pendingGatewayReconnects
-                      }
-                    , Command.batch
-                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
-                        , Broadcast.toUser
-                            Nothing
-                            Nothing
-                            userId
-                            (Server_LinkDiscordUser
-                                discordUser.id
-                                (User.discordFullDataUserToFrontendCurrentUser model.users False backendUser backendUser.isLoadingData)
-                                |> ServerChange
-                            )
-                            model
-                        , DiscordSync.websocketCreateHandle
-                            "LinkDiscordUserStep1"
-                            (WebsocketCreatedHandleForUser discordUser.id)
-                            Discord.websocketGatewayUrl
-                        ]
-                    )
+                    if BackendExtra.discordLinkLimitReached discordUser.id model then
+                        ( model, Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err LinkDiscordLimitReached)) )
+
+                    else
+                        linkDiscordUser linkedAt clientId userId auth discordUser model
 
                 Err error ->
                     ( model
-                    , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
+                    , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err (LinkDiscordHttpError error)))
                     )
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
@@ -2703,7 +2672,6 @@ startExport time model =
                 , discordDmChannels = SeqDict.empty
                 , exportState = Nothing
                 , lastBackup = Nothing
-                , countToFrontendState = Nothing
                 , downloadBackupState = Nothing
                 , scheduledExportState = Nothing
             }
@@ -2727,6 +2695,53 @@ startExport time model =
                 |> Just
         , lastScheduledExportTime = Just time
     }
+
+
+linkDiscordUser :
+    Time.Posix
+    -> ClientId
+    -> Id UserId
+    -> Discord.UserAuth
+    -> Discord.User
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+linkDiscordUser linkedAt clientId userId auth discordUser model =
+    let
+        backendUser : DiscordFullUserData
+        backendUser =
+            { auth = auth
+            , user = discordUser
+            , connection = Discord.init (Time.posixToMillis linkedAt)
+            , linkedTo = userId
+            , icon = Nothing
+            , linkedAt = linkedAt
+            , isLoadingData = DiscordUserLoadingData linkedAt
+            , markEverythingAsViewedOnceLoaded = True
+            }
+    in
+    ( { model
+        | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers
+        , pendingGatewayReconnects =
+            SeqDict.remove discordUser.id model.pendingGatewayReconnects
+      }
+    , Command.batch
+        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
+        , Broadcast.toUser
+            Nothing
+            Nothing
+            userId
+            (Server_LinkDiscordUser
+                discordUser.id
+                (User.discordFullDataUserToFrontendCurrentUser model.users False backendUser backendUser.isLoadingData)
+                |> ServerChange
+            )
+            model
+        , DiscordSync.websocketCreateHandle
+            "LinkDiscordUserStep1"
+            (WebsocketCreatedHandleForUser discordUser.id)
+            Discord.websocketGatewayUrl
+        ]
+    )
 
 
 updateFromFrontend :
@@ -6971,7 +6986,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         ( model
                         , Lamdera.sendToFrontend
                             clientId
-                            (LinkDiscordResponse (Err (Discord.UnexpectedError "Discord account linking is disabled")))
+                            (LinkDiscordResponse (Err (LinkDiscordHttpError (Discord.UnexpectedError "Discord account linking is disabled"))))
                         )
                 )
 
@@ -9246,6 +9261,18 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
+        Pages.Admin.SetDiscordLinkLimit limit ->
+            let
+                model2 =
+                    { model | countToFrontendState = limit }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
         Pages.Admin.SetPrivateVapidKey privateKey ->
             ( { model
                 | privateVapidKey = privateKey
@@ -9555,7 +9582,6 @@ updateFromFrontendAdmin time clientId toBackend model =
                         , discordDmChannels = SeqDict.empty
                         , exportState = Nothing
                         , lastBackup = Nothing
-                        , countToFrontendState = Nothing
                         , downloadBackupState = Nothing
                         , scheduledExportState = Nothing
                     }

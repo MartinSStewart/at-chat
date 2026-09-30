@@ -77,6 +77,7 @@ type LinkDiscordError
     = LinkDiscordExpired
     | LinkDiscordServerError
     | LinkDiscordInvalidData
+    | LinkDiscordLimitReachedError
 
 
 type alias DiscordDmRouteData =
@@ -440,11 +441,20 @@ decode url =
             PrivacyRoute
 
         [ "link-discord" ] ->
-            case Dict.get linkDiscordQueryParam url2.queryParameters of
-                Just [ data ] ->
+            case ( Dict.get linkDiscordQueryParam url2.queryParameters, Dict.get linkDiscordErrorParam url2.queryParameters ) of
+                ( Just [ data ], _ ) ->
                     Codec.decodeString User.linkDiscordDataCodec data
                         |> Result.mapError (\_ -> LinkDiscordInvalidData)
                         |> LinkDiscord
+
+                ( _, Just [ "server-error" ] ) ->
+                    LinkDiscord (Err LinkDiscordServerError)
+
+                ( _, Just [ "invalid-data" ] ) ->
+                    LinkDiscord (Err LinkDiscordInvalidData)
+
+                ( _, Just [ "limit-reached" ] ) ->
+                    LinkDiscord (Err LinkDiscordLimitReachedError)
 
                 _ ->
                     LinkDiscord (Err LinkDiscordExpired)
@@ -1129,6 +1139,15 @@ encode route =
                 PrivacyRoute ->
                     ( [ "privacy" ], [] )
 
+                LinkDiscord (Err LinkDiscordServerError) ->
+                    ( [ linkDiscordPath ], [ Url.Builder.string linkDiscordErrorParam "server-error" ] )
+
+                LinkDiscord (Err LinkDiscordInvalidData) ->
+                    ( [ linkDiscordPath ], [ Url.Builder.string linkDiscordErrorParam "invalid-data" ] )
+
+                LinkDiscord (Err LinkDiscordLimitReachedError) ->
+                    ( [ linkDiscordPath ], [ Url.Builder.string linkDiscordErrorParam "limit-reached" ] )
+
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
 
@@ -1146,6 +1165,11 @@ linkDiscordPath =
 linkDiscordQueryParam : String
 linkDiscordQueryParam =
     "data"
+
+
+linkDiscordErrorParam : String
+linkDiscordErrorParam =
+    "error"
 
 
 encodeShowMembers : ShowChannelSettings -> List Url.Builder.QueryParameter

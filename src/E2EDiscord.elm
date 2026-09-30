@@ -16,6 +16,7 @@ import Effect.Test as T
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import Frontend
 import GuildIcon
 import GuildName
 import Html.Attributes
@@ -2009,6 +2010,73 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         "http://localhost:3000/file/2/https://media.discordapp.net/stickers/1490556070756618301.png?size=480&quality=lossless"
                                     )
                                 ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Linking a Discord account past the admin's limit shows an error"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.UsersSection)
+                        , adminPage.input 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_label")) "1"
+                        , adminPage.click 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_acceptEdit"))
+                        , T.checkState
+                            100
+                            (\data ->
+                                if (E2EHelper.unwrapBackend data.backend).countToFrontendState == Just 1 then
+                                    Ok ()
+
+                                else
+                                    Err "The backend didn't store the linked Discord user limit"
+                            )
+                        ]
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondDiscordUserAuth)
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.checkView
+                            200
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText Frontend.discordLinkLimitReachedText ])
+                        , T.checkState
+                            100
+                            (\data ->
+                                if SeqDict.member E2EHelper.secondDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers then
+                                    Err "The second Discord account shouldn't have been linked"
+
+                                else
+                                    Ok ()
                             )
                         ]
                     )
@@ -4468,3 +4536,13 @@ lastDiscordDmMessage backend =
 
         Nothing ->
             Nothing
+
+
+secondDiscordUserAuth : Discord.UserAuth
+secondDiscordUserAuth =
+    let
+        auth : Discord.UserAuth
+        auth =
+            E2EHelper.discordUserAuth
+    in
+    { auth | token = E2EHelper.secondDiscordToken }

@@ -23,6 +23,7 @@ module Pages.Admin exposing
     , deleteOrphanedFilesButtonId
     , disconnectClient
     , discordChannelReloadUser
+    , discordLinkLimitId
     , discordLinkingEnabledText
     , expandSectionButtonId
     , importedText
@@ -162,6 +163,11 @@ lastRegeneratedAtText =
     "Last regenerated at "
 
 
+discordLinkLimitId : HtmlId
+discordLinkLimitId =
+    Dom.id "Admin_discordLinkLimit"
+
+
 discordLinkingEnabledText : String
 discordLinkingEnabledText =
     "Discord account linking enabled"
@@ -192,6 +198,7 @@ type Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
     | ToggledDiscordLinkingEnabled Bool
+    | DiscordLinkLimitEditableMsg (Editable.Msg (Maybe Int))
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -284,6 +291,7 @@ type alias Model =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , postmarkKey : Editable.Model
+    , discordLinkLimit : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
@@ -339,6 +347,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
+    , discordLinkLimit : Maybe Int
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
@@ -384,6 +393,7 @@ type AdminChange
     | SetEmailNotificationsEnabled Bool
     | SetSignupsEnabled Bool
     | SetDiscordLinkingEnabled Bool
+    | SetDiscordLinkLimit (Maybe Int)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
@@ -442,6 +452,7 @@ initForUser =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
+    , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -471,6 +482,7 @@ initForAdmin { highlightLog } =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
+    , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -562,6 +574,9 @@ updateAdmin changedBy change adminData local =
 
         SetDiscordLinkingEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | discordLinkingEnabled = isEnabled } }
+
+        SetDiscordLinkLimit limit ->
+            { local | adminData = IsAdmin { adminData | discordLinkLimit = limit } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
@@ -1285,6 +1300,14 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetPostmarkKey value |> AdminChange )
 
+        DiscordLinkLimitEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | discordLinkLimit = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetDiscordLinkLimit value |> AdminChange )
+
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
 
@@ -1806,6 +1829,12 @@ pendingChangesText change =
 
             else
                 "Disabled Discord account linking"
+
+        SetDiscordLinkLimit (Just limit) ->
+            "Set linked Discord user limit to " ++ String.fromInt limit
+
+        SetDiscordLinkLimit Nothing ->
+            "Removed linked Discord user limit"
 
         SetPrivateVapidKey _ ->
             "Set private vapid key"
@@ -3672,6 +3701,39 @@ userSection isMobile timezone expandedSections adminData model =
                 }
             , discordLinkingEnabledLabel.element
             ]
+        , Editable.view
+            discordLinkLimitId
+            False
+            "Maximum linked Discord users (leave empty for no limit)"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    case String.toInt text2 of
+                        Just limit ->
+                            if limit < 0 then
+                                Err "Can't be negative"
+
+                            else
+                                Ok (Just limit)
+
+                        Nothing ->
+                            Err "Not a whole number"
+            )
+            DiscordLinkLimitEditableMsg
+            (case adminData.discordLinkLimit of
+                Just limit ->
+                    String.fromInt limit
+
+                Nothing ->
+                    ""
+            )
+            model.discordLinkLimit
         , case adminData.users of
             AdminDataNotLoaded ->
                 Ui.text loadingText

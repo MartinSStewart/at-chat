@@ -28,6 +28,7 @@ module BackendExtra exposing
     , discordDmChannelToFrontend
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
+    , discordLinkLimitReached
     , dmChannelsThatNeedEncrypting
     , encryptOldMessages
     , getLinkedDiscordUsersAndOtherUsers
@@ -1479,11 +1480,46 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
         linkedUsers
 
 
+{-| Relinking a Discord user that's already linked (for example one that needs to be authenticated again) doesn't add to the count, so it's always allowed.
+-}
+discordLinkLimitReached : Discord.Id Discord.UserId -> BackendModel -> Bool
+discordLinkLimitReached discordUserId model =
+    case model.countToFrontendState of
+        Just limit ->
+            case SeqDict.get discordUserId model.discordUsers of
+                Just (FullData _) ->
+                    False
+
+                Just (NeedsAuthAgain _) ->
+                    False
+
+                _ ->
+                    SeqDict.foldl
+                        (\_ discordUser count ->
+                            case discordUser of
+                                FullData _ ->
+                                    count + 1
+
+                                NeedsAuthAgain _ ->
+                                    count + 1
+
+                                BasicData _ ->
+                                    count
+                        )
+                        0
+                        model.discordUsers
+                        >= limit
+
+        Nothing ->
+            False
+
+
 adminData : BackendModel -> Id PageId -> InitAdminData
 adminData model lastLogPageViewed =
     { emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
     , discordLinkingEnabled = model.discordLinkingEnabled
+    , discordLinkLimit = model.countToFrontendState
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
