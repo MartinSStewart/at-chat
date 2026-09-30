@@ -41,7 +41,6 @@ import Ui.Font
 import Unsafe
 import Url
 import UserAgent
-import UserColor
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (Letter(..), LetterOrWildcard(..))
 

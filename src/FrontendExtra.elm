@@ -143,7 +143,7 @@ import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserOptionSection(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserOptionSection, UserSession)
 import VisibleMessages
 import WordSpellingGame
 import X25519

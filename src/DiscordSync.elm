@@ -73,7 +73,6 @@ import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import UInt64
 import User
-import UserColor
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
 

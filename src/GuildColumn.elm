@@ -39,7 +39,6 @@ import Ui exposing (Element)
 import Ui.Gradient
 import Ui.Lazy
 import User exposing (FrontendCurrentUser, LocalUser)
-import UserColor
 
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_

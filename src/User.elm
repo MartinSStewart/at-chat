@@ -91,7 +91,6 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Font
-import Unsafe
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)

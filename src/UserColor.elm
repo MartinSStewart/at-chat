@@ -249,7 +249,7 @@ picker isMobile containerSize selection onChange =
             , Ui.row
                 [ Ui.wrap ]
                 (List.filterMap
-                    (swatchView isMobile (saturationCount * 2 - rowSize) selection selection.selected onChange)
+                    (swatchView isMobile (saturationCount * 2 - rowSize) selection.selected onChange)
                     (List.range 0 (hueCount * saturationCount - 1))
                 )
             ]
@@ -262,7 +262,7 @@ picker isMobile containerSize selection onChange =
             [ Ui.row
                 [ Ui.wrap ]
                 (List.filterMap
-                    (swatchView isMobile 0 selection selection.selected onChange)
+                    (swatchView isMobile 0 selection.selected onChange)
                     (List.range 0 (hueCount * saturationCount - 1))
                 )
             , lightnessSlider selection selection.selected onChange
@@ -278,12 +278,11 @@ swatchId index =
 swatchView :
     Bool
     -> Int
-    -> Selection
     -> { hue : Int, saturation : Int, lightness : Int }
     -> (Selection -> msg)
     -> Int
     -> Maybe (Ui.Element msg)
-swatchView isMobile columnsToDrop selection selected onChange index =
+swatchView isMobile columnsToDrop selected onChange index =
     let
         saturation : Int
         saturation =

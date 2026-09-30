@@ -14,7 +14,6 @@ import Sticker exposing (AnimationMode(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Ui
 import User
-import UserColor
 
 
 repoUrl : String
