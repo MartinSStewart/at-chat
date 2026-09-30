@@ -1095,11 +1095,11 @@ previewCallConnectionId peer =
 -}
 callPreviewImages : Command FrontendOnly toMsg msg
 callPreviewImages =
-    { htmlId = Call.localVideoNodeId, url = "/cacheable/call-preview/0.svg" }
+    { htmlId = Call.localVideoNodeId, url = "/cacheable/call-preview3.webp" }
         :: List.indexedMap
             (\index peer ->
                 { htmlId = Call.connectionIdToString (previewCallConnectionId peer)
-                , url = "/cacheable/call-preview/" ++ String.fromInt (index + 1) ++ ".svg"
+                , url = "/cacheable/call-preview" ++ String.fromInt index ++ ".webp"
                 }
             )
             (List.Nonempty.toList previewCallPeers)

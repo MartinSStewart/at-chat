@@ -509,7 +509,7 @@ videoNodes localUser config loggedIn local =
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
 
         voiceChatY =
-            MyUi.channelHeaderHeight + 4
+            MyUi.channelHeaderHeight + 8
 
         maxWidth : Int
         maxWidth =
@@ -534,7 +534,7 @@ videoNodes localUser config loggedIn local =
                     150
 
                    else
-                    120
+                    90
                   )
                 - (padding * 2)
 
@@ -1242,10 +1242,10 @@ view isAdmin windowSize roomId calls model =
                   )
                     [ Ui.contentBottom
                     , if isMobile then
-                        Ui.padding 8
+                        Ui.paddingXY 8 0
 
                       else
-                        Ui.padding 16
+                        Ui.paddingXY 16 8
                     , Ui.spacing 8
                     ]
                     [ mediaDeviceSelectors isMobile roomId model
