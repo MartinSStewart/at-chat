@@ -118,7 +118,7 @@ discordLinkServerErrorText =
 
 discordLinkLimitReachedText : String
 discordLinkLimitReachedText =
-    "Can't link your Discord account because the maximum number of linked Discord accounts has been reached"
+    "Sorry, too many people have already linked Discord accounts. We starting with only a small number of slots to make sure nothing breaks."
 
 
 discordLinkExpiredText : String
