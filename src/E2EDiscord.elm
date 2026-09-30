@@ -2484,7 +2484,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ -- The admin is on the friends page and isn't viewing the Discord DM, so no
+                        [ admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , -- The admin is on the friends page and isn't viewing the Discord DM, so no
                           -- notification icon is shown in the guild column yet.
                           admin.checkView
                             100
@@ -2633,6 +2634,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\connection _ ->
                         [ -- A new Discord group DM (the linked account plus two other users) is created.
                           T.websocketSendString 100 connection discordGroupDmChannelCreate
+                        , admin.click 100 (Dom.id "userOptions_closeUserOptions")
 
                         -- The admin isn't viewing the group DM, and it has no messages, so no
                         -- notification icon is shown in the guild column yet.
