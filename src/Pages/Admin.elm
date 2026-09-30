@@ -3742,7 +3742,7 @@ userSection isMobile timezone expandedSections adminData model =
                 Ui.text loadingText
 
             AdminDataLoaded users ->
-                Ui.Lazy.lazy4 userTableView timezone model.userTable users adminData.twoFactorAuthentication
+                Ui.Lazy.lazy5 userTableView timezone model.userTable users adminData.twoFactorAuthentication adminData.discordUsers
         , Ui.row
             [ Ui.spacing 16 ]
             (MyUi.simpleButton
@@ -4612,11 +4612,12 @@ userTableView :
     -> UserTable
     -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
+    -> AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     -> Element Msg
-userTableView timezone tableState users twoFactorAuthentication =
+userTableView timezone tableState users twoFactorAuthentication discordUsers =
     Ui.Table.viewWithState
         tableAttributes
-        (userTableColumns timezone tableState users twoFactorAuthentication)
+        (userTableColumns timezone tableState users twoFactorAuthentication (linkedDiscordAccounts discordUsers))
         tableState.table
         (List.map
             (\( userId, user ) ->
@@ -4632,6 +4633,35 @@ userTableView timezone tableState users twoFactorAuthentication =
             (NonemptyDict.toList users)
             ++ List.indexedMap (\index user -> ( NewUserId index, user )) (Array.toList tableState.newUsers)
         )
+
+
+linkedDiscordAccounts :
+    AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
+    -> Maybe (SeqDict (Id UserId) (List String))
+linkedDiscordAccounts discordUsers =
+    case discordUsers of
+        AdminDataLoaded discordUsers2 ->
+            SeqDict.foldl
+                (\_ discordUser dict ->
+                    case discordUser of
+                        FullData_ForAdmin data ->
+                            SeqDict.update data.linkedTo (\list -> Just (data.user.username :: Maybe.withDefault [] list)) dict
+
+                        NeedsAuthAgain_ForAdmin data ->
+                            SeqDict.update data.linkedTo (\list -> Just (data.user.username :: Maybe.withDefault [] list)) dict
+
+                        BasicData_ForAdmin _ ->
+                            dict
+                )
+                SeqDict.empty
+                discordUsers2
+                |> Just
+
+        AdminDataLoading ->
+            Nothing
+
+        AdminDataNotLoaded ->
+            Nothing
 
 
 tableAttributes : List (Ui.Attribute msg)
@@ -4850,8 +4880,9 @@ userTableColumns :
     -> UserTable
     -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
+    -> Maybe (SeqDict (Id UserId) (List String))
     -> Ui.Table.Config Table.Model rowState ( UserTableId, EditedBackendUser ) Msg
-userTableColumns timezone tableState users twoFactorAuthentication =
+userTableColumns timezone tableState users twoFactorAuthentication discordAccounts =
     Table.tableConfig
         (Dom.id "Admin_userTable")
         True
@@ -4979,6 +5010,33 @@ userTableColumns timezone tableState users twoFactorAuthentication =
                                         Ui.none
 
                             NewUserId _ ->
+                                Ui.none
+                        )
+          , sortBy = Nothing
+          }
+        , { title = "Discord accounts"
+          , view =
+                \( userTableId, _ ) ->
+                    Ui.el
+                        [ cellBackgroundColor userTableId tableState
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 4
+                        , Ui.height Ui.fill
+                        , Ui.id ("admin_discordAccounts_" ++ userTableIdToDomId userTableId)
+                        ]
+                        (case ( userTableId, discordAccounts ) of
+                            ( ExistingUserId userId, Just discordAccounts2 ) ->
+                                case SeqDict.get userId discordAccounts2 of
+                                    Just usernames ->
+                                        Ui.text (String.join ", " (List.sort usernames))
+
+                                    Nothing ->
+                                        Ui.none
+
+                            ( ExistingUserId _, Nothing ) ->
+                                Ui.text loadingText
+
+                            ( NewUserId _, _ ) ->
                                 Ui.none
                         )
           , sortBy = Nothing
@@ -5167,7 +5225,9 @@ sectionDataToLoad : AdminUiSection -> AdminData -> List AdminChange
 sectionDataToLoad section2 adminData =
     case section2 of
         UsersSection ->
+            -- Each user is shown with the Discord accounts they've linked.
             loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
 
         LogSection ->
             []

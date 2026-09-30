@@ -2044,6 +2044,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 ]
                             )
                         , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.UsersSection)
+                        , adminPage.checkView
+                            100
+                            (Test.Html.Query.find [ Test.Html.Selector.id "admin_discordAccounts_a_0_" ]
+                                >> Test.Html.Query.has [ Test.Html.Selector.exactText "at28727" ]
+                            )
                         , adminPage.input 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_label")) "1"
                         , adminPage.click 100 (Dom.id (Dom.idToString Pages.Admin.discordLinkLimitId ++ "_acceptEdit"))
                         , T.checkState
