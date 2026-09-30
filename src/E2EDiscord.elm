@@ -1172,9 +1172,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\user ->
-                [ user.click 100 (Dom.id "guild_showUserOptions")
-                , user.click 100 (Dom.id "userOptions_discordSection")
-                , user.checkView
+                [ -- Linking opens user options with the Discord section expanded
+                  user.checkView
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "at0232"
@@ -2242,7 +2241,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
@@ -2275,7 +2276,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ E2EHelper.enableNotifications False admin
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- The admin isn't viewing the Discord guild channel, so a message from
@@ -2333,7 +2336,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
-                        [ E2EHelper.enableNotifications False admin
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- Positive control: while the admin isn't viewing the DM a message should push.
