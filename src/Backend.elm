@@ -1018,7 +1018,12 @@ updateHelper msg model =
                                         markDiscordDataAsViewed discordUserId discordUser.linkedTo model2
 
                                     else
-                                        model2
+                                        markNewDiscordDataAsViewed
+                                            discordUserId
+                                            discordUser.linkedTo
+                                            (SeqDict.keys guildDataDict)
+                                            (List.map .dmChannelId dmChannels)
+                                            model2
                             in
                             ( model3
                             , Command.batch
@@ -8817,6 +8822,58 @@ markDiscordDataAsViewed discordUserId userId model =
                         )
                         guildsViewed
                         model.discordDmChannels
+                )
+                model.users
+    }
+
+
+{-| The guilds and DMs a Discord account's ready data brings in for the first time come with
+messages written before the user could see them here. Without this, an already linked account
+that reconnects, or a first link whose ready data got handled twice, leaves them unread.
+-}
+markNewDiscordDataAsViewed :
+    Discord.Id Discord.UserId
+    -> Id UserId
+    -> List (Discord.Id Discord.GuildId)
+    -> List (Discord.Id Discord.PrivateChannelId)
+    -> BackendModel
+    -> BackendModel
+markNewDiscordDataAsViewed discordUserId userId guildIds dmChannelIds model =
+    { model
+        | users =
+            NonemptyDict.updateIfExists
+                userId
+                (\user ->
+                    let
+                        guildsViewed : BackendUser
+                        guildsViewed =
+                            List.foldl
+                                (\guildId state ->
+                                    case SeqDict.get guildId model.discordGuilds of
+                                        Just guild ->
+                                            LocalState.markAllDiscordChannelsAndThreadsAsViewedBackend
+                                                discordUserId
+                                                guildId
+                                                guild
+                                                state
+
+                                        Nothing ->
+                                            state
+                                )
+                                user
+                                guildIds
+                    in
+                    List.foldl
+                        (\channelId state ->
+                            case SeqDict.get channelId model.discordDmChannels of
+                                Just dmChannel ->
+                                    LocalState.markDiscordDmAsViewedBackend discordUserId channelId dmChannel state
+
+                                Nothing ->
+                                    state
+                        )
+                        guildsViewed
+                        dmChannelIds
                 )
                 model.users
     }

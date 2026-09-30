@@ -5211,7 +5211,7 @@ changeUpdate localMsg local =
                                 markDiscordDataAsViewed discordUserId local2
 
                             else
-                                local2
+                                markNewDiscordDataAsViewed discordUserId data.discordGuilds data.discordDms local2
 
                         Err time ->
                             { local
@@ -6501,6 +6501,40 @@ markDiscordDataAsViewed discordUserId local =
                         )
                         guildsViewed
                         local.discordDmChannels
+            }
+    }
+
+
+{-| The guilds and DMs that are new to the backend come with messages written before the
+user could see them here, so they start out read even when the account was already linked.
+-}
+markNewDiscordDataAsViewed :
+    Discord.Id Discord.UserId
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> LocalState
+    -> LocalState
+markNewDiscordDataAsViewed discordUserId newGuilds newDmChannels local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        guildsViewed : FrontendCurrentUser
+        guildsViewed =
+            SeqDict.foldl
+                (LocalState.markAllDiscordChannelsAndThreadsAsViewedFrontend discordUserId)
+                localUser.user
+                newGuilds
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    SeqDict.foldl
+                        (LocalState.markDiscordDmAsViewedFrontend discordUserId)
+                        guildsViewed
+                        newDmChannels
             }
     }
 

@@ -1755,6 +1755,80 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "A DM that's new to the backend when a linked Discord account reconnects starts out read"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            (String.replace kessDmChannelIdString "1533200000000000500" discordOp0Ready)
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ -> [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":9,"d":false}""" ])
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection discordOp0Ready
+                        , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                        ]
+                    )
+                , T.checkState
+                    3000
+                    (\data ->
+                        case SeqDict.get kessDmChannelId (E2EHelper.unwrapBackend data.backend).discordDmChannels of
+                            Just dmChannel ->
+                                case IdArray.toList dmChannel.messages |> List.map (discordMessageToString data.backend) of
+                                    [ "Old DM message" ] ->
+                                        Ok ()
+
+                                    actual ->
+                                        Err ("Expected the DM to contain \"Old DM message\" but it contains " ++ messagesToDebugString actual)
+
+                            Nothing ->
+                                Err "The DM is missing from the backend"
+                    )
+                , T.checkState
+                    0
+                    (\data ->
+                        case
+                            NonemptyDict.toList (E2EHelper.unwrapBackend data.backend).users
+                                |> List.filterMap (\( _, user ) -> SeqDict.get kessDmGuildOrDmId user.lastViewedMessage)
+                        of
+                            [ lastViewed ] ->
+                                if lastViewed == Id.fromInt 0 then
+                                    Ok ()
+
+                                else
+                                    Err ("Expected the backend to have the DM read up to message 0 but it's read up to " ++ Id.toString lastViewed)
+
+                            _ ->
+                                Err "Expected the backend to have the DM marked as read"
+                    )
+                , T.checkState
+                    0
+                    (\data ->
+                        withAdminLocalState
+                            admin
+                            data
+                            (\local ->
+                                if SeqDict.get kessDmGuildOrDmId local.localUser.user.lastViewedMessage == Just (Id.fromInt 0) then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the frontend to have the DM marked as read"
+                            )
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Reloading a Discord channel loads its threads"
         E2EHelper.startTime
         normalConfig
@@ -4445,7 +4519,17 @@ checkDiscordDmRoute channelId model =
 -}
 kessDmChannelId : Discord.Id Discord.PrivateChannelId
 kessDmChannelId =
-    Unsafe.uint64 "222087308516524036" |> Discord.idFromUInt64
+    Unsafe.uint64 kessDmChannelIdString |> Discord.idFromUInt64
+
+
+kessDmChannelIdString : String
+kessDmChannelIdString =
+    "222087308516524036"
+
+
+kessDmGuildOrDmId : AnyGuildOrDmId
+kessDmGuildOrDmId =
+    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = E2EHelper.currentDiscordUserId, channelId = kessDmChannelId })
 
 
 discordDmChannelId : Discord.Id Discord.PrivateChannelId
