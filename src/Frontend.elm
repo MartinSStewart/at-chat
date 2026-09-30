@@ -10151,5 +10151,6 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
             (User.allUsers localUser)
             SeqDict.empty
             contentAndEmbeds.content
+            |> UserSession.truncatePushNotificationText
         )
     )

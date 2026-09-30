@@ -1430,7 +1430,7 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                   body =
                     case body of
                         UnencryptedBody text ->
-                            text
+                            UserSession.truncatePushNotificationText text
 
                         EncryptedBody _ _ ->
                             encryptedDmText
