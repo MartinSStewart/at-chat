@@ -2931,7 +2931,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredQuestion h
                             time
                             contentWidth
                             localUser
-                            False
+                            (hoveredResult == Just (NotesReaction (Id.fromInt index)))
                             (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
                             notes.attachedFiles
                             notes.text
@@ -3006,7 +3006,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedR
                                 time
                                 (min 300 (contentWidth - answerGroupPaddingX * 2))
                                 localUser
-                                False
+                                (hoveredResult == Just (AnswerReaction userId questionId))
                                 (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
                                 answer.attachedFiles
                                 answer.text
@@ -3113,7 +3113,12 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult highlighte
                         localUser.session.userId
                         localUser.customEmojis
                         (User.allUsers localUser)
-                        Sticker.LoopAFewTimesOnLoad
+                        (if isHovered then
+                            Sticker.ResetAndLoopAFewTimes
+
+                         else
+                            Sticker.LoopAFewTimesOnLoad
+                        )
                         (contentWidth - paddingX2 * 2)
                         reactions
                 of
