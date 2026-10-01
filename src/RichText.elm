@@ -4569,16 +4569,10 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     , currentList
                         ++ [ case ( showLargeContent, config.isHovered ) of
                                 ( ShowLargeContent _, True ) ->
-                                    CustomEmoji.viewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
+                                    CustomEmoji.copyableViewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
 
                                 _ ->
-                                    CustomEmoji.view "1.4em" "0.2em" id config.customEmojis config.animationMode
-                           , -- Same idea as Twemoji.spriteView: the characters that stand for the custom emoji
-                             -- ride alongside the image at no size, so copying the message gives them back and
-                             -- pasting them into a message input turns them into the custom emoji again.
-                             Html.span
-                                [ Html.Attributes.style "font-size" "0" ]
-                                [ Html.text (CustomEmoji.idToString id) ]
+                                    CustomEmoji.copyableView "1.4em" "0.2em" id config.customEmojis config.animationMode
                            ]
                     )
 

@@ -56,26 +56,36 @@ spriteReference sprite emoji =
 
 spriteView : String -> String -> String -> Html msg
 spriteView size sprite emoji =
+    -- Copying a message has to give back the emoji rather than a gap where the picture
+    -- was, and a screen reader needs something to read out. A `use` carries no text of
+    -- its own the way an `img` carries its alt, so the characters sit under the picture,
+    -- filling the room it takes so that dragging across it selects them. The
+    -- `emoji-characters` rules in `MyUi.css` keep them from being drawn.
     Html.span
-        [ Html.Attributes.style "display" "inline-block" ]
-        [ Svg.svg
+        [ Html.Attributes.class "emoji-characters"
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "width" size
+        , Html.Attributes.style "height" size
+        , Html.Attributes.style "line-height" size
+        , Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
+        ]
+        [ Html.text emoji
+        , Svg.svg
             [ Svg.Attributes.viewBox "0 0 36 36"
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" "0"
+            , Html.Attributes.style "top" "0"
             , Html.Attributes.style "width" size
             , Html.Attributes.style "height" size
-            , Html.Attributes.style "display" "inline-block"
-            , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
+            , Html.Attributes.style "pointer-events" "none"
             ]
             [ Svg.use
                 [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
                 []
             ]
-        , -- Copying a message has to give back the emoji rather than a gap where the picture
-          -- was, and a screen reader needs something to read out. A `use` carries no text of
-          -- its own the way an `img` carries its alt, so the characters ride alongside it at
-          -- no size: selected and copied, but taking up nothing and drawing nothing.
-          Html.span
-            [ Html.Attributes.style "font-size" "0" ]
-            [ Html.text emoji ]
         ]
 
 
