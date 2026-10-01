@@ -2058,15 +2058,19 @@ contentView time contentWidth localUser htmlId attachedFiles content =
 messageWithProfile : Id UserId -> LocalUser -> Element msg -> Element msg
 messageWithProfile userId localUser content =
     Ui.row
-        [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.alignTop, Ui.width Ui.shrink ] (User.profileImage (User.getUser userId localUser))
-        , Ui.column
-            []
-            [ User.toStringAlt userId localUser
-                |> Ui.text
-                |> Ui.el [ Ui.Font.bold ]
-            , content
+        []
+        [ Ui.el
+            [ Ui.alignTop
+            , Ui.width Ui.shrink
+            , Ui.paddingWith
+                { left = 0
+                , right = MessageView.profileImagePaddingRight
+                , top = 2
+                , bottom = 0
+                }
             ]
+            (User.profileImage (User.getUser userId localUser))
+        , Ui.column [] [ User.toColoredString userId (User.allUsers localUser), content ]
         ]
 
 
@@ -2124,7 +2128,7 @@ answeringView time contentWidth localUser loggedIn setup shared model =
                             let
                                 answers : List (Element GameMsg)
                                 answers =
-                                    List.map
+                                    List.filterMap
                                         (\( answeredBy, answers2 ) ->
                                             case IdArray.get questionId answers2 of
                                                 Just (Just answer) ->
@@ -2145,9 +2149,10 @@ answeringView time contentWidth localUser loggedIn setup shared model =
                                                             answer.attachedFiles
                                                             answer.text
                                                         )
+                                                        |> Just
 
                                                 _ ->
-                                                    Ui.el [ Ui.Font.italic ] (Ui.text "No answered")
+                                                    Nothing
                                         )
                                         (SeqDict.toList shared.answers)
                             in
