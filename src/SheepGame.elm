@@ -249,6 +249,9 @@ type alias GameData =
       newQuestionRevealed : Bool
     , -- Which answer or note the pointer is over, which is the one offering to be reacted to.
       hoveredResult : Maybe ReactionTarget
+    , -- Which question the pointer is over, so its animated emojis, stickers and images play
+      -- again the way a hovered message's do.
+      hoveredQuestion : Maybe (Id QuestionId)
     }
 
 
@@ -271,6 +274,8 @@ type GameMsg
     | PressedRevealScores
     | PressedShowNextQuestion
     | PressedHidePreviousQuestion
+    | HoveredQuestion (Id QuestionId)
+    | ExitedQuestion (Id QuestionId)
     | HoveredResultsGrid ( Id UserId, Id UserId )
     | ExitedResultsGrid ( Id UserId, Id UserId )
     | UserScrolledResults ScrollPosition
@@ -386,6 +391,7 @@ initGame localUser setup shared =
     , questionsRevealedSeen = shared.questionsRevealed
     , newQuestionRevealed = False
     , hoveredResult = Nothing
+    , hoveredQuestion = Nothing
     }
 
 
@@ -1172,6 +1178,22 @@ updateGame localUser setup shared msg model =
         PressedHidePreviousQuestion ->
             ( model
             , max 0 (shared.questionsRevealed - 1) |> Id.fromInt |> ChangedQuestionsRevealed |> Just
+            , NoOutMsg
+            )
+
+        HoveredQuestion questionId ->
+            ( { model | hoveredQuestion = Just questionId }, Nothing, NoOutMsg )
+
+        ExitedQuestion questionId ->
+            ( { model
+                | hoveredQuestion =
+                    if model.hoveredQuestion == Just questionId then
+                        Nothing
+
+                    else
+                        model.hoveredQuestion
+              }
+            , Nothing
             , NoOutMsg
             )
 
@@ -2018,11 +2040,12 @@ contentView :
     Time.Posix
     -> Int
     -> LocalUser
+    -> Bool
     -> HtmlId
     -> SeqDict (Id FileId) FileData
     -> Nonempty (RichText (Id UserId) (Id ChannelId))
     -> Element GameMsg
-contentView time contentWidth localUser htmlId attachedFiles content =
+contentView time contentWidth localUser isHovered htmlId attachedFiles content =
     RichText.view
         htmlId
         contentWidth
@@ -2037,7 +2060,12 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
         , emojiData = localUser.emojiData
-        , animationMode = Sticker.LoopAFewTimesOnLoad
+        , animationMode =
+            if isHovered then
+                Sticker.ResetAndLoopAFewTimes
+
+            else
+                Sticker.LoopAFewTimesOnLoad
         , timezone = localUser.timezone
         , time = time
         , drawings = SeqDict.empty
@@ -2045,12 +2073,40 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         , drawingUserColor = \_ -> RichText.defaultColor
         , isSelectingAnchor = False
         , devicePixelRatio = localUser.devicePixelRatio
-        , isHovered = False
+        , isHovered = isHovered
         }
         Array.empty
         content
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap", Html.Attributes.id (Dom.idToString htmlId) ]
         |> Ui.html
+
+
+{-| Hovering a question restarts its animated emojis, stickers and images, the same as
+hovering a message does.
+-}
+questionView :
+    Time.Posix
+    -> Int
+    -> LocalUser
+    -> Maybe (Id QuestionId)
+    -> Id QuestionId
+    -> HtmlId
+    -> ValidatedInput
+    -> Element GameMsg
+questionView time contentWidth localUser hoveredQuestion questionId htmlId question =
+    Ui.el
+        [ Ui.Events.onMouseEnter (HoveredQuestion questionId)
+        , Ui.Events.onMouseLeave (ExitedQuestion questionId)
+        ]
+        (contentView
+            time
+            contentWidth
+            localUser
+            (hoveredQuestion == Just questionId)
+            htmlId
+            question.attachedFiles
+            question.text
+        )
 
 
 {-| Something someone wrote, with their name and picture beside it the way a message has.
@@ -2117,13 +2173,14 @@ answeringView time contentWidth localUser loggedIn setup shared model =
                     in
                     Ui.column
                         [ Ui.spacing 4 ]
-                        [ contentView
+                        [ questionView
                             time
                             contentWidth
                             localUser
+                            model.hoveredQuestion
+                            questionId
                             (Dom.id ("sheepGame_answeringQuestion_" ++ Id.toString questionId))
-                            question.attachedFiles
-                            question.text
+                            question
                         , if isHost localUser.session.userId setup then
                             let
                                 answers : List (Element GameMsg)
@@ -2139,6 +2196,7 @@ answeringView time contentWidth localUser loggedIn setup shared model =
                                                             time
                                                             answerContentWidth
                                                             localUser
+                                                            False
                                                             (Dom.id
                                                                 ("sheepGame_answerPreview_"
                                                                     ++ Id.toString questionId
@@ -2333,13 +2391,14 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
         [ Ui.spacing 8 ]
         [ Ui.el
             [ Ui.Font.weight 600 ]
-            (contentView
+            (questionView
                 time
                 contentWidth
                 localUser
+                model.hoveredQuestion
+                questionId
                 (Dom.id ("sheepGame_groupingQuestion_" ++ Id.toString questionId))
-                result.question.attachedFiles
-                result.question.text
+                result.question
             )
         , Ui.column
             [ Ui.spacing 4 ]
@@ -2379,6 +2438,7 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                                 time
                                 contentWidth
                                 localUser
+                                False
                                 (Dom.id ("sheepGame_groupingNotesPreview_" ++ Id.toString questionId))
                                 notes.attachedFiles
                                 notes.text
@@ -2511,6 +2571,7 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
             time
             contentWidth
             localUser
+            False
             (Dom.id ("sheepGame_groupingAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
             answer.attachedFiles
             answer.text
@@ -2769,7 +2830,7 @@ revealingView isMobile time contentWidth localUser highlightedResult setup share
                     ]
                 ]
                 :: List.indexedMap
-                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult highlightedResult results.maxPoints)
+                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredQuestion model.hoveredResult highlightedResult results.maxPoints)
                     (List.take (shared.questionsRevealed - 1) results.questions)
             )
     , if shared.questionsRevealed > questionCount then
@@ -2814,13 +2875,14 @@ resultsQuestionView :
     -> Int
     -> LocalUser
     -> ValidatedSetup
+    -> Maybe (Id QuestionId)
     -> Maybe ReactionTarget
     -> Maybe ReactionTarget
     -> Int
     -> Int
     -> QuestionResult
     -> Element GameMsg
-resultsQuestionView isMobile time contentWidth localUser setup hoveredResult highlightedResult maxPoints index result =
+resultsQuestionView isMobile time contentWidth localUser setup hoveredQuestion hoveredResult highlightedResult maxPoints index result =
     let
         numberWidth : number
         numberWidth =
@@ -2844,13 +2906,14 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult hig
                 , Ui.Font.bold
                 ]
                 (Ui.text (String.fromInt (index + 1) ++ ". "))
-            , contentView
+            , questionView
                 time
                 (contentWidth - (numberWidth + numberSpacing))
                 localUser
+                hoveredQuestion
+                (Id.fromInt index)
                 (revealedQuestionId index)
-                result.question.attachedFiles
-                result.question.text
+                result.question
             ]
         , Ui.column
             [ Ui.spacing 16 ]
@@ -2868,6 +2931,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult hig
                             time
                             contentWidth
                             localUser
+                            False
                             (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
                             notes.attachedFiles
                             notes.text
@@ -2942,6 +3006,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedR
                                 time
                                 (min 300 (contentWidth - answerGroupPaddingX * 2))
                                 localUser
+                                False
                                 (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
                                 answer.attachedFiles
                                 answer.text
