@@ -1398,6 +1398,48 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord user bulk deletes messages in a guild channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\user ->
+                [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , user.click 100 (Dom.id "guild_openChannel_1072828564317159465")
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":3,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:52:35.803000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533095101817950311\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"First\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:52:36.803000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533095101817950312\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Second\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:52:37.803000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533095101817950313\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Third\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordChannelAMessages [ "First", "Second", "Third" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_DELETE_BULK\",\"s\":6,\"op\":0,\"d\":{\"ids\":[\"1533095101817950311\",\"1533095101817950313\"],\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordChannelAMessages [ "<deleted message>", "Second", "<deleted message>" ]
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "First" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Third" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
         E2EHelper.startTime
         normalConfig
