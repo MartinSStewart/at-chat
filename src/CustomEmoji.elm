@@ -3,12 +3,13 @@ module CustomEmoji exposing
     , CustomEmojiUrl(..)
     , EmojiName(..)
     , addUrl
+    , copyableView
+    , copyableViewWithTooltip
     , emojiNameFromString
     , emojiNameToString
     , idToString
     , view
     , viewHelper
-    , viewWithTooltip
     )
 
 import Coord exposing (Coord)
@@ -87,13 +88,29 @@ placeholder emojiSize yOffset =
         []
 
 
-{-| Same as `view` but hovering over the emoji reveals a popup containing a large
+{-| Same as `view`, but the emoji's characters sit under the image, filling the room it
+takes, so that dragging across it in a message selects them and copying gives them back.
+Pasting them into a message turns them into the emoji again. Works like
+`Twemoji.spriteView`, and shares its `emoji-characters` rules in `MyUi.css`.
+-}
+copyableView : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
+copyableView emojiSize yOffset customEmojiId customEmojis2 animationMode =
+    Html.span
+        [ Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "display" "inline-block"
+        ]
+        [ copyableCharacters emojiSize customEmojiId
+        , imageOverCharacters (view emojiSize yOffset customEmojiId customEmojis2 animationMode)
+        ]
+
+
+{-| Same as `copyableView` but hovering over the emoji reveals a popup containing a large
 version of the emoji and its name. This is the same idea as the popup shown when
 hovering over a reaction emoji, and shares the `emoji-popup` rules in `MyUi.css`
 that do the hovering.
 -}
-viewWithTooltip : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
-viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
+copyableViewWithTooltip : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
+copyableViewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
             Html.span
@@ -101,13 +118,45 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 , Html.Attributes.style "position" "relative"
                 , Html.Attributes.style "display" "inline-block"
                 ]
-                [ viewHelper emojiSize yOffset customEmoji animationMode
+                [ copyableCharacters emojiSize customEmojiId
+                , imageOverCharacters (viewHelper emojiSize yOffset customEmoji animationMode)
                 , tooltipView customEmoji
                 , tooltipArrow
                 ]
 
         Nothing ->
-            placeholder emojiSize yOffset
+            copyableView emojiSize yOffset customEmojiId customEmojis2 animationMode
+
+
+{-| Clipped on their own rather than by the emoji's container, which would clip the
+tooltip too.
+-}
+copyableCharacters : String -> Id CustomEmojiId -> Html msg
+copyableCharacters emojiSize customEmojiId =
+    Html.span
+        [ Html.Attributes.class "emoji-characters"
+        , Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "width" emojiSize
+        , Html.Attributes.style "height" emojiSize
+        , Html.Attributes.style "line-height" emojiSize
+        , Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "overflow" "hidden"
+        ]
+        [ Html.text (idToString customEmojiId) ]
+
+
+{-| Lets the mouse through to the characters underneath, since a drag that starts on an
+image selects nothing.
+-}
+imageOverCharacters : Html msg -> Html msg
+imageOverCharacters image =
+    Html.span
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" "0"
+        , Html.Attributes.style "top" "0"
+        , Html.Attributes.style "pointer-events" "none"
+        ]
+        [ image ]
 
 
 {-| Where the tooltip sits, and whether it is shown at all, is left to the

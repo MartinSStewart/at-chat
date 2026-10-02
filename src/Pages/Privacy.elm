@@ -56,9 +56,9 @@ Sensitive data can be accessed by 3rd parties in the following ways:
 
 ## When is it deleted
 
-Your email address, name, messages, and Discord session tokens, will all be deleted when delete your account. Account deletion takes """
+Your email address, name, messages, and Discord session tokens will all be deleted when you delete your account. Account deletion takes """
             ++ String.fromInt User.accountDeletionDelayInWeeks
-            ++ """ weeks in order to give other users a chance to backup any conversations they want a personal copy of.
+            ++ """ weeks in order to give other users a chance to export any conversations they want a personal copy of.
 
 Uploaded files are deleted once they are no longer are attached to any messages. Note that this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
 

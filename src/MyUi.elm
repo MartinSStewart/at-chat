@@ -1328,6 +1328,20 @@ textarea::-moz-selection {
                 ++ """;
     color: rgba(0,0,0,0);
 }
+/* Emoji drawn as pictures keep their characters underneath, for copying. Color emoji
+   ignore `color` once selected unless `::selection` sets it too, and setting anything
+   there drops the browser's own highlight, so that is put back with `Highlight`. */
+.emoji-characters {
+    color: transparent;
+}
+.emoji-characters::selection {
+    background-color: Highlight;
+    color: transparent;
+}
+.emoji-characters::-moz-selection {
+    background-color: Highlight;
+    color: transparent;
+}
 .rich-text-input::selection {
     background-color: transparent;
     color: transparent;

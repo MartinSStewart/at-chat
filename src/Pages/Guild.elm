@@ -5616,7 +5616,7 @@ replyToHeaderHelper isMobile onPress userId allUsers =
         [ Ui.text "Reply to "
         , case userId of
             Just userId2 ->
-                User.toStringView userId2 allUsers
+                User.toColoredString userId2 allUsers
 
             Nothing ->
                 Ui.text "message"
@@ -8509,7 +8509,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                 []
                 [ Ui.row
                     []
-                    [ User.toStringView message2.createdBy allUsers
+                    [ User.toColoredString message2.createdBy allUsers
                     , if showEncryptionIcon then
                         Ui.html Icons.lockClosed
 
@@ -8687,7 +8687,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 []
                 [ Ui.row
                     []
-                    [ User.toStringView message2.createdBy allUsers
+                    [ User.toColoredString message2.createdBy allUsers
                     , messageTimestamp
                         (User.discordUserColor localUser)
                         drawings.timestampDrawings

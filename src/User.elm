@@ -53,9 +53,9 @@ module User exposing
     , setName
     , smallProfileImage
     , smallProfileImageRounding
+    , toColoredString
     , toString
     , toStringAlt
-    , toStringView
     , userColor
     )
 
@@ -985,8 +985,8 @@ toString userId allUsers2 =
             missingName
 
 
-toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
-toStringView userId allUsers2 =
+toColoredString : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
+toColoredString userId allUsers2 =
     case SeqDict.get userId allUsers2 of
         Just user ->
             PersonName.toString user.name

@@ -4569,10 +4569,10 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     , currentList
                         ++ [ case ( showLargeContent, config.isHovered ) of
                                 ( ShowLargeContent _, True ) ->
-                                    CustomEmoji.viewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
+                                    CustomEmoji.copyableViewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
 
                                 _ ->
-                                    CustomEmoji.view "1.4em" "0.2em" id config.customEmojis config.animationMode
+                                    CustomEmoji.copyableView "1.4em" "0.2em" id config.customEmojis config.animationMode
                            ]
                     )
 

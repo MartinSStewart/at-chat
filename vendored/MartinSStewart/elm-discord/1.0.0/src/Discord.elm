@@ -5148,7 +5148,7 @@ decodeDispatchEvent eventName =
         "MESSAGE_DELETE_BULK" ->
             JD.field "d"
                 (JD.succeed DispatchBot_MessageDeleteBulkEvent
-                    |> JD.andMap (JD.field "id" (JD.list decodeId))
+                    |> JD.andMap (JD.field "ids" (JD.list decodeId))
                     |> JD.andMap (JD.field "channel_id" decodeId)
                     |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
@@ -5261,7 +5261,7 @@ decodeDispatchUserEvent eventName =
         "MESSAGE_DELETE_BULK" ->
             JD.field "d"
                 (JD.succeed DispatchUser_MessageDeleteBulkEvent
-                    |> JD.andMap (JD.field "id" (JD.list decodeId))
+                    |> JD.andMap (JD.field "ids" (JD.list decodeId))
                     |> JD.andMap (JD.field "channel_id" decodeId)
                     |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
@@ -6973,7 +6973,11 @@ handleUserGateway authToken intents response model =
                                     )
 
                                 Missing ->
-                                    ( model, [] )
+                                    ( model
+                                    , List.map
+                                        (UserOutMsg_UserDeletedDmMessage (idToUInt64 channelId |> idFromUInt64))
+                                        messageIds
+                                    )
 
                         DispatchUser_GuildMemberAddEvent guildId guildMember ->
                             ( model, [ UserOutMsg_GuildMemberAddEvent guildId guildMember ] )

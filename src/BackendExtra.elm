@@ -757,6 +757,7 @@ unreadMessages maybeLastViewed channel =
             |> IdArray.toList
             |> List.indexedMap (\index message -> ( oldestIncluded + index |> Id.fromInt, message ))
             |> SeqDict.fromList
+            |> Thread.withRepliedToMessages channel.messages
             |> Just
 
     else

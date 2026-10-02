@@ -133,6 +133,7 @@ watching scrollPosition questionsRevealedSeen =
     , questionsRevealedSeen = questionsRevealedSeen
     , newQuestionRevealed = False
     , hoveredResult = Nothing
+    , hoveredQuestion = Nothing
     }
 
 

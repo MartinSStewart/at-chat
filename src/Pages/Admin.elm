@@ -31,7 +31,7 @@ module Pages.Admin exposing
     , initForUser
     , lastRegeneratedAtText
     , logSectionId
-    , noBackendMsgLogsText
+    , noUpdateLogsText
     , notRegeneratedText
     , pendingChangesText
     , regeneratingText
@@ -173,9 +173,9 @@ discordLinkingEnabledText =
     "Discord account linking enabled"
 
 
-noBackendMsgLogsText : String
-noBackendMsgLogsText =
-    "No backendMsg logs"
+noUpdateLogsText : String
+noUpdateLogsText =
+    "No ToBackend or BackendMsg logs"
 
 
 type Msg
@@ -1931,8 +1931,7 @@ view isMobile2 version time local adminData model =
             , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 filesSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local model.expandedSections
-            , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time model.expandedSections adminData
-            , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time model.expandedSections adminData
+            , Ui.Lazy.lazy4 updateLogsSection isMobile2 time model.expandedSections adminData
             , Ui.Lazy.lazy5 exportSection isMobile2 local.localUser.timezone model.expandedSections adminData model
             ]
         )
@@ -2924,70 +2923,240 @@ stickerUrlToString url =
             "Loading"
 
 
-toBackendLogsSection : Bool -> Time.Posix -> SeqSet AdminUiSection -> AdminData -> Element Msg
-toBackendLogsSection isMobile currentTime expandedSections adminData =
+updateLogsSection : Bool -> Time.Posix -> SeqSet AdminUiSection -> AdminData -> Element Msg
+updateLogsSection isMobile currentTime expandedSections adminData =
     section
         isMobile
         expandedSections
-        ToBackendLogsSection
-        [ case adminData.toBackendLogs of
-            AdminDataNotLoaded ->
-                Ui.text loadingText
-
-            AdminDataLoading ->
-                Ui.text loadingText
-
-            AdminDataLoaded logs ->
-                if Array.isEmpty logs then
-                    Ui.text "No toBackend logs"
+        UpdateLogsSection
+        [ case ( adminData.toBackendLogs, adminData.backendMsgLogs ) of
+            ( AdminDataLoaded toBackendLogs, AdminDataLoaded backendMsgLogs ) ->
+                if Array.isEmpty toBackendLogs && Array.isEmpty backendMsgLogs then
+                    Ui.text noUpdateLogsText
 
                 else
                     Ui.column
                         [ Ui.spacing 12 ]
-                        [ Ui.column
-                            [ Ui.spacing 4 ]
-                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
-                            , eventsPerHourLineGraph
-                                currentTime
-                                "#4a90d9"
-                                (Array.toList logs |> List.map .startTime)
-                            ]
-                        , toBackendLogsTable logs
+                        [ updateTimePerMinuteGraph
+                            currentTime
+                            (Array.toList toBackendLogs
+                                |> List.map (\log -> { startTime = log.startTime, endTime = log.endTime })
+                            )
+                            (Array.toList backendMsgLogs
+                                |> List.map (\log -> { startTime = log.startTime, endTime = log.endTime })
+                            )
+                        , Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "ToBackend")
+                        , toBackendLogsTable toBackendLogs
+                        , Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "BackendMsg")
+                        , backendMsgLogsTable backendMsgLogs
                         ]
+
+            _ ->
+                Ui.text loadingText
         ]
 
 
-backendMsgLogsSection : Bool -> Time.Posix -> SeqSet AdminUiSection -> AdminData -> Element Msg
-backendMsgLogsSection isMobile currentTime expandedSections adminData =
-    section
-        isMobile
-        expandedSections
-        BackendMsgLogsSection
-        [ case adminData.backendMsgLogs of
-            AdminDataNotLoaded ->
-                Ui.text loadingText
+toBackendColor : String
+toBackendColor =
+    "#4a90d9"
 
-            AdminDataLoading ->
-                Ui.text loadingText
 
-            AdminDataLoaded logs ->
-                if Array.isEmpty logs then
-                    Ui.text noBackendMsgLogsText
+backendMsgColor : String
+backendMsgColor =
+    "#e8913a"
 
-                else
-                    Ui.column
-                        [ Ui.spacing 12 ]
-                        [ Ui.column
-                            [ Ui.spacing 4 ]
-                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
-                            , eventsPerHourLineGraph
-                                currentTime
-                                "#4a90d9"
-                                (Array.toList logs |> List.map .startTime)
+
+{-| Starts where both logs have entries, since the backend only keeps the newest ones, and
+goes back at most a day.
+-}
+updateTimePerMinuteGraph :
+    Time.Posix
+    -> List { startTime : Time.Posix, endTime : Time.Posix }
+    -> List { startTime : Time.Posix, endTime : Time.Posix }
+    -> Element msg
+updateTimePerMinuteGraph now toBackendLogs backendMsgLogs =
+    let
+        minuteMs : Int
+        minuteMs =
+            60 * 1000
+
+        nowMinute : Int
+        nowMinute =
+            Time.posixToMillis now // minuteMs
+
+        oldestMinute : List { startTime : Time.Posix, endTime : Time.Posix } -> Maybe Int
+        oldestMinute logs =
+            List.map (\log -> Time.posixToMillis log.startTime // minuteMs) logs |> List.minimum
+
+        firstMinute : Int
+        firstMinute =
+            List.filterMap oldestMinute [ toBackendLogs, backendMsgLogs ]
+                |> List.maximum
+                |> Maybe.withDefault nowMinute
+                |> max (nowMinute - 24 * 60 + 1)
+                |> min nowMinute
+
+        bucketCount : Int
+        bucketCount =
+            nowMinute - firstMinute + 1
+
+        msPerMinute : List { startTime : Time.Posix, endTime : Time.Posix } -> Array Float
+        msPerMinute logs =
+            List.foldl
+                (\log acc ->
+                    let
+                        index : Int
+                        index =
+                            Time.posixToMillis log.startTime // minuteMs - firstMinute |> min (bucketCount - 1)
+                    in
+                    case Array.get index acc of
+                        Just ms ->
+                            Array.set
+                                index
+                                (ms + Duration.inMilliseconds (Duration.from log.startTime log.endTime))
+                                acc
+
+                        Nothing ->
+                            acc
+                )
+                (Array.repeat bucketCount 0)
+                logs
+
+        toBackendBuckets : Array Float
+        toBackendBuckets =
+            msPerMinute toBackendLogs
+
+        backendMsgBuckets : Array Float
+        backendMsgBuckets =
+            msPerMinute backendMsgLogs
+
+        peakMs : Float
+        peakMs =
+            max (Array.foldl max 0 toBackendBuckets) (Array.foldl max 0 backendMsgBuckets)
+
+        chartWidth : Int
+        chartWidth =
+            600
+
+        chartHeight : Int
+        chartHeight =
+            100
+
+        stepX : Float
+        stepX =
+            if bucketCount <= 1 then
+                0
+
+            else
+                toFloat chartWidth / toFloat (bucketCount - 1)
+
+        polyline : String -> Array Float -> Svg.Svg msg
+        polyline color buckets =
+            Svg.polyline
+                [ Svg.Attributes.fill "none"
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.strokeWidth "2"
+                , Svg.Attributes.points
+                    (Array.toList buckets
+                        |> List.indexedMap
+                            (\i ms ->
+                                String.fromFloat (toFloat i * stepX)
+                                    ++ ","
+                                    ++ String.fromFloat (toFloat chartHeight - ms / max 1 peakMs * toFloat chartHeight)
+                            )
+                        |> String.join " "
+                    )
+                ]
+                []
+
+        hoverAreas : List (Svg.Svg msg)
+        hoverAreas =
+            List.range 0 (bucketCount - 1)
+                |> List.map
+                    (\i ->
+                        let
+                            msAt : Array Float -> Float
+                            msAt buckets =
+                                Array.get i buckets |> Maybe.withDefault 0
+                        in
+                        Svg.rect
+                            [ Svg.Attributes.x (String.fromFloat (toFloat i * stepX - stepX / 2))
+                            , Svg.Attributes.y "0"
+                            , Svg.Attributes.width (String.fromFloat (max 1 stepX))
+                            , Svg.Attributes.height (String.fromInt chartHeight)
+                            , Svg.Attributes.fill "transparent"
                             ]
-                        , backendMsgLogsTable logs
-                        ]
+                            [ Svg.title []
+                                [ Svg.text
+                                    (String.fromInt (bucketCount - 1 - i)
+                                        ++ " min ago\nToBackend: "
+                                        ++ millisecondsText (msAt toBackendBuckets)
+                                        ++ "\nBackendMsg: "
+                                        ++ millisecondsText (msAt backendMsgBuckets)
+                                    )
+                                ]
+                            ]
+                    )
+
+        baseline : Svg.Svg msg
+        baseline =
+            Svg.line
+                [ Svg.Attributes.x1 "0"
+                , Svg.Attributes.y1 (String.fromInt chartHeight)
+                , Svg.Attributes.x2 (String.fromInt chartWidth)
+                , Svg.Attributes.y2 (String.fromInt chartHeight)
+                , Svg.Attributes.stroke "#888"
+                , Svg.Attributes.strokeWidth "1"
+                ]
+                []
+
+        legend : String -> String -> Element msg
+        legend color label =
+            Ui.row
+                [ Ui.spacing 4, Ui.width Ui.shrink ]
+                [ Ui.el
+                    [ Ui.width (Ui.px 12)
+                    , Ui.height (Ui.px 3)
+                    , Ui.htmlAttribute (Html.Attributes.style "background" color)
+                    ]
+                    Ui.none
+                , Ui.text label
+                ]
+    in
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Time spent on updates per minute")
+        , Ui.row
+            [ Ui.Font.size 12, Ui.spacing 12 ]
+            [ legend toBackendColor "ToBackend"
+            , legend backendMsgColor "BackendMsg"
+            , Ui.text ("peak: " ++ millisecondsText peakMs)
+            ]
+        , Svg.svg
+            [ Svg.Attributes.viewBox ("0 0 " ++ String.fromInt chartWidth ++ " " ++ String.fromInt chartHeight)
+            , Svg.Attributes.width (String.fromInt chartWidth)
+            , Svg.Attributes.height (String.fromInt chartHeight)
+            , Html.Attributes.style "max-width" "100%"
+            , Html.Attributes.style "height" "auto"
+            , Html.Attributes.style "overflow" "visible"
+            ]
+            (baseline
+                :: polyline toBackendColor toBackendBuckets
+                :: polyline backendMsgColor backendMsgBuckets
+                :: hoverAreas
+            )
+            |> Ui.html
+        , Ui.row
+            [ Ui.Font.size 11, Ui.spacing 8 ]
+            [ Ui.text (String.fromInt (bucketCount - 1) ++ " min ago")
+            , Ui.el [ Ui.alignRight, Ui.width Ui.shrink ] (Ui.text "now")
+            ]
         ]
+
+
+millisecondsText : Float -> String
+millisecondsText ms =
+    String.fromInt (round ms) ++ "ms"
 
 
 toBackendLogsTable : Array ToBackendLogData -> Element Msg
@@ -5277,11 +5446,9 @@ sectionDataToLoad section2 adminData =
         FilesSection ->
             loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
 
-        ToBackendLogsSection ->
+        UpdateLogsSection ->
             loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)
-
-        BackendMsgLogsSection ->
-            loadIfNeeded adminData.backendMsgLogs (LoadBackendMsgLogs EmptyPlaceholder)
+                ++ loadIfNeeded adminData.backendMsgLogs (LoadBackendMsgLogs EmptyPlaceholder)
 
         StickersAndEmojisSection ->
             []
@@ -5330,8 +5497,7 @@ type AdminUiSection
     | ExportSection
     | ConnectionsSection
     | FilesSection
-    | ToBackendLogsSection
-    | BackendMsgLogsSection
+    | UpdateLogsSection
     | StickersAndEmojisSection
     | WebsocketCloseEventsSection
     | SessionsSection
@@ -5378,11 +5544,8 @@ sectionToString section2 =
         FilesSection ->
             "Files"
 
-        ToBackendLogsSection ->
-            "ToBackend logs"
-
-        BackendMsgLogsSection ->
-            "BackendMsg logs"
+        UpdateLogsSection ->
+            "ToBackend and BackendMsg logs"
 
         StickersAndEmojisSection ->
             "Stickers and emojis"
