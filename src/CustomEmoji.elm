@@ -99,8 +99,8 @@ copyableView emojiSize yOffset customEmojiId customEmojis2 animationMode =
         [ Html.Attributes.style "position" "relative"
         , Html.Attributes.style "display" "inline-block"
         ]
-        [ copyableCharacters emojiSize customEmojiId
-        , imageOverCharacters (view emojiSize yOffset customEmojiId customEmojis2 animationMode)
+        [ imageOverCharacters emojiSize (view emojiSize yOffset customEmojiId customEmojis2 animationMode)
+        , copyableCharacters emojiSize customEmojiId
         ]
 
 
@@ -118,8 +118,8 @@ copyableViewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationM
                 , Html.Attributes.style "position" "relative"
                 , Html.Attributes.style "display" "inline-block"
                 ]
-                [ copyableCharacters emojiSize customEmojiId
-                , imageOverCharacters (viewHelper emojiSize yOffset customEmoji animationMode)
+                [ imageOverCharacters emojiSize (viewHelper emojiSize yOffset customEmoji animationMode)
+                , copyableCharacters emojiSize customEmojiId
                 , tooltipView customEmoji
                 , tooltipArrow
                 ]
@@ -146,14 +146,15 @@ copyableCharacters emojiSize customEmojiId =
 
 
 {-| Lets the mouse through to the characters underneath, since a drag that starts on an
-image selects nothing.
+image selects nothing. Overlaps them with a negative margin for the same reason as in
+`Twemoji.spriteView`.
 -}
-imageOverCharacters : Html msg -> Html msg
-imageOverCharacters image =
+imageOverCharacters : String -> Html msg -> Html msg
+imageOverCharacters emojiSize image =
     Html.span
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" "0"
-        , Html.Attributes.style "top" "0"
+        [ Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "margin-right" ("-" ++ emojiSize)
         , Html.Attributes.style "pointer-events" "none"
         ]
         [ image ]

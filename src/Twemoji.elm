@@ -64,6 +64,10 @@ spriteView size sprite emoji =
     --
     -- The outer span is what sets the height when this is a flex item, from the line the
     -- inner box sits on, so it stays even though it looks like it does nothing.
+    --
+    -- The picture overlaps the characters with a negative margin rather than absolute
+    -- positioning, because Firefox copies anything absolutely positioned as a block and
+    -- puts a line break after it.
     Html.span
         [ Html.Attributes.style "display" "inline-block" ]
         [ Html.span
@@ -77,12 +81,11 @@ spriteView size sprite emoji =
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
             ]
-            [ Html.text emoji
-            , Svg.svg
+            [ Svg.svg
                 [ Svg.Attributes.viewBox "0 0 36 36"
-                , Html.Attributes.style "position" "absolute"
-                , Html.Attributes.style "left" "0"
-                , Html.Attributes.style "top" "0"
+                , Html.Attributes.style "position" "relative"
+                , Html.Attributes.style "vertical-align" "top"
+                , Html.Attributes.style "margin-right" ("-" ++ size)
                 , Html.Attributes.style "width" size
                 , Html.Attributes.style "height" size
                 , Html.Attributes.style "pointer-events" "none"
@@ -91,6 +94,7 @@ spriteView size sprite emoji =
                     [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
                     []
                 ]
+            , Html.text emoji
             ]
         ]
 
