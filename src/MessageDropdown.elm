@@ -245,7 +245,7 @@ emojiDropdownList isMobile nameSoFar availableCustomEmojis availableStickers loc
         substring =
             String.toLower nameSoFar.nameSoFar
     in
-    if String.length substring > 2 then
+    if String.length substring > 1 then
         let
             unicodeEmojis : List ( Int, EmojiOrSticker )
             unicodeEmojis =
