@@ -4467,6 +4467,8 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                             "padding"
                                             ("0 " ++ String.fromInt codePaddingX ++ "px")
                                          , Html.Attributes.style "border-radius" "4px"
+                                         , Html.Attributes.style "white-space" "pre"
+                                         , Html.Attributes.style "overflow-x" "auto"
                                          ]
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
