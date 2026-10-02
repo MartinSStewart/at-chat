@@ -31,6 +31,7 @@ module Message exposing
     , removeReactionEmoji
     , repliedToGameCodec
     , repliedToMatch
+    , repliedToMessage
     , replyToMaybe
     , threadRouteRepliedToMatches
     , threadRouteWithoutRepliedTo
@@ -494,6 +495,41 @@ repliedToMatch message =
             Nothing
 
         GameStarted _ ->
+            Nothing
+
+
+repliedToMessage : Message messageId userId channelId -> Maybe (Id messageId)
+repliedToMessage message =
+    case message of
+        UserTextMessage data ->
+            repliedToMessageHelper data.repliedTo
+
+        EncryptedUserTextMessage data ->
+            repliedToMessageHelper data.repliedTo
+
+        UserJoinedMessage _ _ _ _ ->
+            Nothing
+
+        DeletedMessage _ ->
+            Nothing
+
+        CallStarted _ ->
+            Nothing
+
+        GameStarted _ ->
+            Nothing
+
+
+repliedToMessageHelper : RepliedTo messageId -> Maybe (Id messageId)
+repliedToMessageHelper repliedTo =
+    case repliedTo of
+        RepliedToMessage messageId ->
+            Just messageId
+
+        RepliedToGame _ _ ->
+            Nothing
+
+        NoReply ->
             Nothing
 
 

@@ -12,6 +12,7 @@ module Thread exposing
     , frontendInit
     , loadMessages
     , toFrontend
+    , withRepliedToMessages
     )
 
 import Array exposing (Array)
@@ -21,7 +22,7 @@ import Drawing
 import Effect.Time as Time
 import Id exposing (ChannelId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import Message exposing (Message, RepliedTo(..))
+import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -148,24 +149,16 @@ loadMessages preloadMessages messages =
         referencedMessages =
             Array.foldl
                 (\message list ->
-                    case message of
-                        Message.UserTextMessage message2 ->
-                            case message2.repliedTo of
-                                RepliedToMessage repliedToId ->
-                                    case IdArray.get repliedToId messages of
-                                        Just repliedTo ->
-                                            ( repliedToId, repliedTo ) :: list
+                    case Message.repliedToMessage message of
+                        Just repliedToId ->
+                            case IdArray.get repliedToId messages of
+                                Just repliedTo ->
+                                    ( repliedToId, repliedTo ) :: list
 
-                                        Nothing ->
-                                            list
-
-                                NoReply ->
+                                Nothing ->
                                     list
 
-                                RepliedToGame _ _ ->
-                                    list
-
-                        _ ->
+                        Nothing ->
                             list
                 )
                 []
@@ -173,3 +166,33 @@ loadMessages preloadMessages messages =
     in
     MessageArray.fromArray messageCount (Id.fromInt oldestLoaded) messagesToLoad
         |> MessageArray.setMany referencedMessages
+
+
+{-| Adds the messages that `loaded` reply to, so a reply can show what it replied to even when
+that message is older than the page being sent.
+-}
+withRepliedToMessages :
+    IdArray messageId (Message messageId userId channelId)
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
+withRepliedToMessages messages loaded =
+    SeqDict.foldl
+        (\_ message dict ->
+            case Message.repliedToMessage message of
+                Just repliedToId ->
+                    if SeqDict.member repliedToId dict then
+                        dict
+
+                    else
+                        case IdArray.get repliedToId messages of
+                            Just repliedTo ->
+                                SeqDict.insert repliedToId repliedTo dict
+
+                            Nothing ->
+                                dict
+
+                Nothing ->
+                    dict
+        )
+        loaded
+        loaded

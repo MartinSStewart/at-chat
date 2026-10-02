@@ -1951,6 +1951,73 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "A reply shows what it replied to even when that message is older than the loaded page"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                let
+                    replyTo : Int -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    replyTo messageIndex text =
+                        T.group
+                            [ user.mouseEnter 100 (Dom.id ("guild_message_" ++ String.fromInt messageIndex)) ( 10, 10 ) []
+                            , user.custom
+                                100
+                                (Dom.id "miniView_reply")
+                                "click"
+                                (Json.Encode.object
+                                    [ ( "clientX", Json.Encode.int 300 )
+                                    , ( "clientY", Json.Encode.int 300 )
+                                    ]
+                                )
+                            , E2EHelper.writeMessage user 100 text
+                            ]
+                in
+                -- Message 1 is replied to from the newest page and message 2 from the page
+                -- before it. Neither is in a page that has a reply to it.
+                [ E2EHelper.writeMessage user 1000 "The original message"
+                , List.range 1 (VisibleMessages.pageSize + 4)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Filler " ++ String.fromInt index))
+                    |> T.group
+                , replyTo 2 "Reply in the older page"
+                , List.range 1 (VisibleMessages.pageSize - 2)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Later filler " ++ String.fromInt index))
+                    |> T.group
+                , replyTo 1 "Reply in the newest page"
+                , E2EHelper.writeMessage user 1000 "Last message"
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId2
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        let
+                            replyPreviews : Int -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                            replyPreviews messageIndex text =
+                                userReload.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.id ("guild_replyLink_" ++ String.fromInt messageIndex)
+                                        , Test.Html.Selector.containing [ Test.Html.Selector.text text ]
+                                        ]
+                                    )
+                        in
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , E2EHelper.hasNotExactText userReload [ "Reply in the older page" ]
+                        , E2EHelper.hasExactText userReload [ "Reply in the newest page" ]
+                        , replyPreviews 1 "The original message"
+                        , E2EHelper.scrollToTop userReload
+                        , E2EHelper.hasNotExactText userReload [ "Filler 2" ]
+                        , E2EHelper.hasExactText userReload [ "Reply in the older page" ]
+                        , replyPreviews 2 "Filler 1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
         E2EHelper.startTime
         normalConfig

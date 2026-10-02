@@ -8682,6 +8682,7 @@ loadMessagesHelper channel =
                 ( index + indexStart |> Id.fromInt, message )
             )
         |> SeqDict.fromList
+        |> Thread.withRepliedToMessages channel.messages
 
 
 handleMessagesRequest :
@@ -8700,6 +8701,7 @@ handleMessagesRequest oldestVisibleMessage channel =
         |> IdArray.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
+        |> Thread.withRepliedToMessages channel.messages
 
 
 sendEditMessage :
