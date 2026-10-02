@@ -4476,7 +4476,20 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                          , Html.Attributes.style "border-radius" "4px"
                                          , Html.Attributes.style "white-space" "pre"
                                          , Html.Attributes.style "overflow-x" "auto"
-                                         , Html.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( config.noOp, True ))
+                                         , Html.Events.stopPropagationOn
+                                            "touchstart"
+                                            (Json.Decode.map2
+                                                (\scrollWidth clientWidth ->
+                                                    if scrollWidth > clientWidth then
+                                                        Json.Decode.succeed ( config.noOp, True )
+
+                                                    else
+                                                        Json.Decode.fail ""
+                                                )
+                                                (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
+                                                (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
+                                                |> Json.Decode.andThen identity
+                                            )
                                          ]
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
