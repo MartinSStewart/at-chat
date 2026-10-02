@@ -8569,6 +8569,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
 
                                 IsHoveredWhileSelectingAnchor ->
                                     False
+                        , noOp = MessageView_NoOp
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -8743,6 +8744,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
 
                                 IsHoveredWhileSelectingAnchor ->
                                     False
+                        , noOp = MessageView_NoOp
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -8964,6 +8966,7 @@ userTextMessagePreview timezone time emojiData customEmojis allUsers channels re
             ]
             [ Html.text (User.toString createdBy allUsers) ]
             :: RichText.preview
+                MessageView_NoOp
                 (\_ -> MessageView_NoOp)
                 { revealedSpoilers = revealedSpoilers
                 , users = allUsers
@@ -9470,6 +9473,7 @@ previewThreadLastMessage_userTextMessage time timezone emojiData customEmojis al
         ]
         [ Html.text (User.toString createdBy allUsers) ]
         :: RichText.preview
+            MessageView_NoOp
             (\_ -> MessageView_NoOp)
             { revealedSpoilers = SeqSet.empty
             , users = allUsers

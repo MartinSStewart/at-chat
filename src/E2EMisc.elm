@@ -2858,7 +2858,7 @@ richTextMessage isMobile normalConfig =
                     -- Uses bullet points along with various other rich text formatting.
                     messageText : String
                     messageText =
-                        "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)\n```elm\nadd a b =\n    a + b\n```\n```ascii\n════════════════════════════\n _,  ____ ____  ,-  \n¢ºº < Yo.│ No.> ··?\\\n/¥\\  ¯¯¯¯ ¯¯¯¯  /V\\ \n/¯|    ___      ´╥` \n░▒▓█```"
+                        "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)\n```elm\nadd a b =\n    a + b\n```\n```ascii\n════════════════════════════\n _,  ____ ____  ,-  \n¢ºº < Yo.│ No.> ··?\\\n/¥\\  ¯¯¯¯ ¯¯¯¯  /V\\ \n/¯|    ___      ´╥` \n░▒▓█``` ```trigger horizontal scroll trigger horizontal scroll trigger horizontal scroll trigger horizontal scroll trigger horizontal scroll trigger horizontal scroll trigger horizontal scroll```"
 
                     -- Selections are looked up by substring so that they stay on the text they are
                     -- meant to highlight when messageText is edited.

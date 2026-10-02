@@ -255,6 +255,7 @@ The following is not encrypted:
             , isSelectingAnchor = False
             , devicePixelRatio = 1
             , isHovered = False
+            , noOp = noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
