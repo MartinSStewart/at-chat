@@ -61,30 +61,36 @@ spriteView size sprite emoji =
     -- its own the way an `img` carries its alt, so the characters sit under the picture,
     -- filling the room it takes so that dragging across it selects them. The
     -- `emoji-characters` rules in `MyUi.css` keep them from being drawn.
+    --
+    -- The outer span is what sets the height when this is a flex item, from the line the
+    -- inner box sits on, so it stays even though it looks like it does nothing.
     Html.span
-        [ Html.Attributes.class "emoji-characters"
-        , Html.Attributes.style "position" "relative"
-        , Html.Attributes.style "display" "inline-block"
-        , Html.Attributes.style "width" size
-        , Html.Attributes.style "height" size
-        , Html.Attributes.style "line-height" size
-        , Html.Attributes.style "white-space" "nowrap"
-        , Html.Attributes.style "overflow" "hidden"
-        , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
-        ]
-        [ Html.text emoji
-        , Svg.svg
-            [ Svg.Attributes.viewBox "0 0 36 36"
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "left" "0"
-            , Html.Attributes.style "top" "0"
+        [ Html.Attributes.style "display" "inline-block" ]
+        [ Html.span
+            [ Html.Attributes.class "emoji-characters"
+            , Html.Attributes.style "position" "relative"
+            , Html.Attributes.style "display" "inline-block"
             , Html.Attributes.style "width" size
             , Html.Attributes.style "height" size
-            , Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.style "line-height" size
+            , Html.Attributes.style "white-space" "nowrap"
+            , Html.Attributes.style "overflow" "hidden"
+            , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
             ]
-            [ Svg.use
-                [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
-                []
+            [ Html.text emoji
+            , Svg.svg
+                [ Svg.Attributes.viewBox "0 0 36 36"
+                , Html.Attributes.style "position" "absolute"
+                , Html.Attributes.style "left" "0"
+                , Html.Attributes.style "top" "0"
+                , Html.Attributes.style "width" size
+                , Html.Attributes.style "height" size
+                , Html.Attributes.style "pointer-events" "none"
+                ]
+                [ Svg.use
+                    [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
+                    []
+                ]
             ]
         ]
 
