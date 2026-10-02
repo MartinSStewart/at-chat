@@ -2074,6 +2074,7 @@ contentView time contentWidth localUser isHovered htmlId attachedFiles content =
         , isSelectingAnchor = False
         , devicePixelRatio = localUser.devicePixelRatio
         , isHovered = isHovered
+        , noOp = NoOp
         }
         Array.empty
         content

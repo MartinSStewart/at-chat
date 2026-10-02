@@ -3767,7 +3767,7 @@ view :
     -> (Url -> msg)
     -> (Int -> msg)
     -> (PressedImageData -> msg)
-    -> Config a userId channelId
+    -> Config a userId channelId msg
     -> Array Embed
     -> Nonempty (RichText userId channelId)
     -> List (Html msg)
@@ -3787,8 +3787,13 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler onPressImage config 
         |> (\( _, _, a ) -> a)
 
 
-preview : (Url -> msg) -> PreviewConfig a userId channelId -> Nonempty (RichText userId channelId) -> List (Html msg)
-preview onPressLink config nonempty =
+preview :
+    msg
+    -> (Url -> msg)
+    -> PreviewConfig a userId channelId
+    -> Nonempty (RichText userId channelId)
+    -> List (Html msg)
+preview noOp onPressLink config nonempty =
     viewHelper
         False
         NoLargeContent
@@ -3815,6 +3820,7 @@ preview onPressLink config nonempty =
         , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
           devicePixelRatio = 1
         , isHovered = False
+        , noOp = noOp
         }
         Array.empty
         0
@@ -3831,7 +3837,7 @@ defaultColor =
         }
 
 
-type alias Config a userId channelId =
+type alias Config a userId channelId msg =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
@@ -3849,6 +3855,7 @@ type alias Config a userId channelId =
     , isSelectingAnchor : Bool
     , devicePixelRatio : Float
     , isHovered : Bool
+    , noOp : msg
     }
 
 
@@ -4027,7 +4034,7 @@ viewHelper :
     -> (Url -> msg)
     -> Int
     -> RichTextState
-    -> Config a userId channelId
+    -> Config a userId channelId msg
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId channelId)
@@ -4469,6 +4476,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                          , Html.Attributes.style "border-radius" "4px"
                                          , Html.Attributes.style "white-space" "pre"
                                          , Html.Attributes.style "overflow-x" "auto"
+                                         , Html.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( config.noOp, True ))
                                          ]
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
@@ -4646,7 +4654,7 @@ imageView :
     Maybe ( HtmlId, Int -> msg )
     -> Maybe (PressedImageData -> msg)
     -> Int
-    -> Config b userId channelId
+    -> Config b userId channelId msg
     -> Coord CssPixels
     -> Id FileId
     -> FileData
