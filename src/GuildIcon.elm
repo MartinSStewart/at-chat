@@ -415,28 +415,45 @@ to meet it, so the icon reads as joined onto the channel list rather than sittin
 Where the guild has a picture, the picture carries on into the curves as a reflection of
 itself, which puts the same row of it on both sides of the icon's edge.
 
+Keep the curves mounted even when unselected so their SVG images load before the first
+click. Selection only reveals them, rather than creating new images after the icon moves.
+
 -}
 selectedEdgeCurves : Mode -> Maybe FileHash -> List (Ui.Attribute msg)
 selectedEdgeCurves mode maybeIcon =
-    case ( mode, maybeIcon ) of
-        ( Normal _, _ ) ->
-            []
+    [ Ui.inFront
+        (Ui.el
+            ([ Ui.width Ui.fill
+             , Ui.height Ui.fill
+             , MyUi.noPointerEvents
+             , MyUi.htmlStyle "visibility"
+                (case mode of
+                    IsSelected ->
+                        "visible"
 
-        ( IsSelected, Just icon ) ->
-            let
-                url : String
-                url =
-                    FileStatus.fileUrl FileStatus.pngContent icon
-            in
-            -- The same background the icon paints behind its picture, so that a picture with
-            -- transparency in it shows the icon's own colour through the curve rather than
-            -- the column behind it
-            [ curveAboveIcon [ tileColor MyUi.guildIconBackground, pictureAboveIcon url ]
-            , curveBelowIcon [ tileColor MyUi.guildIconBackground, pictureBelowIcon url ]
-            ]
+                    Normal _ ->
+                        "hidden"
+                )
+             ]
+                ++ (case maybeIcon of
+                        Just icon ->
+                            let
+                                url : String
+                                url =
+                                    FileStatus.fileUrl FileStatus.pngContent icon
+                            in
+                            -- Match the icon's background behind transparent pictures.
+                            [ curveAboveIcon [ tileColor MyUi.guildIconBackground, pictureAboveIcon url ]
+                            , curveBelowIcon [ tileColor MyUi.guildIconBackground, pictureBelowIcon url ]
+                            ]
 
-        ( IsSelected, Nothing ) ->
-            plainEdgeCurves
+                        Nothing ->
+                            plainEdgeCurves
+                   )
+            )
+            Ui.none
+        )
+    ]
 
 
 {-| The curves for the things in the column that have no picture for them to carry on into:
