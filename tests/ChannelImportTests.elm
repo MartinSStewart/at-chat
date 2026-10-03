@@ -86,7 +86,6 @@ tests =
                                 SeqDict.singleton
                                     (Id.fromInt 0)
                                     { messages = IdArray.fromList [ encryptedMessage ]
-                                    , lastTypedAt = SeqDict.empty
                                     , dateDividerDrawings = SeqDict.empty
                                     }
                         }
@@ -171,7 +170,6 @@ testChannel =
     , description = ChannelDescription.fromStringLossy "What everyone talks in"
     , messages = IdArray.fromList [ textMessage, Message.userJoined (time 3) otherUserId ]
     , status = ChannelActive
-    , lastTypedAt = SeqDict.empty
     , threads = SeqDict.singleton (Id.fromInt 0) testThread
     , dateDividerDrawings = SeqDict.singleton (Date.fromRataDie 738000) (drawing adminId)
     , games =
@@ -193,7 +191,6 @@ testDmChannel =
 testThread : BackendThread
 testThread =
     { messages = IdArray.fromList [ textMessage ]
-    , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.singleton (Date.fromRataDie 738001) (drawing otherUserId)
     }
 

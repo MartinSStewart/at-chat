@@ -169,6 +169,7 @@ guildWithChannels channelIds =
     , membersAndOwner = MembersAndOwner.init SeqDict.empty (Id.fromInt 0)
     , bannedUsers = SeqSet.empty
     , invites = SeqDict.empty
+    , lastTypedAt = SeqDict.empty
     }
 
 
@@ -190,7 +191,6 @@ channel =
     , description = ChannelDescription.empty
     , messages = IdArray.empty
     , status = ChannelActive
-    , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     , games = SeqDict.empty
@@ -206,6 +206,7 @@ discordGuildWithChannels channelIds =
     , stickers = SeqSet.empty
     , customEmojis = SeqSet.empty
     , roles = SeqDict.empty
+    , lastTypedAt = SeqDict.empty
     }
 
 
@@ -216,7 +217,6 @@ discordChannel =
     , isForum = False
     , messages = IdArray.empty
     , status = ChannelActive
-    , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty

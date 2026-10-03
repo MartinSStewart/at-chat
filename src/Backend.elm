@@ -169,7 +169,6 @@ init =
                         , description = ChannelDescription.fromStringLossy "The welcome channel!"
                         , messages = IdArray.empty
                         , status = ChannelActive
-                        , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
                         , dateDividerDrawings = SeqDict.empty
                         , games = SeqDict.empty
@@ -182,7 +181,6 @@ init =
                         , description = ChannelDescription.empty
                         , messages = IdArray.empty
                         , status = ChannelActive
-                        , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
                         , dateDividerDrawings = SeqDict.empty
                         , games = SeqDict.empty
@@ -196,6 +194,7 @@ init =
             --    |> SeqDict.fromList
             , bannedUsers = SeqSet.empty
             , invites = SeqDict.empty
+            , lastTypedAt = SeqDict.empty
             }
     in
     ( { users =
@@ -2341,6 +2340,7 @@ addDiscordGuildData discordUserId data guild =
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
     , roles = Pages.Admin.rolesToDict data.guild.roles
+    , lastTypedAt = guild.lastTypedAt
     }
 
 
@@ -3784,11 +3784,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | guilds =
                                             SeqDict.insert
                                                 id.guildId
-                                                (LocalState.updateChannel
-                                                    (LocalState.memberIsTyping userId time threadRoute)
-                                                    id.channelId
-                                                    guild
-                                                )
+                                                (LocalState.memberIsTyping userId time id.channelId threadRoute guild)
                                                 model.guilds
                                       }
                                     , Command.batch
@@ -3816,7 +3812,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | dmChannels =
                                             SeqDict.updateIfExists
                                                 dmChannelId
-                                                (LocalState.memberIsTyping session.userId time threadRoute)
+                                                (LocalState.dmMemberIsTyping session.userId time threadRoute)
                                                 model.dmChannels
                                       }
                                     , Command.batch
@@ -3866,18 +3862,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | discordGuilds =
                                             SeqDict.insert
                                                 id.guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            id.channelId
-                                                            (LocalState.memberIsTyping
-                                                                id.currentUserId
-                                                                time
-                                                                threadRoute
-                                                                channel
-                                                            )
-                                                            guild.channels
-                                                }
+                                                (LocalState.memberIsTyping id.currentUserId time id.channelId threadRoute guild)
                                                 model.discordGuilds
                                       }
                                     , Command.batch
@@ -3921,7 +3906,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | discordDmChannels =
                                             SeqDict.insert
                                                 id.channelId
-                                                (LocalState.memberIsTypingHelper id.currentUserId time dmChannel)
+                                                (LocalState.discordDmMemberIsTyping id.currentUserId time dmChannel)
                                                 model.discordDmChannels
                                       }
                                     , Command.batch
@@ -4363,7 +4348,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         of
                                             Ok dmChannel2 ->
                                                 ( { model
-                                                    | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel2
+                                                                | lastTypedAt =
+                                                                    LocalState.dmForgetEditTyping session.userId threadRoute dmChannel2.lastTypedAt
+                                                            }
+                                                            model.dmChannels
                                                   }
                                                 , Command.batch
                                                     [ Local_SendEditMessage
@@ -4427,9 +4419,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ( Ok discordText, Ok channel2 ) ->
                                     ( { model
                                         | discordGuilds =
-                                            SeqDict.updateIfExists
+                                            SeqDict.insert
                                                 guildId
-                                                (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                { guild
+                                                    | channels = SeqDict.insert channelId channel2 guild.channels
+                                                    , lastTypedAt =
+                                                        LocalState.forgetEditTyping currentUserId channelId threadRoute guild.lastTypedAt
+                                                }
                                                 model.discordGuilds
                                       }
                                     , Command.batch
@@ -4513,7 +4509,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ( Ok discordText, Ok channel2 ) ->
                                     ( { model
                                         | discordDmChannels =
-                                            SeqDict.insert dmData.channelId channel2 model.discordDmChannels
+                                            SeqDict.insert
+                                                dmData.channelId
+                                                { channel2
+                                                    | lastTypedAt =
+                                                        LocalState.discordDmForgetEditTyping dmData.currentUserId messageId channel2.lastTypedAt
+                                                }
+                                                model.discordDmChannels
                                       }
                                     , Command.batch
                                         [ Local_Discord_SendEditDmMessage time timezone dmData messageId newContent
@@ -4588,7 +4590,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 id
                                 (\{ userId } _ _ dmChannelId dmChannel ->
-                                    case LocalState.memberIsEditTypingBackendHelper time userId threadRoute dmChannel of
+                                    case LocalState.dmMemberIsEditTypingBackend time userId threadRoute dmChannel of
                                         Ok dmChannel2 ->
                                             ( { model
                                                 | dmChannels =
@@ -4663,7 +4665,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         NoThreadWithMessage messageId ->
                                             case
-                                                LocalState.memberIsEditTypingBackendHelperNoThread
+                                                LocalState.discordDmMemberIsEditTypingBackend
                                                     time
                                                     data.currentUserId
                                                     messageId
@@ -6730,7 +6732,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             of
                                 ( DmChannel.E2eeEnabled _, Ok dmChannel2 ) ->
                                     ( { model
-                                        | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                                        | dmChannels =
+                                            SeqDict.insert
+                                                dmChannelId
+                                                { dmChannel2
+                                                    | lastTypedAt =
+                                                        LocalState.dmForgetEditTyping session.userId threadRoute dmChannel2.lastTypedAt
+                                                }
+                                                model.dmChannels
                                       }
                                     , Command.batch
                                         [ Local_SendEncryptedEditMessage time id threadRoute fileHashes content
@@ -7109,7 +7118,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Maybe.withDefault ChannelDescription.empty imported.description
                                     , messages = imported.messages
                                     , status = LocalState.ChannelActive
-                                    , lastTypedAt = SeqDict.empty
                                     , threads = imported.threads
                                     , dateDividerDrawings = imported.dateDividerDrawings
                                     , games = imported.games
@@ -7649,13 +7657,11 @@ handleSheepGame :
     ->
         { c
             | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
             | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
          -> BackendModel
@@ -7805,13 +7811,11 @@ handleWordSpellingGame :
     ->
         { c
             | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
             | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
          -> BackendModel
@@ -8751,9 +8755,12 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
                 Ok channel2 ->
                     ( { model2
                         | guilds =
-                            SeqDict.updateIfExists
+                            SeqDict.insert
                                 id.guildId
-                                (LocalState.updateChannel (\_ -> channel2) id.channelId)
+                                { guild
+                                    | channels = SeqDict.insert id.channelId channel2 guild.channels
+                                    , lastTypedAt = LocalState.forgetEditTyping userId id.channelId threadRoute guild.lastTypedAt
+                                }
                                 model2.guilds
                       }
                     , Command.batch

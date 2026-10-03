@@ -1289,33 +1289,38 @@ discordGuildToFrontend :
     -> DiscordBackendGuild
     -> DiscordFrontendGuild
 discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild =
+    let
+        channels : SeqDict (Discord.Id Discord.ChannelId) LocalState.DiscordFrontendChannel
+        channels =
+            SeqDict.filterMap
+                (\channelId channel ->
+                    LocalState.discordChannelToFrontend
+                        guildId
+                        guild
+                        linkedDiscordUsers
+                        (case requestMessagesFor of
+                            Just ( channelIdB, threadRoute ) ->
+                                if channelId == channelIdB then
+                                    Just threadRoute
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                        )
+                        channel
+                )
+                guild.channels
+    in
     { name = guild.name
     , icon = guild.icon
-    , channels =
-        SeqDict.filterMap
-            (\channelId channel ->
-                LocalState.discordChannelToFrontend
-                    guildId
-                    guild
-                    linkedDiscordUsers
-                    (case requestMessagesFor of
-                        Just ( channelIdB, threadRoute ) ->
-                            if channelId == channelIdB then
-                                Just threadRoute
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    channel
-            )
-            guild.channels
+    , channels = channels
     , membersAndOwner = guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
     , roles = guild.roles
+    , lastTypedAt = SeqDict.filter (\_ typing -> SeqDict.member typing.channelId channels) guild.lastTypedAt
     }
 
 
@@ -2211,13 +2216,13 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                             LocalState.createThreadMessageBackend
                                 threadId
                                 (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds (Message.maybeToReply repliedTo))
-                                dmChannel
+                                { dmChannel | lastTypedAt = SeqDict.remove session.userId dmChannel.lastTypedAt }
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
                         NoThreadWithRepliedTo repliedTo ->
                             LocalState.createChannelMessageBackend
                                 (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
-                                dmChannel
+                                { dmChannel | lastTypedAt = SeqDict.remove session.userId dmChannel.lastTypedAt }
                                 |> Tuple.mapFirst NoThreadWithMessage
 
                 ( sessions, notificationCmd ) =
@@ -2311,7 +2316,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         model.stickers
 
                 ( messageId, dmChannel2 ) =
-                    LocalState.createThreadMessageBackend threadId (UserTextMessage message) dmChannel
+                    LocalState.createThreadMessageBackend threadId (UserTextMessage message) { dmChannel | lastTypedAt = SeqDict.remove session.userId dmChannel.lastTypedAt }
 
                 ( sessions, notificationCmds ) =
                     Broadcast.broadcastDm
@@ -2367,7 +2372,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         model.stickers
 
                 ( messageId, dmChannel2 ) =
-                    LocalState.createChannelMessageBackend (Message.UserTextMessage message) dmChannel
+                    LocalState.createChannelMessageBackend (Message.UserTextMessage message) { dmChannel | lastTypedAt = SeqDict.remove session.userId dmChannel.lastTypedAt }
 
                 ( sessions, notificationCmds ) =
                     Broadcast.broadcastDm

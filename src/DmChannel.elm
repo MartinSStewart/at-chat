@@ -33,7 +33,7 @@ import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
 import Effect.Time as Time
 import Game exposing (BackendGameData)
-import Id exposing (ChannelId, ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage, UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message)
 import MessageArray exposing (MessageArray)
@@ -43,14 +43,14 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
+import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
 type alias BackendDmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRoute, time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
+    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRouteWithMaybeMessage, time : Time.Posix }
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
@@ -90,7 +90,7 @@ type alias DiscordFrontendDmChannel =
 type alias FrontendDmChannel =
     { messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRoute, time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
+    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRouteWithMaybeMessage, time : Time.Posix }
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))

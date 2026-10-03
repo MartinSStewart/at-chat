@@ -730,7 +730,6 @@ addDiscordChannel discordChannel =
         , isForum = discordChannel.type_ == Discord.GuildForum
         , messages = IdArray.empty
         , status = ChannelActive
-        , lastTypedAt = SeqDict.empty
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
         , dateDividerDrawings = SeqDict.empty
@@ -1033,7 +1032,12 @@ handleCreateMessage websocketJson discordMessage attachments model =
                             guildOrDmId =
                                 DiscordGuildOrDmId_Dm { currentUserId = discordMessage.author.id, channelId = dmChannelId }
                         in
-                        case LocalState.createDiscordDmChannelMessageBackend discordMessage.id (Message.UserTextMessage message) channel of
+                        case
+                            LocalState.createDiscordDmChannelMessageBackend
+                                discordMessage.id
+                                (Message.UserTextMessage message)
+                                { channel | lastTypedAt = SeqDict.remove discordMessage.author.id channel.lastTypedAt }
+                        of
                             Ok ( messageId, channel2 ) ->
                                 let
                                     ( sessions, notification ) =
@@ -1510,6 +1514,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 { joinedAt = Nothing, roles = SeqSet.empty }
                                                                 guild.membersAndOwner
                                                                 |> Result.withDefault guild.membersAndOwner
+                                                        , lastTypedAt = SeqDict.remove discordMessage.author.id guild.lastTypedAt
                                                     }
                                                     model2.discordGuilds
                                             , discordUsers =
@@ -3012,41 +3017,25 @@ handleTypingStarted typingStart model =
             case SeqDict.get guildId model.discordGuilds of
                 Just guild ->
                     case discordChannelIdToChannelIdNoMessage typingStart.channelId guild of
-                        Just ( channelId, channel, threadRoute ) ->
+                        Just ( channelId, _, maybeThread ) ->
                             let
-                                ( lastTypedAt, channel2 ) =
-                                    case threadRoute of
-                                        Nothing ->
-                                            ( SeqDict.get typingStart.userId channel.lastTypedAt |> Maybe.map .time
-                                            , { channel
-                                                | lastTypedAt =
-                                                    SeqDict.insert
-                                                        typingStart.userId
-                                                        { time = typingStart.timestamp, messageIndex = Nothing }
-                                                        channel.lastTypedAt
-                                              }
-                                            )
+                                threadRoute : ThreadRoute
+                                threadRoute =
+                                    case maybeThread of
+                                        Just a ->
+                                            ViewThread a.threadId
 
-                                        Just { threadId, thread } ->
-                                            ( SeqDict.get typingStart.userId thread.lastTypedAt |> Maybe.map .time
-                                            , { channel
-                                                | threads =
-                                                    SeqDict.insert
-                                                        threadId
-                                                        { thread
-                                                            | lastTypedAt =
-                                                                SeqDict.insert
-                                                                    typingStart.userId
-                                                                    { time = typingStart.timestamp, messageIndex = Nothing }
-                                                                    thread.lastTypedAt
-                                                        }
-                                                        channel.threads
-                                              }
-                                            )
+                                        Nothing ->
+                                            NoThread
                             in
                             if
                                 -- If we just got a typing indicator two seconds ago then skip this new one
-                                Duration.from (Maybe.withDefault (Time.millisToPosix 0) lastTypedAt) typingStart.timestamp
+                                Duration.from
+                                    (SeqDict.get typingStart.userId guild.lastTypedAt
+                                        |> Maybe.map .time
+                                        |> Maybe.withDefault (Time.millisToPosix 0)
+                                    )
+                                    typingStart.timestamp
                                     |> Quantity.lessThan (Duration.seconds 2)
                             then
                                 ( model, Command.none )
@@ -3056,7 +3045,7 @@ handleTypingStarted typingStart model =
                                     | discordGuilds =
                                         SeqDict.insert
                                             guildId
-                                            { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                                            (LocalState.memberIsTyping typingStart.userId typingStart.timestamp channelId threadRoute guild)
                                             model.discordGuilds
                                   }
                                 , Broadcast.toDiscordGuildChannel
@@ -3067,13 +3056,7 @@ handleTypingStarted typingStart model =
                                         typingStart.userId
                                         guildId
                                         channelId
-                                        (case threadRoute of
-                                            Just a ->
-                                                ViewThread a.threadId
-
-                                            Nothing ->
-                                                NoThread
-                                        )
+                                        threadRoute
                                         |> ServerChange
                                     )
                                     model
@@ -3097,13 +3080,7 @@ handleTypingStarted typingStart model =
                         | discordDmChannels =
                             SeqDict.insert
                                 channelId
-                                { channel
-                                    | lastTypedAt =
-                                        SeqDict.insert
-                                            typingStart.userId
-                                            { time = typingStart.timestamp, messageIndex = Nothing }
-                                            channel.lastTypedAt
-                                }
+                                (LocalState.discordDmMemberIsTyping typingStart.userId typingStart.timestamp channel)
                                 model.discordDmChannels
                       }
                     , Broadcast.toDiscordDmChannel
@@ -3844,6 +3821,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                             guild.emojis
                             |> SeqSet.fromList
                     , roles = Pages.Admin.rolesToDict guild.roles
+                    , lastTypedAt = SeqDict.empty
                     }
                         |> Just
         )

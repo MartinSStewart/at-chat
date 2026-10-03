@@ -75,7 +75,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers
@@ -107,7 +107,7 @@ import SeqSet exposing (SeqSet)
 import SheepGame
 import Sticker exposing (AnimationMode(..))
 import String.Nonempty
-import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
+import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
 import Time
 import Touch
 import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelError(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
@@ -1583,7 +1583,6 @@ discordDmChannelView routeData loggedIn local model =
                 { messages = dmChannel.messages
                 , isForum = False
                 , visibleMessages = dmChannel.visibleMessages
-                , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
                 , dateDividerDrawings = dmChannel.dateDividerDrawings
                 }
@@ -3956,7 +3955,6 @@ conversationViewHelper :
         { a
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -3981,15 +3979,20 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
         othersEditing : SeqSet (Id ChannelMessageId)
         othersEditing =
-            SeqDict.remove local.localUser.session.userId channel.lastTypedAt
+            SeqDict.remove local.localUser.session.userId (LocalState.typingIn guildOrDmIdNoThread local)
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
-                        if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
-                            a.messageIndex
+                        case a.threadRoute of
+                            NoThreadWithMaybeMessage maybeMessageId ->
+                                if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
+                                    maybeMessageId
 
-                        else
-                            Nothing
+                                else
+                                    Nothing
+
+                            ViewThreadWithMaybeMessage _ _ ->
+                                Nothing
                     )
                 |> SeqSet.fromList
 
@@ -4337,7 +4340,6 @@ discordConversationViewHelper :
         { a
             | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
         }
@@ -4361,15 +4363,20 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         othersEditing : SeqSet (Id ChannelMessageId)
         othersEditing =
-            SeqDict.remove currentDiscordUserId channel.lastTypedAt
+            SeqDict.remove currentDiscordUserId (LocalState.discordTypingIn guildOrDmIdNoThread local)
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
-                        if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
-                            a.messageIndex
+                        case a.threadRoute of
+                            NoThreadWithMaybeMessage maybeMessageId ->
+                                if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
+                                    maybeMessageId
 
-                        else
-                            Nothing
+                                else
+                                    Nothing
+
+                            ViewThreadWithMaybeMessage _ _ ->
+                                Nothing
                     )
                 |> SeqSet.fromList
 
@@ -4721,15 +4728,20 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         othersEditing : SeqSet (Id ThreadMessageId)
         othersEditing =
-            SeqDict.remove local.localUser.session.userId thread.lastTypedAt
+            SeqDict.remove local.localUser.session.userId (LocalState.typingIn guildOrDmIdNoThread local)
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
-                        if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
-                            a.messageIndex
+                        case a.threadRoute of
+                            ViewThreadWithMaybeMessage typingThreadId maybeMessageId ->
+                                if typingThreadId == threadId && (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3)) then
+                                    maybeMessageId
 
-                        else
-                            Nothing
+                                else
+                                    Nothing
+
+                            NoThreadWithMaybeMessage _ ->
+                                Nothing
                     )
                 |> SeqSet.fromList
 
@@ -4945,15 +4957,20 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
 
         othersEditing : SeqSet (Id ThreadMessageId)
         othersEditing =
-            SeqDict.remove currentDiscordUserId thread.lastTypedAt
+            SeqDict.remove currentDiscordUserId (LocalState.discordTypingIn guildOrDmIdNoThread local)
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
-                        if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
-                            a.messageIndex
+                        case a.threadRoute of
+                            ViewThreadWithMaybeMessage typingThreadId maybeMessageId ->
+                                if typingThreadId == threadId && (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3)) then
+                                    maybeMessageId
 
-                        else
-                            Nothing
+                                else
+                                    Nothing
+
+                            NoThreadWithMaybeMessage _ ->
+                                Nothing
                     )
                 |> SeqSet.fromList
 
@@ -5793,7 +5810,6 @@ conversationView :
         { a
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -5961,7 +5977,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (User.allUsers local.localUser)
                 channels
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
-            , peopleAreTypingView allUsers channel local.localUser.session.userId model
+            , peopleAreTypingView allUsers NoThread (LocalState.typingIn guildOrDmIdNoThread local) local.localUser.session.userId model
             ]
         ]
 
@@ -5980,7 +5996,6 @@ discordConversationView :
             | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
             , isForum : Bool
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
         }
@@ -6186,7 +6201,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                 SeqDict.empty
                         )
                         local.localUser
-            , peopleAreTypingView allUsers channel currentDiscordUserId model
+            , peopleAreTypingView allUsers NoThread (LocalState.discordTypingIn guildOrDmIdNoThread local) currentDiscordUserId model
             ]
         ]
 
@@ -6198,18 +6213,19 @@ typingDebouncerDelay =
 
 peopleAreTypingView :
     SeqDict userId { a | name : PersonName }
-    -> { b | lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> ThreadRoute
+    -> SeqDict userId { b | threadRoute : ThreadRouteWithMaybeMessage, time : Time.Posix }
     -> userId
     -> LoadedFrontend
     -> Element msg
-peopleAreTypingView allUsers channel currentUserId model =
+peopleAreTypingView allUsers threadRoute typing currentUserId model =
     (case
         SeqDict.filter
             (\_ a ->
                 (Duration.from a.time model.time |> Quantity.lessThan (Quantity.plus Duration.second typingDebouncerDelay))
-                    && (a.messageIndex == Nothing)
+                    && (a.threadRoute == Id.threadRouteWithNoMessage threadRoute)
             )
-            (SeqDict.remove currentUserId channel.lastTypedAt)
+            (SeqDict.remove currentUserId typing)
             |> SeqDict.keys
      of
         [] ->
@@ -6451,7 +6467,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (User.allUsers local.localUser)
                 channels
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
-            , peopleAreTypingView allUsers channel local.localUser.session.userId model
+            , peopleAreTypingView allUsers (ViewThread threadId) (LocalState.typingIn guildOrDmIdNoThread local) local.localUser.session.userId model
             ]
         ]
 
@@ -6632,7 +6648,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                 channels
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
-            , peopleAreTypingView allUsers channel currentDiscordUserId model
+            , peopleAreTypingView allUsers (ViewThread threadId) (LocalState.discordTypingIn guildOrDmIdNoThread local) currentDiscordUserId model
             ]
         ]
 
@@ -11237,7 +11253,7 @@ type SomeoneIsTyping
     | NoOneIsTyping
 
 
-someoneIsTyping : Time.Posix -> SeqDict userId (LastTypedAt messageId) -> SomeoneIsTyping
+someoneIsTyping : Time.Posix -> SeqDict userId { a | threadRoute : ThreadRouteWithMaybeMessage, time : Time.Posix } -> SomeoneIsTyping
 someoneIsTyping time lastTypedAt =
     SeqDict.foldl
         (\_ a state ->
@@ -11247,12 +11263,15 @@ someoneIsTyping time lastTypedAt =
 
                 _ ->
                     if Duration.from a.time time |> Quantity.lessThan (Quantity.plus Duration.second typingDebouncerDelay) then
-                        case a.messageIndex of
-                            Just _ ->
+                        case a.threadRoute of
+                            NoThreadWithMaybeMessage (Just _) ->
                                 SomeoneIsEditing
 
-                            Nothing ->
+                            NoThreadWithMaybeMessage Nothing ->
                                 SomeoneIsTyping
+
+                            ViewThreadWithMaybeMessage _ _ ->
+                                state
 
                     else
                         state
@@ -11435,7 +11454,13 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         messagePreview : String
         messagePreview =
-            case someoneIsTyping time (SeqDict.diff channel.lastTypedAt (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)) of
+            case
+                someoneIsTyping
+                    time
+                    (SeqDict.diff channel.lastTypedAt (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
+                        |> SeqDict.map (\_ a -> { threadRoute = NoThreadWithMaybeMessage a.messageIndex, time = a.time })
+                    )
+            of
                 SomeoneIsTyping ->
                     typingText
 

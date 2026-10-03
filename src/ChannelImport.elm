@@ -185,7 +185,6 @@ importThread mapUserId mapChannelId threads =
             in
             ( SeqDict.insert threadId
                 { messages = messages
-                , lastTypedAt = SeqDict.empty
                 , dateDividerDrawings = SeqDict.map (\_ drawing -> mapDrawing mapUserId drawing) thread.dateDividerDrawings
                 }
                 result

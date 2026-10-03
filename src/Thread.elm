@@ -20,7 +20,7 @@ import Date exposing (Date)
 import Discord
 import Drawing
 import Effect.Time as Time
-import Id exposing (ChannelId, Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, Id, ThreadMessageId, ThreadRouteWithMaybeMessage, UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message)
 import MessageArray exposing (MessageArray)
@@ -63,8 +63,8 @@ type alias DiscordFrontendThread =
     }
 
 
-type alias LastTypedAt channelId messageId =
-    { channelId : channelId, time : Time.Posix, messageIndex : Maybe (Id messageId) }
+type alias LastTypedAt channelId =
+    { channelId : channelId, threadRoute : ThreadRouteWithMaybeMessage, time : Time.Posix }
 
 
 backendInit : BackendThread

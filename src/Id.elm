@@ -32,7 +32,9 @@ module Id exposing
     , increment
     , nextId
     , threadRouteToMessageId
+    , threadRouteWithJustMessage
     , threadRouteWithMessage
+    , threadRouteWithNoMessage
     , threadRouteWithoutMaybeMessage
     , threadRouteWithoutMessage
     , toInt
@@ -138,6 +140,26 @@ threadRouteWithoutMaybeMessage threadRoute =
 
         NoThreadWithMaybeMessage _ ->
             NoThread
+
+
+threadRouteWithNoMessage : ThreadRoute -> ThreadRouteWithMaybeMessage
+threadRouteWithNoMessage threadRoute =
+    case threadRoute of
+        ViewThread threadId ->
+            ViewThreadWithMaybeMessage threadId Nothing
+
+        NoThread ->
+            NoThreadWithMaybeMessage Nothing
+
+
+threadRouteWithJustMessage : ThreadRouteWithMessage -> ThreadRouteWithMaybeMessage
+threadRouteWithJustMessage threadRoute =
+    case threadRoute of
+        ViewThreadWithMessage threadId messageId ->
+            ViewThreadWithMaybeMessage threadId (Just messageId)
+
+        NoThreadWithMessage messageId ->
+            NoThreadWithMaybeMessage (Just messageId)
 
 
 threadRouteToMessageId : ThreadRouteWithMessage -> Id ChannelMessageId
