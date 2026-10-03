@@ -3972,9 +3972,19 @@ conversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+        channels : SeqDict (Id ChannelId) FrontendChannel
         channels =
-            LocalState.channelMentions guildOrDmIdNoThread local
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Guild { guildId } ->
+                    case SeqDict.get guildId local.guilds of
+                        Just guild ->
+                            guild.channels
+
+                        Nothing ->
+                            SeqDict.empty
+
+                GuildOrDmId_Dm _ ->
+                    SeqDict.empty
 
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -4149,6 +4159,17 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser
                                                     index
                                                     message
+                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                            ( Nothing, True ) ->
+                                                Ui.Lazy.lazy6
+                                                    messageViewNotThreadStarterWithChannelMention
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                    revealedSpoilers
+                                                    local.localUser
+                                                    index
+                                                    message
+                                                    channels
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             _ ->
@@ -7238,6 +7259,38 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         message
 
 
+messageViewNotThreadStarterWithChannelMention :
+    Int
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> LocalUser
+    -> Int
+    -> Message ChannelMessageId (Id UserId) (Id ChannelId)
+    -> SeqDict (Id ChannelId) FrontendChannel
+    -> Element MessageViewMsg
+messageViewNotThreadStarterWithChannelMention data revealedSpoilers localUser messageIndex message channels =
+    let
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+    in
+    messageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        isEditing
+        localUser.session.userId
+        (User.allUsers localUser)
+        channels
+        localUser
+        Nothing
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
 messageViewThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -7449,7 +7502,7 @@ messageView :
     -> Bool
     -> Id UserId
     -> SeqDict (Id UserId) FrontendUser
-    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+    -> SeqDict (Id ChannelId) FrontendChannel
     -> LocalUser
     -> Maybe (RepliedToView ChannelMessageId (Id UserId) (Id ChannelId) MessageViewMsg)
     -> Maybe (FrontendGenericThread (Id UserId) (Id ChannelId))
@@ -7461,6 +7514,10 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId) (Id ChannelId)))
         decrypted =
             localUser.decryptedMessages
+
+        channelsWithUrl : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+        channelsWithUrl =
+            LocalState.guildChannelMentions localUser channels
     in
     case message of
         UserTextMessage data ->
@@ -7473,7 +7530,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
-                channels
+                channelsWithUrl
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
@@ -7503,7 +7560,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     localUser
                     revealedSpoilers
                     allUsers
-                    channels
+                    channelsWithUrl
                     (User.userColor localUser)
                     isHovered
                     messageId
@@ -7524,7 +7581,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         localUser.customEmojis
                         localUser.emojiData
                         allUsers
-                        channels
+                        channelsWithUrl
                         highlight
                         messageId
                         (currentUserId == data.createdBy)
@@ -7544,7 +7601,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                             localUser
                             revealedSpoilers
                             allUsers
-                            channels
+                            channelsWithUrl
                             (User.userColor localUser)
                             isHovered
                             messageId
@@ -7569,7 +7626,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
-                channels
+                channelsWithUrl
                 highlight
                 messageId
                 False
@@ -7603,7 +7660,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
-                channels
+                channelsWithUrl
                 highlight
                 messageId
                 False
@@ -7630,7 +7687,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
-                channels
+                channelsWithUrl
                 highlight
                 messageId
                 False
@@ -7672,7 +7729,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
-                channels
+                channelsWithUrl
                 highlight
                 messageId
                 False

@@ -11,7 +11,7 @@ import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (CustomEmojiId, Id, UserId)
+import Id exposing (ChannelId, CustomEmojiId, Id, ThreadRoute, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import MyUi
@@ -60,6 +60,7 @@ type MessageViewMsg
     | MessageView_PressedCardAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedUserIconButton (Id UserId)
     | MessageView_PressedDiscordUserIconButton (Discord.Id Discord.UserId)
+    | MessageView_PressedChannelMention (Id ChannelId) ThreadRoute
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -138,6 +139,9 @@ isPressMsg msg =
             True
 
         MessageView_PressedDiscordUserIconButton _ ->
+            True
+
+        MessageView_PressedChannelMention id threadRoute ->
             True
 
 

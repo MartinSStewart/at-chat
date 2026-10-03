@@ -2366,7 +2366,7 @@ updateLoaded msg model =
                         allUsers =
                             User.allUsers local.localUser
 
-                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> Maybe NonemptyString
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, channelId : Id ChannelId, threadRoute : ThreadRoute } -> NonemptyString -> Maybe NonemptyString
                         removeFile channels draft =
                             case
                                 RichText.fromNonemptyString local.localUser.timezone allUsers channels draft

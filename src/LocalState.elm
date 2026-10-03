@@ -532,7 +532,29 @@ channelMentions guildOrDmId local =
         GuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    guildChannelMentions local.localUser guildId guild
+                    guildChannelMentions local.localUser guild.channels
+                        |> SeqDict.map
+                            (\( channelId, threadRoute ) { name } ->
+                                { name = name
+                                , url =
+                                    GuildRoute
+                                        guildId
+                                        (ChannelRoute
+                                            channelId
+                                            (case threadRoute of
+                                                Just threadId ->
+                                                    ViewThreadWithFriends threadId Nothing HideChannelSettings
+
+                                                Nothing ->
+                                                    NoThreadWithFriends Nothing HideChannelSettings
+                                            )
+                                            Nothing
+                                        )
+                                        ChannelsHiddenOnMobile
+                                        Nothing
+                                        |> Route.encode
+                                }
+                            )
 
                 Nothing ->
                     SeqDict.empty
@@ -602,44 +624,23 @@ discordThreadMentionName threadId channel localUser =
 
 guildChannelMentions :
     LocalUser
-    -> Id GuildId
-    -> FrontendGuild
-    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
-guildChannelMentions localUser guildId guild =
+    -> SeqDict (Id ChannelId) FrontendChannel
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+guildChannelMentions localUser channels =
     SeqDict.foldl
         (\channelId channel dict ->
             SeqDict.foldl
                 (\threadId _ dict2 ->
                     SeqDict.insert
                         ( channelId, Just threadId )
-                        { name = threadMentionName threadId channel localUser
-                        , url =
-                            GuildRoute
-                                guildId
-                                (ChannelRoute channelId (ViewThreadWithFriends threadId Nothing HideChannelSettings) Nothing)
-                                ChannelsHiddenOnMobile
-                                Nothing
-                                |> Route.encode
-                        }
+                        { name = threadMentionName threadId channel localUser }
                         dict2
                 )
-                (SeqDict.insert
-                    ( channelId, Nothing )
-                    { name = ChannelName.toString channel.name
-                    , url =
-                        GuildRoute
-                            guildId
-                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
-                            ChannelsHiddenOnMobile
-                            Nothing
-                            |> Route.encode
-                    }
-                    dict
-                )
+                (SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
                 channel.threads
         )
         SeqDict.empty
-        guild.channels
+        channels
 
 
 discordGuildChannelMentions :
