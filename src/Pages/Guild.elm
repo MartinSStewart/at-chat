@@ -4069,7 +4069,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
                         maybeRepliedTo2 : Maybe (RepliedToView ChannelMessageId (Id UserId) (Id ChannelId) msg)
                         maybeRepliedTo2 =
-                            channelMessageRepliedTo (User.allUsers local.localUser) channel.games message channel
+                            channelMessageRepliedTo local.localUser channel.games message channel
 
                         date : Date
                         date =
@@ -4262,17 +4262,17 @@ type RepliedToView messageId userId channelId msg
 
 
 channelMessageRepliedTo :
-    SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    LocalUser
     -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> Message ChannelMessageId (Id UserId) (Id ChannelId)
     -> { b | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId) }
     -> Maybe (RepliedToView ChannelMessageId (Id UserId) (Id ChannelId) msg)
-channelMessageRepliedTo allUsers games message channel =
+channelMessageRepliedTo localUser games message channel =
     case maybeRepliedTo message channel of
         Just (RepliedToView_Game matchId game a) ->
             case SeqDict.get matchId games of
                 Just matchData ->
-                    Game.replyPreview allUsers game matchData
+                    Ui.Lazy.lazy3 gameReplyPreview localUser game matchData
                         |> RepliedToView_Game matchId game
                         |> Just
 
@@ -4281,6 +4281,14 @@ channelMessageRepliedTo allUsers games message channel =
 
         maybeRepliedTo2 ->
             maybeRepliedTo2
+
+
+{-| Working out a word spelling game move replays the whole match, so this only runs again
+when the match or the users change.
+-}
+gameReplyPreview : LocalUser -> Message.RepliedToGame -> Game.MatchData -> Element msg
+gameReplyPreview localUser game matchData =
+    Game.replyPreview (User.allUsers localUser) game matchData
 
 
 maybeRepliedTo : Message messageId userId channelId -> { a | messages : MessageArray messageId userId channelId } -> Maybe (RepliedToView messageId userId channelId msg)
