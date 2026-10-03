@@ -8989,8 +8989,8 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
         Just (RepliedToView_Message repliedToIndex (CallStarted { startedAt, endedAt, startedBy })) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted startedBy startedAt endedAt allUsers)
 
-        Just (RepliedToView_Message repliedToIndex (GameStarted { startedBy })) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
+        Just (RepliedToView_Message repliedToIndex (GameStarted { startedBy, gameType })) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (gameStartedContent startedBy gameType allUsers)
 
         Just (RepliedToView_Game matchId _ preview) ->
             MyUi.rowButton
@@ -9131,14 +9131,14 @@ eventDurationText start end =
             ""
 
 
-goMatchStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
-goMatchStarted userId allUsers =
+gameStartedContent : userId -> GameType -> SeqDict userId { a | name : PersonName } -> Element msg
+gameStartedContent userId game allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
         [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
-        , Ui.text " started a Go match" |> Ui.el []
+        , Ui.text (" " ++ startedGameText game) |> Ui.el []
         ]
 
 
@@ -9175,42 +9175,29 @@ goMatchStartedCard :
     -> GameType
     -> Element MessageViewMsg
 goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId allUsers game =
+    eventCard
+        userIdToColor
+        isSelectingAnchor
+        messageId
+        drawings
+        (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+        MessageViewMsg_PressedGameStartedCard
+        (Ui.html Icons.go)
+        (User.toString userId allUsers)
+        (startedGameText game)
+
+
+startedGameText : GameType -> String
+startedGameText game =
     case game of
         GameType_Go ->
-            eventCard
-                userIdToColor
-                isSelectingAnchor
-                messageId
-                drawings
-                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
-                MessageViewMsg_PressedGameStartedCard
-                (Ui.html Icons.go)
-                (User.toString userId allUsers)
-                "started a Go match"
+            "started a Go match"
 
         GameType_WordSpellingGame ->
-            eventCard
-                userIdToColor
-                isSelectingAnchor
-                messageId
-                drawings
-                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
-                MessageViewMsg_PressedGameStartedCard
-                (Ui.html Icons.go)
-                (User.toString userId allUsers)
-                "started a Word Spelling game"
+            "started a Word Spelling game"
 
         GameType_SheepGame ->
-            eventCard
-                userIdToColor
-                isSelectingAnchor
-                messageId
-                drawings
-                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
-                MessageViewMsg_PressedGameStartedCard
-                (Ui.html Icons.go)
-                (User.toString userId allUsers)
-                "started a Sheep Game"
+            "started a Sheep Game"
 
 
 eventCard :
@@ -9665,11 +9652,11 @@ previewThreadLastMessage timezone time emojiData customEmojis allUsers channels 
                                     ]
                                 ]
 
-                            GameStarted { startedBy } ->
+                            GameStarted { startedBy, gameType } ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString startedBy allUsers |> Html.text ]
-                                    , Html.text " started a Go match"
+                                    , Html.text (" " ++ startedGameText gameType)
                                     ]
                                 ]
 
