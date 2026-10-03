@@ -222,7 +222,14 @@ guildIcon guild mode name =
                             notSelectedRounding
                     , MyUi.notoSans
                     , Ui.Font.weight 600
-                    , Ui.background MyUi.secondaryGray
+                    , Ui.background
+                        (case mode of
+                            IsSelected ->
+                                Ui.rgba 0 0 0 0
+
+                            Normal _ ->
+                                MyUi.secondaryGray
+                        )
                     , case mode of
                         IsSelected ->
                             Ui.alignRight
@@ -234,15 +241,6 @@ guildIcon guild mode name =
                     , Ui.Font.size (round (toFloat size * 18 / 50))
                     , Ui.Font.color iconFontColor
                     , MyUi.hoverText name
-                    , MyUi.htmlStyle
-                        "outline"
-                        (case mode of
-                            IsSelected ->
-                                "1px solid " ++ MyUi.colorToStyle MyUi.guildIconSelectedBorder
-
-                            Normal _ ->
-                                "0"
-                        )
                     ]
 
 
@@ -315,6 +313,14 @@ guildIconView mode url =
         , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.guildIconBackground)
+        , Html.Attributes.style "opacity"
+            (case mode of
+                IsSelected ->
+                    "0"
+
+                Normal _ ->
+                    "1"
+            )
         , Html.Attributes.style
             "align-self"
             (case mode of
@@ -333,15 +339,6 @@ guildIconView mode url =
 
                 Normal _ ->
                     "0 " ++ String.fromInt iconRounding ++ "px " ++ String.fromInt iconRounding ++ "px 0"
-            )
-        , Html.Attributes.style
-            "outline"
-            (case mode of
-                IsSelected ->
-                    "1px solid " ++ MyUi.colorToStyle MyUi.guildIconSelectedBorder
-
-                Normal _ ->
-                    "0"
             )
         ]
         []
@@ -408,25 +405,27 @@ notSelectedRounding =
         }
 
 
-{-| The curves above and below the selected icon, the way the channel header tabs have them:
-the edge the icon shares with the channel list carries on past the icon and then curves back in
-to meet it, so the icon reads as joined onto the channel list rather than sitting against it.
-
-Where the guild has a picture, the picture carries on into the curves as a reflection of
-itself, which puts the same row of it on both sides of the icon's edge.
-
-Keep the curves mounted even when unselected so their SVG images load before the first
-click. Selection only reveals them, rather than creating new images after the icon moves.
-
+{-| Keep the selected artwork mounted to preload its images. The whole tile and its
+reflections are painted together, with no independently clipped edges at their joins.
+It sits behind the initials, but above the neighbouring channel column's border.
 -}
 selectedEdgeCurves : Mode -> Maybe FileHash -> List (Ui.Attribute msg)
 selectedEdgeCurves mode maybeIcon =
-    [ Ui.inFront
+    [ MyUi.htmlStyle "z-index"
+        (case mode of
+            IsSelected ->
+                "1"
+
+            Normal _ ->
+                "0"
+        )
+    , Ui.behindContent
         (Ui.el
-            ([ Ui.width Ui.fill
-             , Ui.height Ui.fill
-             , MyUi.noPointerEvents
-             , MyUi.htmlStyle "visibility"
+            [ Ui.alignRight
+            , Ui.width (Ui.px size)
+            , Ui.move { x = 0, y = -invertedRadius, z = 0 }
+            , MyUi.noPointerEvents
+            , MyUi.htmlStyle "visibility"
                 (case mode of
                     IsSelected ->
                         "visible"
@@ -434,190 +433,50 @@ selectedEdgeCurves mode maybeIcon =
                     Normal _ ->
                         "hidden"
                 )
-             ]
-                ++ (case maybeIcon of
-                        Just icon ->
-                            let
-                                url : String
-                                url =
-                                    FileStatus.fileUrl FileStatus.pngContent icon
-                            in
-                            -- Match the icon's background behind transparent pictures.
-                            [ curveAboveIcon [ tileColor MyUi.guildIconBackground, pictureAboveIcon url ]
-                            , curveBelowIcon [ tileColor MyUi.guildIconBackground, pictureBelowIcon url ]
-                            ]
-
-                        Nothing ->
-                            plainEdgeCurves
-                   )
-            )
-            Ui.none
+            ]
+            (selectedTile maybeIcon)
         )
     ]
 
 
-{-| The curves for the things in the column that have no picture for them to carry on into:
-a guild showing its initials, and the button for making a new one.
+{-| One pattern paints the picture and its reflection across the entire silhouette.
+Using separate SVGs clips both sides of a join independently, leaving an antialiased
+hairline at fractional zoom. The silhouette has no stroke on its open right edge.
 -}
-plainEdgeCurves : List (Ui.Attribute msg)
-plainEdgeCurves =
-    [ curveAboveIcon [ tileColor MyUi.secondaryGray ]
-    , curveBelowIcon [ tileColor MyUi.secondaryGray ]
-    ]
+selectedTile : Maybe FileHash -> Element msg
+selectedTile maybeIcon =
+    let
+        height : Int
+        height =
+            size + 2 * invertedRadius
 
+        id : String
+        id =
+            Maybe.map FileStatus.fileHashToString maybeIcon |> Maybe.withDefault "plain"
 
-curveAboveIcon : List (Svg.Svg msg) -> Ui.Attribute msg
-curveAboveIcon paint =
-    Ui.inFront
-        (Ui.el
-            [ Ui.alignTop
-            , Ui.alignRight
-            , Ui.move { x = 0, y = -invertedRadius, z = 0 }
-            , MyUi.noPointerEvents
-            , Ui.inFront curveEdgeAboveIcon
-            ]
-            (curve
-                (String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ])
-                paint
-            )
-        )
+        gradientId : String
+        gradientId =
+            "guildIconOutline_" ++ id
 
-
-curveBelowIcon : List (Svg.Svg msg) -> Ui.Attribute msg
-curveBelowIcon paint =
-    Ui.inFront
-        (Ui.el
-            [ Ui.alignBottom
-            , Ui.alignRight
-            , Ui.move { x = 0, y = invertedRadius, z = 0 }
-            , MyUi.noPointerEvents
-            , Ui.inFront curveEdgeBelowIcon
-            ]
-            (curve
-                (String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ])
-                paint
-            )
-        )
-
-
-{-| The curved edge of the curve above the icon, which is also the edge the icon's own outline
-carries on along. It leaves the icon's top edge level with it and comes back to the edge the
-icon shares with the channel list at a right angle to it, so neither join has a corner in it.
--}
-arcAboveIcon : String
-arcAboveIcon =
-    "M " ++ radius ++ ",0 A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
-
-
-{-| The same edge below the icon.
--}
-arcBelowIcon : String
-arcBelowIcon =
-    "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
-
-
-edgeRadius : Float
-edgeRadius =
-    toFloat invertedRadius - 0.5
-
-
-edgeRadiusText : String
-edgeRadiusText =
-    String.fromFloat edgeRadius
-
-
-edgeAboveIcon : String
-edgeAboveIcon =
-    "M "
-        ++ edgeRadiusText
-        ++ ",0 A "
-        ++ edgeRadiusText
-        ++ " "
-        ++ edgeRadiusText
-        ++ " 0 0 1 0,"
-        ++ edgeRadiusText
-
-
-edgeBelowIcon : String
-edgeBelowIcon =
-    "M "
-        ++ edgeRadiusText
-        ++ ","
-        ++ radius
-        ++ " A "
-        ++ edgeRadiusText
-        ++ " "
-        ++ edgeRadiusText
-        ++ " 0 0 0 0,"
-        ++ String.fromFloat (toFloat invertedRadius - edgeRadius)
-
-
-{-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
-clipped away and `edge` drawn along the part of `shape` that the column can be seen across.
-`shape` is the curve itself, a square with a circle's worth of one corner taken out of it,
-which is what bends it towards the icon instead of leaving a square on the end.
-
-Clipping is what keeps it to the curve. Painting the colour of the column over the rest of the
-box instead would only look the same while the box had nothing but column behind it, and a
-radius wider than the gap between icons puts it over the icon above or below.
-
--}
-curve : String -> List (Svg.Svg msg) -> Element msg
-curve shape paint =
+        patternId : String
+        patternId =
+            "guildIconPicture_" ++ id
+    in
     Svg.svg
-        [ Svg.Attributes.width radius
-        , Svg.Attributes.height radius
-        , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
-        , Svg.Attributes.style ("display:block;clip-path:path('" ++ shape ++ "')")
-        ]
-        paint
-        |> Ui.html
-
-
-{-| The curve above the icon starts on the line beside the channel list, at the top right of its
-box, and ends on the icon's own outline, at the bottom left.
--}
-curveEdgeAboveIcon : Element msg
-curveEdgeAboveIcon =
-    curveEdge "guildIconCurveEdgeAbove" edgeAboveIcon { x1 = "1", y1 = "0", x2 = "0", y2 = "1" }
-
-
-{-| The curve below the icon runs the same way, from the bottom right of its box to the top left.
--}
-curveEdgeBelowIcon : Element msg
-curveEdgeBelowIcon =
-    curveEdge "guildIconCurveEdgeBelow" edgeBelowIcon { x1 = "1", y1 = "1", x2 = "0", y2 = "0" }
-
-
-{-| The line along the curve's edge, over the top of the curve rather than inside it. Inside it
-would be held to the curve's shape, and where the curve meets a straight line it runs alongside
-it, thinner than a pixel for several pixels before it opens out. Clipping the line to that
-tapers it away to nothing over exactly the stretch where the two are meant to look like one
-line. Overflow leaves the half of it that falls outside the box alone as well, which lands on
-the icon's own outline and on the line beside the channel list, where it belongs.
-
-The line is a gradient rather than one colour because its two ends belong to two different
-lines: the bright outline the icon is picked out by, and the ordinary border beside the channel
-list that the curve carries on into. `line` runs from the second end to the first, as a fraction
-of the curve's box.
-
--}
-curveEdge : String -> String -> { x1 : String, y1 : String, x2 : String, y2 : String } -> Element msg
-curveEdge gradientId edge line =
-    Svg.svg
-        [ Svg.Attributes.width radius
-        , Svg.Attributes.height radius
-        , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
+        [ Svg.Attributes.width (String.fromInt size)
+        , Svg.Attributes.height (String.fromInt height)
+        , Svg.Attributes.viewBox ("0 " ++ String.fromInt -invertedRadius ++ " " ++ String.fromInt size ++ " " ++ String.fromInt height)
         , Svg.Attributes.style "display:block;overflow:visible"
         ]
         [ Svg.defs
             []
-            [ Svg.linearGradient
+            (Svg.linearGradient
                 [ Svg.Attributes.id gradientId
-                , Svg.Attributes.x1 line.x1
-                , Svg.Attributes.y1 line.y1
-                , Svg.Attributes.x2 line.x2
-                , Svg.Attributes.y2 line.y2
+                , Svg.Attributes.gradientUnits "userSpaceOnUse"
+                , Svg.Attributes.x1 "0"
+                , Svg.Attributes.x2 "0"
+                , Svg.Attributes.y1 (String.fromInt -invertedRadius)
+                , Svg.Attributes.y2 (String.fromInt (size + invertedRadius))
                 ]
                 [ Svg.stop
                     [ Svg.Attributes.offset "0"
@@ -625,14 +484,76 @@ curveEdge gradientId edge line =
                     ]
                     []
                 , Svg.stop
-                    [ Svg.Attributes.offset "1"
+                    [ Svg.Attributes.offset (String.fromFloat ((toFloat invertedRadius - 0.5) / toFloat height))
                     , Svg.Attributes.stopColor (MyUi.colorToStyle MyUi.guildIconSelectedBorder)
                     ]
                     []
+                , Svg.stop
+                    [ Svg.Attributes.offset (String.fromFloat ((toFloat (size + invertedRadius) + 0.5) / toFloat height))
+                    , Svg.Attributes.stopColor (MyUi.colorToStyle MyUi.guildIconSelectedBorder)
+                    ]
+                    []
+                , Svg.stop
+                    [ Svg.Attributes.offset "1"
+                    , Svg.Attributes.stopColor (MyUi.colorToStyle MyUi.guildColumnBorder)
+                    ]
+                    []
                 ]
-            ]
+                :: (case maybeIcon of
+                        Nothing ->
+                            []
+
+                        Just icon ->
+                            let
+                                url : String
+                                url =
+                                    FileStatus.fileUrl FileStatus.pngContent icon
+                            in
+                            [ Svg.pattern
+                                [ Svg.Attributes.id patternId
+                                , Svg.Attributes.patternUnits "userSpaceOnUse"
+                                , Svg.Attributes.width (String.fromInt size)
+                                , Svg.Attributes.height (String.fromInt (size * 2))
+                                ]
+                                [ Svg.rect
+                                    [ Svg.Attributes.width (String.fromInt size)
+                                    , Svg.Attributes.height (String.fromInt (size * 2))
+                                    , Svg.Attributes.fill (MyUi.colorToStyle MyUi.guildIconBackground)
+                                    ]
+                                    []
+                                , Svg.image
+                                    [ Svg.Attributes.xlinkHref url
+                                    , Svg.Attributes.width (String.fromInt size)
+                                    , Svg.Attributes.height (String.fromInt size)
+                                    , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
+                                    ]
+                                    []
+                                , Svg.image
+                                    [ Svg.Attributes.xlinkHref url
+                                    , Svg.Attributes.width (String.fromInt size)
+                                    , Svg.Attributes.height (String.fromInt size)
+                                    , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
+                                    , Svg.Attributes.transform ("translate(0," ++ String.fromInt (size * 2) ++ ") scale(1,-1)")
+                                    ]
+                                    []
+                                ]
+                            ]
+                   )
+            )
         , Svg.path
-            [ Svg.Attributes.d edge
+            [ Svg.Attributes.d selectedShape
+            , Svg.Attributes.fill
+                (case maybeIcon of
+                    Nothing ->
+                        MyUi.colorToStyle MyUi.secondaryGray
+
+                    Just _ ->
+                        "url(#" ++ patternId ++ ")"
+                )
+            ]
+            []
+        , Svg.path
+            [ Svg.Attributes.d selectedOutline
             , Svg.Attributes.fill "none"
             , Svg.Attributes.stroke ("url(#" ++ gradientId ++ ")")
             , Svg.Attributes.strokeWidth "1"
@@ -642,57 +563,36 @@ curveEdge gradientId edge line =
         |> Ui.html
 
 
-{-| The icon's picture reflected in the icon's top edge. The curve sits directly above that
-edge, so the reflection puts the same row of the picture on both sides of it.
+selectedShape : String
+selectedShape =
+    selectedOutline ++ " H " ++ String.fromInt size ++ " V " ++ String.fromInt -invertedRadius ++ " Z"
+
+
+{-| The fill follows this exact contour so the stroke overlaps it rather than
+merely touching a separately offset edge. The mirrored circular arcs meet the
+centre of the column border; only the fill closes over that border on the right.
 -}
-pictureAboveIcon : String -> Svg.Svg msg
-pictureAboveIcon url =
-    Svg.image
-        [ Svg.Attributes.xlinkHref url
-        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
-        , Svg.Attributes.y radius
-        , Svg.Attributes.width (String.fromInt size)
-        , Svg.Attributes.height (String.fromInt size)
-        , -- Matches the object-fit the icon itself is drawn with, so a picture that isn't
-          -- square is cropped the same way in both places
-          Svg.Attributes.preserveAspectRatio "xMidYMid slice"
-        , Svg.Attributes.transform
-            ("translate(0," ++ String.fromInt (invertedRadius * 2) ++ ") scale(1,-1)")
+selectedOutline : String
+selectedOutline =
+    let
+        arc : String
+        arc =
+            "A " ++ String.fromFloat (toFloat invertedRadius - 0.5) ++ " " ++ String.fromFloat (toFloat invertedRadius - 0.5) ++ " 0 0 1 "
+
+        corner : String
+        corner =
+            "A " ++ String.fromFloat (toFloat iconRounding + 0.5) ++ " " ++ String.fromFloat (toFloat iconRounding + 0.5) ++ " 0 0 0 "
+    in
+    String.join " "
+        [ "M " ++ String.fromFloat (toFloat size - 0.5) ++ "," ++ String.fromInt -invertedRadius
+        , arc ++ String.fromInt (size - invertedRadius) ++ ",-0.5"
+        , "H " ++ String.fromInt iconRounding
+        , corner ++ "-0.5," ++ String.fromInt iconRounding
+        , "V " ++ String.fromInt (size - iconRounding)
+        , corner ++ String.fromInt iconRounding ++ "," ++ String.fromFloat (toFloat size + 0.5)
+        , "H " ++ String.fromInt (size - invertedRadius)
+        , arc ++ String.fromFloat (toFloat size - 0.5) ++ "," ++ String.fromInt (size + invertedRadius)
         ]
-        []
-
-
-{-| The same reflection in the icon's bottom edge.
--}
-pictureBelowIcon : String -> Svg.Svg msg
-pictureBelowIcon url =
-    Svg.image
-        [ Svg.Attributes.xlinkHref url
-        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
-        , Svg.Attributes.y (String.fromInt -size)
-        , Svg.Attributes.width (String.fromInt size)
-        , Svg.Attributes.height (String.fromInt size)
-        , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
-        , Svg.Attributes.transform "scale(1,-1)"
-        ]
-        []
-
-
-{-| What a guild with no picture has in place of one: the colour its initials are drawn on.
--}
-tileColor : Ui.Color -> Svg.Svg msg
-tileColor color =
-    Svg.rect
-        [ Svg.Attributes.width "100%"
-        , Svg.Attributes.height "100%"
-        , Svg.Attributes.fill (MyUi.colorToStyle color)
-        ]
-        []
-
-
-radius : String
-radius =
-    String.fromInt invertedRadius
 
 
 invertedRadius : Int
@@ -719,8 +619,20 @@ addGuildButton htmlId isSelected onPress =
             notSelectedRounding
          , MyUi.notoSans
          , Ui.Font.weight 600
-         , Ui.background MyUi.secondaryGray
-         , Ui.border 1
+         , Ui.background
+            (if isSelected then
+                Ui.rgba 0 0 0 0
+
+             else
+                MyUi.secondaryGray
+            )
+         , Ui.border
+            (if isSelected then
+                0
+
+             else
+                1
+            )
          , Ui.borderColor MyUi.secondaryGrayBorder
          , Ui.width (Ui.px size)
          , Ui.height (Ui.px size)
@@ -728,14 +640,16 @@ addGuildButton htmlId isSelected onPress =
          , Ui.Font.color iconFontColor
          , MyUi.hoverText "Create new guild"
          ]
-            ++ (if isSelected then
-                    plainEdgeCurves
+            ++ selectedEdgeCurves
+                (if isSelected then
+                    IsSelected
 
-                else
-                    []
-               )
+                 else
+                    Normal NoNotification
+                )
+                Nothing
         )
-        (Ui.html Icons.plusIcon)
+        (Ui.el [] (Ui.html Icons.plusIcon))
 
 
 showFriendsButton : msg -> Element msg

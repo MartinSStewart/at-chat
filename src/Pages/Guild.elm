@@ -366,7 +366,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             Ui.noAttr
                     ]
                     [ Ui.row
-                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                        [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                         [ GuildColumn.guildColumnLazy True model local
                         , friendsColumnLazy
                             canScroll2
@@ -1695,7 +1695,7 @@ guildView model guildId channelRoute loggedIn local =
                                 |> Ui.inFront
                             ]
                             [ Ui.row
-                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
                                 , channelColumnLazy True canScroll2 model loggedIn local.localUser local.calls guildId guild channelRoute
                                 ]
@@ -1872,7 +1872,7 @@ discordGuildView model routeData loggedIn local =
                                 |> Ui.inFront
                             ]
                             [ Ui.row
-                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
                                 , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
                                 ]

@@ -2089,6 +2089,8 @@ longMentionTest config =
                 , E2EHelper.writeMessageMobile user "Hello @Stevie Steve how are you? Mentions that fit stay on the line they're written on."
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ("@" ++ E2EHelper.adminName) ])
                 , user.snapshotView 100 { name = "Long mentions on a phone" }
+                , user.click 100 (Dom.id "guild_headerBackButton")
+                , user.snapshotView 100 { name = "Selected guild sidebar on a phone" }
                 ]
             )
         ]
