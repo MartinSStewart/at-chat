@@ -101,6 +101,7 @@ main =
                     , isSelectingAnchor = False
                     , devicePixelRatio = 1
                     , isHovered = True
+                    , noOp = ()
                     }
                     Array.empty
                     (Nonempty
@@ -209,6 +210,7 @@ stickersSection =
             , isSelectingAnchor = False
             , devicePixelRatio = 1
             , isHovered = True
+            , noOp = ()
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -580,6 +582,7 @@ embedExamples whitelistedDomains =
                 , isSelectingAnchor = False
                 , devicePixelRatio = 1
                 , isHovered = True
+                , noOp = ()
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text)
