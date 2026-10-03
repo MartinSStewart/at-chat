@@ -2,6 +2,7 @@ module GuildIcon exposing
     ( ChannelNotificationType(..)
     , Mode(..)
     , addGuildButton
+    , columnBorderView
     , defaultUser
     , defaultUserHtml
     , discordLogo
@@ -378,6 +379,37 @@ iconFontColor =
 size : number
 size =
     50
+
+
+{-| Match the curves' stroke and horizontal SVG origin: CSS borders and separate
+SVG origins round differently at fractional zoom. Reserve 1px of column padding
+for the line, allowing SVG overflow for antialiasing. Only clip the paint layer
+to the column's rounded corner, not its content.
+-}
+columnBorderView : Int -> Element msg
+columnBorderView topLeftRadius =
+    Svg.svg
+        [ Svg.Attributes.width (String.fromInt size)
+        , Svg.Attributes.height "100%"
+        , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt size ++ " 1")
+        , Svg.Attributes.preserveAspectRatio "none"
+        , Svg.Attributes.style "display:block;overflow:visible;position:absolute;right:0;top:0"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d ("M " ++ String.fromFloat (toFloat size - 0.5) ++ ",0 V 1")
+            , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+            , Svg.Attributes.strokeWidth "1"
+            ]
+            []
+        ]
+        |> Ui.html
+        |> Ui.el [ Ui.width (Ui.px 1), Ui.height Ui.fill, Ui.alignLeft, MyUi.htmlStyle "position" "relative", MyUi.noPointerEvents ]
+        |> Ui.el
+            [ Ui.height Ui.fill
+            , Ui.roundedWith { topLeft = topLeftRadius, topRight = 0, bottomLeft = 0, bottomRight = 0 }
+            , Ui.clip
+            , MyUi.noPointerEvents
+            ]
 
 
 iconRounding : Int
