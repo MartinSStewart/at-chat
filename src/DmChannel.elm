@@ -50,7 +50,7 @@ import VisibleMessages exposing (VisibleMessages)
 
 type alias BackendDmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRoute, time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
@@ -71,7 +71,7 @@ type alias E2eeEnabledData =
 
 type alias DiscordDmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) { time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
@@ -81,7 +81,7 @@ type alias DiscordDmChannel =
 type alias DiscordFrontendDmChannel =
     { messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) { time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     }
@@ -90,7 +90,7 @@ type alias DiscordFrontendDmChannel =
 type alias FrontendDmChannel =
     { messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+    , lastTypedAt : SeqDict (Id UserId) { threadRoute : ThreadRoute, time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))

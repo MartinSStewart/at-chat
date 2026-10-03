@@ -31,14 +31,12 @@ import VisibleMessages exposing (VisibleMessages)
 
 type alias BackendThread =
     { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId))
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
 type alias DiscordBackendThread =
     { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
     }
@@ -47,7 +45,6 @@ type alias DiscordBackendThread =
 type alias FrontendGenericThread userId channelId =
     { messages : MessageArray ThreadMessageId userId channelId
     , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
     }
 
@@ -55,7 +52,6 @@ type alias FrontendGenericThread userId channelId =
 type alias FrontendThread =
     { messages : MessageArray ThreadMessageId (Id UserId) (Id ChannelId)
     , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
@@ -63,19 +59,17 @@ type alias FrontendThread =
 type alias DiscordFrontendThread =
     { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
     }
 
 
-type alias LastTypedAt messageId =
-    { time : Time.Posix, messageIndex : Maybe (Id messageId) }
+type alias LastTypedAt channelId messageId =
+    { channelId : channelId, time : Time.Posix, messageIndex : Maybe (Id messageId) }
 
 
 backendInit : BackendThread
 backendInit =
     { messages = IdArray.empty
-    , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -84,7 +78,6 @@ frontendInit : FrontendGenericThread userId channelId
 frontendInit =
     { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
-    , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -92,7 +85,6 @@ frontendInit =
 discordBackendInit : DiscordBackendThread
 discordBackendInit =
     { messages = IdArray.empty
-    , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
     , dateDividerDrawings = SeqDict.empty
     }
@@ -102,7 +94,6 @@ discordFrontendInit : DiscordFrontendThread
 discordFrontendInit =
     { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
-    , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -111,7 +102,6 @@ toFrontend : Bool -> BackendThread -> FrontendThread
 toFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
     , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length thread.messages)
-    , lastTypedAt = thread.lastTypedAt
     , dateDividerDrawings = thread.dateDividerDrawings
     }
 
@@ -120,7 +110,6 @@ discordToFrontend : Bool -> DiscordBackendThread -> DiscordFrontendThread
 discordToFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
     , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length thread.messages)
-    , lastTypedAt = thread.lastTypedAt
     , dateDividerDrawings = thread.dateDividerDrawings
     }
 

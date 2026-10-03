@@ -258,6 +258,7 @@ type alias BackendGuild =
     , membersAndOwner : MembersAndOwner (Id UserId) GuildMember
     , bannedUsers : SeqSet (Id UserId)
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
+    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     }
 
 
@@ -399,7 +400,6 @@ type alias BackendChannel =
     , description : ChannelDescription
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
     , status : ChannelStatus
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
@@ -412,7 +412,6 @@ type alias DiscordBackendChannel =
     , isForum : Bool
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , status : ChannelStatus
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
@@ -428,7 +427,6 @@ type alias FrontendChannel =
     , messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , isArchived : Maybe Archived
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -441,7 +439,6 @@ type alias DiscordFrontendChannel =
     , isForum : Bool
     , messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     , permissionOverwrites : List Discord.Overwrite
@@ -790,7 +787,6 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
             , messages = messages
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
             , isArchived = Nothing
-            , lastTypedAt = channel.lastTypedAt
             , threads =
                 SeqDict.map
                     (\threadId thread ->
@@ -880,7 +876,6 @@ discordChannelToFrontend guildId guild linkedDiscordUsers threadRoute channel =
             , isForum = channel.isForum
             , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
-            , lastTypedAt = channel.lastTypedAt
             , threads =
                 SeqDict.map
                     (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
@@ -1556,7 +1551,6 @@ createDiscordMessageBackend :
     ->
         { d
             | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt messageId)
             , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         }
     ->
@@ -1565,7 +1559,6 @@ createDiscordMessageBackend :
             ( Id messageId
             , { d
                 | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-                , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt messageId)
                 , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
               }
             )
@@ -1610,14 +1603,12 @@ createThreadMessageFrontend :
         { d
             | messages : MessageArray ChannelMessageId userId channelId
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId channelId)
         }
     ->
         { d
             | messages : MessageArray ChannelMessageId userId channelId
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId channelId)
         }
 createThreadMessageFrontend threadId message channel =
@@ -1658,13 +1649,11 @@ createMessageFrontend :
         { d
             | messages : MessageArray messageId userId channelId
             , visibleMessages : VisibleMessages messageId
-            , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
     ->
         { d
             | messages : MessageArray messageId userId channelId
             , visibleMessages : VisibleMessages messageId
-            , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
 createMessageFrontend message channel =
     { channel
@@ -1707,7 +1696,6 @@ createGuild time userId guildName =
                 , description = ChannelDescription.empty
                 , messages = IdArray.empty
                 , status = ChannelActive
-                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -1717,6 +1705,7 @@ createGuild time userId guildName =
     , membersAndOwner = MembersAndOwner.init SeqDict.empty userId
     , bannedUsers = SeqSet.empty
     , invites = SeqDict.empty
+    , lastTypedAt = SeqDict.empty
     }
 
 
@@ -1742,7 +1731,6 @@ createChannel time userId channelName channelDescription guild =
                 , description = channelDescription
                 , messages = IdArray.empty
                 , status = ChannelActive
-                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -1777,7 +1765,6 @@ createChannelFrontend time userId channelName channelDescription guild =
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.empty
                 , isArchived = Nothing
-                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
