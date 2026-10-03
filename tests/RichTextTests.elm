@@ -750,6 +750,7 @@ timestampViewTest name now minutes expected =
             RichText.preview
                 ()
                 (\_ -> ())
+                (\_ _ -> ())
                 { domainWhitelist = SeqSet.empty
                 , revealedSpoilers = SeqSet.empty
                 , users = users

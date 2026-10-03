@@ -76,7 +76,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRoute(..))
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -3790,10 +3790,11 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler onPressImage config 
 preview :
     msg
     -> (Url -> msg)
+    -> (channelId -> ThreadRoute -> msg)
     -> PreviewConfig a userId channelId
     -> Nonempty (RichText userId channelId)
     -> List (Html msg)
-preview noOp onPressLink config nonempty =
+preview noOp onPressLink onPressChannelMention config nonempty =
     viewHelper
         False
         NoLargeContent
@@ -3821,6 +3822,7 @@ preview noOp onPressLink config nonempty =
           devicePixelRatio = 1
         , isHovered = False
         , noOp = noOp
+        , onPressChannelMention = onPressChannelMention
         }
         Array.empty
         0
@@ -3841,7 +3843,7 @@ type alias Config a userId channelId msg =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
-    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -3856,6 +3858,7 @@ type alias Config a userId channelId msg =
     , devicePixelRatio : Float
     , isHovered : Bool
     , noOp : msg
+    , onPressChannelMention : channelId -> ThreadRoute -> msg
     }
 
 
@@ -3863,7 +3866,7 @@ type alias PreviewConfig a userId channelId =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
-    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
@@ -4052,7 +4055,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
 
                 ChannelMention channel thread ->
-                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ channelMentionView channel thread config.channels ] )
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ channelMentionView config.onPressChannelMention channel thread config.channels ] )
 
                 NormalText char text ->
                     ( ( False, spoilerIndex2 )
@@ -5331,13 +5334,28 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
         ]
 
 
-channelMentionView : channelId -> Maybe (Id ChannelMessageId) -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> Html msg
-channelMentionView channel maybeThread channels =
+channelMentionView :
+    (channelId -> ThreadRoute -> msg)
+    -> channelId
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
+    -> Html msg
+channelMentionView onPress channel maybeThread channels =
     case SeqDict.get ( channel, maybeThread ) channels of
-        Just { name, url } ->
+        Just { name } ->
             Html.a
-                (Html.Attributes.href url
-                    :: Html.Attributes.style "text-decoration" "none"
+                (Html.Events.onClick
+                    (onPress
+                        channel
+                        (case maybeThread of
+                            Just threadId ->
+                                ViewThread threadId
+
+                            Nothing ->
+                                NoThread
+                        )
+                    )
+                    :: Html.Attributes.style "cursor" "pointer"
                     :: MyUi.userLabelHtmlAttributes
                 )
                 [ Html.text ("#" ++ name) ]

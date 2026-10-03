@@ -280,7 +280,7 @@ viewMobile offset extraOptions loggedIn local model =
                                 Int
                                 -> Maybe (Nonempty (RichText userId channelId))
                                 -> SeqDict userId { b | name : PersonName }
-                                -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+                                -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
                                 -> Element MessageInput.Msg
                             editView charsLeft richText allUsers channels =
                                 MessageInput.editView
@@ -306,7 +306,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     allUsers =
                                         User.allUsers local.localUser
 
-                                    channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+                                    channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
                                     channels =
                                         LocalState.channelMentions guildOrDmId local
 
@@ -326,7 +326,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     allUsers =
                                         LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
-                                    channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+                                    channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
                                     channels =
                                         LocalState.discordChannelMentions guildOrDmId local
 

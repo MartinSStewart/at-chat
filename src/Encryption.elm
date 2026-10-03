@@ -256,6 +256,7 @@ The following is not encrypted:
             , devicePixelRatio = 1
             , isHovered = False
             , noOp = noOp
+            , onPressChannelMention = \_ _ -> noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]

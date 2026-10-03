@@ -3020,7 +3020,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 localUser.session.userId
-                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelMentions local.localUser id.guildId guild) local)
+                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelMentions local.localUser guild.channels) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3119,7 +3119,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     text
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelMentions localUser currentUserId guildId guild)
+                                                    (LocalState.discordGuildChannelMentions localUser guild.channels)
                                                     local
                                                 )
                                                 attachedFiles
@@ -3321,7 +3321,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     newContent
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelMentions local.localUser currentUserId guildId guild)
+                                                    (LocalState.discordGuildChannelMentions local.localUser guild.channels)
                                                     local
                                                 )
                                                 DoNotChangeAttachments
@@ -6801,7 +6801,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                         (textToRichText
                                             newContent
                                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                            (LocalState.guildChannelMentions local.localUser guildId guild)
+                                            (LocalState.guildChannelMentions local.localUser guild.channels)
                                             local
                                         )
                                         (ChangeAttachments attachedFiles)

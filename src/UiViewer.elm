@@ -102,6 +102,7 @@ main =
                     , devicePixelRatio = 1
                     , isHovered = True
                     , noOp = ()
+                    , onPressChannelMention = \_ _ -> ()
                     }
                     Array.empty
                     (Nonempty
@@ -211,6 +212,7 @@ stickersSection =
             , devicePixelRatio = 1
             , isHovered = True
             , noOp = ()
+            , onPressChannelMention = \_ _ -> ()
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -583,6 +585,7 @@ embedExamples whitelistedDomains =
                 , devicePixelRatio = 1
                 , isHovered = True
                 , noOp = ()
+                , onPressChannelMention = \_ _ -> ()
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text)

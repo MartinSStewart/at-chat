@@ -111,6 +111,7 @@ module LocalState exposing
     , getGuildAndChannel
     , guildChannelMentions
     , guildChannelNames
+    , guildChannels
     , guildOrDmIdToLatestMessages
     , guildOrDmIdToMessage
     , guildOrDmIdToMessagesCount
@@ -198,7 +199,7 @@ import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -526,35 +527,18 @@ messageReactionsNoThread messageId channel =
             SeqDict.empty
 
 
-channelMentions : GuildOrDmId -> LocalState -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+channelMentions : GuildOrDmId -> LocalState -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
 channelMentions guildOrDmId local =
+    guildChannelMentions local.localUser (guildChannels guildOrDmId local)
+
+
+guildChannels : GuildOrDmId -> LocalState -> SeqDict (Id ChannelId) FrontendChannel
+guildChannels guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    guildChannelMentions local.localUser guild.channels
-                        |> SeqDict.map
-                            (\( channelId, threadRoute ) { name } ->
-                                { name = name
-                                , url =
-                                    GuildRoute
-                                        guildId
-                                        (ChannelRoute
-                                            channelId
-                                            (case threadRoute of
-                                                Just threadId ->
-                                                    ViewThreadWithFriends threadId Nothing HideChannelSettings
-
-                                                Nothing ->
-                                                    NoThreadWithFriends Nothing HideChannelSettings
-                                            )
-                                            Nothing
-                                        )
-                                        ChannelsHiddenOnMobile
-                                        Nothing
-                                        |> Route.encode
-                                }
-                            )
+                    guild.channels
 
                 Nothing ->
                     SeqDict.empty
@@ -563,13 +547,13 @@ channelMentions guildOrDmId local =
             SeqDict.empty
 
 
-discordChannelMentions : DiscordGuildOrDmId -> LocalState -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+discordChannelMentions : DiscordGuildOrDmId -> LocalState -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
 discordChannelMentions guildOrDmId local =
     case guildOrDmId of
-        DiscordGuildOrDmId_Guild { guildId, currentUserId } ->
+        DiscordGuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.discordGuilds of
                 Just guild ->
-                    discordGuildChannelMentions local.localUser currentUserId guildId guild
+                    discordGuildChannelMentions local.localUser guild.channels
 
                 Nothing ->
                     SeqDict.empty
@@ -645,57 +629,23 @@ guildChannelMentions localUser channels =
 
 discordGuildChannelMentions :
     LocalUser
-    -> Discord.Id Discord.UserId
-    -> Discord.Id Discord.GuildId
-    -> DiscordFrontendGuild
-    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
-discordGuildChannelMentions localUser currentUserId guildId guild =
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+discordGuildChannelMentions localUser channels =
     SeqDict.foldl
         (\channelId channel dict ->
             SeqDict.foldl
                 (\threadId _ dict2 ->
                     SeqDict.insert
                         ( channelId, Just threadId )
-                        { name = discordThreadMentionName threadId channel localUser
-                        , url =
-                            DiscordGuildRoute
-                                { currentDiscordUserId = currentUserId
-                                , guildId = guildId
-                                , channelRoute =
-                                    DiscordChannel_ChannelRoute
-                                        channelId
-                                        (NoThreadWithFriends Nothing HideChannelSettings)
-                                        Nothing
-                                , channelsVisible = ChannelsHiddenOnMobile
-                                , overlay = Nothing
-                                }
-                                |> Route.encode
-                        }
+                        { name = discordThreadMentionName threadId channel localUser }
                         dict2
                 )
-                (SeqDict.insert
-                    ( channelId, Nothing )
-                    { name = ChannelName.toString channel.name
-                    , url =
-                        DiscordGuildRoute
-                            { currentDiscordUserId = currentUserId
-                            , guildId = guildId
-                            , channelRoute =
-                                DiscordChannel_ChannelRoute
-                                    channelId
-                                    (NoThreadWithFriends Nothing HideChannelSettings)
-                                    Nothing
-                            , channelsVisible = ChannelsHiddenOnMobile
-                            , overlay = Nothing
-                            }
-                            |> Route.encode
-                    }
-                    dict
-                )
+                (SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
                 channel.threads
         )
         SeqDict.empty
-        guild.channels
+        channels
 
 
 {-| How a thread is written in a #mention: the name of its channel and the start of the message

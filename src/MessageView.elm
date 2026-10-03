@@ -61,6 +61,7 @@ type MessageViewMsg
     | MessageView_PressedUserIconButton (Id UserId)
     | MessageView_PressedDiscordUserIconButton (Discord.Id Discord.UserId)
     | MessageView_PressedChannelMention (Id ChannelId) ThreadRoute
+    | MessageView_PressedDiscordChannelMention (Discord.Id Discord.ChannelId) ThreadRoute
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -141,7 +142,10 @@ isPressMsg msg =
         MessageView_PressedDiscordUserIconButton _ ->
             True
 
-        MessageView_PressedChannelMention id threadRoute ->
+        MessageView_PressedChannelMention _ _ ->
+            True
+
+        MessageView_PressedDiscordChannelMention _ _ ->
             True
 
 

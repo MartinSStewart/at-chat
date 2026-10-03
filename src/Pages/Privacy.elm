@@ -90,6 +90,7 @@ Backups of the server are generated regularly. These are stored for up to 30 day
             , devicePixelRatio = 1
             , isHovered = False
             , noOp = noOp
+            , onPressChannelMention = \_ _ -> noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
