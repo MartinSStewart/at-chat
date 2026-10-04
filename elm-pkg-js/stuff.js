@@ -904,6 +904,14 @@ exports.init = async function init(app)
         }
     });
 
+    // Safari keeps a video that has played in the lock screen's media controls for as long
+    // as its element stays in the page, so closing the fullscreen player swaps in a fresh copy.
+    document.addEventListener('webkitendfullscreen', (event) => {
+        if (event.target instanceof HTMLVideoElement) {
+            event.target.replaceWith(event.target.cloneNode(true));
+        }
+    }, true);
+
     app.ports.exec_command_to_js.subscribe((data) => {
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
