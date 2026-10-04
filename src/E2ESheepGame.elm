@@ -222,6 +222,18 @@ sheepGameDmTest normalConfig =
                         , user.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.text "And the winner is" ])
+
+                        -- A reply to the message that started the match names the game it
+                        -- started.
+                        , user.mouseEnter 100 (Dom.id "guild_message_0") ( 10, 10 ) []
+                        , user.click 100 (Dom.id "miniView_reply")
+                        , E2EHelper.writeMessage user 100 "Good game"
+                        , user.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_replyLink_0" ] view
+                                    |> Test.Html.Query.has [ Test.Html.Selector.text "started a Sheep Game" ]
+                            )
                         ]
                     )
                 ]

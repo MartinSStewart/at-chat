@@ -31,7 +31,7 @@ import Game
 import GuildName exposing (GuildName)
 import Html
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRouteWithMaybeMessage(..), UserId)
 import IdArray
 import IdString exposing (IdString)
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
@@ -423,7 +423,6 @@ previewThread messages =
     in
     { messages = messages2
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages2)
-    , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -516,6 +515,7 @@ previewDiscordGuilds time =
         , stickers = SeqSet.empty
         , customEmojis = SeqSet.empty
         , roles = SeqDict.empty
+        , lastTypedAt = SeqDict.empty
         }
 
 
@@ -607,7 +607,6 @@ previewChannel time =
     , messages = messages
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
     , isArchived = Nothing
-    , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
     , threads =
         SeqDict.fromList
             [ ( Id.fromInt 0, previewThread [ previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "") ] )
@@ -667,7 +666,6 @@ previewGameChannel time =
     , messages = messages
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
     , isArchived = Nothing
-    , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 3, { time = time, messageIndex = Nothing } ) ]
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     , games = previewGames time
@@ -692,7 +690,6 @@ previewGuild time =
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.init True 0
                 , isArchived = Nothing
-                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -706,6 +703,10 @@ previewGuild time =
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty
+    , lastTypedAt =
+        SeqDict.singleton
+            (Id.fromInt 2)
+            { channelId = previewChannelId, threadRoute = NoThreadWithMaybeMessage Nothing, time = time }
     }
 
 
@@ -726,7 +727,6 @@ previewGameGuild time =
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.init True 0
                 , isArchived = Nothing
-                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -740,6 +740,10 @@ previewGameGuild time =
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty
+    , lastTypedAt =
+        SeqDict.singleton
+            (Id.fromInt 3)
+            { channelId = previewChannelId, threadRoute = NoThreadWithMaybeMessage Nothing, time = time }
     }
 
 
@@ -772,7 +776,6 @@ previewPetPicsChannel time =
     , messages = messages
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
     , isArchived = Nothing
-    , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     , games = SeqDict.empty

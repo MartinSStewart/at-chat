@@ -3020,7 +3020,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 localUser.session.userId
-                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelMentions local.localUser id.guildId guild) local)
+                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelMentions local.localUser guild.channels) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3119,7 +3119,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     text
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelMentions localUser currentUserId guildId guild)
+                                                    (LocalState.discordGuildChannelMentions localUser guild.channels)
                                                     local
                                                 )
                                                 attachedFiles
@@ -3321,7 +3321,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     newContent
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelMentions local.localUser currentUserId guildId guild)
+                                                    (LocalState.discordGuildChannelMentions local.localUser guild.channels)
                                                     local
                                                 )
                                                 DoNotChangeAttachments
@@ -4555,7 +4555,7 @@ changeUpdate localMsg local =
                                                     )
                                                     attachedFiles
                                                 )
-                                                dmChannel
+                                                { dmChannel | lastTypedAt = SeqDict.remove data.currentUserId dmChannel.lastTypedAt }
 
                                         {- The reader's own Discord account is the one this DM
                                            keeps its unread state under, so the id comes from
@@ -4819,7 +4819,7 @@ changeUpdate localMsg local =
                                                         |> Result.withDefault channel
                                                 )
                                                 channelId
-                                                guild
+                                                { guild | lastTypedAt = LocalState.forgetEditTyping userId channelId threadRoute guild.lastTypedAt }
                                         )
                                         local.guilds
                             }
@@ -4836,7 +4836,7 @@ changeUpdate localMsg local =
                                                 newContent
                                                 (ChangeAttachments attachedFiles)
                                                 threadRoute
-                                                dmChannel
+                                                { dmChannel | lastTypedAt = LocalState.dmForgetEditTyping userId threadRoute dmChannel.lastTypedAt }
                                                 |> Result.withDefault dmChannel
                                         )
                                         local.dmChannels
@@ -4847,18 +4847,20 @@ changeUpdate localMsg local =
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.updateChannel
-                                    (\channel ->
-                                        LocalState.editMessageFrontendHelper
-                                            time
-                                            editedBy
-                                            newContent
-                                            DoNotChangeAttachments
-                                            threadRoute
-                                            channel
-                                            |> Result.withDefault channel
-                                    )
-                                    channelId
+                                (\guild ->
+                                    LocalState.updateChannel
+                                        (\channel ->
+                                            LocalState.editMessageFrontendHelper
+                                                time
+                                                editedBy
+                                                newContent
+                                                DoNotChangeAttachments
+                                                threadRoute
+                                                channel
+                                                |> Result.withDefault channel
+                                        )
+                                        channelId
+                                        { guild | lastTypedAt = LocalState.forgetEditTyping editedBy channelId threadRoute guild.lastTypedAt }
                                 )
                                 local.discordGuilds
                     }
@@ -4875,7 +4877,10 @@ changeUpdate localMsg local =
                                         newContent
                                         DoNotChangeAttachments
                                         messageId
-                                        dmChannel
+                                        { dmChannel
+                                            | lastTypedAt =
+                                                LocalState.discordDmForgetEditTyping data.currentUserId messageId dmChannel.lastTypedAt
+                                        }
                                         |> Result.withDefault dmChannel
                                 )
                                 local.discordDmChannels
@@ -5115,7 +5120,6 @@ changeUpdate localMsg local =
                                                             , isForum = isForum
                                                             , messages = MessageArray.empty
                                                             , visibleMessages = VisibleMessages.empty
-                                                            , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
                                                             , dateDividerDrawings = SeqDict.empty
                                                             , permissionOverwrites = permissionOverwrites
@@ -6075,14 +6079,12 @@ gameChangeUpdateChannel :
         { c
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     ->
         { c
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
 gameChangeUpdateChannel changeBy gameChange channel =
@@ -6421,6 +6423,7 @@ discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo
                                 channel
                     )
                     guild.channels
+            , lastTypedAt = SeqDict.remove discordUserId guild.lastTypedAt
         }
         local.discordGuilds
 
@@ -6549,7 +6552,7 @@ memberTyping time userId guildOrDmId threadRoute local =
                 | guilds =
                     SeqDict.updateIfExists
                         guildId
-                        (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId)
+                        (LocalState.memberIsTyping userId time channelId threadRoute)
                         local.guilds
             }
 
@@ -6558,7 +6561,7 @@ memberTyping time userId guildOrDmId threadRoute local =
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
-                        (LocalState.memberIsTyping userId time threadRoute)
+                        (LocalState.dmMemberIsTyping userId time threadRoute)
                         local.dmChannels
             }
 
@@ -6576,7 +6579,7 @@ discordGuildMemberTyping time userId guildId channelId threadRoute local =
         | discordGuilds =
             SeqDict.updateIfExists
                 guildId
-                (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId)
+                (LocalState.memberIsTyping userId time channelId threadRoute)
                 local.discordGuilds
     }
 
@@ -6590,7 +6593,7 @@ discordDmMemberTyping :
 discordDmMemberTyping time userId channelId local =
     { local
         | discordDmChannels =
-            SeqDict.updateIfExists channelId (LocalState.memberIsTypingHelper userId time) local.discordDmChannels
+            SeqDict.updateIfExists channelId (LocalState.discordDmMemberIsTyping userId time) local.discordDmChannels
     }
 
 
@@ -6740,7 +6743,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.memberIsEditTypingFrontendHelper time userId threadRoute dmChannel
+                            LocalState.dmMemberIsEditTypingFrontend time userId threadRoute dmChannel
                                 |> Result.withDefault dmChannel
                         )
                         local.dmChannels
@@ -6769,7 +6772,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                             SeqDict.updateIfExists
                                 channelId
                                 (\dmChannel ->
-                                    LocalState.memberIsEditTypingFrontendHelperNoThread time currentUserId messageId dmChannel
+                                    LocalState.discordDmMemberIsEditTypingFrontend time currentUserId messageId dmChannel
                                         |> Result.withDefault dmChannel
                                 )
                                 local.discordDmChannels
@@ -6801,7 +6804,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                         (textToRichText
                                             newContent
                                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                            (LocalState.guildChannelMentions local.localUser guildId guild)
+                                            (LocalState.guildChannelMentions local.localUser guild.channels)
                                             local
                                         )
                                         (ChangeAttachments attachedFiles)
@@ -7598,7 +7601,9 @@ addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbed
     let
         dmChannel : FrontendDmChannel
         dmChannel =
-            SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+            SeqDict.get otherUserId local.dmChannels
+                |> Maybe.withDefault DmChannel.frontendInit
+                |> (\a -> { a | lastTypedAt = SeqDict.remove createdBy a.lastTypedAt })
     in
     { local
         | dmChannels =
@@ -7657,7 +7662,13 @@ editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes cont
                     dmChannel
             of
                 Ok dmChannel2 ->
-                    { local | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels }
+                    { local
+                        | dmChannels =
+                            SeqDict.insert
+                                otherUserId
+                                { dmChannel2 | lastTypedAt = LocalState.dmForgetEditTyping editedBy threadRoute dmChannel2.lastTypedAt }
+                                local.dmChannels
+                    }
 
                 Err () ->
                     local
@@ -7941,7 +7952,9 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
 
         dmChannel : FrontendDmChannel
         dmChannel =
-            SeqDict.get id.otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+            SeqDict.get id.otherUserId local.dmChannels
+                |> Maybe.withDefault DmChannel.frontendInit
+                |> (\a -> { a | lastTypedAt = SeqDict.remove createdBy a.lastTypedAt })
 
         dmChannel2 : FrontendDmChannel
         dmChannel2 =

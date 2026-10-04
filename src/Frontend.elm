@@ -2366,7 +2366,7 @@ updateLoaded msg model =
                         allUsers =
                             User.allUsers local.localUser
 
-                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> Maybe NonemptyString
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String } -> NonemptyString -> Maybe NonemptyString
                         removeFile channels draft =
                             case
                                 RichText.fromNonemptyString local.localUser.timezone allUsers channels draft
@@ -2427,7 +2427,7 @@ updateLoaded msg model =
                         allUsers =
                             User.allUsers local.localUser
 
-                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> String -> String
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String } -> NonemptyString -> String -> String
                         removeFile channels nonempty text =
                             case
                                 RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty
@@ -3052,6 +3052,12 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
+
+                MessageView.MessageView_PressedChannelMention channelId threadRoute2 ->
+                    handlePressedChannelMention guildOrDmId channelId threadRoute2 model
+
+                MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
+                    handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -5013,7 +5019,7 @@ updateLoaded msg model =
                                         timezone =
                                             Local.model loggedIn.localState |> .localUser |> .timezone
 
-                                        toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
+                                        toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String } -> String
                                         toggleSpoiler channels =
                                             (if removeSpoiler then
                                                 RichText.fromNonemptyString timezone allUsers channels text
@@ -5061,7 +5067,7 @@ updateLoaded msg model =
                                                 timezone2 =
                                                     Local.model loggedIn.localState |> .localUser |> .timezone
 
-                                                toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
+                                                toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String } -> String
                                                 toggleSpoiler channels =
                                                     (if removeSpoiler then
                                                         RichText.fromNonemptyString timezone2 allUsers channels nonempty
@@ -5878,6 +5884,12 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
 
+                MessageView.MessageView_PressedChannelMention channelId threadRoute2 ->
+                    handlePressedChannelMention guildOrDmId channelId threadRoute2 model
+
+                MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
+                    handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
+
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
                 MessageView.MessageView_PressedSpoiler spoilerIndex ->
@@ -5977,6 +5989,12 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
 
+                MessageView.MessageView_PressedChannelMention channelId threadRoute2 ->
+                    handlePressedChannelMention guildOrDmId channelId threadRoute2 model
+
+                MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
+                    handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
+
         ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -6052,6 +6070,57 @@ handlePressedUserIconButton otherUserId model =
 
         NotLoggedIn _ ->
             ( model, Command.none )
+
+
+handlePressedChannelMention : AnyGuildOrDmId -> Id ChannelId -> ThreadRoute -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handlePressedChannelMention guildOrDmId channelId threadRoute model =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild { guildId }) ->
+            FrontendExtra.routePush
+                model
+                (GuildRoute
+                    guildId
+                    (ChannelRoute channelId (threadRouteWithFriends threadRoute) Nothing)
+                    ChannelsHiddenOnMobile
+                    Nothing
+                )
+
+        _ ->
+            ( model, Command.none )
+
+
+handlePressedDiscordChannelMention :
+    AnyGuildOrDmId
+    -> Discord.Id Discord.ChannelId
+    -> ThreadRoute
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handlePressedDiscordChannelMention guildOrDmId channelId threadRoute model =
+    case guildOrDmId of
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, currentUserId }) ->
+            FrontendExtra.routePush
+                model
+                (DiscordGuildRoute
+                    { currentDiscordUserId = currentUserId
+                    , guildId = guildId
+                    , channelRoute = DiscordChannel_ChannelRoute channelId (threadRouteWithFriends threadRoute) Nothing
+                    , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
+                    }
+                )
+
+        _ ->
+            ( model, Command.none )
+
+
+threadRouteWithFriends : ThreadRoute -> ThreadRouteWithFriends
+threadRouteWithFriends threadRoute =
+    case threadRoute of
+        NoThread ->
+            NoThreadWithFriends Nothing HideChannelSettings
+
+        ViewThread threadId ->
+            ViewThreadWithFriends threadId Nothing HideChannelSettings
 
 
 handlePressedDiscordUserIconButton : Discord.Id Discord.UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )

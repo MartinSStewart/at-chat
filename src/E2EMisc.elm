@@ -1910,9 +1910,9 @@ emojiSuggestionTest config =
                 [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
                 , admin.click 100 Pages.Guild.channelTextInputId
 
-                -- Two characters match too much of the emoji list to be worth showing.
-                , admin.input 100 Pages.Guild.channelTextInputId "Party :ta"
-                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 9, end = 9 }
+                -- One character matches too much of the emoji list to be worth showing.
+                , admin.input 100 Pages.Guild.channelTextInputId "Party :t"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }

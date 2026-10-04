@@ -2075,6 +2075,7 @@ contentView time contentWidth localUser isHovered htmlId attachedFiles content =
         , devicePixelRatio = localUser.devicePixelRatio
         , isHovered = isHovered
         , noOp = NoOp
+        , onPressChannelMention = \_ _ -> NoOp
         }
         Array.empty
         content

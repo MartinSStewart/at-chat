@@ -268,7 +268,44 @@ function thumbnailContentType(plainText) {
 }
 
 
-async function decryptedFileResponse(isDevelopment, encryptedUrl) {
+// Safari only plays a video it can ask for a piece at a time, starting with the first two
+// bytes, and gives up on one that comes back whole in answer to that. A range this doesn't
+// understand, such as several at once, is answered with the whole file, which is allowed.
+function decryptedFileResponseFor(range, plainText, contentType) {
+    const match = range === null ? null : /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    const size = plainText.byteLength;
+
+    if (match === null || (match[1] === "" && match[2] === "")) {
+        return new Response(plainText, {
+            status: 200,
+            statusText: "OK",
+            headers: { "Content-Type": contentType, "Accept-Ranges": "bytes" }
+        });
+    }
+
+    const start = match[1] === "" ? Math.max(0, size - Number(match[2])) : Number(match[1]);
+    const end = match[1] === "" || match[2] === "" ? size - 1 : Math.min(Number(match[2]), size - 1);
+
+    if (start > end) {
+        return new Response(null, {
+            status: 416,
+            statusText: "Range Not Satisfiable",
+            headers: { "Content-Range": "bytes */" + size }
+        });
+    }
+
+    return new Response(plainText.slice(start, end + 1), {
+        status: 206,
+        statusText: "Partial Content",
+        headers: {
+            "Content-Type": contentType,
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes " + start + "-" + end + "/" + size
+        }
+    });
+}
+
+async function decryptedFileResponse(isDevelopment, encryptedUrl, range) {
     const start = encryptedUrl.indexOf('/file/e/');
     const rest = encryptedUrl.slice(start + '/file/e/'.length);
     const separator = rest.indexOf('/');
@@ -326,15 +363,10 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
         const plainText = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: cipherText.slice(0, 12) }, key, cipherText.slice(12));
 
-        return new Response(plainText, {
-            status: 200,
-            statusText: "OK",
-            headers: {
-                "Content-Type": contentType === null
-                    ? thumbnailContentType(plainText)
-                    : contentType
-            }
-        });
+        return decryptedFileResponseFor(
+            range,
+            plainText,
+            contentType === null ? thumbnailContentType(plainText) : contentType);
     } catch (error) {
         log("File decrypt error: " + error.message);
         return new Response("This file could not be decrypted", { status: 404 });
@@ -388,7 +420,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     if (url.startsWith(apiDomain + 'file/e/')) {
-        event.respondWith(decryptedFileResponse(isDevelopment, url));
+        event.respondWith(decryptedFileResponse(isDevelopment, url, event.request.headers.get('Range')));
         return;
     }
 
