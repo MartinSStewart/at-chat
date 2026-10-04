@@ -1867,6 +1867,14 @@ mentionSuggestionTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
 
+                -- Nor is anything suggested inside a code block.
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nHey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 10, end = 10 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```code```\nHey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 17, end = 17 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+
                 -- Picking a suggestion closes the dropdown. The name it writes into the message
                 -- is put there by js, which these tests don't run, so the text it would have
                 -- left behind is typed in its place.
@@ -1918,6 +1926,11 @@ emojiSuggestionTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":tada:" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nParty :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 15, end = 15 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
 
                 -- Picking a suggestion closes the dropdown. As with a mention, what it writes
                 -- into the message is put there by js, so the emoji it would have left behind
@@ -1954,6 +1967,9 @@ channelSuggestionTest config =
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "general" ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #zz"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nSee #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 12, end = 12 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }

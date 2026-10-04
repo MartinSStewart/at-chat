@@ -7031,12 +7031,16 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
         nameSoFar : Int -> String -> Maybe NameSoFar
         nameSoFar caret text =
-            case timeOffsetSoFar caret text of
-                Just timeOffset ->
-                    Just timeOffset
+            if MessageInput.isInsideCodeBlock caret text then
+                Nothing
 
-                Nothing ->
-                    helper caret text
+            else
+                case timeOffsetSoFar caret text of
+                    Just timeOffset ->
+                        Just timeOffset
+
+                    Nothing ->
+                        helper caret text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
