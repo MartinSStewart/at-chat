@@ -679,6 +679,7 @@ type FrontendMsg_
     | PressedDeclineE2eeRequest (Id UserId)
     | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
+    | PageFocusSettled
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
     | SafeAreaInsetsChanged { top : Int, bottom : Int }

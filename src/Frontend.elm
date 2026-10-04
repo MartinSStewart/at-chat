@@ -3748,7 +3748,7 @@ updateLoaded msg model =
                 [ cmd
                 , if hasFocus then
                     Command.batch
-                        [ FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
+                        [ Process.sleep (Duration.milliseconds 100) |> Task.perform (\() -> PageFocusSettled)
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
@@ -3759,6 +3759,20 @@ updateLoaded msg model =
                   else
                     Command.none
                 ]
+            )
+
+        PageFocusSettled ->
+            ( model
+            , case model.loginStatus of
+                LoggedIn loggedIn ->
+                    if loggedIn.textInputFocus == Nothing then
+                        FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+
+                    else
+                        Command.none
+
+                NotLoggedIn _ ->
+                    Command.none
             )
 
         GotServiceWorkerMessage url ->

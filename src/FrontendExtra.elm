@@ -2653,6 +2653,9 @@ isPressMsg msg =
         PageHasFocusChanged _ ->
             False
 
+        PageFocusSettled ->
+            False
+
         GotServiceWorkerMessage _ ->
             False
 
