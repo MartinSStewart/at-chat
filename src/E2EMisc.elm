@@ -1867,12 +1867,18 @@ mentionSuggestionTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
 
-                -- Nor is anything suggested inside a code block.
+                -- Nor is anything suggested inside a code block or inline code.
                 , admin.input 100 Pages.Guild.channelTextInputId "```\nHey @S"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 10, end = 10 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "```code```\nHey @S"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 17, end = 17 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey `x @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 9, end = 9 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "`code` ```code``` @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 20, end = 20 }
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
 
                 -- Picking a suggestion closes the dropdown. The name it writes into the message
@@ -1929,6 +1935,9 @@ emojiSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "```\nParty :tada"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 15, end = 15 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party `x :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 14, end = 14 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
 
@@ -1970,6 +1979,9 @@ channelSuggestionTest config =
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "```\nSee #gen"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 12, end = 12 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "See `x #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }

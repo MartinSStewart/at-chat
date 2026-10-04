@@ -12,6 +12,7 @@ module MessageInput exposing
     , emptyPlaceholder
     , insertTab
     , isInsideCodeBlock
+    , isInsideInlineCode
     , isPress
     , largePastedText
     , showEmojiSelectorButton
@@ -239,6 +240,19 @@ cursor means the most recent one opened a code block that hasn't been closed yet
 isInsideCodeBlock : Int -> String -> Bool
 isInsideCodeBlock cursor text =
     modBy 2 (String.left cursor text |> String.indexes "```" |> List.length) == 1
+
+
+{-| Same idea as `isInsideCodeBlock`. Inline code can't span a line break so only the cursor's line
+is checked, and triple backticks are left out since they belong to code blocks.
+-}
+isInsideInlineCode : Int -> String -> Bool
+isInsideInlineCode cursor text =
+    case String.left cursor text |> String.split "\n" |> List.reverse of
+        currentLine :: _ ->
+            modBy 2 (String.replace "```" "" currentLine |> String.indexes "`" |> List.length) == 1
+
+        [] ->
+            False
 
 
 selectionInsideCodeBlock : String -> Maybe Range -> Maybe Range

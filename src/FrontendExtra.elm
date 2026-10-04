@@ -7031,7 +7031,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
         nameSoFar : Int -> String -> Maybe NameSoFar
         nameSoFar caret text =
-            if MessageInput.isInsideCodeBlock caret text then
+            if MessageInput.isInsideCodeBlock caret text || MessageInput.isInsideInlineCode caret text then
                 Nothing
 
             else
