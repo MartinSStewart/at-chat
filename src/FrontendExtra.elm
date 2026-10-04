@@ -128,6 +128,7 @@ import SetViewing exposing (SetViewing(..))
 import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
+import SyntaxHighlight
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Drag(..), DragTarget(..))

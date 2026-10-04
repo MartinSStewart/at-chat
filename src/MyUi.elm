@@ -131,6 +131,7 @@ import Round
 import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
+import SyntaxHighlight
 import Time exposing (Month(..))
 import Touch exposing (Drag(..))
 import Ui exposing (Element)
@@ -1475,8 +1476,24 @@ body {
   }
 }
 """
+                ++ elmSyntaxHighlight
             )
         ]
+
+
+elmSyntaxHighlight =
+    """.elmsh {color: #24292e;background: transparent;}
+.elmsh-hl {background: #fffbdd;}
+.elmsh-add {background: #eaffea;}
+.elmsh-del {background: #ffecec;}
+.elmsh-comm {color: #969896;}
+.elmsh1 {color: #005cc5;}
+.elmsh2 {color: #df5000;}
+.elmsh3 {color: #d73a49;}
+.elmsh4 {color: #0086b3;}
+.elmsh5 {color: #63a35c;}
+.elmsh6 {color: #005cc5;}
+.elmsh7 {color: #795da3;}"""
 
 
 {-| Noto Sans is used for all normal text so that text placement is consistent

@@ -92,6 +92,7 @@ import Serialize
 import Set
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
+import SyntaxHighlight
 import TimeInMinutes exposing (TimeInMinutes)
 import Touch exposing (ScreenCoordinate)
 import UInt64
@@ -4508,11 +4509,23 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                     [ Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace" ]
                                                )
                                         )
-                                        [ if state.spoiler then
-                                            Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
+                                        [ case language of
+                                            Language (NonemptyString 'e' "lm") ->
+                                                case SyntaxHighlight.elm text of
+                                                    Ok ok ->
+                                                        SyntaxHighlight.toInlineHtml ok
 
-                                          else
-                                            Html.text text
+                                                    Err _ ->
+                                                        Html.text text
+
+                                            _ ->
+                                                Html.text text
+
+                                        --if state.spoiler then
+                                        --    Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
+                                        --
+                                        --  else
+                                        --    Html.text text
                                         ]
                                    ]
                             )
