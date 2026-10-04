@@ -258,19 +258,19 @@ function jpegBytes() {
 }
 
 
-function askWorker(listeners, url) {
+function askWorker(listeners, url, headers) {
     let responded = null;
 
     listeners.fetch({
-        request: { url: url },
+        request: { url: url, headers: new Headers(headers) },
         respondWith: (response) => { responded = response; }
     });
 
     return responded;
 }
 
-function requestFile(listeners, url) {
-    const responded = askWorker(listeners, url);
+function requestFile(listeners, url, headers) {
+    const responded = askWorker(listeners, url, headers);
 
     if (responded === null) {
         throw new Error("The service worker didn't answer " + url);
@@ -383,6 +383,40 @@ async function run() {
         if (Buffer.compare(Buffer.from(cachedBody), Buffer.from(plainText)) === 0) {
             throw new Error("The decrypted file was written to the cache");
         }
+    });
+
+    // Safari asks for the first two bytes of a video before anything else, and won't play
+    // one that doesn't answer with just those.
+    await check("A range of an encrypted file is served as partial content", async () => {
+        const ranges = [
+            { asked: "bytes=0-1", start: 0, end: 1 },
+            { asked: "bytes=1000-", start: 1000, end: 2047 },
+            { asked: "bytes=2000-5000", start: 2000, end: 2047 },
+            { asked: "bytes=-48", start: 2000, end: 2047 }
+        ];
+
+        for (const range of ranges) {
+            const response = await requestFile(listeners, encryptedUrl, { Range: range.asked });
+            const body = new Uint8Array(await response.arrayBuffer());
+
+            expectEqual(response.status, 206, range.asked + " status");
+            expectEqual(
+                response.headers.get("content-range"),
+                "bytes " + range.start + "-" + range.end + "/2048",
+                range.asked + " Content-Range");
+            expectEqual(response.headers.get("content-type"), contentType, range.asked + " content type");
+
+            if (Buffer.compare(Buffer.from(body), Buffer.from(plainText.slice(range.start, range.end + 1))) !== 0) {
+                throw new Error("The body for " + range.asked + " isn't that part of the file");
+            }
+        }
+    });
+
+    await check("A range past the end of an encrypted file is refused", async () => {
+        const response = await requestFile(listeners, encryptedUrl, { Range: "bytes=2048-" });
+
+        expectEqual(response.status, 416, "status");
+        expectEqual(response.headers.get("content-range"), "bytes */2048", "Content-Range");
     });
 
     // The address the ciphertext is read from is all the server learns about an encrypted
@@ -510,7 +544,7 @@ async function run() {
         served.set(elsewhere, () => new Response(encrypted.cipherText, { status: 200 }));
 
         let responded = false;
-        listeners.fetch({ request: { url: elsewhere }, respondWith: () => { responded = true; } });
+        listeners.fetch({ request: { url: elsewhere, headers: new Headers() }, respondWith: () => { responded = true; } });
 
         if (responded) {
             throw new Error("The worker answered for an address outside the origin it was served from");
