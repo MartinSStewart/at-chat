@@ -2425,6 +2425,12 @@ isPressMsg msg =
         DebouncedTyping ->
             False
 
+        CheckedSheepGameSaveDebounce _ _ _ _ ->
+            False
+
+        CheckedSheepGameQuestionsDebounce _ _ ->
+            False
+
         GotPingUserPosition _ _ ->
             False
 

@@ -33,7 +33,9 @@ module Game exposing
     , sheepGameFileUploaded
     , sheepGameFilesToAttach
     , sheepGameInputSaveDelay
+    , sheepGameInputToSave
     , sheepGameQuestionsSaveDelay
+    , sheepGameQuestionsToSave
     , update
     , view
     , wordSpellingScrollPosition
@@ -134,8 +136,6 @@ type Msg
     | SelectedMatch (Id ChannelMessageId)
     | PressedReset
     | PressedSelectGame GameType
-    | CheckedSheepGameQuestionsDebounce Int
-    | CheckedSheepGameSaveDebounce (Id ChannelMessageId) SheepGame.Input Int
     | NoOpMsg
 
 
@@ -520,10 +520,10 @@ type OutMsg
     | SaveSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
-    | SaveSheepGameQuestionsAfterDelay Int
+    | SaveSheepGameQuestionsAfterDelay GuildOrDmId Int
       -- Ask to be sent `CheckedSheepGameSaveDebounce` once whoever is writing in that box
       -- has stopped typing (see `Frontend.handleGameOutMsgs`).
-    | SaveSheepGameInputAfterDelay (Id ChannelMessageId) SheepGame.Input Int
+    | SaveSheepGameInputAfterDelay GuildOrDmId (Id ChannelMessageId) SheepGame.Input Int
     | OpenSheepGameEmojiSelector SheepGame.Input
       -- Somebody wants to react to an answer or a note with an emoji that isn't one of their
       -- most used ones, so the full selector is opened for them.
@@ -803,7 +803,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                     (\input ->
                                         SeqDict.get ( matchId, input ) counters
                                             |> Maybe.withDefault 0
-                                            |> SaveSheepGameInputAfterDelay matchId input
+                                            |> SaveSheepGameInputAfterDelay guildOrDmId matchId input
                                     )
                                     changed
                                 ++ (case outMsg of
@@ -855,7 +855,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                             | setup = SheepGame_Setup setup
                             , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                           }
-                        , SaveSheepGameQuestionsAfterDelay (model.sheepGameQuestionsCounter + 1) :: outMsg2
+                        , SaveSheepGameQuestionsAfterDelay guildOrDmId (model.sheepGameQuestionsCounter + 1) :: outMsg2
                         )
 
                 SheepGame.Game game ->
@@ -876,41 +876,6 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                       }
                     , SaveSheepGameQuestions IdArray.empty :: outMsg2
                     )
-
-        CheckedSheepGameSaveDebounce matchId input counter ->
-            case
-                ( SeqDict.get ( matchId, input ) model.sheepGameSaveCounters == Just counter
-                , SeqDict.get matchId model.startedGames
-                )
-            of
-                ( True, Just (SheepGame_Game game) ) ->
-                    ( model
-                    , case SheepGame.saveInputAction localUser input game of
-                        Just action ->
-                            [ { userId = currentUserId, time = time, change = action }
-                                |> SheepGame.Action
-                                |> LocalChange_SheepGame matchId
-                                |> OutLocalChange
-                            ]
-
-                        Nothing ->
-                            []
-                    )
-
-                _ ->
-                    -- More typing happened after this save was asked for, so the one that
-                    -- typing scheduled will cover it.
-                    ( model, [] )
-
-        CheckedSheepGameQuestionsDebounce counter ->
-            case ( counter == model.sheepGameQuestionsCounter, model.setup ) of
-                ( True, SheepGame_Setup setup ) ->
-                    ( model, [ SheepGame.clampSavedQuestions setup.questions |> SaveSheepGameQuestions ] )
-
-                _ ->
-                    -- More typing happened after this save was asked for, so the one that
-                    -- typing scheduled will cover it.
-                    ( model, [] )
 
         PressedSelectGame game ->
             case game of
@@ -1102,6 +1067,47 @@ to be saved.
 sheepGameInputSaveDelay : Duration
 sheepGameInputSaveDelay =
     Duration.seconds 1
+
+
+{-| What a box has to be saved as, once the delay its typing scheduled has run out without any
+more typing in it. The player may have left the games tab since, so this goes by the match
+rather than by what's on screen.
+-}
+sheepGameInputToSave : Time.Posix -> LocalUser -> Id ChannelMessageId -> SheepGame.Input -> Int -> Model -> Maybe LocalChange
+sheepGameInputToSave time localUser matchId input counter model =
+    case
+        ( SeqDict.get ( matchId, input ) model.sheepGameSaveCounters == Just counter
+        , SeqDict.get matchId model.startedGames
+        )
+    of
+        ( True, Just (SheepGame_Game game) ) ->
+            SheepGame.saveInputAction localUser input game
+                |> Maybe.map
+                    (\action ->
+                        { userId = localUser.session.userId, time = time, change = action }
+                            |> SheepGame.Action
+                            |> LocalChange_SheepGame matchId
+                    )
+
+        _ ->
+            -- More typing happened after this save was asked for, so the one that typing
+            -- scheduled will cover it.
+            Nothing
+
+
+{-| The questions the host has written so far, once the delay their typing scheduled has run out
+without any more typing.
+-}
+sheepGameQuestionsToSave : Int -> Model -> Maybe (IdArray QuestionId UserSession.SheepGameQuestion)
+sheepGameQuestionsToSave counter model =
+    case ( counter == model.sheepGameQuestionsCounter, model.setup ) of
+        ( True, SheepGame_Setup setup ) ->
+            SheepGame.clampSavedQuestions setup.questions |> Just
+
+        _ ->
+            -- More typing happened after this save was asked for, so the one that typing
+            -- scheduled will cover it.
+            Nothing
 
 
 dragStart :

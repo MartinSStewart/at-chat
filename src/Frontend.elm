@@ -2303,6 +2303,41 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        CheckedSheepGameSaveDebounce guildOrDmId matchId input counter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (SeqDict.get guildOrDmId loggedIn.games
+                            |> Maybe.andThen
+                                (Game.sheepGameInputToSave
+                                    model.time
+                                    (Local.model loggedIn.localState).localUser
+                                    matchId
+                                    input
+                                    counter
+                                )
+                            |> Maybe.map (Local_Game guildOrDmId)
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        CheckedSheepGameQuestionsDebounce guildOrDmId counter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (SeqDict.get guildOrDmId loggedIn.games
+                            |> Maybe.andThen (Game.sheepGameQuestionsToSave counter)
+                            |> Maybe.map Local_SetSheepGameQuestions
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
         UserNameEditableMsg editableMsg ->
             handleEditable
                 editableMsg
@@ -9510,20 +9545,18 @@ handleGameOutMsgs outMsgs model =
                 Game.SaveSheepGameQuestions _ ->
                     ( model2, cmds )
 
-                Game.SaveSheepGameQuestionsAfterDelay counter ->
+                Game.SaveSheepGameQuestionsAfterDelay guildOrDmId counter ->
                     ( model2
                     , (Process.sleep Game.sheepGameQuestionsSaveDelay
-                        |> Task.perform
-                            (\() -> GameMsg (Game.CheckedSheepGameQuestionsDebounce counter))
+                        |> Task.perform (\() -> CheckedSheepGameQuestionsDebounce guildOrDmId counter)
                       )
                         :: cmds
                     )
 
-                Game.SaveSheepGameInputAfterDelay matchId input counter ->
+                Game.SaveSheepGameInputAfterDelay guildOrDmId matchId input counter ->
                     ( model2
                     , (Process.sleep Game.sheepGameInputSaveDelay
-                        |> Task.perform
-                            (\() -> GameMsg (Game.CheckedSheepGameSaveDebounce matchId input counter))
+                        |> Task.perform (\() -> CheckedSheepGameSaveDebounce guildOrDmId matchId input counter)
                       )
                         :: cmds
                     )

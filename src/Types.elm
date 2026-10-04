@@ -637,6 +637,8 @@ type FrontendMsg_
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GameMsg Game.Msg
+    | CheckedSheepGameSaveDebounce GuildOrDmId (Id ChannelMessageId) SheepGame.Input Int
+    | CheckedSheepGameQuestionsDebounce GuildOrDmId Int
     | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
