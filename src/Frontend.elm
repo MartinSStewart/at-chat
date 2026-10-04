@@ -3094,6 +3094,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
 
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -5939,6 +5942,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
 
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
+
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
                 MessageView.MessageView_PressedSpoiler spoilerIndex ->
@@ -6043,6 +6049,9 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
+
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
 
         ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn

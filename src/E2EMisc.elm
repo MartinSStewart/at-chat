@@ -3,6 +3,7 @@ module E2EMisc exposing
     , banMemberTest
     , channelSearchTest
     , channelSuggestionTest
+    , codeBlockCopyButtonTest
     , codeBlockInputTest
     , colorPickerTest
     , deleteAccountTest
@@ -2071,6 +2072,41 @@ codeBlockInputTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
                 , admin.checkModel 100 (checkDraft (Just "no code block"))
+                ]
+            )
+        ]
+
+
+{-| A code block naming a language comes out highlighted, and the button in its corner
+copies the code without the \`\`\` or the language name around it.
+-}
+codeBlockCopyButtonTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+codeBlockCopyButtonTest config =
+    E2EHelper.startTest
+        "Pressing a code block's copy button copies its code"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "```elm\nx = 1\n```"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.class "elmsh1", Test.Html.Selector.text "1" ])
+                , admin.click 100 (Dom.id "spoiler_1_copyCode_0")
+                , T.checkState
+                    100
+                    (\data ->
+                        case E2EHelper.copiedText admin.clientId data of
+                            Just "x = 1\n" ->
+                                Ok ()
+
+                            Just copied ->
+                                Err ("Expected the code to be copied but got " ++ copied)
+
+                            Nothing ->
+                                Err "Clipboard text not found"
+                    )
                 ]
             )
         ]

@@ -257,6 +257,7 @@ The following is not encrypted:
             , isHovered = False
             , noOp = noOp
             , onPressChannelMention = \_ _ -> noOp
+            , onPressCopyCode = \_ -> noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]

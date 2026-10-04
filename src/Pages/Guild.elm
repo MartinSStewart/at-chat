@@ -8645,6 +8645,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedChannelMention
+                        , onPressCopyCode = MessageView_PressedCopyCode
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -8821,6 +8822,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedDiscordChannelMention
+                        , onPressCopyCode = MessageView_PressedCopyCode
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->

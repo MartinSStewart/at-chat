@@ -83,6 +83,7 @@ import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
 import OneToOne exposing (OneToOne)
+import Parser
 import PersonName exposing (PersonName)
 import Point2d exposing (Point2d)
 import Range exposing (Range)
@@ -244,6 +245,107 @@ isAsciiArt language =
 
         NoLanguage ->
             False
+
+
+syntaxHighlight : Language -> String -> Maybe SyntaxHighlight.HCode
+syntaxHighlight language text =
+    let
+        highlighter : Maybe (String -> Result (List Parser.DeadEnd) SyntaxHighlight.HCode)
+        highlighter =
+            case language of
+                Language name ->
+                    case String.toLower (String.Nonempty.toString name) of
+                        "elm" ->
+                            Just SyntaxHighlight.elm
+
+                        "js" ->
+                            Just SyntaxHighlight.javascript
+
+                        "jsx" ->
+                            Just SyntaxHighlight.javascript
+
+                        "javascript" ->
+                            Just SyntaxHighlight.javascript
+
+                        "css" ->
+                            Just SyntaxHighlight.css
+
+                        "py" ->
+                            Just SyntaxHighlight.python
+
+                        "python" ->
+                            Just SyntaxHighlight.python
+
+                        "sql" ->
+                            Just SyntaxHighlight.sql
+
+                        "xml" ->
+                            Just SyntaxHighlight.xml
+
+                        "html" ->
+                            Just SyntaxHighlight.xml
+
+                        "svg" ->
+                            Just SyntaxHighlight.xml
+
+                        "json" ->
+                            Just SyntaxHighlight.json
+
+                        "nix" ->
+                            Just SyntaxHighlight.nix
+
+                        "kt" ->
+                            Just SyntaxHighlight.kotlin
+
+                        "kotlin" ->
+                            Just SyntaxHighlight.kotlin
+
+                        "go" ->
+                            Just SyntaxHighlight.go
+
+                        "golang" ->
+                            Just SyntaxHighlight.go
+
+                        _ ->
+                            Nothing
+
+                NoLanguage ->
+                    Nothing
+    in
+    Maybe.andThen (\highlight -> Result.toMaybe (highlight text)) highlighter
+
+
+copyCodeButtonId : HtmlId -> Int -> HtmlId
+copyCodeButtonId htmlIdPrefix index =
+    Dom.id (Dom.idToString htmlIdPrefix ++ "_copyCode_" ++ String.fromInt index)
+
+
+copyCodeButton : Maybe HtmlId -> msg -> Html msg
+copyCodeButton maybeHtmlId onPress =
+    Html.button
+        ([ Html.Events.onClick onPress
+         , Html.Attributes.title "Copy"
+         , Html.Attributes.style "position" "absolute"
+         , Html.Attributes.style "top" "2px"
+         , Html.Attributes.style "right" "2px"
+         , Html.Attributes.style "display" "flex"
+         , Html.Attributes.style "padding" "2px"
+         , Html.Attributes.style "border" "none"
+         , Html.Attributes.style "border-radius" "4px"
+         , Html.Attributes.style "background-color" codeBorder
+         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+         , Html.Attributes.style "cursor" "pointer"
+         , Html.Attributes.style "user-select" "none"
+         ]
+            ++ (case maybeHtmlId of
+                    Just htmlId ->
+                        [ Dom.idToAttribute htmlId ]
+
+                    Nothing ->
+                        []
+               )
+        )
+        [ Icons.copy 16 ]
 
 
 {-| ascii.ttf is drawn on a grid 18 pixels to the em and 10 to the character, and only comes
@@ -3824,6 +3926,7 @@ preview noOp onPressLink onPressChannelMention config nonempty =
         , isHovered = False
         , noOp = noOp
         , onPressChannelMention = onPressChannelMention
+        , onPressCopyCode = \_ -> noOp
         }
         Array.empty
         0
@@ -3860,6 +3963,7 @@ type alias Config a userId channelId msg =
     , isHovered : Bool
     , noOp : msg
     , onPressChannelMention : channelId -> ThreadRoute -> msg
+    , onPressCopyCode : String -> msg
     }
 
 
@@ -4463,69 +4567,78 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
-                                        ([ Html.Attributes.style
-                                            "background-color"
-                                            (if state.spoiler then
-                                                spoilerBackground
+                                        [ Html.Attributes.style "position" "relative" ]
+                                        [ Html.div
+                                            ([ Html.Attributes.style
+                                                "background-color"
+                                                (if state.spoiler then
+                                                    spoilerBackground
 
-                                             else
-                                                codeBackground
-                                            )
-                                         , Html.Attributes.style
-                                            "border"
-                                            (codeBorder ++ " solid " ++ String.fromInt codeBorderWidth ++ "px")
-                                         , Html.Attributes.style
-                                            "padding"
-                                            ("0 " ++ String.fromInt codePaddingX ++ "px")
-                                         , Html.Attributes.style "border-radius" "4px"
-                                         , Html.Attributes.style "white-space" "pre"
-                                         , Html.Attributes.style "overflow-x" "auto"
-                                         , Html.Events.stopPropagationOn
-                                            "touchstart"
-                                            (Json.Decode.map2
-                                                (\scrollWidth clientWidth ->
-                                                    if scrollWidth > clientWidth then
-                                                        Json.Decode.succeed ( config.noOp, True )
+                                                 else
+                                                    codeBackground
+                                                )
+                                             , Html.Attributes.style
+                                                "border"
+                                                (codeBorder ++ " solid " ++ String.fromInt codeBorderWidth ++ "px")
+                                             , Html.Attributes.style
+                                                "padding"
+                                                ("0 " ++ String.fromInt codePaddingX ++ "px")
+                                             , Html.Attributes.style "border-radius" "4px"
+                                             , Html.Attributes.style "white-space" "pre"
+                                             , Html.Attributes.style "overflow-x" "auto"
+                                             , Html.Events.stopPropagationOn
+                                                "touchstart"
+                                                (Json.Decode.map2
+                                                    (\scrollWidth clientWidth ->
+                                                        if scrollWidth > clientWidth then
+                                                            Json.Decode.succeed ( config.noOp, True )
+
+                                                        else
+                                                            Json.Decode.fail ""
+                                                    )
+                                                    (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
+                                                    (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
+                                                    |> Json.Decode.andThen identity
+                                                )
+                                             ]
+                                                ++ (if isAsciiArt language then
+                                                        [ Html.Attributes.style "font-family" "'ascii', monospace"
+                                                        , Html.Attributes.style "line-height" "1"
+                                                        , Html.Attributes.style
+                                                            "font-size"
+                                                            (asciiFontSize containerWidth2 config.devicePixelRatio text)
+                                                        , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
+                                                          Html.Attributes.style "transform" "translateZ(0)"
+                                                        ]
 
                                                     else
-                                                        Json.Decode.fail ""
-                                                )
-                                                (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
-                                                (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
-                                                |> Json.Decode.andThen identity
+                                                        [ Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace" ]
+                                                   )
                                             )
-                                         ]
-                                            ++ (if isAsciiArt language then
-                                                    [ Html.Attributes.style "font-family" "'ascii', monospace"
-                                                    , Html.Attributes.style "line-height" "1"
-                                                    , Html.Attributes.style
-                                                        "font-size"
-                                                        (asciiFontSize containerWidth2 config.devicePixelRatio text)
-                                                    , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
-                                                      Html.Attributes.style "transform" "translateZ(0)"
-                                                    ]
+                                            [ if state.spoiler then
+                                                Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
 
-                                                else
-                                                    [ Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace" ]
-                                               )
-                                        )
-                                        [ case language of
-                                            Language (NonemptyString 'e' "lm") ->
-                                                case SyntaxHighlight.elm text of
-                                                    Ok ok ->
-                                                        SyntaxHighlight.toInlineHtml ok
+                                              else
+                                                case syntaxHighlight language text of
+                                                    Just highlighted ->
+                                                        SyntaxHighlight.toInlineHtml highlighted
 
-                                                    Err _ ->
+                                                    Nothing ->
                                                         Html.text text
+                                            ]
+                                        , if state.spoiler then
+                                            Html.text ""
 
-                                            _ ->
-                                                Html.text text
+                                          else
+                                            copyCodeButton
+                                                (case maybePressedSpoiler of
+                                                    Just ( htmlIdPrefix, _ ) ->
+                                                        Just (copyCodeButtonId htmlIdPrefix (List.length currentList))
 
-                                        --if state.spoiler then
-                                        --    Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
-                                        --
-                                        --  else
-                                        --    Html.text text
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                (config.onPressCopyCode text)
                                         ]
                                    ]
                             )

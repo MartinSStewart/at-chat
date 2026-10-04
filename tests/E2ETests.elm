@@ -386,6 +386,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
+    , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EMisc.hourlyOrphanedFilesTest imageUploadConfig

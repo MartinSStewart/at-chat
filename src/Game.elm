@@ -950,6 +950,9 @@ sheepGameOutMsgs time newMatchId outMsg =
         SheepGame.ShowImage pressedImageData ->
             [ ShowSheepGameImage pressedImageData ]
 
+        SheepGame.CopyText text ->
+            [ CopyText text ]
+
         SheepGame.SetFocusOnQuestion questionId ->
             [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
 
