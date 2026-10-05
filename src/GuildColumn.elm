@@ -198,7 +198,7 @@ discordGuildIcon localUser route guildId guild =
                 (Dom.id ("guild_openDiscordGuild_" ++ Discord.idToString guildId))
                 (discordGuildRoute localUser discordUserId guildId guild)
                 []
-                (GuildIcon.discordView
+                (GuildIcon.view
                     (case route of
                         DiscordGuildRoute data ->
                             if data.guildId == guildId then
