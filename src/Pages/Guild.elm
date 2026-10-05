@@ -3248,9 +3248,8 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , Ui.padding 16
             ]
-            [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
+            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
