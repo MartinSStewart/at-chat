@@ -4,6 +4,8 @@ module MuteSettings exposing
     , MutedChannel
     , MutedDiscordGuild
     , MutedGuild
+    , hidesRedDot
+    , hidesWhiteDot
     , init
     , isChannelMuted
     , isChannelSpecificallyMuted
@@ -158,7 +160,10 @@ setMuteThread guildId channelId threadId isMuted model =
                         IsNotMuted ->
                             SeqDict.remove threadId channel.mutedThreads
 
-                        _ ->
+                        IsPartiallyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+
+                        IsFullyMuted ->
                             SeqDict.insert threadId isMuted channel.mutedThreads
             }
         )
@@ -188,7 +193,10 @@ setMuteDiscordThread guildId channelId threadId isMuted model =
                         IsNotMuted ->
                             SeqDict.remove threadId channel.mutedThreads
 
-                        _ ->
+                        IsPartiallyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+
+                        IsFullyMuted ->
                             SeqDict.insert threadId isMuted channel.mutedThreads
             }
         )
@@ -327,21 +335,49 @@ channelOrThreadMuted threadRoute channel =
 
 strongest : IsMuted -> IsMuted -> IsMuted
 strongest a b =
-    case ( a, b ) of
-        ( IsFullyMuted, _ ) ->
+    case a of
+        IsNotMuted ->
+            b
+
+        IsPartiallyMuted ->
+            case b of
+                IsNotMuted ->
+                    IsPartiallyMuted
+
+                IsPartiallyMuted ->
+                    IsPartiallyMuted
+
+                IsFullyMuted ->
+                    IsFullyMuted
+
+        IsFullyMuted ->
             IsFullyMuted
 
-        ( _, IsFullyMuted ) ->
-            IsFullyMuted
 
-        ( IsPartiallyMuted, _ ) ->
-            IsPartiallyMuted
+hidesWhiteDot : IsMuted -> Bool
+hidesWhiteDot isMuted =
+    case isMuted of
+        IsNotMuted ->
+            False
 
-        ( _, IsPartiallyMuted ) ->
-            IsPartiallyMuted
+        IsPartiallyMuted ->
+            True
 
-        ( IsNotMuted, IsNotMuted ) ->
-            IsNotMuted
+        IsFullyMuted ->
+            True
+
+
+hidesRedDot : IsMuted -> Bool
+hidesRedDot isMuted =
+    case isMuted of
+        IsNotMuted ->
+            False
+
+        IsPartiallyMuted ->
+            False
+
+        IsFullyMuted ->
+            True
 
 
 isDmMuted : Model -> Id UserId -> ThreadRoute -> IsMuted

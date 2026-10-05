@@ -472,10 +472,13 @@ channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages 
 hideNewMessage : ChannelNotificationType -> ChannelNotificationType
 hideNewMessage notification =
     case notification of
+        NoNotification ->
+            NoNotification
+
         NewMessage _ ->
             NoNotification
 
-        _ ->
+        NewMessageForUser _ ->
             notification
 
 
@@ -596,14 +599,20 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
                                     (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                     thread
 
-                        _ ->
+                        IsPartiallyMuted ->
+                            count2
+
+                        IsFullyMuted ->
                             count2
                 )
                 (case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
                     IsNotMuted ->
                         count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
 
-                    _ ->
+                    IsPartiallyMuted ->
+                        count
+
+                    IsFullyMuted ->
                         count
                 )
                 channel.threads
@@ -614,60 +623,59 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
 
 guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
 guildHasNotifications currentUser guildId guild =
-    case MuteSettings.isGuildSpecificallyMute currentUser.muteSettings guildId of
-        IsFullyMuted ->
-            NoNotification
+    if MuteSettings.hidesRedDot (MuteSettings.isGuildSpecificallyMute currentUser.muteSettings guildId) then
+        NoNotification
 
-        _ ->
-            let
-                counts : List ( IsMuted, Int )
-                counts =
-                    guildNewMessageCounts currentUser guildId guild
-            in
-            if SeqSet.member guildId currentUser.notifyOnAllMessages then
-                case
-                    List.foldl
-                        (\( isMuted, count ) total ->
-                            if isMuted == IsFullyMuted then
-                                total
+    else
+        let
+            counts : List ( IsMuted, Int )
+            counts =
+                guildNewMessageCounts currentUser guildId guild
+        in
+        if SeqSet.member guildId currentUser.notifyOnAllMessages then
+            case
+                List.foldl
+                    (\( isMuted, count ) total ->
+                        if MuteSettings.hidesRedDot isMuted then
+                            total
 
-                            else
-                                total + count
-                        )
-                        0
-                        counts
-                        |> OneOrGreater.fromInt
-                of
-                    Just count ->
-                        NewMessageForUser count
+                        else
+                            total + count
+                    )
+                    0
+                    counts
+                    |> OneOrGreater.fromInt
+            of
+                Just count ->
+                    NewMessageForUser count
 
-                    Nothing ->
-                        NoNotification
+                Nothing ->
+                    NoNotification
 
-            else
-                case unmutedDirectMentions currentUser guildId (SeqDict.get guildId currentUser.directMentions) of
-                    Just count ->
-                        NewMessageForUser count
+        else
+            case unmutedDirectMentions currentUser guildId (SeqDict.get guildId currentUser.directMentions) of
+                Just count ->
+                    NewMessageForUser count
 
-                    Nothing ->
-                        case
-                            List.foldl
-                                (\( isMuted, count ) total ->
-                                    if isMuted == IsNotMuted then
-                                        total + count
+                Nothing ->
+                    case
+                        List.foldl
+                            (\( isMuted, count ) total ->
+                                if MuteSettings.hidesWhiteDot isMuted then
+                                    total
 
-                                    else
-                                        total
-                                )
-                                0
-                                counts
-                                |> OneOrGreater.fromInt
-                        of
-                            Just count ->
-                                NewMessage count
+                                else
+                                    total + count
+                            )
+                            0
+                            counts
+                            |> OneOrGreater.fromInt
+                    of
+                        Just count ->
+                            NewMessage count
 
-                            Nothing ->
-                                NoNotification
+                        Nothing ->
+                            NoNotification
 
 
 {-| How many unread messages are announced with a red circle in the guild column, i.e.
@@ -982,17 +990,16 @@ unmutedDirectMentions currentUser guildId maybeDirectMentions =
         Just directMentions ->
             SeqDict.foldl
                 (\( channelId, threadRoute ) count total ->
-                    case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId threadRoute of
-                        IsFullyMuted ->
-                            total
+                    if MuteSettings.hidesRedDot (MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId threadRoute) then
+                        total
 
-                        _ ->
-                            case total of
-                                Just total2 ->
-                                    OneOrGreater.plus count total2 |> Just
+                    else
+                        case total of
+                            Just total2 ->
+                                OneOrGreater.plus count total2 |> Just
 
-                                Nothing ->
-                                    Just count
+                            Nothing ->
+                                Just count
                 )
                 Nothing
                 (NonemptyDict.toSeqDict directMentions)
@@ -1014,17 +1021,16 @@ unmutedDiscordDirectMentions currentUser guildId maybeDirectMentions =
         Just directMentions ->
             SeqDict.foldl
                 (\( channelId, threadRoute ) count total ->
-                    case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId threadRoute of
-                        IsFullyMuted ->
-                            total
+                    if MuteSettings.hidesRedDot (MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId threadRoute) then
+                        total
 
-                        _ ->
-                            case total of
-                                Just total2 ->
-                                    OneOrGreater.plus count total2 |> Just
+                    else
+                        case total of
+                            Just total2 ->
+                                OneOrGreater.plus count total2 |> Just
 
-                                Nothing ->
-                                    Just count
+                            Nothing ->
+                                Just count
                 )
                 Nothing
                 (NonemptyDict.toSeqDict directMentions)
@@ -1049,22 +1055,21 @@ discordGuildHasNotifications currentDiscordUserId currentUser guildId guild =
     --            NoNotification
     --
     --else
-    case MuteSettings.isDiscordGuildSpecificallyMute currentUser.muteSettings guildId of
-        IsFullyMuted ->
-            NoNotification
+    if MuteSettings.hidesRedDot (MuteSettings.isDiscordGuildSpecificallyMute currentUser.muteSettings guildId) then
+        NoNotification
 
-        _ ->
-            case unmutedDiscordDirectMentions currentUser guildId (SeqDict.get guildId currentUser.discordDirectMentions) of
-                Just count ->
-                    NewMessageForUser count
+    else
+        case unmutedDiscordDirectMentions currentUser guildId (SeqDict.get guildId currentUser.discordDirectMentions) of
+            Just count ->
+                NewMessageForUser count
 
-                Nothing ->
-                    case discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild |> OneOrGreater.fromInt of
-                        Just count ->
-                            NewMessage count
+            Nothing ->
+                case discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild |> OneOrGreater.fromInt of
+                    Just count ->
+                        NewMessage count
 
-                        Nothing ->
-                            NoNotification
+                    Nothing ->
+                        NoNotification
 
 
 elLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Element FrontendMsg_
