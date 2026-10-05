@@ -1094,8 +1094,8 @@ type LocalMsg
 
 type RepliedToData
     = NoReplyData
-    | RepliedToMessage (Message (Id ChannelMessageId) (Id UserId) (Id ChannelId))
-    | RepliedToThreadMessage (Message (Id ThreadMessageId) (Id UserId) (Id ChannelId))
+    | RepliedToMessage (Message ChannelMessageId (Id UserId) (Id ChannelId))
+    | RepliedToThreadMessage (Message ThreadMessageId (Id UserId) (Id ChannelId))
     | RepliedToGame Game.LoadedMatch
 
 

@@ -2006,12 +2006,12 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                         , threadRoute = threadRouteWithMaybeReplyTo
                         , attachedFiles = attachedFiles
                         , stickers = stickers
-                        , repliedToGameData =
-                            Message.threadRouteRepliedToMatches threadRouteWithMaybeReplyTo
-                                |> DmChannel.loadRepliedToMatches
-                                    (GuildOrFullDmId_Guild id.guildId id.channelId)
-                                    model.goMatchPublicIds
-                                    channel2
+                        , repliedToData =
+                            Broadcast.repliedToData
+                                (GuildOrFullDmId_Guild id.guildId id.channelId)
+                                model.goMatchPublicIds
+                                channel2
+                                threadRouteWithMaybeReplyTo
                         }
                         |> ServerChange
                     )

@@ -8592,8 +8592,8 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                             )
 
-                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ _ ->
-                                            FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
+                                        Server_SendMessage data ->
+                                            FrontendExtra.handleServerSendMessage data.senderId data.guildOrDmId data.content data.threadRoute local loggedIn2 model
 
                                         Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo _ ->
                                             ( FrontendExtra.mapEncryptionRequests

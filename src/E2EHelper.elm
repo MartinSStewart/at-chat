@@ -2643,7 +2643,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"

@@ -129,10 +129,10 @@ import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
-import Thread exposing (FrontendGenericThread)
+import Thread exposing (FrontendGenericThread, FrontendThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -4302,7 +4302,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage { senderId, sender, sentAt, guildOrDmId, content, threadRoute, attachedFiles, stickers, repliedToGameData } ->
+                Server_SendMessage { senderId, sender, sentAt, guildOrDmId, content, threadRoute, attachedFiles, stickers, repliedToData } ->
                     case guildOrDmId of
                         GuildOrDmId_Guild id ->
                             case LocalState.getGuildAndChannel id local of
@@ -4363,7 +4363,7 @@ changeUpdate localMsg local =
                                                 id.guildId
                                                 guild
                                                 id.channelId
-                                                { channel | games = DmChannel.addRepliedToMatches repliedToGameData channel.games }
+                                                (addRepliedToData threadRoute repliedToData channel)
                                                 threadRoute
                                                 sentAt
                                                 senderId
@@ -4385,6 +4385,7 @@ changeUpdate localMsg local =
                         GuildOrDmId_Dm id ->
                             handleServerSendDmMessage
                                 id
+                                (frontendDmChannel id local |> addRepliedToData threadRoute repliedToData)
                                 senderId
                                 sender
                                 stickers
@@ -4405,7 +4406,6 @@ changeUpdate localMsg local =
                                         attachedFiles
                                 )
                                 threadRoute
-                                repliedToGameData
                                 local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -5727,6 +5727,9 @@ changeUpdate localMsg local =
                 Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo repliedToMatches ->
                     handleServerSendDmMessage
                         id
+                        (frontendDmChannel id local
+                            |> (\dmChannel -> { dmChannel | games = DmChannel.addRepliedToMatches repliedToMatches dmChannel.games })
+                        )
                         createdBy
                         createdByUser
                         -- TODO, solve stickers
@@ -5738,7 +5741,6 @@ changeUpdate localMsg local =
                             Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
                         threadRouteWithRepliedTo
-                        repliedToMatches
                         local
 
                 Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->
@@ -7942,18 +7944,99 @@ fileDecryptedMessages decrypted loggedIn =
     }
 
 
+frontendDmChannel : Viewing_DmId -> LocalState -> FrontendDmChannel
+frontendDmChannel id local =
+    SeqDict.get id.otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+
+
+{-| Loads what a new message replied to, so its reply preview can show even when that wasn't
+loaded yet.
+-}
+addRepliedToData :
+    ThreadRouteWithRepliedTo
+    -> RepliedToData
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+        }
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+        }
+addRepliedToData threadRoute repliedToData channel =
+    case repliedToData of
+        NoReplyData ->
+            channel
+
+        RepliedToMessage message ->
+            case threadRoute of
+                NoThreadWithRepliedTo (Message.RepliedToMessage messageId) ->
+                    { channel | messages = loadIfMissing messageId message channel.messages }
+
+                NoThreadWithRepliedTo (Message.RepliedToGame _ _) ->
+                    channel
+
+                NoThreadWithRepliedTo Message.NoReply ->
+                    channel
+
+                ViewThreadWithRepliedTo _ _ ->
+                    channel
+
+        RepliedToThreadMessage message ->
+            case threadRoute of
+                ViewThreadWithRepliedTo threadId (Just messageId) ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread -> { thread | messages = loadIfMissing messageId message thread.messages })
+                                channel.threads
+                    }
+
+                ViewThreadWithRepliedTo _ Nothing ->
+                    channel
+
+                NoThreadWithRepliedTo _ ->
+                    channel
+
+        RepliedToGame match ->
+            { channel
+                | games =
+                    DmChannel.addRepliedToMatches
+                        (Message.threadRouteRepliedToMatches threadRoute
+                            |> List.map (\matchId -> ( matchId, match ))
+                            |> SeqDict.fromList
+                        )
+                        channel.games
+            }
+
+
+loadIfMissing : Id messageId -> Message messageId userId channelId -> MessageArray messageId userId channelId -> MessageArray messageId userId channelId
+loadIfMissing messageId message messages =
+    case MessageArray.get messageId messages of
+        Just _ ->
+            messages
+
+        Nothing ->
+            MessageArray.set messageId message messages
+
+
 handleServerSendDmMessage :
     Viewing_DmId
+    -> FrontendDmChannel
     -> Id UserId
     -> FrontendUser
     -> SeqDict (Id StickerId) StickerData
     -> (Message.RepliedTo ChannelMessageId -> Message ChannelMessageId (Id UserId) (Id ChannelId))
     -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId) (Id ChannelId))
     -> ThreadRouteWithRepliedTo
-    -> SeqDict (Id ChannelMessageId) Game.LoadedMatch
     -> LocalState
     -> LocalState
-handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo repliedToMatches local =
+handleServerSendDmMessage id dmChannelBefore createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo local =
     let
         localUser : LocalUser
         localUser =
@@ -7965,9 +8048,7 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
 
         dmChannel : FrontendDmChannel
         dmChannel =
-            SeqDict.get id.otherUserId local.dmChannels
-                |> Maybe.withDefault DmChannel.frontendInit
-                |> (\a -> { a | lastTypedAt = SeqDict.remove createdBy a.lastTypedAt })
+            { dmChannelBefore | lastTypedAt = SeqDict.remove createdBy dmChannelBefore.lastTypedAt }
 
         dmChannel2 : FrontendDmChannel
         dmChannel2 =
@@ -7976,9 +8057,7 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
                     LocalState.createThreadMessageFrontend threadId (messageForThread maybeReplyTo) dmChannel
 
                 NoThreadWithRepliedTo repliedTo ->
-                    LocalState.createChannelMessageFrontend
-                        (messageForChannel repliedTo)
-                        { dmChannel | games = DmChannel.addRepliedToMatches repliedToMatches dmChannel.games }
+                    LocalState.createChannelMessageFrontend (messageForChannel repliedTo) dmChannel
 
         threadRouteNoReply : ThreadRoute
         threadRouteNoReply =

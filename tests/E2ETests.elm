@@ -2057,6 +2057,50 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "A new reply shows what it replied to even when that message isn't loaded"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ E2EHelper.writeMessage user 1000 "The original message"
+                , List.range 1 (VisibleMessages.pageSize + 4)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Filler " ++ String.fromInt index))
+                    |> T.group
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId2
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , E2EHelper.hasNotExactText userReload [ "The original message" ]
+                        , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                        , user.custom
+                            100
+                            (Dom.id "miniView_reply")
+                            "click"
+                            (Json.Encode.object
+                                [ ( "clientX", Json.Encode.int 300 )
+                                , ( "clientY", Json.Encode.int 300 )
+                                ]
+                            )
+                        , E2EHelper.writeMessage user 100 "A reply to the original"
+                        , E2EHelper.hasExactText userReload [ "A reply to the original" ]
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guild_replyLink_1"
+                                , Test.Html.Selector.containing [ Test.Html.Selector.text "The original message" ]
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
         E2EHelper.startTime
         normalConfig
