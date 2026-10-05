@@ -431,8 +431,9 @@ dmHasNotifications currentUser otherUserId dmChannel =
     channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) currentUser dmChannel |> OneOrGreater.fromInt
 
 
-{-| In the case of a channel, it's just the channel, not the threads it contains. A muted
-channel or thread never shows a notification, not even for a direct mention.
+{-| In the case of a channel, it's just the channel, not the threads it contains. A fully muted
+channel or thread never shows a notification, not even for a direct mention. A partially
+muted one only shows the red ones.
 -}
 channelOrThreadHasNotifications :
     IsMuted
@@ -445,8 +446,18 @@ channelOrThreadHasNotifications :
     -> ChannelNotificationType
 channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     case isMuted of
-        IsMuted ->
+        IsFullyMuted ->
             NoNotification
+
+        IsPartiallyMuted ->
+            channelOrThreadHasNotificationsHelper
+                maybeDirectMentions
+                notifyOnAllMessages
+                channelId
+                threadRoute
+                maybeLastViewed
+                channel
+                |> hideNewMessage
 
         IsNotMuted ->
             channelOrThreadHasNotificationsHelper
@@ -456,6 +467,16 @@ channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages 
                 threadRoute
                 maybeLastViewed
                 channel
+
+
+hideNewMessage : ChannelNotificationType -> ChannelNotificationType
+hideNewMessage notification =
+    case notification of
+        NewMessage _ ->
+            NoNotification
+
+        _ ->
+            notification
 
 
 channelOrThreadHasNotificationsHelper :
@@ -520,43 +541,38 @@ channelNewMessageCount guildOrDmId currentUser channel =
         channel.threads
 
 
-{-| Muted channels and threads are left out, so that a guild the user has muted parts of
-doesn't light up its icon for messages they said they don't want to hear about.
+{-| The unread message count of every channel and thread in the guild, next to how muted it is.
 -}
-guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> Int
-guildNewMessageCount currentUser guildId guild =
+guildNewMessageCounts : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> List ( IsMuted, Int )
+guildNewMessageCounts currentUser guildId guild =
     SeqDict.foldl
-        (\channelId channel count ->
+        (\channelId channel counts ->
             let
                 guildOrDmId : AnyGuildOrDmId
                 guildOrDmId =
                     GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
             in
             SeqDict.foldl
-                (\threadId thread count2 ->
-                    case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
-                        IsMuted ->
-                            count2
-
-                        IsNotMuted ->
-                            count2
-                                + newMessageCount
-                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
-                                    thread
+                (\threadId thread counts2 ->
+                    ( MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId)
+                    , newMessageCount (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage) thread
+                    )
+                        :: counts2
                 )
-                (case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread of
-                    IsMuted ->
-                        count
-
-                    IsNotMuted ->
-                        count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                (( MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread
+                 , newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                 )
+                    :: counts
                 )
                 channel.threads
         )
-        0
+        []
         guild.channels
 
 
+{-| Muted channels and threads (partially or fully) are left out, so that a guild the user has
+muted parts of doesn't light up its icon for messages they said they don't want to hear about.
+-}
 discordGuildNewMessageCount :
     Discord.Id Discord.UserId
     -> FrontendCurrentUser
@@ -574,21 +590,21 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
             SeqDict.foldl
                 (\threadId thread count2 ->
                     case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
-                        IsMuted ->
-                            count2
-
                         IsNotMuted ->
                             count2
                                 + newMessageCount
                                     (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                     thread
+
+                        _ ->
+                            count2
                 )
                 (case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
-                    IsMuted ->
-                        count
-
                     IsNotMuted ->
                         count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+
+                    _ ->
+                        count
                 )
                 channel.threads
         )
@@ -599,12 +615,29 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
 guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
 guildHasNotifications currentUser guildId guild =
     case MuteSettings.isGuildSpecificallyMute currentUser.muteSettings guildId of
-        IsMuted ->
+        IsFullyMuted ->
             NoNotification
 
-        IsNotMuted ->
+        _ ->
+            let
+                counts : List ( IsMuted, Int )
+                counts =
+                    guildNewMessageCounts currentUser guildId guild
+            in
             if SeqSet.member guildId currentUser.notifyOnAllMessages then
-                case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+                case
+                    List.foldl
+                        (\( isMuted, count ) total ->
+                            if isMuted == IsFullyMuted then
+                                total
+
+                            else
+                                total + count
+                        )
+                        0
+                        counts
+                        |> OneOrGreater.fromInt
+                of
                     Just count ->
                         NewMessageForUser count
 
@@ -617,7 +650,19 @@ guildHasNotifications currentUser guildId guild =
                         NewMessageForUser count
 
                     Nothing ->
-                        case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+                        case
+                            List.foldl
+                                (\( isMuted, count ) total ->
+                                    if isMuted == IsNotMuted then
+                                        total + count
+
+                                    else
+                                        total
+                                )
+                                0
+                                counts
+                                |> OneOrGreater.fromInt
+                        of
                             Just count ->
                                 NewMessage count
 
@@ -925,7 +970,7 @@ redNotificationCount notification =
             OneOrGreater.toInt count
 
 
-{-| Mentions in muted channels and threads don't count, the same way their messages don't.
+{-| Mentions in fully muted channels and threads don't count, the same way their messages don't.
 -}
 unmutedDirectMentions :
     FrontendCurrentUser
@@ -938,10 +983,10 @@ unmutedDirectMentions currentUser guildId maybeDirectMentions =
             SeqDict.foldl
                 (\( channelId, threadRoute ) count total ->
                     case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId threadRoute of
-                        IsMuted ->
+                        IsFullyMuted ->
                             total
 
-                        IsNotMuted ->
+                        _ ->
                             case total of
                                 Just total2 ->
                                     OneOrGreater.plus count total2 |> Just
@@ -956,7 +1001,7 @@ unmutedDirectMentions currentUser guildId maybeDirectMentions =
             Nothing
 
 
-{-| Mentions in muted Discord channels and threads don't count, the same way their messages
+{-| Mentions in fully muted Discord channels and threads don't count, the same way their messages
 don't.
 -}
 unmutedDiscordDirectMentions :
@@ -970,10 +1015,10 @@ unmutedDiscordDirectMentions currentUser guildId maybeDirectMentions =
             SeqDict.foldl
                 (\( channelId, threadRoute ) count total ->
                     case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId threadRoute of
-                        IsMuted ->
+                        IsFullyMuted ->
                             total
 
-                        IsNotMuted ->
+                        _ ->
                             case total of
                                 Just total2 ->
                                     OneOrGreater.plus count total2 |> Just
@@ -1005,10 +1050,10 @@ discordGuildHasNotifications currentDiscordUserId currentUser guildId guild =
     --
     --else
     case MuteSettings.isDiscordGuildSpecificallyMute currentUser.muteSettings guildId of
-        IsMuted ->
+        IsFullyMuted ->
             NoNotification
 
-        IsNotMuted ->
+        _ ->
             case unmutedDiscordDirectMentions currentUser guildId (SeqDict.get guildId currentUser.discordDirectMentions) of
                 Just count ->
                     NewMessageForUser count

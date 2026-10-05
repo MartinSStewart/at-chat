@@ -30,7 +30,6 @@ import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..), UserId)
 import MyUi
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 
 
@@ -38,13 +37,14 @@ type alias Model =
     { mutedGuilds : SeqDict (Id GuildId) MutedGuild
     , mutedDms : SeqDict (Id UserId) MutedChannel
     , mutedDiscordGuilds : SeqDict (Discord.Id Discord.GuildId) MutedDiscordGuild
-    , mutedDiscordDms : SeqSet (Discord.Id Discord.PrivateChannelId)
+    , mutedDiscordDms : SeqDict (Discord.Id Discord.PrivateChannelId) IsMuted
     }
 
 
 type IsMuted
-    = IsMuted
-    | IsNotMuted
+    = IsNotMuted
+    | IsPartiallyMuted
+    | IsFullyMuted
 
 
 type alias MutedGuild =
@@ -54,7 +54,7 @@ type alias MutedGuild =
 
 
 type alias MutedChannel =
-    { mutedChannel : IsMuted, mutedThreads : SeqSet (Id ChannelMessageId) }
+    { mutedChannel : IsMuted, mutedThreads : SeqDict (Id ChannelMessageId) IsMuted }
 
 
 type alias MutedDiscordGuild =
@@ -68,7 +68,7 @@ init =
     { mutedGuilds = SeqDict.empty
     , mutedDms = SeqDict.empty
     , mutedDiscordGuilds = SeqDict.empty
-    , mutedDiscordDms = SeqSet.empty
+    , mutedDiscordDms = SeqDict.empty
     }
 
 
@@ -84,12 +84,16 @@ view onPress isMuted =
                 IsNotMuted ->
                     Ui.html Icons.bell
 
-                IsMuted ->
+                IsPartiallyMuted ->
                     Ui.html Icons.bellSlash
+
+                IsFullyMuted ->
+                    Ui.html Icons.bellDoubleSlash
             ]
         )
         [ ( IsNotMuted, "Not muted" )
-        , ( IsMuted, "Muted (hide red/white dot)" )
+        , ( IsPartiallyMuted, "Partial mute (hide white dot)" )
+        , ( IsFullyMuted, "Fully muted (hide red/white dot)" )
         ]
 
 
@@ -151,11 +155,11 @@ setMuteThread guildId channelId threadId isMuted model =
             { channel
                 | mutedThreads =
                     case isMuted of
-                        IsMuted ->
-                            SeqSet.insert threadId channel.mutedThreads
-
                         IsNotMuted ->
-                            SeqSet.remove threadId channel.mutedThreads
+                            SeqDict.remove threadId channel.mutedThreads
+
+                        _ ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
             }
         )
         model
@@ -181,11 +185,11 @@ setMuteDiscordThread guildId channelId threadId isMuted model =
             { channel
                 | mutedThreads =
                     case isMuted of
-                        IsMuted ->
-                            SeqSet.insert threadId channel.mutedThreads
-
                         IsNotMuted ->
-                            SeqSet.remove threadId channel.mutedThreads
+                            SeqDict.remove threadId channel.mutedThreads
+
+                        _ ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
             }
         )
         model
@@ -208,7 +212,7 @@ updateMutedChannel guildId channelId updateFunc model =
                             SeqDict.update
                                 channelId
                                 (\maybeChannel ->
-                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqSet.empty } maybeChannel
+                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqDict.empty } maybeChannel
                                         |> updateFunc
                                         |> Just
                                 )
@@ -242,7 +246,7 @@ updateMutedDiscordChannel guildId channelId updateFunc model =
                             SeqDict.update
                                 channelId
                                 (\maybeChannel ->
-                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqSet.empty } maybeChannel
+                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqDict.empty } maybeChannel
                                         |> updateFunc
                                         |> Just
                                 )
@@ -285,11 +289,7 @@ isThreadSpecificallyMuted model guildId channelId threadId =
         Just guild ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    if SeqSet.member threadId channel.mutedThreads then
-                        IsMuted
-
-                    else
-                        IsNotMuted
+                    SeqDict.get threadId channel.mutedThreads |> Maybe.withDefault IsNotMuted
 
                 Nothing ->
                     IsNotMuted
@@ -302,33 +302,45 @@ isChannelMuted : Model -> Id GuildId -> Id ChannelId -> ThreadRoute -> IsMuted
 isChannelMuted model guildId channelId threadRoute =
     case SeqDict.get guildId model.mutedGuilds of
         Just guild ->
-            case guild.mutedGuild of
-                IsMuted ->
-                    IsMuted
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    strongest guild.mutedGuild (channelOrThreadMuted threadRoute channel)
 
-                IsNotMuted ->
-                    case SeqDict.get channelId guild.channels of
-                        Just channel ->
-                            case threadRoute of
-                                NoThread ->
-                                    channel.mutedChannel
-
-                                ViewThread threadId ->
-                                    case channel.mutedChannel of
-                                        IsMuted ->
-                                            IsMuted
-
-                                        IsNotMuted ->
-                                            if SeqSet.member threadId channel.mutedThreads then
-                                                IsMuted
-
-                                            else
-                                                IsNotMuted
-
-                        Nothing ->
-                            IsNotMuted
+                Nothing ->
+                    guild.mutedGuild
 
         Nothing ->
+            IsNotMuted
+
+
+channelOrThreadMuted : ThreadRoute -> MutedChannel -> IsMuted
+channelOrThreadMuted threadRoute channel =
+    case threadRoute of
+        NoThread ->
+            channel.mutedChannel
+
+        ViewThread threadId ->
+            SeqDict.get threadId channel.mutedThreads
+                |> Maybe.withDefault IsNotMuted
+                |> strongest channel.mutedChannel
+
+
+strongest : IsMuted -> IsMuted -> IsMuted
+strongest a b =
+    case ( a, b ) of
+        ( IsFullyMuted, _ ) ->
+            IsFullyMuted
+
+        ( _, IsFullyMuted ) ->
+            IsFullyMuted
+
+        ( IsPartiallyMuted, _ ) ->
+            IsPartiallyMuted
+
+        ( _, IsPartiallyMuted ) ->
+            IsPartiallyMuted
+
+        ( IsNotMuted, IsNotMuted ) ->
             IsNotMuted
 
 
@@ -336,21 +348,7 @@ isDmMuted : Model -> Id UserId -> ThreadRoute -> IsMuted
 isDmMuted model otherUserId threadRoute =
     case SeqDict.get otherUserId model.mutedDms of
         Just channel ->
-            case channel.mutedChannel of
-                IsMuted ->
-                    IsMuted
-
-                IsNotMuted ->
-                    case threadRoute of
-                        NoThread ->
-                            IsNotMuted
-
-                        ViewThread threadId ->
-                            if SeqSet.member threadId channel.mutedThreads then
-                                IsMuted
-
-                            else
-                                IsNotMuted
+            channelOrThreadMuted threadRoute channel
 
         Nothing ->
             IsNotMuted
@@ -358,11 +356,7 @@ isDmMuted model otherUserId threadRoute =
 
 isDiscordDmMuted : Model -> Discord.Id Discord.PrivateChannelId -> IsMuted
 isDiscordDmMuted model channelId =
-    if SeqSet.member channelId model.mutedDiscordDms then
-        IsMuted
-
-    else
-        IsNotMuted
+    SeqDict.get channelId model.mutedDiscordDms |> Maybe.withDefault IsNotMuted
 
 
 isDiscordGuildSpecificallyMute : Model -> Discord.Id Discord.GuildId -> IsMuted
@@ -401,11 +395,7 @@ isDiscordThreadSpecificallyMuted model guildId channelId threadId =
         Just guild ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    if SeqSet.member threadId channel.mutedThreads then
-                        IsMuted
-
-                    else
-                        IsNotMuted
+                    SeqDict.get threadId channel.mutedThreads |> Maybe.withDefault IsNotMuted
 
                 Nothing ->
                     IsNotMuted
@@ -418,31 +408,12 @@ isDiscordChannelMuted : Model -> Discord.Id Discord.GuildId -> Discord.Id Discor
 isDiscordChannelMuted model guildId channelId threadRoute =
     case SeqDict.get guildId model.mutedDiscordGuilds of
         Just guild ->
-            case guild.mutedGuild of
-                IsMuted ->
-                    IsMuted
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    strongest guild.mutedGuild (channelOrThreadMuted threadRoute channel)
 
-                IsNotMuted ->
-                    case SeqDict.get channelId guild.channels of
-                        Just channel ->
-                            case threadRoute of
-                                NoThread ->
-                                    channel.mutedChannel
-
-                                ViewThread threadId ->
-                                    case channel.mutedChannel of
-                                        IsMuted ->
-                                            IsMuted
-
-                                        IsNotMuted ->
-                                            if SeqSet.member threadId channel.mutedThreads then
-                                                IsMuted
-
-                                            else
-                                                IsNotMuted
-
-                        Nothing ->
-                            IsNotMuted
+                Nothing ->
+                    guild.mutedGuild
 
         Nothing ->
             IsNotMuted
