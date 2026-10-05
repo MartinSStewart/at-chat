@@ -11,6 +11,8 @@ module MessageInput exposing
     , editView
     , emptyPlaceholder
     , insertTab
+    , isInsideCodeBlock
+    , isInsideInlineCode
     , isPress
     , largePastedText
     , showEmojiSelectorButton
@@ -232,15 +234,32 @@ insertTab range text =
     String.left range.start text ++ tabText ++ String.dropLeft range.end text
 
 
-{-| The selection, but only if the cursor is inside a code block. This is an ad hoc check rather
-than a full parse: an odd number of triple backticks before the cursor means the most recent one
-opened a code block that hasn't been closed yet.
+{-| This is an ad hoc check rather than a full parse: an odd number of triple backticks before the
+cursor means the most recent one opened a code block that hasn't been closed yet.
 -}
+isInsideCodeBlock : Int -> String -> Bool
+isInsideCodeBlock cursor text =
+    modBy 2 (String.left cursor text |> String.indexes "```" |> List.length) == 1
+
+
+{-| Same idea as `isInsideCodeBlock`. Inline code can't span a line break so only the cursor's line
+is checked, and triple backticks are left out since they belong to code blocks.
+-}
+isInsideInlineCode : Int -> String -> Bool
+isInsideInlineCode cursor text =
+    case String.left cursor text |> String.split "\n" |> List.reverse of
+        currentLine :: _ ->
+            modBy 2 (String.replace "```" "" currentLine |> String.indexes "`" |> List.length) == 1
+
+        [] ->
+            False
+
+
 selectionInsideCodeBlock : String -> Maybe Range -> Maybe Range
 selectionInsideCodeBlock text maybeSelection =
     case maybeSelection of
         Just selection ->
-            if modBy 2 (String.left selection.start text |> String.indexes "```" |> List.length) == 1 then
+            if isInsideCodeBlock selection.start text then
                 Just selection
 
             else

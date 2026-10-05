@@ -18,7 +18,7 @@ module DmChannel exposing
     , loadMessages
     , loadOlderChannelMessages
     , loadOlderMessages
-    , loadRepliedToMatches
+    , loadRepliedToMatch
     , loadUnreadMessages
     , loadedMessages
     , toDiscordFrontendHelper
@@ -223,20 +223,29 @@ loadRepliedToMatches :
 loadRepliedToMatches guildOrDmId goMatchPublicIds channel matchIds =
     List.filterMap
         (\matchId ->
-            case SeqDict.get matchId channel.games of
-                Just gameData ->
-                    Just
-                        ( matchId
-                        , { gameData = gameData
-                          , publicLink = OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds
-                          }
-                        )
-
-                Nothing ->
-                    Nothing
+            loadRepliedToMatch guildOrDmId goMatchPublicIds channel matchId
+                |> Maybe.map (Tuple.pair matchId)
         )
         matchIds
         |> SeqDict.fromList
+
+
+loadRepliedToMatch :
+    GuildOrFullDmId
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> { a | games : SeqDict (Id ChannelMessageId) BackendGameData }
+    -> Id ChannelMessageId
+    -> Maybe Game.LoadedMatch
+loadRepliedToMatch guildOrDmId goMatchPublicIds channel matchId =
+    case SeqDict.get matchId channel.games of
+        Just gameData ->
+            Just
+                { gameData = gameData
+                , publicLink = OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds
+                }
+
+        Nothing ->
+            Nothing
 
 
 updateArray : Id messageId -> (a -> a) -> IdArray messageId a -> IdArray messageId a

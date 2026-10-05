@@ -3,6 +3,7 @@ module E2EMisc exposing
     , banMemberTest
     , channelSearchTest
     , channelSuggestionTest
+    , codeBlockCopyButtonTest
     , codeBlockInputTest
     , colorPickerTest
     , deleteAccountTest
@@ -18,6 +19,7 @@ module E2EMisc exposing
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
     , leaveGuildTest
+    , longMentionTest
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
@@ -1867,6 +1869,20 @@ mentionSuggestionTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
 
+                -- Nor is anything suggested inside a code block or inline code.
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nHey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 10, end = 10 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```code```\nHey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 17, end = 17 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey `x @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 9, end = 9 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "`code` ```code``` @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 20, end = 20 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+
                 -- Picking a suggestion closes the dropdown. The name it writes into the message
                 -- is put there by js, which these tests don't run, so the text it would have
                 -- left behind is typed in its place.
@@ -1889,6 +1905,30 @@ mentionSuggestionTest config =
                                 )
                     )
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "@Stevie Steve" ])
+                ]
+            )
+        ]
+
+
+{-| A mention is never split across lines, so one too long to fit on a phone is cut off
+with an ellipsis rather than making the conversation scroll sideways.
+-}
+longMentionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+longMentionTest config =
+    E2EHelper.startTest
+        "A long mention is cut off instead of scrolling sideways"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\_ user ->
+                [ E2EHelper.writeMessageMobile user ("@" ++ E2EHelper.adminName)
+                , E2EHelper.writeMessageMobile user ("Hello @" ++ E2EHelper.adminName ++ " how are you?")
+                , E2EHelper.writeMessageMobile user "Hello @Stevie Steve how are you? Mentions that fit stay on the line they're written on."
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ("@" ++ E2EHelper.adminName) ])
+                , user.snapshotView 100 { name = "Long mentions on a phone" }
                 ]
             )
         ]
@@ -1918,6 +1958,14 @@ emojiSuggestionTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":tada:" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nParty :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 15, end = 15 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party `x :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 14, end = 14 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
 
                 -- Picking a suggestion closes the dropdown. As with a mention, what it writes
                 -- into the message is put there by js, so the emoji it would have left behind
@@ -1954,6 +2002,12 @@ channelSuggestionTest config =
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "general" ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #zz"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nSee #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 12, end = 12 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "See `x #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }
@@ -2043,6 +2097,41 @@ codeBlockInputTest config =
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
                 , admin.checkModel 100 (checkDraft (Just "no code block"))
+                ]
+            )
+        ]
+
+
+{-| A code block naming a language comes out highlighted, and the button in its corner
+copies the code without the \`\`\` or the language name around it.
+-}
+codeBlockCopyButtonTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+codeBlockCopyButtonTest config =
+    E2EHelper.startTest
+        "Pressing a code block's copy button copies its code"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "```elm\nx = 1\n```"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.class "elmsh1", Test.Html.Selector.text "1" ])
+                , admin.click 100 (Dom.id "spoiler_1_copyCode_0")
+                , T.checkState
+                    100
+                    (\data ->
+                        case E2EHelper.copiedText admin.clientId data of
+                            Just "x = 1\n" ->
+                                Ok ()
+
+                            Just copied ->
+                                Err ("Expected the code to be copied but got " ++ copied)
+
+                            Nothing ->
+                                Err "Clipboard text not found"
+                    )
                 ]
             )
         ]

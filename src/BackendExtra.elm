@@ -1998,20 +1998,21 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                     clientId
                     id.guildId
                     (Server_SendMessage
-                        session.userId
-                        (User.backendToFrontendForUser user)
-                        time
-                        guildOrDmId
-                        richText
-                        threadRouteWithMaybeReplyTo
-                        attachedFiles
-                        stickers
-                        (Message.threadRouteRepliedToMatches threadRouteWithMaybeReplyTo
-                            |> DmChannel.loadRepliedToMatches
+                        { senderId = session.userId
+                        , sender = User.backendToFrontendForUser user
+                        , sentAt = time
+                        , guildOrDmId = guildOrDmId
+                        , content = richText
+                        , threadRoute = threadRouteWithMaybeReplyTo
+                        , attachedFiles = attachedFiles
+                        , stickers = stickers
+                        , repliedToData =
+                            Broadcast.repliedToData
                                 (GuildOrFullDmId_Guild id.guildId id.channelId)
                                 model.goMatchPublicIds
                                 channel2
-                        )
+                                threadRouteWithMaybeReplyTo
+                        }
                         |> ServerChange
                     )
                     model
@@ -2252,19 +2253,20 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                     id
                     (\id2 ->
                         Server_SendEncryptedMessage
-                            session.userId
-                            (User.backendToFrontendForUser user)
-                            time
-                            id2
-                            fileHashes
-                            contentAndEmbeds
-                            threadRouteWithReplyTo
-                            (Message.threadRouteRepliedToMatches threadRouteWithReplyTo
-                                |> DmChannel.loadRepliedToMatches
+                            { senderId = session.userId
+                            , sender = User.backendToFrontendForUser user
+                            , sentAt = time
+                            , id = id2
+                            , fileHashes = fileHashes
+                            , content = contentAndEmbeds
+                            , threadRoute = threadRouteWithReplyTo
+                            , repliedToData =
+                                Broadcast.repliedToData
                                     (GuildOrFullDmId_Dm dmChannelId)
                                     model.goMatchPublicIds
                                     dmChannel2
-                            )
+                                    threadRouteWithReplyTo
+                            }
                     )
                     model
                 , notificationCmd

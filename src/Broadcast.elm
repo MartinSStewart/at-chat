@@ -17,6 +17,7 @@ module Broadcast exposing
     , notificationEmailSubject
     , pushNotification
     , pushNotificationCodec
+    , repliedToData
     , toAdmins
     , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
@@ -61,7 +62,8 @@ import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (ChannelId, ChannelMessageId, GamePublicId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import IdArray exposing (IdArray)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -69,6 +71,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), ThreadRouteWithRepliedTo(..), UserTextMessageData)
 import MyUi
 import NonemptyDict
+import OneToOne exposing (OneToOne)
 import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
@@ -80,7 +83,8 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
-import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Thread exposing (BackendThread)
+import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), RepliedToData(..), ServerChange(..), ToFrontend(..))
 import Unsafe
 import Url
 import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), FrontendUser)
@@ -1591,6 +1595,50 @@ toEveryoneWhoCanSeeDiscordUser discordUserId serverChange model =
         |> Command.batch
 
 
+repliedToData :
+    DmChannelId.GuildOrFullDmId
+    -> OneToOne (SecretId GamePublicId) ( DmChannelId.GuildOrFullDmId, Id ChannelMessageId )
+    ->
+        { a
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+        }
+    -> ThreadRouteWithRepliedTo
+    -> RepliedToData
+repliedToData guildOrDmId goMatchPublicIds channel threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo (Message.RepliedToMessage messageId) ->
+            case IdArray.get messageId channel.messages of
+                Just message ->
+                    RepliedToMessage message
+
+                Nothing ->
+                    NoReplyData
+
+        NoThreadWithRepliedTo (Message.RepliedToGame matchId _) ->
+            case DmChannel.loadRepliedToMatch guildOrDmId goMatchPublicIds channel matchId of
+                Just match ->
+                    RepliedToGame match
+
+                Nothing ->
+                    NoReplyData
+
+        NoThreadWithRepliedTo Message.NoReply ->
+            NoReplyData
+
+        ViewThreadWithRepliedTo threadId (Just messageId) ->
+            case SeqDict.get threadId channel.threads |> Maybe.andThen (\thread -> IdArray.get messageId thread.messages) of
+                Just message ->
+                    RepliedToThreadMessage message
+
+                Nothing ->
+                    NoReplyData
+
+        ViewThreadWithRepliedTo _ Nothing ->
+            NoReplyData
+
+
 broadcastDm :
     ChangeId
     -> Time.Posix
@@ -1613,18 +1661,18 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
         dmChannelId =
             DmChannelId.fromUserIds userId otherUserId
 
-        repliedToMatches : SeqDict (Id ChannelMessageId) Game.LoadedMatch
-        repliedToMatches =
+        repliedToData2 : RepliedToData
+        repliedToData2 =
             case SeqDict.get dmChannelId model.dmChannels of
                 Just dmChannel ->
-                    Message.threadRouteRepliedToMatches threadRouteWithReplyTo
-                        |> DmChannel.loadRepliedToMatches
-                            (DmChannelId.GuildOrFullDmId_Dm dmChannelId)
-                            model.goMatchPublicIds
-                            dmChannel
+                    repliedToData
+                        (DmChannelId.GuildOrFullDmId_Dm dmChannelId)
+                        model.goMatchPublicIds
+                        dmChannel
+                        threadRouteWithReplyTo
 
                 Nothing ->
-                    SeqDict.empty
+                    NoReplyData
 
         isViewing : Bool
         isViewing =
@@ -1698,15 +1746,16 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
             { otherUserId = otherUserId }
             (\otherUserId2 ->
                 Server_SendMessage
-                    userId
-                    senderFrontendUser
-                    time
-                    (GuildOrDmId_Dm otherUserId2)
-                    message.content.content
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    stickers
-                    repliedToMatches
+                    { senderId = userId
+                    , sender = senderFrontendUser
+                    , sentAt = time
+                    , guildOrDmId = GuildOrDmId_Dm otherUserId2
+                    , content = message.content.content
+                    , threadRoute = threadRouteWithReplyTo
+                    , attachedFiles = attachedFiles
+                    , stickers = stickers
+                    , repliedToData = repliedToData2
+                    }
             )
             model
         , Command.batch cmds

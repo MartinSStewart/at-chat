@@ -129,10 +129,10 @@ import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
-import Thread exposing (FrontendGenericThread)
+import Thread exposing (FrontendGenericThread, FrontendThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -2425,6 +2425,12 @@ isPressMsg msg =
         DebouncedTyping ->
             False
 
+        CheckedSheepGameSaveDebounce _ _ _ _ ->
+            False
+
+        CheckedSheepGameQuestionsDebounce _ _ ->
+            False
+
         GotPingUserPosition _ _ ->
             False
 
@@ -2651,6 +2657,9 @@ isPressMsg msg =
             False
 
         PageHasFocusChanged _ ->
+            False
+
+        PageFocusSettled ->
             False
 
         GotServiceWorkerMessage _ ->
@@ -4293,7 +4302,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers repliedToMatches ->
+                Server_SendMessage { senderId, sender, sentAt, guildOrDmId, content, threadRoute, attachedFiles, stickers, repliedToData } ->
                     case guildOrDmId of
                         GuildOrDmId_Guild id ->
                             case LocalState.getGuildAndChannel id local of
@@ -4309,32 +4318,32 @@ changeUpdate localMsg local =
 
                                         threadRouteNoReply : ThreadRoute
                                         threadRouteNoReply =
-                                            Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo
+                                            Message.threadRouteWithoutRepliedTo threadRoute
 
                                         isViewing2 : Bool
                                         isViewing2 =
                                             isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply local
 
                                         ( currentlyViewing2, user2 ) =
-                                            case ( isViewing2, createdBy == localUser.session.userId ) of
+                                            case ( isViewing2, senderId == localUser.session.userId ) of
                                                 ( _, True ) ->
                                                     LocalState.ownMessageIsReadFrontend
                                                         (GuildOrDmId guildOrDmId)
-                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo) channel)
+                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRoute) channel)
                                                         ( localUser.currentlyViewing, user )
 
                                                 ( True, _ ) ->
                                                     LocalState.incrementLastViewedMessageFrontend
                                                         (GuildOrDmId guildOrDmId)
-                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo) channel)
+                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRoute) channel)
                                                         ( localUser.currentlyViewing, user )
 
                                                 ( False, _ ) ->
                                                     ( localUser.currentlyViewing
                                                     , if
                                                         LocalState.usersMentionedOrRepliedToFrontend
-                                                            (Message.toThreadRouteWithMaybeMessage threadRouteWithRepliedTo)
-                                                            text
+                                                            (Message.toThreadRouteWithMaybeMessage threadRoute)
+                                                            content
                                                             channel
                                                             |> SeqSet.member localUser.session.userId
                                                       then
@@ -4354,18 +4363,18 @@ changeUpdate localMsg local =
                                                 id.guildId
                                                 guild
                                                 id.channelId
-                                                { channel | games = DmChannel.addRepliedToMatches repliedToMatches channel.games }
-                                                threadRouteWithRepliedTo
-                                                createdAt
-                                                createdBy
-                                                text
+                                                (addRepliedToData threadRoute repliedToData channel)
+                                                threadRoute
+                                                sentAt
+                                                senderId
+                                                content
                                                 attachedFiles
                                                 local
                                         , localUser =
                                             { localUser
                                                 | user = user2
                                                 , currentlyViewing = currentlyViewing2
-                                                , otherUsers = addMessageSender createdBy createdByUser localUser
+                                                , otherUsers = addMessageSender senderId sender localUser
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
@@ -4376,27 +4385,27 @@ changeUpdate localMsg local =
                         GuildOrDmId_Dm id ->
                             handleServerSendDmMessage
                                 id
-                                createdBy
-                                createdByUser
+                                (frontendDmChannel id local |> addRepliedToData threadRoute repliedToData)
+                                senderId
+                                sender
                                 stickers
                                 (\repliedTo ->
                                     Message.userTextMessageFrontend
-                                        createdAt
-                                        createdBy
-                                        text
+                                        sentAt
+                                        senderId
+                                        content
                                         repliedTo
                                         attachedFiles
                                 )
                                 (\maybeReplyTo ->
                                     Message.userTextMessageFrontend
-                                        createdAt
-                                        createdBy
-                                        text
+                                        sentAt
+                                        senderId
+                                        content
                                         (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                 )
-                                threadRouteWithRepliedTo
-                                repliedToMatches
+                                threadRoute
                                 local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -5715,21 +5724,21 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo repliedToMatches ->
+                Server_SendEncryptedMessage { senderId, sender, sentAt, id, fileHashes, content, threadRoute, repliedToData } ->
                     handleServerSendDmMessage
                         id
-                        createdBy
-                        createdByUser
+                        (frontendDmChannel id local |> addRepliedToData threadRoute repliedToData)
+                        senderId
+                        sender
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\repliedTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content repliedTo
+                            Message.encryptedUserTextMessageFrontend sentAt senderId fileHashes content repliedTo
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
+                            Message.encryptedUserTextMessageFrontend sentAt senderId fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
-                        threadRouteWithRepliedTo
-                        repliedToMatches
+                        threadRoute
                         local
 
                 Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->
@@ -7022,12 +7031,16 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
         nameSoFar : Int -> String -> Maybe NameSoFar
         nameSoFar caret text =
-            case timeOffsetSoFar caret text of
-                Just timeOffset ->
-                    Just timeOffset
+            if MessageInput.isInsideCodeBlock caret text || MessageInput.isInsideInlineCode caret text then
+                Nothing
 
-                Nothing ->
-                    helper caret text
+            else
+                case timeOffsetSoFar caret text of
+                    Just timeOffset ->
+                        Just timeOffset
+
+                    Nothing ->
+                        helper caret text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
@@ -7929,18 +7942,99 @@ fileDecryptedMessages decrypted loggedIn =
     }
 
 
+frontendDmChannel : Viewing_DmId -> LocalState -> FrontendDmChannel
+frontendDmChannel id local =
+    SeqDict.get id.otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+
+
+{-| Loads what a new message replied to, so its reply preview can show even when that wasn't
+loaded yet.
+-}
+addRepliedToData :
+    ThreadRouteWithRepliedTo
+    -> RepliedToData
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+        }
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+        }
+addRepliedToData threadRoute repliedToData channel =
+    case repliedToData of
+        NoReplyData ->
+            channel
+
+        RepliedToMessage message ->
+            case threadRoute of
+                NoThreadWithRepliedTo (Message.RepliedToMessage messageId) ->
+                    { channel | messages = loadIfMissing messageId message channel.messages }
+
+                NoThreadWithRepliedTo (Message.RepliedToGame _ _) ->
+                    channel
+
+                NoThreadWithRepliedTo Message.NoReply ->
+                    channel
+
+                ViewThreadWithRepliedTo _ _ ->
+                    channel
+
+        RepliedToThreadMessage message ->
+            case threadRoute of
+                ViewThreadWithRepliedTo threadId (Just messageId) ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread -> { thread | messages = loadIfMissing messageId message thread.messages })
+                                channel.threads
+                    }
+
+                ViewThreadWithRepliedTo _ Nothing ->
+                    channel
+
+                NoThreadWithRepliedTo _ ->
+                    channel
+
+        RepliedToGame match ->
+            { channel
+                | games =
+                    DmChannel.addRepliedToMatches
+                        (Message.threadRouteRepliedToMatches threadRoute
+                            |> List.map (\matchId -> ( matchId, match ))
+                            |> SeqDict.fromList
+                        )
+                        channel.games
+            }
+
+
+loadIfMissing : Id messageId -> Message messageId userId channelId -> MessageArray messageId userId channelId -> MessageArray messageId userId channelId
+loadIfMissing messageId message messages =
+    case MessageArray.get messageId messages of
+        Just _ ->
+            messages
+
+        Nothing ->
+            MessageArray.set messageId message messages
+
+
 handleServerSendDmMessage :
     Viewing_DmId
+    -> FrontendDmChannel
     -> Id UserId
     -> FrontendUser
     -> SeqDict (Id StickerId) StickerData
     -> (Message.RepliedTo ChannelMessageId -> Message ChannelMessageId (Id UserId) (Id ChannelId))
     -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId) (Id ChannelId))
     -> ThreadRouteWithRepliedTo
-    -> SeqDict (Id ChannelMessageId) Game.LoadedMatch
     -> LocalState
     -> LocalState
-handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo repliedToMatches local =
+handleServerSendDmMessage id dmChannelBefore createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo local =
     let
         localUser : LocalUser
         localUser =
@@ -7952,9 +8046,7 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
 
         dmChannel : FrontendDmChannel
         dmChannel =
-            SeqDict.get id.otherUserId local.dmChannels
-                |> Maybe.withDefault DmChannel.frontendInit
-                |> (\a -> { a | lastTypedAt = SeqDict.remove createdBy a.lastTypedAt })
+            { dmChannelBefore | lastTypedAt = SeqDict.remove createdBy dmChannelBefore.lastTypedAt }
 
         dmChannel2 : FrontendDmChannel
         dmChannel2 =
@@ -7963,9 +8055,7 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
                     LocalState.createThreadMessageFrontend threadId (messageForThread maybeReplyTo) dmChannel
 
                 NoThreadWithRepliedTo repliedTo ->
-                    LocalState.createChannelMessageFrontend
-                        (messageForChannel repliedTo)
-                        { dmChannel | games = DmChannel.addRepliedToMatches repliedToMatches dmChannel.games }
+                    LocalState.createChannelMessageFrontend (messageForChannel repliedTo) dmChannel
 
         threadRouteNoReply : ThreadRoute
         threadRouteNoReply =

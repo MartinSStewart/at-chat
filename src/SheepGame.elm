@@ -281,6 +281,7 @@ type GameMsg
     | UserScrolledResults ScrollPosition
     | ReactionMsg ReactionTarget MessageView.MessageViewMsg
     | PressedImage RichText.PressedImageData
+    | PressedCopyCode String
     | PressedNewQuestionRevealed
     | NoOp
 
@@ -524,6 +525,7 @@ type OutMsg
       -- An image attached to a question, an answer or a note, pressed to see it full size.
       -- Where that gets shown is the frontend's business rather than the game's.
     | ShowImage RichText.PressedImageData
+    | CopyText String
     | SetFocusOnQuestion (Id QuestionId)
 
 
@@ -1271,6 +1273,9 @@ updateGame localUser setup shared msg model =
 
         PressedImage pressedImageData ->
             ( model, Nothing, ShowImage pressedImageData )
+
+        PressedCopyCode text ->
+            ( model, Nothing, CopyText text )
 
         NoOp ->
             ( model, Nothing, NoOutMsg )
@@ -2076,6 +2081,7 @@ contentView time contentWidth localUser isHovered htmlId attachedFiles content =
         , isHovered = isHovered
         , noOp = NoOp
         , onPressChannelMention = \_ _ -> NoOp
+        , onPressCopyCode = PressedCopyCode
         }
         Array.empty
         content

@@ -12,8 +12,6 @@
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
 * Adding images to an existing Discord message doesn't work
 * A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
-* Two messages get sent and it seems to happen for Discord and normal users. In the latest case, it was in a DM and the
-  user saw duplicated messages for both themselves and the other user.
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
 * lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then

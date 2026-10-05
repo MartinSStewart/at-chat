@@ -1,5 +1,6 @@
 module E2ESheepGame exposing (imageInQuestionOpensImageViewerTest, tests)
 
+import Array
 import Audio
 import Coord
 import E2EHelper
@@ -9,7 +10,7 @@ import Expect
 import FileStatus
 import Game
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (ChannelMessageId, GuildOrDmId(..), Id)
 import Json.Encode
 import SeqDict
 import SheepGame
@@ -27,6 +28,7 @@ tests normalConfig =
         [ sheepGameDmTest normalConfig
         , setupNeedsAQuestionTest normalConfig
         , questionsSurviveAReloadTest normalConfig
+        , answerSavesAfterLeavingTheTabTest normalConfig
         , threePlayerMatchTest normalConfig
         , mobileHostMatchTest normalConfig
         ]
@@ -239,6 +241,95 @@ sheepGameDmTest normalConfig =
                 ]
             )
         ]
+
+
+{-| An answer saves a moment after the typing stops, and a player who leaves the games tab
+within that moment, to say they're done in the chat say, still has it saved.
+-}
+answerSavesAfterLeavingTheTabTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+answerSavesAfterLeavingTheTabTest normalConfig =
+    E2EHelper.startTest
+        "A sheep game answer still saves when the player leaves the games tab straight away"
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ E2EHelper.openDm user 1000 "0"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+                        , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
+                        , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+                        , admin.click 100 (Dom.id "sheepGame_start")
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
+                        , user.input 100 (Dom.id "sheepGame_answer_0") "blue"
+                        , user.click 100 (Dom.id "guild_openDescription")
+                        , T.checkBackend 100 (checkSubmittedAnswerCount 1)
+
+                        -- program-test runs Process.sleep straight away, so the save that typing
+                        -- scheduled has already happened. Handing it over again now is how it
+                        -- arrives for real when the player has left the tab within the delay.
+                        , user.update
+                            100
+                            (Audio.userMsg
+                                (Types.CheckedSheepGameSaveDebounce
+                                    (GuildOrDmId_Dm { otherUserId = Id.fromInt 0 })
+                                    (Id.fromInt 0)
+                                    (SheepGame.AnswerInput (Id.fromInt 0))
+                                    1
+                                )
+                            )
+                        , T.checkBackend 100 (checkSubmittedAnswerCount 2)
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+checkSubmittedAnswerCount : Int -> E2EHelper.BackendModel2 -> Result String ()
+checkSubmittedAnswerCount expected backend =
+    let
+        count : Int
+        count =
+            SeqDict.values (E2EHelper.unwrapBackend backend).dmChannels
+                |> List.concatMap (\dmChannel -> SeqDict.values dmChannel.games)
+                |> List.concatMap
+                    (\game ->
+                        case game of
+                            Game.GameData_SheepGame _ actions _ ->
+                                Array.toList actions
+
+                            _ ->
+                                []
+                    )
+                |> List.filter
+                    (\action ->
+                        case action.change of
+                            SheepGame.SubmittedAnswer _ _ ->
+                                True
+
+                            _ ->
+                                False
+                    )
+                |> List.length
+    in
+    if count == expected then
+        Ok ()
+
+    else
+        Err ("Expected " ++ String.fromInt expected ++ " saved answers but the backend has " ++ String.fromInt count)
 
 
 {-| The host can't start a match without writing something to answer.

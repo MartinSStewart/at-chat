@@ -183,7 +183,7 @@ errorBox htmlId onPress error =
             , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
             , Ui.spacing 4
             ]
-            (Ui.html Icons.copy)
+            (Ui.html (Icons.copy 22))
         ]
 
 
@@ -249,10 +249,10 @@ copyBox htmlId label2 pressedCopyText noOp loaded text =
                             Ui.text "Copied!"
 
                         else
-                            Ui.html Icons.copy
+                            Ui.html (Icons.copy 22)
 
                     Nothing ->
-                        Ui.html Icons.copy
+                        Ui.html (Icons.copy 22)
                 )
             ]
         ]
@@ -320,10 +320,10 @@ newPasswordCopyBox htmlId label2 pressedCopyText noOp loaded text =
                             Ui.text "Copied!"
 
                         else
-                            Ui.html Icons.copy
+                            Ui.html (Icons.copy 22)
 
                     Nothing ->
-                        Ui.html Icons.copy
+                        Ui.html (Icons.copy 22)
                 )
             ]
         ]
@@ -1475,8 +1475,22 @@ body {
   }
 }
 """
+                ++ elmSyntaxHighlight
             )
         ]
+
+
+elmSyntaxHighlight : String
+elmSyntaxHighlight =
+    ".elmsh {color: inherit; font: inherit; background: transparent;}\n"
+        ++ ".elmsh-comm {color: rgb(128,136,150); font-style: italic;}\n"
+        ++ ".elmsh1 {color: rgb(209,154,102);}\n"
+        ++ ".elmsh2 {color: rgb(152,195,121);}\n"
+        ++ ".elmsh3 {color: rgb(198,120,221);}\n"
+        ++ (".elmsh4 {color: " ++ colorToStyle font3 ++ ";}\n")
+        ++ (".elmsh5 {color: " ++ colorToStyle guildIconSelectedBorder ++ ";}\n")
+        ++ ".elmsh6 {color: rgb(229,192,123);}\n"
+        ++ ".elmsh7 {color: rgb(224,108,117);}\n"
 
 
 {-| Noto Sans is used for all normal text so that text placement is consistent
@@ -1570,6 +1584,12 @@ userLabelHtmlAttributes =
     , Html.Attributes.style "color" (colorToStyle userLabelFontColor)
     , Html.Attributes.style "border-radius" "2px"
     , Html.Attributes.style "white-space" "nowrap"
+    , Html.Attributes.style "display" "inline-block"
+    , Html.Attributes.style "max-width" "100%"
+    , Html.Attributes.style "overflow" "clip"
+    , Html.Attributes.style "text-overflow" "ellipsis"
+    , Html.Attributes.style "line-height" "normal"
+    , Html.Attributes.style "margin-top" "-1px"
     ]
 
 

@@ -840,66 +840,64 @@ unreadOverviewChannels local allDiscordUsers =
                         guildOrDmId =
                             GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                     in
-                    (case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread of
-                        IsNotMuted ->
-                            unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
-                                |> Maybe.map
-                                    (\unread ->
-                                        [ { source = channelSource guild.name channel.name
-                                          , route =
-                                                GuildRoute
-                                                    guildId
-                                                    (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
-                                                    ChannelsHiddenOnMobile
-                                                    Nothing
-                                          , guildOrDmId = guildOrDmId
-                                          , threadRoute = NoThreadWithMessage unread.newestMessageId
-                                          , additionalUnread = unread.additionalUnread
-                                          , oldestAt = unread.oldestAt
-                                          , messages = UnreadOverviewMessages unread.messages
-                                          }
-                                        ]
-                                    )
-                                |> Maybe.withDefault []
+                    (if showInUnreadOverview (MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread) (SeqSet.member guildId currentUser.notifyOnAllMessages || isMentioned (SeqDict.get guildId currentUser.directMentions) ( channelId, NoThread )) then
+                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                            |> Maybe.map
+                                (\unread ->
+                                    [ { source = channelSource guild.name channel.name
+                                      , route =
+                                            GuildRoute
+                                                guildId
+                                                (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
+                                                ChannelsHiddenOnMobile
+                                                Nothing
+                                      , guildOrDmId = guildOrDmId
+                                      , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                      , additionalUnread = unread.additionalUnread
+                                      , oldestAt = unread.oldestAt
+                                      , messages = UnreadOverviewMessages unread.messages
+                                      }
+                                    ]
+                                )
+                            |> Maybe.withDefault []
 
-                        IsMuted ->
-                            []
+                     else
+                        []
                     )
                         ++ List.filterMap
                             (\( threadId, thread ) ->
-                                case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
-                                    IsNotMuted ->
-                                        unreadMessages
-                                            (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
-                                            thread
-                                            |> Maybe.map
-                                                (\unread ->
-                                                    { source =
-                                                        threadSource
-                                                            guild.name
-                                                            channel.name
-                                                            (threadPreviewText local.localUser.timezone allUsers (LocalState.guildChannelMentions local.localUser guild.channels) threadId local.localUser.decryptedMessages channel)
-                                                    , route =
-                                                        GuildRoute
-                                                            guildId
-                                                            (ChannelRoute
-                                                                channelId
-                                                                (ViewThreadWithFriends threadId Nothing HideChannelSettings)
-                                                                Nothing
-                                                            )
-                                                            ChannelsHiddenOnMobile
+                                if showInUnreadOverview (MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId)) (SeqSet.member guildId currentUser.notifyOnAllMessages || isMentioned (SeqDict.get guildId currentUser.directMentions) ( channelId, ViewThread threadId )) then
+                                    unreadMessages
+                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                        thread
+                                        |> Maybe.map
+                                            (\unread ->
+                                                { source =
+                                                    threadSource
+                                                        guild.name
+                                                        channel.name
+                                                        (threadPreviewText local.localUser.timezone allUsers (LocalState.guildChannelMentions local.localUser guild.channels) threadId local.localUser.decryptedMessages channel)
+                                                , route =
+                                                    GuildRoute
+                                                        guildId
+                                                        (ChannelRoute
+                                                            channelId
+                                                            (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                                                             Nothing
-                                                    , guildOrDmId = guildOrDmId
-                                                    , threadRoute =
-                                                        ViewThreadWithMessage threadId unread.newestMessageId
-                                                    , additionalUnread = unread.additionalUnread
-                                                    , oldestAt = unread.oldestAt
-                                                    , messages = UnreadOverviewThreadMessages threadId unread.messages
-                                                    }
-                                                )
+                                                        )
+                                                        ChannelsHiddenOnMobile
+                                                        Nothing
+                                                , guildOrDmId = guildOrDmId
+                                                , threadRoute =
+                                                    ViewThreadWithMessage threadId unread.newestMessageId
+                                                , additionalUnread = unread.additionalUnread
+                                                , oldestAt = unread.oldestAt
+                                                , messages = UnreadOverviewThreadMessages threadId unread.messages
+                                                }
+                                            )
 
-                                    IsMuted ->
-                                        Nothing
+                                else
+                                    Nothing
                             )
                             (SeqDict.toList channel.threads)
                 )
@@ -913,65 +911,63 @@ unreadOverviewChannels local allDiscordUsers =
                     guildOrDmId =
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })
                 in
-                (case MuteSettings.isDmMuted currentUser.muteSettings otherUserId NoThread of
-                    IsNotMuted ->
-                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
-                            |> Maybe.map
-                                (\unread ->
-                                    [ { source = dmSource otherUserId local.localUser
-                                      , route =
-                                            DmRoute
-                                                { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
-                                                , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
-                                                , tab = Nothing
-                                                , channelsVisible = ChannelsHiddenOnMobile
-                                                , overlay = Nothing
-                                                }
-                                      , guildOrDmId = guildOrDmId
-                                      , threadRoute = NoThreadWithMessage unread.newestMessageId
-                                      , additionalUnread = unread.additionalUnread
-                                      , oldestAt = unread.oldestAt
-                                      , messages = UnreadOverviewMessages unread.messages
-                                      }
-                                    ]
-                                )
-                            |> Maybe.withDefault []
+                (if MuteSettings.hidesRedDot (MuteSettings.isDmMuted currentUser.muteSettings otherUserId NoThread) then
+                    []
 
-                    IsMuted ->
-                        []
+                 else
+                    unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
+                        |> Maybe.map
+                            (\unread ->
+                                [ { source = dmSource otherUserId local.localUser
+                                  , route =
+                                        DmRoute
+                                            { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
+                                            , tab = Nothing
+                                            , channelsVisible = ChannelsHiddenOnMobile
+                                            , overlay = Nothing
+                                            }
+                                  , guildOrDmId = guildOrDmId
+                                  , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                  , additionalUnread = unread.additionalUnread
+                                  , oldestAt = unread.oldestAt
+                                  , messages = UnreadOverviewMessages unread.messages
+                                  }
+                                ]
+                            )
+                        |> Maybe.withDefault []
                 )
                     ++ List.filterMap
                         (\( threadId, thread ) ->
-                            case MuteSettings.isDmMuted currentUser.muteSettings otherUserId (ViewThread threadId) of
-                                IsNotMuted ->
-                                    unreadMessages
-                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
-                                        thread
-                                        |> Maybe.map
-                                            (\unread ->
-                                                { source =
-                                                    dmThreadSource
-                                                        otherUserId
-                                                        local.localUser
-                                                        (threadPreviewText local.localUser.timezone allUsers SeqDict.empty threadId local.localUser.decryptedMessages dmChannel)
-                                                , route =
-                                                    DmRoute
-                                                        { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
-                                                        , threadRoute = ViewThreadWithFriends threadId Nothing HideChannelSettings
-                                                        , tab = Nothing
-                                                        , channelsVisible = ChannelsHiddenOnMobile
-                                                        , overlay = Nothing
-                                                        }
-                                                , guildOrDmId = guildOrDmId
-                                                , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
-                                                , additionalUnread = unread.additionalUnread
-                                                , oldestAt = unread.oldestAt
-                                                , messages = UnreadOverviewThreadMessages threadId unread.messages
-                                                }
-                                            )
+                            if MuteSettings.hidesRedDot (MuteSettings.isDmMuted currentUser.muteSettings otherUserId (ViewThread threadId)) then
+                                Nothing
 
-                                IsMuted ->
-                                    Nothing
+                            else
+                                unreadMessages
+                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                    thread
+                                    |> Maybe.map
+                                        (\unread ->
+                                            { source =
+                                                dmThreadSource
+                                                    otherUserId
+                                                    local.localUser
+                                                    (threadPreviewText local.localUser.timezone allUsers SeqDict.empty threadId local.localUser.decryptedMessages dmChannel)
+                                            , route =
+                                                DmRoute
+                                                    { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                                    , threadRoute = ViewThreadWithFriends threadId Nothing HideChannelSettings
+                                                    , tab = Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+                                            , guildOrDmId = guildOrDmId
+                                            , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
+                                            , additionalUnread = unread.additionalUnread
+                                            , oldestAt = unread.oldestAt
+                                            , messages = UnreadOverviewThreadMessages threadId unread.messages
+                                            }
+                                        )
                         )
                         (SeqDict.toList dmChannel.threads)
             )
@@ -988,86 +984,84 @@ unreadOverviewChannels local allDiscordUsers =
                                         DiscordGuildOrDmId
                                             (DiscordGuildOrDmId_Guild { currentUserId = currentDiscordUserId, guildId = guildId, channelId = channelId })
                                 in
-                                (case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
-                                    IsNotMuted ->
-                                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
-                                            |> Maybe.map
-                                                (\unread ->
-                                                    [ { source = channelSource guild.name channel.name
-                                                      , route =
-                                                            DiscordGuildRoute
-                                                                { currentDiscordUserId = currentDiscordUserId
-                                                                , guildId = guildId
-                                                                , channelRoute =
-                                                                    DiscordChannel_ChannelRoute
-                                                                        channelId
-                                                                        (NoThreadWithFriends Nothing HideChannelSettings)
-                                                                        Nothing
-                                                                , channelsVisible = ChannelsHiddenOnMobile
-                                                                , overlay = Nothing
-                                                                }
-                                                      , guildOrDmId = guildOrDmId
-                                                      , threadRoute = NoThreadWithMessage unread.newestMessageId
-                                                      , additionalUnread = unread.additionalUnread
-                                                      , oldestAt = unread.oldestAt
-                                                      , messages =
-                                                            UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
-                                                      }
-                                                    ]
-                                                )
-                                            |> Maybe.withDefault []
+                                (if showInUnreadOverview (MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread) (SeqSet.member guildId currentUser.discordNotifyOnAllMessages || isMentioned (SeqDict.get guildId currentUser.discordDirectMentions) ( channelId, NoThread )) then
+                                    unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                                        |> Maybe.map
+                                            (\unread ->
+                                                [ { source = channelSource guild.name channel.name
+                                                  , route =
+                                                        DiscordGuildRoute
+                                                            { currentDiscordUserId = currentDiscordUserId
+                                                            , guildId = guildId
+                                                            , channelRoute =
+                                                                DiscordChannel_ChannelRoute
+                                                                    channelId
+                                                                    (NoThreadWithFriends Nothing HideChannelSettings)
+                                                                    Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
+                                                            }
+                                                  , guildOrDmId = guildOrDmId
+                                                  , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                                  , additionalUnread = unread.additionalUnread
+                                                  , oldestAt = unread.oldestAt
+                                                  , messages =
+                                                        UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
+                                                  }
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
 
-                                    IsMuted ->
-                                        []
+                                 else
+                                    []
                                 )
                                     ++ List.filterMap
                                         (\( threadId, thread ) ->
-                                            case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
-                                                IsNotMuted ->
-                                                    unreadMessages
-                                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
-                                                        thread
-                                                        |> Maybe.map
-                                                            (\unread ->
-                                                                { source =
-                                                                    threadSource
-                                                                        guild.name
-                                                                        channel.name
-                                                                        (threadPreviewText
-                                                                            local.localUser.timezone
-                                                                            allDiscordUsers
-                                                                            (LocalState.discordGuildChannelMentions local.localUser guild.channels)
-                                                                            threadId
-                                                                            SeqDict.empty
-                                                                            channel
-                                                                        )
-                                                                , route =
-                                                                    DiscordGuildRoute
-                                                                        { currentDiscordUserId = currentDiscordUserId
-                                                                        , guildId = guildId
-                                                                        , channelRoute =
-                                                                            DiscordChannel_ChannelRoute
-                                                                                channelId
-                                                                                (ViewThreadWithFriends threadId Nothing HideChannelSettings)
-                                                                                Nothing
-                                                                        , channelsVisible = ChannelsHiddenOnMobile
-                                                                        , overlay = Nothing
-                                                                        }
-                                                                , guildOrDmId = guildOrDmId
-                                                                , threadRoute =
-                                                                    ViewThreadWithMessage threadId unread.newestMessageId
-                                                                , additionalUnread = unread.additionalUnread
-                                                                , oldestAt = unread.oldestAt
-                                                                , messages =
-                                                                    UnreadOverviewDiscordThreadMessages
+                                            if showInUnreadOverview (MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId)) (SeqSet.member guildId currentUser.discordNotifyOnAllMessages || isMentioned (SeqDict.get guildId currentUser.discordDirectMentions) ( channelId, ViewThread threadId )) then
+                                                unreadMessages
+                                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                                    thread
+                                                    |> Maybe.map
+                                                        (\unread ->
+                                                            { source =
+                                                                threadSource
+                                                                    guild.name
+                                                                    channel.name
+                                                                    (threadPreviewText
+                                                                        local.localUser.timezone
+                                                                        allDiscordUsers
+                                                                        (LocalState.discordGuildChannelMentions local.localUser guild.channels)
                                                                         threadId
-                                                                        currentDiscordUserId
-                                                                        unread.messages
-                                                                }
-                                                            )
+                                                                        SeqDict.empty
+                                                                        channel
+                                                                    )
+                                                            , route =
+                                                                DiscordGuildRoute
+                                                                    { currentDiscordUserId = currentDiscordUserId
+                                                                    , guildId = guildId
+                                                                    , channelRoute =
+                                                                        DiscordChannel_ChannelRoute
+                                                                            channelId
+                                                                            (ViewThreadWithFriends threadId Nothing HideChannelSettings)
+                                                                            Nothing
+                                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                                    , overlay = Nothing
+                                                                    }
+                                                            , guildOrDmId = guildOrDmId
+                                                            , threadRoute =
+                                                                ViewThreadWithMessage threadId unread.newestMessageId
+                                                            , additionalUnread = unread.additionalUnread
+                                                            , oldestAt = unread.oldestAt
+                                                            , messages =
+                                                                UnreadOverviewDiscordThreadMessages
+                                                                    threadId
+                                                                    currentDiscordUserId
+                                                                    unread.messages
+                                                            }
+                                                        )
 
-                                                IsMuted ->
-                                                    Nothing
+                                            else
+                                                Nothing
                                         )
                                         (SeqDict.toList channel.threads)
                             )
@@ -1081,10 +1075,10 @@ unreadOverviewChannels local allDiscordUsers =
             (\( channelId, dmChannel ) ->
                 case
                     ( GuildColumn.discordDmCurrentUserId local.localUser dmChannel
-                    , MuteSettings.isDiscordDmMuted currentUser.muteSettings channelId
+                    , MuteSettings.hidesRedDot (MuteSettings.isDiscordDmMuted currentUser.muteSettings channelId)
                     )
                 of
-                    ( Just currentDiscordUserId, IsNotMuted ) ->
+                    ( Just currentDiscordUserId, False ) ->
                         let
                             guildOrDmId : AnyGuildOrDmId
                             guildOrDmId =
@@ -1336,6 +1330,31 @@ unreadOverviewHtmlId prefix guildOrDmId threadRoute =
 unreadOverviewMarkAllAsReadId : HtmlId
 unreadOverviewMarkAllAsReadId =
     Dom.id "guild_unreadOverviewMarkAllAsRead"
+
+
+{-| A partially muted channel or thread only shows up when it has a red notification.
+-}
+showInUnreadOverview : IsMuted -> Bool -> Bool
+showInUnreadOverview isMuted hasRedNotification =
+    case isMuted of
+        IsNotMuted ->
+            True
+
+        IsPartiallyMuted ->
+            hasRedNotification
+
+        IsFullyMuted ->
+            False
+
+
+isMentioned : Maybe (NonemptyDict key OneOrGreater) -> key -> Bool
+isMentioned maybeDirectMentions key =
+    case maybeDirectMentions of
+        Just directMentions ->
+            NonemptyDict.member key directMentions
+
+        Nothing ->
+            False
 
 
 {-| The newest unread messages of a channel or thread, oldest first, plus how many older
@@ -3231,27 +3250,32 @@ discordChannelView routeData guild loggedIn local model =
             pageMissing "Adding Discord channels not supported yet"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView (MyUi.isMobile model) routeData.currentDiscordUserId routeData.guildId guild local
+            discordGuildSettingsView model routeData.currentDiscordUserId routeData.guildId guild local
 
 
 discordGuildSettingsView :
-    Bool
+    LoadedFrontend
     -> Discord.Id Discord.UserId
     -> Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
     -> LocalState
     -> Element FrontendMsg_
-discordGuildSettingsView isMobile currentUserId guildId guild local =
-    Ui.el
-        [ Ui.height Ui.fill ]
-        (Ui.column
-            [ Ui.Font.color MyUi.font1
-            , Ui.alignTop
-            , Ui.spacing 16
-            , Ui.padding 16
+discordGuildSettingsView model currentUserId guildId guild local =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
-            [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
-            , Ui.column
+            [ Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
                 , discordMemberLabel isMobile local.localUser currentUserId (MembersAndOwner.owner guild.membersAndOwner)
@@ -3279,7 +3303,7 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
                     (MuteSettings.isDiscordGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             ]
-        )
+        ]
 
 
 guildSettingsView : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
@@ -3313,16 +3337,17 @@ guildSettingsView model loggedIn local guildId guild =
                 Nothing ->
                     ImageEditor.init
     in
-    Ui.el
-        [ Ui.height Ui.fill ]
-        (Ui.column
-            [ Ui.Font.color MyUi.font1
-            , Ui.alignTop
-            , Ui.spacing 16
-            , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
-            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
-            , Ui.column
+            [ Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
                 , memberLabel isMobile local.localUser owner
@@ -3467,7 +3492,7 @@ guildSettingsView model loggedIn local guildId guild =
               else
                 leaveGuildSection guildId editGuildForm
             ]
-        )
+        ]
 
 
 guildMembersText : String
@@ -8645,6 +8670,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedChannelMention
+                        , onPressCopyCode = MessageView_PressedCopyCode
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -8821,6 +8847,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedDiscordChannelMention
+                        , onPressCopyCode = MessageView_PressedCopyCode
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -10366,28 +10393,27 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            case isMuted of
-                                IsMuted ->
-                                    NoNotification
+                            if MuteSettings.hidesRedDot isMuted then
+                                NoNotification
 
-                                IsNotMuted ->
-                                    -- Every message in a DM is meant for you, so unread ones
-                                    -- always get the red count. Guild channels save that for
-                                    -- messages that mention you and show the plain one otherwise.
-                                    case
-                                        GuildColumn.newMessageCount
-                                            (SeqDict.get
-                                                ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }), threadMessageIndex )
-                                                localUser.user.lastViewedThreadMessage
-                                            )
-                                            thread
-                                            |> OneOrGreater.fromInt
-                                    of
-                                        Just unreadCount ->
-                                            NewMessageForUser unreadCount
+                            else
+                                -- Every message in a DM is meant for you, so unread ones
+                                -- always get the red count. Guild channels save that for
+                                -- messages that mention you and show the plain one otherwise.
+                                case
+                                    GuildColumn.newMessageCount
+                                        (SeqDict.get
+                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }), threadMessageIndex )
+                                            localUser.user.lastViewedThreadMessage
+                                        )
+                                        thread
+                                        |> OneOrGreater.fromInt
+                                of
+                                    Just unreadCount ->
+                                        NewMessageForUser unreadCount
 
-                                        Nothing ->
-                                            NoNotification
+                                    Nothing ->
+                                        NoNotification
                     in
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
@@ -10738,13 +10764,21 @@ channelColumnRow isMobile isMuted hasNotification usersInCall channelRoute guild
 channelIsMuted : IsMuted -> Element msg
 channelIsMuted isMuted =
     case isMuted of
-        IsMuted ->
+        IsPartiallyMuted ->
             Ui.el
                 [ MyUi.noShrinking
                 , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 0 }
                 , Ui.alignRight
                 ]
                 (Ui.html Icons.bellSlash)
+
+        IsFullyMuted ->
+            Ui.el
+                [ MyUi.noShrinking
+                , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 0 }
+                , Ui.alignRight
+                ]
+                (Ui.html Icons.bellDoubleSlash)
 
         IsNotMuted ->
             Ui.none

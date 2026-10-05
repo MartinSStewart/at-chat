@@ -2643,7 +2643,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
@@ -2901,7 +2901,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ ->
                             True
 
                         Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->
@@ -3116,10 +3116,10 @@ allAttackerLocalChanges =
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
-    , Local_SetMuteChannel legitGuildId channelId MuteSettings.IsMuted
-    , Local_SetMuteDiscordChannel discordUserId discordGuildId discordChannelId MuteSettings.IsMuted
-    , Local_SetMuteDiscordThread discordUserId discordGuildId discordChannelId (Id.fromInt 0) MuteSettings.IsMuted
-    , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
+    , Local_SetMuteChannel legitGuildId channelId MuteSettings.IsFullyMuted
+    , Local_SetMuteDiscordChannel discordUserId discordGuildId discordChannelId MuteSettings.IsFullyMuted
+    , Local_SetMuteDiscordThread discordUserId discordGuildId discordChannelId (Id.fromInt 0) MuteSettings.IsFullyMuted
+    , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsFullyMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
     , Local_SetSheepGameQuestions (IdArray.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
@@ -3171,8 +3171,8 @@ allAttackerLocalChanges =
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( SafeFloat.zero, SafeFloat.zero ))
-    , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
-    , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
+    , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsFullyMuted
+    , Local_SetMuteGuild legitGuildId MuteSettings.IsFullyMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequestAsInitiator { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }

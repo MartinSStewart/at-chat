@@ -381,11 +381,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
+    , E2EMisc.longMentionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
     , E2EMisc.channelSuggestionTest normalConfig
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
+    , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EMisc.hourlyOrphanedFilesTest imageUploadConfig
@@ -1480,7 +1482,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.update
                     100
                     (Audio.userMsg
-                        (Types.PressedMuteThread (Id.fromInt 1) (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsMuted)
+                        (Types.PressedMuteThread (Id.fromInt 1) (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsFullyMuted)
                     )
                 , user.checkView 100 (Test.Html.Query.has [ channelDot ])
                 , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
@@ -1488,7 +1490,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Muting the channel takes the channel's dot away too.
                 , user.update
                     100
-                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsFullyMuted))
                 , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
 
                 -- Unmuting the channel brings its dot back, but the thread stays muted.
@@ -1511,8 +1513,45 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Muting the channel as well leaves the guild icon with nothing to show.
                 , user.update
                     100
-                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsFullyMuted))
                 , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Partially muting a channel hides its white dot but not its red one"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    dot : String -> Test.Html.Selector.Selector
+                    dot count =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" count)
+                in
+                [ user.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Noisy-channel"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , E2EHelper.writeMessage admin 100 "First message"
+                , E2EHelper.writeMessage admin 100 "Second message"
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ dot "2" ])
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsPartiallyMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ dot "2" ])
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve Hello!"
+                , user.checkView 100 (Test.Html.Query.has [ dot "1" ])
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.checkView 100 (Test.Html.Query.has [ dot "1" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Hello!" ])
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsFullyMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ dot "1" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Hello!" ])
                 ]
             )
         ]
@@ -1537,7 +1576,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- channel stays.
                 , user.update
                     100
-                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsFullyMuted))
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
                 , user.checkView
                     100
@@ -1546,7 +1585,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Muting the whole guild drops the rest of it too.
                 , user.update
                     100
-                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsFullyMuted))
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in general" ])
 
                 -- Unmuting the guild brings back everything but the muted channel.
@@ -1571,13 +1610,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                   -- entry for it to change yet.
                   user.update
                     100
-                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsFullyMuted))
                 , T.checkBackend
                     100
                     (\backend ->
                         case NonemptyDict.get (Id.fromInt 2) (E2EHelper.unwrapBackend backend).users of
                             Just user2 ->
-                                if MuteSettings.isGuildSpecificallyMute user2.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                if MuteSettings.isGuildSpecificallyMute user2.muteSettings (Id.fromInt 1) == MuteSettings.IsFullyMuted then
                                     Ok ()
 
                                 else
@@ -1593,7 +1632,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Types.Loaded loaded ->
                                 case loaded.loginStatus of
                                     Types.LoggedIn loggedIn ->
-                                        if MuteSettings.isGuildSpecificallyMute (Local.model loggedIn.localState).localUser.user.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                        if MuteSettings.isGuildSpecificallyMute (Local.model loggedIn.localState).localUser.user.muteSettings (Id.fromInt 1) == MuteSettings.IsFullyMuted then
                                             Ok ()
 
                                         else
@@ -2012,6 +2051,50 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , E2EHelper.hasNotExactText userReload [ "Filler 2" ]
                         , E2EHelper.hasExactText userReload [ "Reply in the older page" ]
                         , replyPreviews 2 "Filler 1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A new reply shows what it replied to even when that message isn't loaded"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ E2EHelper.writeMessage user 1000 "The original message"
+                , List.range 1 (VisibleMessages.pageSize + 4)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Filler " ++ String.fromInt index))
+                    |> T.group
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId2
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , E2EHelper.hasNotExactText userReload [ "The original message" ]
+                        , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                        , user.custom
+                            100
+                            (Dom.id "miniView_reply")
+                            "click"
+                            (Json.Encode.object
+                                [ ( "clientX", Json.Encode.int 300 )
+                                , ( "clientY", Json.Encode.int 300 )
+                                ]
+                            )
+                        , E2EHelper.writeMessage user 100 "A reply to the original"
+                        , E2EHelper.hasExactText userReload [ "A reply to the original" ]
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guild_replyLink_1"
+                                , Test.Html.Selector.containing [ Test.Html.Selector.text "The original message" ]
+                                ]
+                            )
                         ]
                     )
                 ]

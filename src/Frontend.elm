@@ -58,7 +58,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (MessageContent)
+import Message exposing (Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
@@ -95,7 +95,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication
-import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -2303,6 +2303,41 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        CheckedSheepGameSaveDebounce guildOrDmId matchId input counter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (SeqDict.get guildOrDmId loggedIn.games
+                            |> Maybe.andThen
+                                (Game.sheepGameInputToSave
+                                    model.time
+                                    (Local.model loggedIn.localState).localUser
+                                    matchId
+                                    input
+                                    counter
+                                )
+                            |> Maybe.map (Local_Game guildOrDmId)
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        CheckedSheepGameQuestionsDebounce guildOrDmId counter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (SeqDict.get guildOrDmId loggedIn.games
+                            |> Maybe.andThen (Game.sheepGameQuestionsToSave counter)
+                            |> Maybe.map Local_SetSheepGameQuestions
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
         UserNameEditableMsg editableMsg ->
             handleEditable
                 editableMsg
@@ -3059,6 +3094,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
 
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3748,7 +3786,7 @@ updateLoaded msg model =
                 [ cmd
                 , if hasFocus then
                     Command.batch
-                        [ FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
+                        [ Process.sleep (Duration.milliseconds 100) |> Task.perform (\() -> PageFocusSettled)
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
@@ -3759,6 +3797,20 @@ updateLoaded msg model =
                   else
                     Command.none
                 ]
+            )
+
+        PageFocusSettled ->
+            ( model
+            , case model.loginStatus of
+                LoggedIn loggedIn ->
+                    if loggedIn.textInputFocus == Nothing then
+                        FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+
+                    else
+                        Command.none
+
+                NotLoggedIn _ ->
+                    Command.none
             )
 
         GotServiceWorkerMessage url ->
@@ -5890,6 +5942,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
 
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
+
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
                 MessageView.MessageView_PressedSpoiler spoilerIndex ->
@@ -5994,6 +6049,9 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDiscordChannelMention channelId threadRoute2 ->
                     handlePressedDiscordChannelMention guildOrDmId channelId threadRoute2 model
+
+                MessageView.MessageView_PressedCopyCode text ->
+                    copyText text model
 
         ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn
@@ -8495,7 +8553,7 @@ updateLoadedFromBackend msg model =
                         loggedIn2 =
                             { loggedIn | localState = localState }
 
-                        ( loggedIn3, cmd ) =
+                        ( loggedIn4, cmd ) =
                             case change of
                                 ServerChange serverChange ->
                                     case serverChange of
@@ -8534,10 +8592,14 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                             )
 
-                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ _ ->
-                                            FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
+                                        Server_SendMessage data ->
+                                            FrontendExtra.handleServerSendMessage data.senderId data.guildOrDmId data.content data.threadRoute local loggedIn2 model
 
-                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo _ ->
+                                        Server_SendEncryptedMessage data ->
+                                            let
+                                                ( loggedIn3, decryptRepliedToCmd ) =
+                                                    decryptRepliedTo data.id data.repliedToData local loggedIn2
+                                            in
                                             ( FrontendExtra.mapEncryptionRequests
                                                 (\requests ->
                                                     { requests
@@ -8546,19 +8608,22 @@ updateLoadedFromBackend msg model =
                                                         , pendingDecryptedMessages =
                                                             SeqDict.insert
                                                                 requests.nextDecryptionRequestId
-                                                                { hash = Encryption.hash content
-                                                                , id = id
-                                                                , senderId = senderId
-                                                                , threadRoute = maybeRepliedTo
+                                                                { hash = Encryption.hash data.content
+                                                                , id = data.id
+                                                                , senderId = data.senderId
+                                                                , threadRoute = data.threadRoute
                                                                 }
                                                                 requests.pendingDecryptedMessages
                                                     }
                                                 )
-                                                loggedIn2
-                                            , Encryption.decryptMessage
-                                                loggedIn2.encryptionRequests.nextDecryptionRequestId
-                                                id
-                                                content
+                                                loggedIn3
+                                            , Command.batch
+                                                [ Encryption.decryptMessage
+                                                    loggedIn3.encryptionRequests.nextDecryptionRequestId
+                                                    data.id
+                                                    data.content
+                                                , decryptRepliedToCmd
+                                                ]
                                             )
 
                                         Server_SendEncryptedEditMessage _ _ id _ _ content ->
@@ -8802,7 +8867,7 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     ( loggedIn2, Command.none )
                     in
-                    ( loggedIn3
+                    ( loggedIn4
                     , Command.batch
                         [ cmd
                         , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
@@ -9496,20 +9561,18 @@ handleGameOutMsgs outMsgs model =
                 Game.SaveSheepGameQuestions _ ->
                     ( model2, cmds )
 
-                Game.SaveSheepGameQuestionsAfterDelay counter ->
+                Game.SaveSheepGameQuestionsAfterDelay guildOrDmId counter ->
                     ( model2
                     , (Process.sleep Game.sheepGameQuestionsSaveDelay
-                        |> Task.perform
-                            (\() -> GameMsg (Game.CheckedSheepGameQuestionsDebounce counter))
+                        |> Task.perform (\() -> CheckedSheepGameQuestionsDebounce guildOrDmId counter)
                       )
                         :: cmds
                     )
 
-                Game.SaveSheepGameInputAfterDelay matchId input counter ->
+                Game.SaveSheepGameInputAfterDelay guildOrDmId matchId input counter ->
                     ( model2
                     , (Process.sleep Game.sheepGameInputSaveDelay
-                        |> Task.perform
-                            (\() -> GameMsg (Game.CheckedSheepGameSaveDebounce matchId input counter))
+                        |> Task.perform (\() -> CheckedSheepGameSaveDebounce guildOrDmId matchId input counter)
                       )
                         :: cmds
                     )
@@ -9854,6 +9917,70 @@ messagesNeedingEncryption nextRequestId localChange =
             []
 
 
+{-| A new message can arrive with the message it replied to, which then needs decrypting
+for the reply preview to say anything.
+-}
+decryptRepliedTo :
+    Viewing_DmId
+    -> RepliedToData
+    -> LocalState
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+decryptRepliedTo id repliedToData local loggedIn =
+    let
+        maybeContent : Maybe (Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
+        maybeContent =
+            case repliedToData of
+                NoReplyData ->
+                    Nothing
+
+                RepliedToMessage message ->
+                    encryptedContent message
+
+                RepliedToThreadMessage message ->
+                    encryptedContent message
+
+                RepliedToGame _ ->
+                    Nothing
+    in
+    case maybeContent of
+        Just content ->
+            if SeqDict.member (Encryption.hash content) local.localUser.decryptedMessages then
+                ( loggedIn, Command.none )
+
+            else
+                ( FrontendExtra.mapEncryptionRequests
+                    (rememberDecryptManyRequest { messageHashes = [ Encryption.hash content ], shiftScrollFrom = Nothing })
+                    loggedIn
+                , Encryption.decryptManyMessages loggedIn.encryptionRequests.nextDecryptManyRequestId id [ content ]
+                )
+
+        Nothing ->
+            ( loggedIn, Command.none )
+
+
+encryptedContent : Message messageId userId channelId -> Maybe (Encryption.EncryptedData (MessageContent userId (Id ChannelId)))
+encryptedContent message =
+    case message of
+        EncryptedUserTextMessage data ->
+            Just data.content
+
+        UserTextMessage _ ->
+            Nothing
+
+        UserJoinedMessage _ _ _ _ ->
+            Nothing
+
+        DeletedMessage _ ->
+            Nothing
+
+        CallStarted _ ->
+            Nothing
+
+        GameStarted _ ->
+            Nothing
+
+
 {-| A batch of messages decrypted so they can be read, which is every batch except the one
 that turns encryption off.
 -}
@@ -10096,7 +10223,7 @@ encryptedMessagesJustLoaded localChange =
 encryptedMessagesLoadedInto :
     GuildOrDmId
     -> Maybe HtmlId
-    -> List (Message.Message messageId (Id UserId) (Id ChannelId))
+    -> List (Message messageId (Id UserId) (Id ChannelId))
     -> Maybe LoadedEncryptedMessages
 encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
     case guildOrDmId of
@@ -10110,7 +10237,7 @@ encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
 encryptedMessagesInConversation :
     Viewing_DmId
     -> Maybe HtmlId
-    -> List (Message.Message messageId (Id UserId) (Id ChannelId))
+    -> List (Message messageId (Id UserId) (Id ChannelId))
     -> Maybe LoadedEncryptedMessages
 encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
     case List.filterMap FrontendExtra.encryptedMessageData messagesLoaded of
