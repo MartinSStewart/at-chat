@@ -3255,27 +3255,32 @@ discordChannelView routeData guild loggedIn local model =
             pageMissing "Adding Discord channels not supported yet"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView (MyUi.isMobile model) routeData.currentDiscordUserId routeData.guildId guild local
+            discordGuildSettingsView model routeData.currentDiscordUserId routeData.guildId guild local
 
 
 discordGuildSettingsView :
-    Bool
+    LoadedFrontend
     -> Discord.Id Discord.UserId
     -> Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
     -> LocalState
     -> Element FrontendMsg_
-discordGuildSettingsView isMobile currentUserId guildId guild local =
-    Ui.el
-        [ Ui.height Ui.fill ]
-        (Ui.column
-            [ Ui.Font.color MyUi.font1
-            , Ui.alignTop
-            , Ui.spacing 16
-            , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = local.localUser.safeAreaInsetBottom + 16 }
+discordGuildSettingsView model currentUserId guildId guild local =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
-            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
-            , Ui.column
+            [ Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
                 , discordMemberLabel isMobile local.localUser currentUserId (MembersAndOwner.owner guild.membersAndOwner)
@@ -3303,7 +3308,7 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
                     (MuteSettings.isDiscordGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             ]
-        )
+        ]
 
 
 guildSettingsView : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
@@ -3337,17 +3342,17 @@ guildSettingsView model loggedIn local guildId guild =
                 Nothing ->
                     ImageEditor.init
     in
-    Ui.el
-        [ Ui.height Ui.fill ]
-        (Ui.column
-            [ Ui.Font.color MyUi.font1
-            , Ui.alignTop
-            , Ui.spacing 16
-            , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
-            , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = local.localUser.safeAreaInsetBottom + 16 }
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
-            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
-            , Ui.column
+            [ Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
                 , memberLabel isMobile local.localUser owner
@@ -3492,7 +3497,7 @@ guildSettingsView model loggedIn local guildId guild =
               else
                 leaveGuildSection guildId editGuildForm
             ]
-        )
+        ]
 
 
 guildMembersText : String
