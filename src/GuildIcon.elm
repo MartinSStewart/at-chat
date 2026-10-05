@@ -8,7 +8,6 @@ module GuildIcon exposing
     , discordLogo
     , discordNotificationView
     , discordUserView
-    , discordView
     , iconFontColor
     , notificationView
     , showFriendsButton
@@ -187,26 +186,6 @@ view mode guild =
             -4
             -3
             MyUi.background1
-            (case mode of
-                IsSelected ->
-                    NoNotification
-
-                Normal notification ->
-                    notification
-            )
-            :: selectedEdgeCurves mode guild.icon
-        )
-        (guildIcon guild mode (GuildName.toString guild.name))
-
-
-{-| Same as `view` but marked as coming from Discord.
--}
-discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
-discordView mode guild =
-    Ui.el
-        (discordNotificationView
-            -4
-            -3
             (case mode of
                 IsSelected ->
                     NoNotification
