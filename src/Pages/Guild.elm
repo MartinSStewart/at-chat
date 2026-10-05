@@ -3248,6 +3248,7 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
+            , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
             [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
@@ -3319,6 +3320,7 @@ guildSettingsView model loggedIn local guildId guild =
             , Ui.alignTop
             , Ui.spacing 16
             , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = local.localUser.safeAreaInsetBottom + 16 }
             ]
             [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
