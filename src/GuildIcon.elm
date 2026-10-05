@@ -4,7 +4,6 @@ module GuildIcon exposing
     , addGuildButton
     , defaultUser
     , defaultUserHtml
-    , discordLabel
     , discordLogo
     , discordNotificationView
     , discordUserView

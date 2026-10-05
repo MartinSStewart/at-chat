@@ -17,7 +17,6 @@ import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import Frontend
-import GuildIcon
 import GuildName
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
