@@ -1698,15 +1698,16 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
             { otherUserId = otherUserId }
             (\otherUserId2 ->
                 Server_SendMessage
-                    userId
-                    senderFrontendUser
-                    time
-                    (GuildOrDmId_Dm otherUserId2)
-                    message.content.content
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    stickers
-                    repliedToMatches
+                    { senderId = userId
+                    , sender = senderFrontendUser
+                    , sentAt = time
+                    , guildOrDmId = GuildOrDmId_Dm otherUserId2
+                    , content = message.content.content
+                    , threadRoute = threadRouteWithReplyTo
+                    , attachedFiles = attachedFiles
+                    , stickers = stickers
+                    , repliedToGameData = repliedToMatches
+                    }
             )
             model
         , Command.batch cmds

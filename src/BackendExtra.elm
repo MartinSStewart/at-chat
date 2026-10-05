@@ -1998,20 +1998,21 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                     clientId
                     id.guildId
                     (Server_SendMessage
-                        session.userId
-                        (User.backendToFrontendForUser user)
-                        time
-                        guildOrDmId
-                        richText
-                        threadRouteWithMaybeReplyTo
-                        attachedFiles
-                        stickers
-                        (Message.threadRouteRepliedToMatches threadRouteWithMaybeReplyTo
-                            |> DmChannel.loadRepliedToMatches
-                                (GuildOrFullDmId_Guild id.guildId id.channelId)
-                                model.goMatchPublicIds
-                                channel2
-                        )
+                        { senderId = session.userId
+                        , sender = User.backendToFrontendForUser user
+                        , sentAt = time
+                        , guildOrDmId = guildOrDmId
+                        , content = richText
+                        , threadRoute = threadRouteWithMaybeReplyTo
+                        , attachedFiles = attachedFiles
+                        , stickers = stickers
+                        , repliedToGameData =
+                            Message.threadRouteRepliedToMatches threadRouteWithMaybeReplyTo
+                                |> DmChannel.loadRepliedToMatches
+                                    (GuildOrFullDmId_Guild id.guildId id.channelId)
+                                    model.goMatchPublicIds
+                                    channel2
+                        }
                         |> ServerChange
                     )
                     model

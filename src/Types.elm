@@ -52,6 +52,7 @@ module Types exposing
     , PendingEncryptedMessage
     , PendingGatewayReconnect
     , PublicGoMatch(..)
+    , RepliedToData(..)
     , RevealedSpoilers
     , ServerChange(..)
     , ToBackend(..)
@@ -1091,10 +1092,25 @@ type LocalMsg
     | ServerChange ServerChange
 
 
+type RepliedToData
+    = NoReplyData
+    | RepliedToMessage (Message (Id ChannelMessageId) (Id UserId) (Id ChannelId))
+    | RepliedToThreadMessage (Message (Id ThreadMessageId) (Id UserId) (Id ChannelId))
+    | RepliedToGame Game.LoadedMatch
+
+
 type ServerChange
-    = -- The user that wrote the message comes along with it because the receiver might not
-      -- have them loaded yet, which is what makes names show up as "<missing>"
-      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId) (Id ChannelId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData) (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
+    = Server_SendMessage
+        { senderId : Id UserId
+        , sender : FrontendUser
+        , sentAt : Time.Posix
+        , guildOrDmId : GuildOrDmId
+        , content : Nonempty (RichText (Id UserId) (Id ChannelId))
+        , threadRoute : Message.ThreadRouteWithRepliedTo
+        , attachedFiles : SeqDict (Id FileId) FileData
+        , stickers : SeqDict (Id StickerId) StickerData
+        , repliedToData : RepliedToData
+        }
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel

@@ -4302,7 +4302,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers repliedToMatches ->
+                Server_SendMessage { senderId, sender, sentAt, guildOrDmId, content, threadRoute, attachedFiles, stickers, repliedToGameData } ->
                     case guildOrDmId of
                         GuildOrDmId_Guild id ->
                             case LocalState.getGuildAndChannel id local of
@@ -4318,32 +4318,32 @@ changeUpdate localMsg local =
 
                                         threadRouteNoReply : ThreadRoute
                                         threadRouteNoReply =
-                                            Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo
+                                            Message.threadRouteWithoutRepliedTo threadRoute
 
                                         isViewing2 : Bool
                                         isViewing2 =
                                             isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply local
 
                                         ( currentlyViewing2, user2 ) =
-                                            case ( isViewing2, createdBy == localUser.session.userId ) of
+                                            case ( isViewing2, senderId == localUser.session.userId ) of
                                                 ( _, True ) ->
                                                     LocalState.ownMessageIsReadFrontend
                                                         (GuildOrDmId guildOrDmId)
-                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo) channel)
+                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRoute) channel)
                                                         ( localUser.currentlyViewing, user )
 
                                                 ( True, _ ) ->
                                                     LocalState.incrementLastViewedMessageFrontend
                                                         (GuildOrDmId guildOrDmId)
-                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRouteWithRepliedTo) channel)
+                                                        (newMessageThreadRoute (Message.threadRouteWithoutRepliedTo threadRoute) channel)
                                                         ( localUser.currentlyViewing, user )
 
                                                 ( False, _ ) ->
                                                     ( localUser.currentlyViewing
                                                     , if
                                                         LocalState.usersMentionedOrRepliedToFrontend
-                                                            (Message.toThreadRouteWithMaybeMessage threadRouteWithRepliedTo)
-                                                            text
+                                                            (Message.toThreadRouteWithMaybeMessage threadRoute)
+                                                            content
                                                             channel
                                                             |> SeqSet.member localUser.session.userId
                                                       then
@@ -4363,18 +4363,18 @@ changeUpdate localMsg local =
                                                 id.guildId
                                                 guild
                                                 id.channelId
-                                                { channel | games = DmChannel.addRepliedToMatches repliedToMatches channel.games }
-                                                threadRouteWithRepliedTo
-                                                createdAt
-                                                createdBy
-                                                text
+                                                { channel | games = DmChannel.addRepliedToMatches repliedToGameData channel.games }
+                                                threadRoute
+                                                sentAt
+                                                senderId
+                                                content
                                                 attachedFiles
                                                 local
                                         , localUser =
                                             { localUser
                                                 | user = user2
                                                 , currentlyViewing = currentlyViewing2
-                                                , otherUsers = addMessageSender createdBy createdByUser localUser
+                                                , otherUsers = addMessageSender senderId sender localUser
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
@@ -4385,27 +4385,27 @@ changeUpdate localMsg local =
                         GuildOrDmId_Dm id ->
                             handleServerSendDmMessage
                                 id
-                                createdBy
-                                createdByUser
+                                senderId
+                                sender
                                 stickers
                                 (\repliedTo ->
                                     Message.userTextMessageFrontend
-                                        createdAt
-                                        createdBy
-                                        text
+                                        sentAt
+                                        senderId
+                                        content
                                         repliedTo
                                         attachedFiles
                                 )
                                 (\maybeReplyTo ->
                                     Message.userTextMessageFrontend
-                                        createdAt
-                                        createdBy
-                                        text
+                                        sentAt
+                                        senderId
+                                        content
                                         (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                 )
-                                threadRouteWithRepliedTo
-                                repliedToMatches
+                                threadRoute
+                                repliedToGameData
                                 local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
