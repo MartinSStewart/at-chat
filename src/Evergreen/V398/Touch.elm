@@ -1,0 +1,32 @@
+module Evergreen.V398.Touch exposing (..)
+
+import Effect.Time
+import Evergreen.V398.CssPixels
+import Evergreen.V398.NonemptyDict
+import Evergreen.V398.Point2d
+
+
+type ScreenCoordinate
+    = ScreenCoordinate Never
+
+
+type alias Touch =
+    { client : Evergreen.V398.Point2d.Point2d Evergreen.V398.CssPixels.CssPixels ScreenCoordinate
+    , targetIsTextInput : Bool
+    }
+
+
+type DragTarget
+    = Drag_Channel
+    | Drag_CallThumbnail
+    | Drag_Game
+
+
+type Drag
+    = NoDrag
+    | DragStart Effect.Time.Posix (Evergreen.V398.NonemptyDict.NonemptyDict Int Touch)
+    | Dragging
+        { horizontalStart : Bool
+        , touches : Evergreen.V398.NonemptyDict.NonemptyDict Int Touch
+        , target : DragTarget
+        }
