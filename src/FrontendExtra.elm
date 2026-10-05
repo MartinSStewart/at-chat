@@ -5725,14 +5725,9 @@ changeUpdate localMsg local =
                         local
 
                 Server_SendEncryptedMessage { senderId, sender, sentAt, id, fileHashes, content, threadRoute, repliedToData } ->
-                    let
-                        dmChannel : FrontendDmChannel
-                        dmChannel =
-                            frontendDmChannel id local
-                    in
                     handleServerSendDmMessage
                         id
-                        { dmChannel | games = DmChannel.addRepliedToMatches repliedToData dmChannel.games }
+                        (frontendDmChannel id local |> addRepliedToData threadRoute repliedToData)
                         senderId
                         sender
                         -- TODO, solve stickers

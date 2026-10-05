@@ -19,7 +19,6 @@ module DmChannel exposing
     , loadOlderChannelMessages
     , loadOlderMessages
     , loadRepliedToMatch
-    , loadRepliedToMatches
     , loadUnreadMessages
     , loadedMessages
     , toDiscordFrontendHelper

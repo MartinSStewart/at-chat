@@ -2262,7 +2262,7 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                             , threadRoute = threadRouteWithReplyTo
                             , repliedToData =
                                 Broadcast.repliedToData
-                                    (GuildOrFullDmId_Dm (DmChannelId.fromUserIds session.userId id.otherUserId))
+                                    (GuildOrFullDmId_Dm dmChannelId)
                                     model.goMatchPublicIds
                                     dmChannel2
                                     threadRouteWithReplyTo

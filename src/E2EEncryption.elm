@@ -31,6 +31,7 @@ import FrontendExtra
 import Html.Attributes
 import Id exposing (ChannelId, Id, UserId)
 import IdArray
+import Json.Encode
 import Message exposing (MessageContent)
 import NonemptyDict
 import RichText
@@ -1003,6 +1004,88 @@ tests config =
                                     )
                                 , T.checkState 100 (checkScrollShifts adminB 2)
                                 , adminB.snapshotView 100 { name = "Older encrypted messages decrypted" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A new encrypted reply shows what it replied to even when that message isn't loaded"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , List.range 1 (VisibleMessages.pageSize + 5)
+                            |> List.map (\index -> writeEncryptedMessage admin 100 (olderMessage index))
+                            |> T.group
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , admin.mouseEnter 100 (Dom.id "guild_message_0") ( 10, 10 ) []
+                                , admin.custom
+                                    100
+                                    (Dom.id "miniView_reply")
+                                    "click"
+                                    (Json.Encode.object
+                                        [ ( "clientX", Json.Encode.int 300 )
+                                        , ( "clientY", Json.Encode.int 300 )
+                                        ]
+                                    )
+                                , writeEncryptedMessage admin 100 "A reply to the first message"
+                                , respondToMessageDecrypted adminB
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.id "guild_replyLink_0"
+                                        , Test.Html.Selector.containing [ Test.Html.Selector.text (olderMessage 1) ]
+                                        ]
+                                    )
                                 ]
                             )
                         ]
