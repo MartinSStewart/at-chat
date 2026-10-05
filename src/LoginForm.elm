@@ -323,7 +323,7 @@ validateCode digitCount text =
                 Err "Invalid code"
 
     else
-        Err ""
+        Err "\u{00A0}"
 
 
 loginCodeLength : number
@@ -738,10 +738,15 @@ enterLoginCodeView windowSize textSelection model =
                 )
     in
     Ui.column
-        [ Ui.spacing 24 ]
+        []
         [ label.element
         , Ui.column
-            [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
+            [ Ui.spacing 4
+            , Ui.centerX
+            , Ui.width Ui.shrink
+            , Ui.move (Ui.right 18)
+            , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 4 }
+            ]
             [ Ui.el [ Ui.centerX ] (loginCodeInput windowSize loginCodeLength TypedLoginCode textSelection model.code label)
             , if SeqDict.size model.attempts < maxLoginAttempts then
                 case validateCode loginCodeLength model.code of
@@ -751,7 +756,8 @@ enterLoginCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.none
+                                -- Prevent the layout from shifting
+                                Ui.text "\u{00A0}"
 
                     Err error ->
                         errorView error
@@ -767,7 +773,7 @@ enterLoginCodeView windowSize textSelection model =
                     "Submitting..."
 
                  else
-                    "Cancel"
+                    "Cancel login"
                 )
             )
         ]
@@ -795,10 +801,15 @@ enterTwoFactorCodeView windowSize textSelection model =
                 )
     in
     Ui.column
-        [ Ui.spacing 24 ]
+        []
         [ label.element
         , Ui.column
-            [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
+            [ Ui.spacing 8
+            , Ui.centerX
+            , Ui.width Ui.shrink
+            , Ui.move (Ui.right 18)
+            , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 4 }
+            ]
             [ Ui.el [ Ui.centerX ] (loginCodeInput windowSize twoFactorCodeLength TypedTwoFactorCode textSelection model.code label)
             , if model.attemptCount < maxLoginAttempts then
                 case validateCode twoFactorCodeLength model.code of
@@ -808,7 +819,8 @@ enterTwoFactorCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.none
+                                -- Prevent the layout from shifting
+                                Ui.text "\u{00A0}"
 
                     Err error ->
                         errorView error
@@ -824,7 +836,7 @@ enterTwoFactorCodeView windowSize textSelection model =
                     "Submitting..."
 
                  else
-                    "Cancel"
+                    "Cancel login"
                 )
             )
         ]
