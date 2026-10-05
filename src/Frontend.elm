@@ -8553,7 +8553,7 @@ updateLoadedFromBackend msg model =
                         loggedIn2 =
                             { loggedIn | localState = localState }
 
-                        ( loggedIn3, cmd ) =
+                        ( loggedIn4, cmd ) =
                             case change of
                                 ServerChange serverChange ->
                                     case serverChange of
@@ -8597,7 +8597,7 @@ updateLoadedFromBackend msg model =
 
                                         Server_SendEncryptedMessage data ->
                                             let
-                                                ( loggedInWithRepliedTo, decryptRepliedToCmd ) =
+                                                ( loggedIn3, decryptRepliedToCmd ) =
                                                     decryptRepliedTo data.id data.repliedToData local loggedIn2
                                             in
                                             ( FrontendExtra.mapEncryptionRequests
@@ -8616,10 +8616,10 @@ updateLoadedFromBackend msg model =
                                                                 requests.pendingDecryptedMessages
                                                     }
                                                 )
-                                                loggedInWithRepliedTo
+                                                loggedIn3
                                             , Command.batch
                                                 [ Encryption.decryptMessage
-                                                    loggedIn2.encryptionRequests.nextDecryptionRequestId
+                                                    loggedIn3.encryptionRequests.nextDecryptionRequestId
                                                     data.id
                                                     data.content
                                                 , decryptRepliedToCmd
@@ -8867,7 +8867,7 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     ( loggedIn2, Command.none )
                     in
-                    ( loggedIn3
+                    ( loggedIn4
                     , Command.batch
                         [ cmd
                         , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
