@@ -1584,6 +1584,12 @@ userLabelHtmlAttributes =
     , Html.Attributes.style "color" (colorToStyle userLabelFontColor)
     , Html.Attributes.style "border-radius" "2px"
     , Html.Attributes.style "white-space" "nowrap"
+    , Html.Attributes.style "display" "inline-block"
+    , Html.Attributes.style "max-width" "100%"
+    , Html.Attributes.style "overflow" "clip"
+    , Html.Attributes.style "text-overflow" "ellipsis"
+    , Html.Attributes.style "line-height" "normal"
+    , Html.Attributes.style "margin-top" "-1px"
     ]
 
 

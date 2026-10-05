@@ -381,6 +381,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
+    , E2EMisc.longMentionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
     , E2EMisc.channelSuggestionTest normalConfig
     , E2EEncryption.tests normalConfig

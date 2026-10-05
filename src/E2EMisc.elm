@@ -19,6 +19,7 @@ module E2EMisc exposing
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
     , leaveGuildTest
+    , longMentionTest
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
@@ -1904,6 +1905,30 @@ mentionSuggestionTest config =
                                 )
                     )
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "@Stevie Steve" ])
+                ]
+            )
+        ]
+
+
+{-| A mention is never split across lines, so one too long to fit on a phone is cut off
+with an ellipsis rather than making the conversation scroll sideways.
+-}
+longMentionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+longMentionTest config =
+    E2EHelper.startTest
+        "A long mention is cut off instead of scrolling sideways"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\_ user ->
+                [ E2EHelper.writeMessageMobile user ("@" ++ E2EHelper.adminName)
+                , E2EHelper.writeMessageMobile user ("Hello @" ++ E2EHelper.adminName ++ " how are you?")
+                , E2EHelper.writeMessageMobile user "Hello @Stevie Steve how are you? Mentions that fit stay on the line they're written on."
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ("@" ++ E2EHelper.adminName) ])
+                , user.snapshotView 100 { name = "Long mentions on a phone" }
                 ]
             )
         ]
