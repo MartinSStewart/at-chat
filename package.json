@@ -25,5 +25,10 @@
   "resolutions": {
     "**/wrap-ansi": "^7.0.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "allowScripts": {
+    "elm-format@0.8.8": true,
+    "elm-test-rs@3.0.0-5": true,
+    "lamdera@0.19.1-1.3.2": true
+  }
 }
