@@ -183,7 +183,23 @@ update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode onSubmitUserData ms
                 |> Just
 
         PressedCancelLogin ->
-            Nothing
+            case model of
+                EnterLoginCode enterLoginCode ->
+                    if isCheckingCode loginCodeLength enterLoginCode then
+                        Just ( model, Command.none )
+
+                    else
+                        Nothing
+
+                EnterTwoFactorCode enterTwoFactorCode ->
+                    if isCheckingCode twoFactorCodeLength enterTwoFactorCode then
+                        Just ( model, Command.none )
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
 
         TypedLoginCode loginCodeText ->
             (case model of
@@ -281,6 +297,16 @@ typedCode digitCount onSubmitLoginCode text model =
             ( { model | code = String.left digitCount text2 }
             , Command.none
             )
+
+
+isCheckingCode : Int -> { a | attempts : SeqDict Int CodeStatus, code : String } -> Bool
+isCheckingCode digitCount model =
+    case validateCode digitCount model.code of
+        Ok code ->
+            SeqDict.get code model.attempts == Just Checking
+
+        Err _ ->
+            False
 
 
 validateCode : Int -> String -> Result String Int
@@ -725,7 +751,7 @@ enterLoginCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                submitting
+                                Ui.none
 
                     Err error ->
                         errorView error
@@ -735,13 +761,16 @@ enterLoginCodeView windowSize textSelection model =
             ]
         , Ui.el
             [ Ui.centerX, Ui.width Ui.shrink ]
-            (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
+            (MyUi.secondaryButtonTall cancelButtonId
+                PressedCancelLogin
+                (if isCheckingCode loginCodeLength model then
+                    "Submitting..."
+
+                 else
+                    "Cancel"
+                )
+            )
         ]
-
-
-submitting : Element msg
-submitting =
-    Ui.Prose.paragraph [ Ui.paddingXY 16 0 ] [ Ui.text "Submitting..." ]
 
 
 enterTwoFactorCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
@@ -779,7 +808,7 @@ enterTwoFactorCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                submitting
+                                Ui.none
 
                     Err error ->
                         errorView error
@@ -789,7 +818,15 @@ enterTwoFactorCodeView windowSize textSelection model =
             ]
         , Ui.el
             [ Ui.centerX, Ui.width Ui.shrink ]
-            (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
+            (MyUi.secondaryButtonTall cancelButtonId
+                PressedCancelLogin
+                (if isCheckingCode twoFactorCodeLength model then
+                    "Submitting..."
+
+                 else
+                    "Cancel"
+                )
+            )
         ]
 
 
