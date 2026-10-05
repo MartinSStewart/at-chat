@@ -9259,16 +9259,18 @@ migrate_Types_RevealedSpoilers old =
 migrate_Types_ServerChange : Evergreen.V397.Types.ServerChange -> Evergreen.V398.Types.ServerChange
 migrate_Types_ServerChange old =
     case old of
-        Evergreen.V397.Types.Server_SendMessage p0 p1 p2 p3 p4 p5 p6 p7 p8 ->
-            Evergreen.V398.Types.Server_SendMessage (p0 |> (Unimplemented {- Type changed from `Evergreen.V397.Id.Id (Evergreen.V397.Id.UserId)` to `{}`. I need you to write this migration. -}))
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
+        Evergreen.V397.Types.Server_SendMessage p0 p1 p2 p3 p4 p5 p6 p7 _ ->
+            Evergreen.V398.Types.Server_SendMessage
+                { senderId = p0 |> migrate_Id_Id
+                , sender = p1 |> migrate_User_FrontendUser
+                , sentAt = p2
+                , guildOrDmId = p3 |> migrate_Id_GuildOrDmId
+                , content = p4 |> migrate_List_Nonempty_Nonempty (migrate_RichText_RichText migrate_Id_Id migrate_Id_Id)
+                , threadRoute = p5 |> migrate_Message_ThreadRouteWithRepliedTo
+                , attachedFiles = p6 |> SeqDict.toList >> List.map (Tuple.mapBoth migrate_Id_Id migrate_FileStatus_FileData) >> SeqDict.fromList
+                , stickers = p7 |> SeqDict.toList >> List.map (Tuple.mapBoth migrate_Id_Id migrate_Sticker_StickerData) >> SeqDict.fromList
+                , repliedToData = Evergreen.V398.Types.NoReplyData
+                }
 
         Evergreen.V397.Types.Server_Discord_SendMessage p0 p1 p2 p3 p4 p5 p6 ->
             Evergreen.V398.Types.Server_Discord_SendMessage p0
@@ -9687,15 +9689,17 @@ migrate_Types_ServerChange old =
             Evergreen.V398.Types.Server_SetPublicKey (p0 |> migrate_Id_Id)
                 (p1 |> migrate_X25519_PublicKey)
 
-        Evergreen.V397.Types.Server_SendEncryptedMessage p0 p1 p2 p3 p4 p5 p6 p7 ->
-            Evergreen.V398.Types.Server_SendEncryptedMessage (p0 |> (Unimplemented {- Type changed from `Evergreen.V397.Id.Id (Evergreen.V397.Id.UserId)` to `{}`. I need you to write this migration. -}))
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
-                (Unimplemented {- Warning: old variant didn't get mapped to anything, check this is what you want -})
+        Evergreen.V397.Types.Server_SendEncryptedMessage p0 p1 p2 p3 p4 p5 p6 _ ->
+            Evergreen.V398.Types.Server_SendEncryptedMessage
+                { senderId = p0 |> migrate_Id_Id
+                , sender = p1 |> migrate_User_FrontendUser
+                , sentAt = p2
+                , id = p3 |> migrate_Id_Viewing_DmId
+                , content = p5 |> migrate_Encryption_EncryptedData
+                , threadRoute = p6 |> migrate_Message_ThreadRouteWithRepliedTo
+                , fileHashes = p4 |> SeqSet.map migrate_FileStatus_FileHash
+                , repliedToData = Evergreen.V398.Types.NoReplyData
+                }
 
         Evergreen.V397.Types.Server_SendEncryptedEditMessage p0 p1 p2 p3 p4 p5 ->
             Evergreen.V398.Types.Server_SendEncryptedEditMessage p0
