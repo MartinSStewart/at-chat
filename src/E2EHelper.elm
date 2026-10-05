@@ -2901,7 +2901,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ ->
                             True
 
                         Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->

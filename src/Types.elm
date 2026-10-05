@@ -1213,7 +1213,16 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
+    | Server_SendEncryptedMessage
+        { senderId : Id UserId
+        , sender : FrontendUser
+        , sentAt : Time.Posix
+        , id : Viewing_DmId
+        , content : EncryptedData (MessageContent (Id UserId) (Id ChannelId))
+        , threadRoute : Message.ThreadRouteWithRepliedTo
+        , fileHashes : SeqSet FileHash
+        , repliedToData : RepliedToData
+        }
     | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
     | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 

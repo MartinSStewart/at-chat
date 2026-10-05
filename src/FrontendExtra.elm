@@ -5724,23 +5724,26 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo repliedToMatches ->
+                Server_SendEncryptedMessage { senderId, sender, sentAt, id, fileHashes, content, threadRoute, repliedToData } ->
+                    let
+                        dmChannel : FrontendDmChannel
+                        dmChannel =
+                            frontendDmChannel id local
+                    in
                     handleServerSendDmMessage
                         id
-                        (frontendDmChannel id local
-                            |> (\dmChannel -> { dmChannel | games = DmChannel.addRepliedToMatches repliedToMatches dmChannel.games })
-                        )
-                        createdBy
-                        createdByUser
+                        { dmChannel | games = DmChannel.addRepliedToMatches repliedToData dmChannel.games }
+                        senderId
+                        sender
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\repliedTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content repliedTo
+                            Message.encryptedUserTextMessageFrontend sentAt senderId fileHashes content repliedTo
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
+                            Message.encryptedUserTextMessageFrontend sentAt senderId fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
-                        threadRouteWithRepliedTo
+                        threadRoute
                         local
 
                 Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->

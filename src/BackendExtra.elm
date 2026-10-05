@@ -2253,19 +2253,20 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                     id
                     (\id2 ->
                         Server_SendEncryptedMessage
-                            session.userId
-                            (User.backendToFrontendForUser user)
-                            time
-                            id2
-                            fileHashes
-                            contentAndEmbeds
-                            threadRouteWithReplyTo
-                            (Message.threadRouteRepliedToMatches threadRouteWithReplyTo
-                                |> DmChannel.loadRepliedToMatches
-                                    (GuildOrFullDmId_Dm dmChannelId)
+                            { senderId = session.userId
+                            , sender = User.backendToFrontendForUser user
+                            , sentAt = time
+                            , id = id2
+                            , fileHashes = fileHashes
+                            , content = contentAndEmbeds
+                            , threadRoute = threadRouteWithReplyTo
+                            , repliedToData =
+                                Broadcast.repliedToData
+                                    (GuildOrFullDmId_Dm (DmChannelId.fromUserIds session.userId id.otherUserId))
                                     model.goMatchPublicIds
                                     dmChannel2
-                            )
+                                    threadRouteWithReplyTo
+                            }
                     )
                     model
                 , notificationCmd
