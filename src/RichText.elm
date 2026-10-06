@@ -5484,10 +5484,10 @@ channelMentionView onPress channel maybeThread channels =
                     :: Html.Attributes.style "cursor" "pointer"
                     :: MyUi.userLabelHtmlAttributes
                 )
-                [ Html.text ("#" ++ name) ]
+                [ MyUi.userLabelText ("#" ++ name) ]
 
         Nothing ->
-            Html.span MyUi.userLabelHtmlAttributes [ Html.text "#<missing>" ]
+            Html.span MyUi.userLabelHtmlAttributes [ MyUi.userLabelText "#<missing>" ]
 
 
 textInputView :
