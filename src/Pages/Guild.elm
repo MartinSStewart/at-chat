@@ -2729,7 +2729,7 @@ privateKeyInput otherUserId prompt keyInput =
         [ keyLabel.element
         , Ui.Input.currentPassword
             [ Ui.background MyUi.inputBackground
-            , Ui.paddingXY 8 8
+            , Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }
             , Ui.borderColor MyUi.inputBorder
             ]
             { text = keyInput.text
