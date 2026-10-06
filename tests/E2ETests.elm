@@ -368,6 +368,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
+    , E2EMisc.escapeClosesUserOptionsTest normalConfig
     , E2EMisc.deleteAccountTest normalConfig discordOp0Ready discordOp0ReadySupplemental
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.importChannelTest channelImportConfig

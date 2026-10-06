@@ -7288,7 +7288,10 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
+            if Route.toOverlay model.route == Just Route.UserOptionsOverlay then
+                routePush model (Route.setOverlay Nothing model.route)
+
+            else if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
                 -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
                 routePush model (Route.setChannelHeaderTab Nothing model.route)
 

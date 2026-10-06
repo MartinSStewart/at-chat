@@ -9,6 +9,7 @@ module E2EMisc exposing
     , deleteAccountTest
     , dmThreadsTest
     , emojiSuggestionTest
+    , escapeClosesUserOptionsTest
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
@@ -2490,6 +2491,30 @@ colorPickerTest config =
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
                 , T.checkState 100 (checkSavedColorIsNot RichText.defaultColor)
+                ]
+            )
+        ]
+
+
+escapeClosesUserOptionsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+escapeClosesUserOptionsTest config =
+    E2EHelper.startTest
+        "Pressing escape closes the user options"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_closeUserOptions" ])
+                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = "Escape" }))
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_closeUserOptions" ])
                 ]
             )
         ]
