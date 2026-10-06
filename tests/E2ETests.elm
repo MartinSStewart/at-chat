@@ -423,6 +423,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.markMessageAsUnreadTest normalConfig
     , E2EMisc.staysReadWhileViewingTest normalConfig
     , E2EMisc.swipedAwayConversationStopsBeingViewedTest normalConfig
+    , E2EMisc.androidBackButtonRetracesScreensTest normalConfig
     , E2EMisc.touchingTextInputDoesntStartDragTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest

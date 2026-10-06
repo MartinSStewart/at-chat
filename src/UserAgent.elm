@@ -1,4 +1,4 @@
-module UserAgent exposing (Browser(..), Device(..), UserAgent, browserToString, deviceToString, init, isDesktop, parseUserAgent)
+module UserAgent exposing (Browser(..), Device(..), UserAgent, browserToString, deviceToString, init, isAndroid, isDesktop, parseUserAgent)
 
 
 type Browser
@@ -163,6 +163,43 @@ isDesktop device =
 
         Desktop ->
             True
+
+
+isAndroid : Device -> Bool
+isAndroid device =
+    case device of
+        IPhone ->
+            False
+
+        IPad ->
+            False
+
+        AndroidPhone ->
+            True
+
+        AndroidTablet ->
+            True
+
+        Windows ->
+            False
+
+        MacOS ->
+            False
+
+        ChromeOS ->
+            False
+
+        Linux ->
+            False
+
+        Mobile ->
+            False
+
+        Tablet ->
+            False
+
+        Desktop ->
+            False
 
 
 parseDevice : String -> Device

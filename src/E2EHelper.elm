@@ -20,6 +20,7 @@ module E2EHelper exposing
     , checkNoNotification
     , checkNotification
     , checkVoiceChatFromJsEvents
+    , chromeAndroid
     , chromeDesktop
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
@@ -1533,6 +1534,11 @@ firefoxDesktop =
 chromeDesktop : String
 chromeDesktop =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+
+
+chromeAndroid : String
+chromeAndroid =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
 
 
 safariIphone : String

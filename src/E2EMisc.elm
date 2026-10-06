@@ -1,5 +1,6 @@
 module E2EMisc exposing
     ( adminConnectionsShowWhatIsViewedTest
+    , androidBackButtonRetracesScreensTest
     , banMemberTest
     , channelSearchTest
     , channelSuggestionTest
@@ -996,6 +997,84 @@ swipedAwayConversationStopsBeingViewedTest config =
                 ]
             )
         ]
+
+
+{-| Android's back button goes back through history, so on Android phones the route changes
+that slide between the channel list, the conversation and the member column are history
+entries, and back retraces them in the order they were visited.
+-}
+androidBackButtonRetracesScreensTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+androidBackButtonRetracesScreensTest config =
+    E2EHelper.startTest
+        "On Android phones the back button slides back to the channel list"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.iphone14Window
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.chromeAndroid E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+
+                -- A new guild opens straight into its conversation, so the channel list is
+                -- one press of the header's back button away
+                , admin.click 100 (Dom.id "guild_headerBackButton")
+                , admin.checkModel 100 (checkChannelsVisible ChannelsVisibleOnMobile)
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , admin.checkModel 100 (checkChannelsVisible ChannelsHiddenOnMobile)
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.checkModel 100 (checkShowMembers Route.ShowChannelSettings)
+                , admin.navigateBack 100
+                , admin.checkModel 100 (checkShowMembers Route.HideChannelSettings)
+                , admin.checkModel 100 (checkChannelsVisible ChannelsHiddenOnMobile)
+                , admin.navigateBack 100
+                , admin.checkModel 100 (checkChannelsVisible ChannelsVisibleOnMobile)
+
+                -- Before the channel list came the conversation the new guild opened into
+                , admin.navigateBack 100
+                , admin.checkModel 100 (checkChannelsVisible ChannelsHiddenOnMobile)
+                ]
+            )
+        ]
+
+
+checkChannelsVisible : ChannelsVisibleOnMobile -> FrontendModel -> Result String ()
+checkChannelsVisible expected model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.GuildRoute _ _ channelsVisible _ ->
+                    if channelsVisible == expected then
+                        Ok ()
+
+                    else
+                        Err "The channel list is on the wrong side of the screen"
+
+                _ ->
+                    Err "Expected to be in a guild"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+checkShowMembers : Route.ShowChannelSettings -> FrontendModel -> Result String ()
+checkShowMembers expected model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            if Tuple.first (Route.toShowMembersTab loaded.route) == expected then
+                Ok ()
+
+            else
+                Err "The member column is on the wrong side of the screen"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 checkBackendIsViewingTheChannel : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
