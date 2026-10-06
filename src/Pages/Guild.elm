@@ -4233,7 +4233,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || lastThreadMessageMentionsChannel thread ) of
                                             ( Nothing, False ) ->
                                                 Ui.Lazy.lazy6
                                                     messageViewThreadStarter
@@ -4597,7 +4597,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || lastThreadMessageMentionsChannel thread ) of
                                             ( Nothing, False ) ->
                                                 discordMessageViewThreadStarter
                                                     (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
@@ -9568,6 +9568,16 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
             ++ [ highlightLayer highlight ]
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
+
+
+lastThreadMessageMentionsChannel : { a | messages : MessageArray messageId userId channelId } -> Bool
+lastThreadMessageMentionsChannel thread =
+    case MessageArray.last thread.messages of
+        Just last ->
+            Message.mentionsChannel last
+
+        Nothing ->
+            False
 
 
 previewThreadLastMessage_userTextMessage :

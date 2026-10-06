@@ -2,6 +2,7 @@ module E2EMisc exposing
     ( adminConnectionsShowWhatIsViewedTest
     , androidBackButtonRetracesScreensTest
     , banMemberTest
+    , channelMentionInThreadPreviewTest
     , channelSearchTest
     , channelSuggestionTest
     , codeBlockCopyButtonTest
@@ -2096,6 +2097,34 @@ channelSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "See #general"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "a", Test.Html.Selector.exactText "#general" ])
+                ]
+            )
+        ]
+
+
+{-| The card under a message with a thread shows the thread's last message, and a channel
+mentioned there is named rather than shown as missing.
+-}
+channelMentionInThreadPreviewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+channelMentionInThreadPreviewTest config =
+    E2EHelper.startTest
+        "A channel mentioned in a thread is named in the thread's preview card"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "Start a thread here"
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "See #general"
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "guild_threadStarterIndicator_1" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "#general" ]
+                    )
                 ]
             )
         ]
