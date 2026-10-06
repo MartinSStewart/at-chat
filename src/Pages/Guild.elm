@@ -2491,9 +2491,34 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 "guild_e2eeAcceptRisks"
                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
                 (Ui.text "I understand and accept the\u{00A0}risks")
+
+        showsPrivateKeyInput : Bool
+        showsPrivateKeyInput =
+            case e2ee of
+                DmChannel.E2eeDisabled _ ->
+                    False
+
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy /= localUser.session.userId then
+                        risksAccepted && localUser.user.publicKey /= Nothing
+
+                    else
+                        otherUserId == localUser.session.userId
+
+                DmChannel.E2eeDeclinedBy _ ->
+                    False
+
+                DmChannel.E2eeEnabled _ ->
+                    not keyInput.hasKeyOnThisDevice
     in
     MyUi.container
         16
+        (if showsPrivateKeyInput then
+            8
+
+         else
+            16
+        )
         isExpanded
         (Dom.id "guild_e2eeSection")
         (PressedExpandE2eeSection otherUserId)

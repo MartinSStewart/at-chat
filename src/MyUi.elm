@@ -947,8 +947,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Int -> Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
-container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
+container : Int -> Int -> Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container topPadding bottomPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
     if isExpanded then
         Ui.el
             [ Ui.paddingWith
@@ -984,7 +984,7 @@ container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2
                     { left = 0
                     , right = 0
                     , top = 4 + topPadding
-                    , bottom = 16
+                    , bottom = bottomPadding
                     }
                 , Ui.spacing 16
                 ]
