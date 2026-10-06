@@ -1,10 +1,11 @@
-module E2EMedia exposing (audioAttachmentTest, imageViewerTests, videoAttachmentTest)
+module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, videoAttachmentTest)
 
 import Audio
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
+import Expect
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -762,6 +763,38 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
+        ]
+
+
+imageRowTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+imageRowTest imageUploadConfig =
+    E2EHelper.startTest
+        "Images sent together are shown side by side"
+        E2EHelper.startTime
+        imageUploadConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView
+                    0
+                    (\html ->
+                        Test.Html.Query.findAll
+                            [ Test.Html.Selector.style "flex-wrap" "wrap"
+                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_1" ]
+                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_2" ]
+                            ]
+                            html
+                            |> Test.Html.Query.count (Expect.greaterThan 0)
+                    )
+                , admin.snapshotView 100 { name = "Images side by side" }
+                ]
+            )
         ]
 
 

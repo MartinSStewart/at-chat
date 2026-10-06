@@ -390,6 +390,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
+    , E2EMedia.imageRowTest imageUploadConfig
     , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EMisc.hourlyOrphanedFilesTest imageUploadConfig
     , E2EHelper.startTest
