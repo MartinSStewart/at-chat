@@ -528,7 +528,14 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     , Ui.borderColor MyUi.deleteButtonBorder
                                     , Ui.border 1
                                     ]
-                                    (Ui.text "Delete your account")
+                                    (Ui.text
+                                        (if local.localUser.user.isAdmin then
+                                            "Admins can't delete their account"
+
+                                         else
+                                            "Delete your account"
+                                        )
+                                    )
                                 ]
                         )
                     ]

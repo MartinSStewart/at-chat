@@ -984,12 +984,7 @@ container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2
                     { left = 0
                     , right = 0
                     , top = 4 + topPadding
-                    , bottom =
-                        if isMobile2 then
-                            8
-
-                        else
-                            16
+                    , bottom = 16
                     }
                 , Ui.spacing 16
                 ]
