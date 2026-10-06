@@ -46,6 +46,7 @@ module BackendExtra exposing
     , sendEncryptedDm
     , sendGuildMessage
     , sendLoginEmail
+    , sessionLastActiveAt
     , shouldRateLimit
     , toBackendLog
     , unreadOverviewData
@@ -901,8 +902,18 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
             ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
 
 
-getLastActiveAt : Maybe (NonemptyDict ClientId ConnectionData) -> Maybe Time.Posix
-getLastActiveAt connections =
+sessionLastActiveAt : UserSession -> Maybe (NonemptyDict ClientId ConnectionData) -> Time.Posix
+sessionLastActiveAt session connections =
+    let
+        lastActiveWhileDisconnected : Time.Posix
+        lastActiveWhileDisconnected =
+            case session.lastClientDisconnect of
+                Just lastClientDisconnect ->
+                    timeMax lastClientDisconnect session.signedInAt
+
+                Nothing ->
+                    session.signedInAt
+    in
     case connections of
         Just connections2 ->
             NonemptyDict.foldl
@@ -914,12 +925,11 @@ getLastActiveAt connections =
                         NoRequestsMade ->
                             lastActiveAt
                 )
-                (Time.millisToPosix 0)
+                lastActiveWhileDisconnected
                 connections2
-                |> Just
 
         Nothing ->
-            Nothing
+            lastActiveWhileDisconnected
 
 
 timeMax : Time.Posix -> Time.Posix -> Time.Posix
@@ -1128,14 +1138,7 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
                                     Nothing ->
                                         SeqDict.empty
                           , userAgent = otherSession.userAgent
-                          , lastActiveAt =
-                                case otherSession.lastClientDisconnect of
-                                    Just time ->
-                                        Maybe.withDefault otherSession.signedInAt (getLastActiveAt connections)
-                                            |> timeMax time
-
-                                    Nothing ->
-                                        Maybe.withDefault otherSession.signedInAt (getLastActiveAt connections)
+                          , lastActiveAt = sessionLastActiveAt otherSession connections
                           }
                         )
                             |> Just
