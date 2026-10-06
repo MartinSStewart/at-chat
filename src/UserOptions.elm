@@ -348,6 +348,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         Ui.none
                 , MyUi.container
                     16
+                    16
                     (SeqSet.member UserOption_Settings local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_settings")
                     (PressedExpandContainer UserOption_Settings)
@@ -528,11 +529,19 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     , Ui.borderColor MyUi.deleteButtonBorder
                                     , Ui.border 1
                                     ]
-                                    (Ui.text "Delete your account")
+                                    (Ui.text
+                                        (if local.localUser.user.isAdmin then
+                                            "Admins can't delete their account"
+
+                                         else
+                                            "Delete your account"
+                                        )
+                                    )
                                 ]
                         )
                     ]
                 , MyUi.container
+                    16
                     16
                     (SeqSet.member UserOption_TwoFactorAuthentication local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_twoFactor")
@@ -559,6 +568,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
+                        16
                         16
                         (SeqSet.member UserOption_WhitelistedDomains local.localUser.session.expandedUserOptions)
                         (Dom.id "userOptions_whitelistedDomains")
@@ -598,6 +608,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             Ui.none
                         ]
                 , MyUi.container
+                    16
                     16
                     (SeqSet.member UserOption_E2ee local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_e2eeSection")
@@ -701,6 +712,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     )
                 , MyUi.container
                     16
+                    16
                     (SeqSet.member UserOption_Discord local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_discordSection")
                     (PressedExpandContainer UserOption_Discord)
@@ -765,6 +777,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     ]
                 , MyUi.container
                     10
+                    16
                     (SeqSet.member UserOption_ConnectedDevices local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_connectedDevices")
                     (PressedExpandContainer UserOption_ConnectedDevices)
@@ -784,6 +797,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             (SeqDict.toList local.otherSessions)
                     )
                 , MyUi.container
+                    16
                     16
                     (SeqSet.member UserOption_Debug local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_debug")
@@ -872,6 +886,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         [ Ui.html (Icons.github 20), Ui.text "Source code" ]
                     ]
                 , MyUi.container
+                    16
                     16
                     (SeqSet.member UserOption_Privacy local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_privacy")

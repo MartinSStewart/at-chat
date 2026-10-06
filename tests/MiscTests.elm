@@ -8,6 +8,8 @@ import ChannelName
 import Coord
 import CssPixels exposing (CssPixels)
 import DiscordSync
+import Duration
+import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
@@ -27,6 +29,7 @@ import Test exposing (Test)
 import Types exposing (BackendModel, BackendMsg(..))
 import User
 import UserAgent
+import UserSession
 import X25519
 
 
@@ -83,6 +86,55 @@ backendMsgLogTests =
                           , endTime = Time.millisToPosix 1025
                           }
                         ]
+        ]
+
+
+{-| A session is dropped after 30 days without being used, and a device that disconnected was
+used up until it disconnected, however long ago it signed in.
+-}
+sessionExpiryTests : Test
+sessionExpiryTests =
+    let
+        sessionId : SessionId
+        sessionId =
+            Lamdera.sessionIdFromString "session"
+
+        day : Int -> Time.Posix
+        day n =
+            Duration.days (toFloat n) |> Duration.inMilliseconds |> round |> Time.millisToPosix
+
+        sessionsAfterHourlyUpdate : Maybe Time.Posix -> List SessionId
+        sessionsAfterHourlyUpdate lastClientDisconnect =
+            let
+                model : BackendModel
+                model =
+                    Backend.app_.init |> Tuple.first
+
+                session : UserSession.UserSession
+                session =
+                    UserSession.init (day 0) sessionId (Id.fromInt 0) (UserAgent.parseUserAgent "")
+            in
+            Backend.app_.update
+                (GotTimeForBackendMsg (day 31) (HourlyUpdate (day 31)))
+                { model
+                    | sessions =
+                        SeqDict.insert
+                            sessionId
+                            { session | lastClientDisconnect = lastClientDisconnect }
+                            model.sessions
+                }
+                |> Tuple.first
+                |> .sessions
+                |> SeqDict.keys
+    in
+    Test.describe
+        "Session expiry"
+        [ Test.test "A session signed in 31 days ago whose device disconnected 2 days ago stays signed in" <|
+            \_ -> sessionsAfterHourlyUpdate (Just (day 29)) |> Expect.equal [ sessionId ]
+        , Test.test "A session whose device disconnected 31 days ago is signed out" <|
+            \_ -> sessionsAfterHourlyUpdate (Just (day 0)) |> Expect.equal []
+        , Test.test "A session signed in 31 days ago that never connected is signed out" <|
+            \_ -> sessionsAfterHourlyUpdate Nothing |> Expect.equal []
         ]
 
 
@@ -295,6 +347,7 @@ tests =
         , attachmentUrlTests
         , uploadedFileMetadataTests
         , backendMsgLogTests
+        , sessionExpiryTests
         , threadMentionOnBackendTest
         , Test.test "Round trip message view encoding" <|
             \_ ->

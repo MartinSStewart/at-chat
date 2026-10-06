@@ -106,6 +106,7 @@ module MyUi exposing
     , userLabelFontColor
     , userLabelHtml
     , userLabelHtmlAttributes
+    , userLabelText
     , virtualKeyboardOpen
     , warningHeader
     , weakHoverHighlight
@@ -946,8 +947,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Int -> Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
-container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
+container : Int -> Int -> Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container topPadding bottomPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
     if isExpanded then
         Ui.el
             [ Ui.paddingWith
@@ -983,12 +984,7 @@ container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2
                     { left = 0
                     , right = 0
                     , top = 4 + topPadding
-                    , bottom =
-                        if isMobile2 then
-                            8
-
-                        else
-                            16
+                    , bottom = bottomPadding
                     }
                 , Ui.spacing 16
                 ]
@@ -1574,7 +1570,7 @@ userLabelHtml userId allUsers =
             userLabel2Html user
 
         Nothing ->
-            Html.span userLabelHtmlAttributes [ Html.text "@<name missing>" ]
+            Html.span userLabelHtmlAttributes [ userLabelText "@<name missing>" ]
 
 
 userLabelHtmlAttributes : List (Html.Attribute msg)
@@ -1584,18 +1580,31 @@ userLabelHtmlAttributes =
     , Html.Attributes.style "color" (colorToStyle userLabelFontColor)
     , Html.Attributes.style "border-radius" "2px"
     , Html.Attributes.style "white-space" "nowrap"
-    , Html.Attributes.style "display" "inline-block"
+    , Html.Attributes.style "display" "inline-flex"
+    , Html.Attributes.style "box-sizing" "border-box"
     , Html.Attributes.style "max-width" "100%"
-    , Html.Attributes.style "overflow" "clip"
-    , Html.Attributes.style "text-overflow" "ellipsis"
     , Html.Attributes.style "line-height" "normal"
     , Html.Attributes.style "margin-top" "-1px"
     ]
 
 
+{-| The clipping is done by this inner element rather than the label itself because Safari
+puts the bottom edge of an inline-block that clips its content on the baseline, lifting the
+label above the text around it. A flex item's baseline is still taken from its text.
+-}
+userLabelText : String -> Html msg
+userLabelText text =
+    Html.span
+        [ Html.Attributes.style "min-width" "0"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "text-overflow" "ellipsis"
+        ]
+        [ Html.text text ]
+
+
 userLabel2Html : { a | name : PersonName } -> Html msg
 userLabel2Html user =
-    Html.span userLabelHtmlAttributes [ Html.text ("@" ++ PersonName.toString user.name) ]
+    Html.span userLabelHtmlAttributes [ userLabelText ("@" ++ PersonName.toString user.name) ]
 
 
 blockClickPropagation : msg -> Ui.Attribute msg

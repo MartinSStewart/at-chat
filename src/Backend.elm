@@ -1979,27 +1979,11 @@ updateHelper msg model =
                     List.filterMap
                         (\( sessionId, session ) ->
                             let
-                                latestRequest : Time.Posix
-                                latestRequest =
-                                    case SeqDict.get sessionId model.connections of
-                                        Just connections ->
-                                            NonemptyDict.foldl
-                                                (\_ data latestRequest2 ->
-                                                    case data.lastRequest of
-                                                        NoRequestsMade ->
-                                                            latestRequest2
-
-                                                        LastRequest time2 ->
-                                                            max (Time.posixToMillis time2) (Time.posixToMillis latestRequest2)
-                                                                |> Time.millisToPosix
-                                                )
-                                                session.signedInAt
-                                                connections
-
-                                        Nothing ->
-                                            session.signedInAt
+                                lastActiveAt : Time.Posix
+                                lastActiveAt =
+                                    BackendExtra.sessionLastActiveAt session (SeqDict.get sessionId model.connections)
                             in
-                            if Duration.from latestRequest time |> Quantity.lessThan (Duration.days 30) then
+                            if Duration.from lastActiveAt time |> Quantity.lessThan (Duration.days 30) then
                                 Nothing
 
                             else

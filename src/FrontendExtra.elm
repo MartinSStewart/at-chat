@@ -142,6 +142,7 @@ import Ui.Lazy
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import UserAgent
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserOptionSection, UserSession)
 import VisibleMessages
@@ -1592,9 +1593,14 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             Command.none
 
 
+{-| Phones other than Android don't get history entries. Safari's edge swipe goes back
+through history as soon as there is any, and nothing turns it off, so it would fight the
+channel sidebar's swipe. On Android the OS owns the edge swipe either way and Chrome's own
+one is turned off by `overscroll-behavior`, so there the back button can retrace the screens.
+-}
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routePush model route =
-    if MyUi.isMobile model then
+    if MyUi.isMobile model && not (UserAgent.isAndroid model.startupData.userAgent.device) then
         routeRequest (Just model.route) route model
 
     else
@@ -7288,7 +7294,10 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
+            if Route.toOverlay model.route == Just Route.UserOptionsOverlay then
+                routePush model (Route.setOverlay Nothing model.route)
+
+            else if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
                 -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
                 routePush model (Route.setChannelHeaderTab Nothing model.route)
 

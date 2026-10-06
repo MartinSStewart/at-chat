@@ -4134,6 +4134,11 @@ type PressedImageId
     | PressedEmbedImage Int
 
 
+type ContentGroup userId channelId
+    = OtherContent (Nonempty (RichText userId channelId))
+    | MediaRow (Nonempty (RichText userId channelId))
+
+
 viewHelper :
     Bool
     -> ShowLargeContent
@@ -4148,6 +4153,244 @@ viewHelper :
     -> Nonempty (RichText userId channelId)
     -> ( ( Bool, Int ), Int, List (Html msg) )
 viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressImage onPressLink spoilerIndex state config embeds embedIndex nonempty =
+    List.foldl
+        (\group ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
+            case group of
+                OtherContent nodes ->
+                    viewNodes
+                        dropNextLineBreak2
+                        showLargeContent
+                        maybePressedSpoiler
+                        maybeOnPressImage
+                        onPressLink
+                        spoilerIndex2
+                        state
+                        config
+                        embeds
+                        embedIndex2
+                        currentList
+                        nodes
+
+                MediaRow nodes ->
+                    let
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, row ) =
+                            viewNodes
+                                dropNextLineBreak2
+                                showLargeContent
+                                maybePressedSpoiler
+                                maybeOnPressImage
+                                onPressLink
+                                spoilerIndex2
+                                state
+                                config
+                                embeds
+                                embedIndex2
+                                []
+                                nodes
+                    in
+                    ( ( dropNextLineBreak3, spoilerIndex3 )
+                    , embedIndex3
+                    , currentList
+                        ++ [ Html.div
+                                [ Html.Attributes.style "display" "flex"
+                                , Html.Attributes.style "flex-wrap" "wrap"
+                                , Html.Attributes.style "align-items" "flex-start"
+                                , Html.Attributes.style "gap" "4px"
+                                ]
+                                row
+                           ]
+                    )
+        )
+        ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
+        (case showLargeContent of
+            ShowLargeContent _ ->
+                groupMediaRows config.attachedFiles [] [] (List.Nonempty.toList nonempty)
+
+            NoLargeContent ->
+                [ OtherContent nonempty ]
+        )
+
+
+{-| Images and videos with nothing but spaces between them are grouped so they can be shown side by side.
+-}
+groupMediaRows :
+    SeqDict (Id FileId) FileData
+    -> List (RichText userId channelId)
+    -> List (ContentGroup userId channelId)
+    -> List (RichText userId channelId)
+    -> List (ContentGroup userId channelId)
+groupMediaRows attachedFiles otherContent groups nodes =
+    case nodes of
+        node :: rest ->
+            if isMedia attachedFiles node then
+                case takeMediaRow attachedFiles [ node ] rest of
+                    ( [ _ ], _ ) ->
+                        groupMediaRows attachedFiles (node :: otherContent) groups rest
+
+                    ( media, rest2 ) ->
+                        groupMediaRows
+                            attachedFiles
+                            []
+                            (case List.Nonempty.fromList (List.reverse media) of
+                                Just mediaNonempty ->
+                                    MediaRow mediaNonempty :: addOtherContent otherContent groups
+
+                                Nothing ->
+                                    addOtherContent otherContent groups
+                            )
+                            rest2
+
+            else
+                groupMediaRows attachedFiles (node :: otherContent) groups rest
+
+        [] ->
+            addOtherContent otherContent groups |> List.reverse
+
+
+addOtherContent : List (RichText userId channelId) -> List (ContentGroup userId channelId) -> List (ContentGroup userId channelId)
+addOtherContent otherContent groups =
+    case List.Nonempty.fromList (List.reverse otherContent) of
+        Just nonempty ->
+            OtherContent nonempty :: groups
+
+        Nothing ->
+            groups
+
+
+takeMediaRow :
+    SeqDict (Id FileId) FileData
+    -> List (RichText userId channelId)
+    -> List (RichText userId channelId)
+    -> ( List (RichText userId channelId), List (RichText userId channelId) )
+takeMediaRow attachedFiles media nodes =
+    case nodes of
+        (NormalText char text) :: next :: rest ->
+            if String.all (\a -> a == ' ') (String.cons char text) && isMedia attachedFiles next then
+                takeMediaRow attachedFiles (next :: media) rest
+
+            else
+                ( media, nodes )
+
+        next :: rest ->
+            if isMedia attachedFiles next then
+                takeMediaRow attachedFiles (next :: media) rest
+
+            else
+                ( media, nodes )
+
+        [] ->
+            ( media, nodes )
+
+
+isMedia : SeqDict (Id FileId) FileData -> RichText userId channelId -> Bool
+isMedia attachedFiles richText =
+    case richText of
+        AttachedFile fileId ->
+            case SeqDict.get fileId attachedFiles of
+                Just fileData ->
+                    case fileData.metadata of
+                        Just (FileMetadata_Image _) ->
+                            True
+
+                        Just (FileMetadata_Video _) ->
+                            True
+
+                        Nothing ->
+                            case FileStatus.contentTypeType fileData.contentType of
+                                FileStatus.Video ->
+                                    True
+
+                                FileStatus.Text ->
+                                    False
+
+                                FileStatus.Image ->
+                                    False
+
+                                FileStatus.Audio ->
+                                    False
+
+                                FileStatus.Application ->
+                                    False
+
+                                FileStatus.Other ->
+                                    False
+
+                Nothing ->
+                    False
+
+        Spoiler nonempty ->
+            List.Nonempty.all (isMedia attachedFiles) nonempty
+
+        UserMention _ ->
+            False
+
+        ChannelMention _ _ ->
+            False
+
+        NormalText _ _ ->
+            False
+
+        Bold _ ->
+            False
+
+        Italic _ ->
+            False
+
+        Underline _ ->
+            False
+
+        Strikethrough _ ->
+            False
+
+        BlockQuote _ _ ->
+            False
+
+        Heading _ _ _ ->
+            False
+
+        Hyperlink _ ->
+            False
+
+        MarkdownLink _ _ ->
+            False
+
+        InlineCode _ _ ->
+            False
+
+        CodeBlock _ _ ->
+            False
+
+        EscapedChar _ ->
+            False
+
+        Sticker _ ->
+            False
+
+        CustomEmoji _ ->
+            False
+
+        BulletPoint _ _ ->
+            False
+
+        Timestamp _ ->
+            False
+
+
+viewNodes :
+    Bool
+    -> ShowLargeContent
+    -> Maybe ( HtmlId, Int -> msg )
+    -> Maybe (PressedImageData -> msg)
+    -> (Url -> msg)
+    -> Int
+    -> RichTextState
+    -> Config a userId channelId msg
+    -> Array Embed
+    -> Int
+    -> List (Html msg)
+    -> Nonempty (RichText userId channelId)
+    -> ( ( Bool, Int ), Int, List (Html msg) )
+viewNodes dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressImage onPressLink spoilerIndex state config embeds embedIndex previousHtml nonempty =
     let
         nodes : List (RichText userId channelId)
         nodes =
@@ -4788,7 +5031,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     , currentList ++ [ timestampView config.time config.timezone state time ]
                     )
         )
-        ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
+        ( ( dropNextLineBreak, spoilerIndex ), embedIndex, previousHtml )
         (List.map2 Tuple.pair (Nothing :: List.map Just nodes) nodes)
 
 
@@ -5484,10 +5727,10 @@ channelMentionView onPress channel maybeThread channels =
                     :: Html.Attributes.style "cursor" "pointer"
                     :: MyUi.userLabelHtmlAttributes
                 )
-                [ Html.text ("#" ++ name) ]
+                [ MyUi.userLabelText ("#" ++ name) ]
 
         Nothing ->
-            Html.span MyUi.userLabelHtmlAttributes [ Html.text "#<missing>" ]
+            Html.span MyUi.userLabelHtmlAttributes [ MyUi.userLabelText "#<missing>" ]
 
 
 textInputView :

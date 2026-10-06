@@ -321,65 +321,63 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             ( HideChannelSettings, _ ) ->
                                 Ui.none
                 in
-                Ui.row
+                Ui.column
                     [ Ui.height Ui.fill
                     , Ui.background MyUi.background1
+                    , Ui.heightMin 0
+                    , Ui.clip
+                    , Ui.inFront memberColumn
+                    , case maybeOtherUserId of
+                        SelectedDmChannel dmRoute ->
+                            dmChannelView dmRoute loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                    , Ui.move
+                                        { x = Call.conversationOffset loggedIn.sidebarMode model
+                                        , y = 0
+                                        , z = 0
+                                        }
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.inFront
+
+                        SelectedDiscordDmChannel routeData ->
+                            discordDmChannelView routeData loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                    , Ui.move
+                                        { x = Call.conversationOffset loggedIn.sidebarMode model
+                                        , y = 0
+                                        , z = 0
+                                        }
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.inFront
+
+                        NoDmChannelSelected ->
+                            Ui.noAttr
                     ]
-                    [ Ui.column
-                        [ Ui.height Ui.fill
-                        , Ui.inFront memberColumn
-                        , case maybeOtherUserId of
-                            SelectedDmChannel dmRoute ->
-                                dmChannelView dmRoute loggedIn local model
-                                    |> Ui.el
-                                        [ Ui.height Ui.fill
-                                        , Ui.background MyUi.background3
-                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
-                                        , Ui.move
-                                            { x = Call.conversationOffset loggedIn.sidebarMode model
-                                            , y = 0
-                                            , z = 0
-                                            }
-                                        , Ui.heightMin 0
-                                        , Ui.borderColor MyUi.border1
-                                        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        ]
-                                    |> Ui.inFront
-
-                            SelectedDiscordDmChannel routeData ->
-                                discordDmChannelView routeData loggedIn local model
-                                    |> Ui.el
-                                        [ Ui.height Ui.fill
-                                        , Ui.background MyUi.background3
-                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
-                                        , Ui.move
-                                            { x = Call.conversationOffset loggedIn.sidebarMode model
-                                            , y = 0
-                                            , z = 0
-                                            }
-                                        , Ui.heightMin 0
-                                        , Ui.borderColor MyUi.border1
-                                        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        ]
-                                    |> Ui.inFront
-
-                            NoDmChannelSelected ->
-                                Ui.noAttr
+                    [ Ui.row
+                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                        [ GuildColumn.guildColumnLazy True model local
+                        , friendsColumnLazy
+                            canScroll2
+                            True
+                            model.time
+                            maybeOtherUserId
+                            loggedIn.friendsSearch
+                            (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
+                            local
                         ]
-                        [ Ui.row
-                            [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ GuildColumn.guildColumnLazy True model local
-                            , friendsColumnLazy
-                                canScroll2
-                                True
-                                model.time
-                                maybeOtherUserId
-                                loggedIn.friendsSearch
-                                (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
-                                local
-                            ]
-                        , Ui.Lazy.lazy loggedInAsView local.localUser
-                        ]
+                    , Ui.Lazy.lazy loggedInAsView local.localUser
                     ]
 
             else
@@ -2493,9 +2491,34 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 "guild_e2eeAcceptRisks"
                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
                 (Ui.text "I understand and accept the\u{00A0}risks")
+
+        showsPrivateKeyInput : Bool
+        showsPrivateKeyInput =
+            case e2ee of
+                DmChannel.E2eeDisabled _ ->
+                    False
+
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy /= localUser.session.userId then
+                        risksAccepted && localUser.user.publicKey /= Nothing
+
+                    else
+                        otherUserId == localUser.session.userId
+
+                DmChannel.E2eeDeclinedBy _ ->
+                    False
+
+                DmChannel.E2eeEnabled _ ->
+                    not keyInput.hasKeyOnThisDevice
     in
     MyUi.container
         16
+        (if showsPrivateKeyInput then
+            8
+
+         else
+            16
+        )
         isExpanded
         (Dom.id "guild_e2eeSection")
         (PressedExpandE2eeSection otherUserId)
@@ -4210,7 +4233,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || lastThreadMessageMentionsChannel thread ) of
                                             ( Nothing, False ) ->
                                                 Ui.Lazy.lazy6
                                                     messageViewThreadStarter
@@ -4574,7 +4597,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || lastThreadMessageMentionsChannel thread ) of
                                             ( Nothing, False ) ->
                                                 discordMessageViewThreadStarter
                                                     (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
@@ -9545,6 +9568,16 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
             ++ [ highlightLayer highlight ]
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
+
+
+lastThreadMessageMentionsChannel : { a | messages : MessageArray messageId userId channelId } -> Bool
+lastThreadMessageMentionsChannel thread =
+    case MessageArray.last thread.messages of
+        Just last ->
+            Message.mentionsChannel last
+
+        Nothing ->
+            False
 
 
 previewThreadLastMessage_userTextMessage :

@@ -6608,6 +6608,7 @@ setupView windowSize isReadonly setup =
             ]
         , MyUi.container
             16
+            16
             setup.advancedSettingsExpanded
             (Dom.id "wsg_advancedSection")
             PressedExpandAdvancedSettings

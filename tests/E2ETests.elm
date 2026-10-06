@@ -368,6 +368,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
+    , E2EMisc.escapeClosesUserOptionsTest normalConfig
     , E2EMisc.deleteAccountTest normalConfig discordOp0Ready discordOp0ReadySupplemental
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.importChannelTest channelImportConfig
@@ -384,11 +385,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.longMentionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
     , E2EMisc.channelSuggestionTest normalConfig
+    , E2EMisc.channelMentionInThreadPreviewTest normalConfig
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
+    , E2EMedia.imageRowTest imageUploadConfig
     , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EMisc.hourlyOrphanedFilesTest imageUploadConfig
     , E2EHelper.startTest
@@ -422,6 +425,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.markMessageAsUnreadTest normalConfig
     , E2EMisc.staysReadWhileViewingTest normalConfig
     , E2EMisc.swipedAwayConversationStopsBeingViewedTest normalConfig
+    , E2EMisc.androidBackButtonRetracesScreensTest normalConfig
     , E2EMisc.touchingTextInputDoesntStartDragTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
