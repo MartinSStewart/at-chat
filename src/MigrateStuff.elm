@@ -14,7 +14,6 @@ import File.Select
 import Html
 import Html.Attributes
 import Html.Events
-import Http
 import Id
 import Lamdera.Wire3
 import LocalState
