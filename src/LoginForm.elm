@@ -666,6 +666,26 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
                                                             )
                                                         ]
 
+                                                    else if range.start == range.end && range.start == codeLength && index == codeLength - 1 then
+                                                        [ Ui.background MyUi.inputBackground
+                                                        , Ui.inFront
+                                                            (Ui.el
+                                                                [ Ui.paddingXY 4 0
+                                                                , Ui.height Ui.fill
+                                                                , Ui.alignRight
+                                                                , MyUi.noPointerEvents
+                                                                ]
+                                                                (Ui.el
+                                                                    [ Ui.height Ui.fill
+                                                                    , Ui.background MyUi.white
+                                                                    , Ui.borderWith { left = 2, right = 0, top = 0, bottom = 0 }
+                                                                    , cursorBlinking
+                                                                    ]
+                                                                    Ui.none
+                                                                )
+                                                            )
+                                                        ]
+
                                                     else if range.start <= index && index < range.end then
                                                         [ Ui.background MyUi.selectedTextBackground ]
 
