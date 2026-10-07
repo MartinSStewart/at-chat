@@ -391,6 +391,7 @@ type MessageHover
     = NoMessageHover
     | MessageHover AnyGuildOrDmId ThreadRouteWithMessage
     | MessageMenu MessageMenuExtraOptions
+    | ReactionPopup AnyGuildOrDmId ThreadRouteWithMessage Int
 
 
 type alias MessageMenuExtraOptions =
@@ -631,7 +632,7 @@ type FrontendMsg_
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
+    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String) (Maybe Int)
     | PressedShowUserOption
     | PressedCloseOverlay
     | PressedExpandContainer UserOptionSection

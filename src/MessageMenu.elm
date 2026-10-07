@@ -63,6 +63,9 @@ close model loggedIn =
         MessageHover _ _ ->
             loggedIn
 
+        ReactionPopup _ _ _ ->
+            loggedIn
+
         MessageMenu extraOptions ->
             let
                 isMobile =

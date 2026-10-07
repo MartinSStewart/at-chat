@@ -1411,6 +1411,11 @@ body {
   display: block;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
+/* A long press has already waited, so the popup comes straight in */
+.reaction-long-pressed .emoji-popup {
+  display: flex;
+  animation: emoji-popup-fade-in 0.2s ease forwards;
+}
 @keyframes emoji-popup-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

@@ -30,6 +30,7 @@ module E2EMisc exposing
     , orphanedFilesTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
+    , reactionPopupOnLongPressTest
     , reloadingAConversationLeavesItUnreadTest
     , richTextMessage
     , startingACallOrGameStaysReadTest
@@ -195,6 +196,83 @@ reactionPopupNamesEmojiTest config =
                         , Test.Html.Selector.text ":heart:"
                         ]
                     )
+                ]
+            )
+        ]
+
+
+{-| Fingers can't hover, so on a phone long pressing a reaction brings up the popup naming who
+reacted instead of the message menu. Lifting the finger leaves the popup up and the reaction
+as it was, and the next touch puts the popup away again.
+-}
+reactionPopupOnLongPressTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+reactionPopupOnLongPressTest config =
+    E2EHelper.startTest
+        "Long pressing a reaction shows who reacted"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\_ user ->
+                let
+                    touchStart : List ( String, Json.Encode.Value ) -> Json.Encode.Value
+                    touchStart dataset =
+                        Json.Encode.object
+                            [ ( "timeStamp", Json.Encode.float 1000 )
+                            , ( "touches"
+                              , Json.Encode.object
+                                    [ ( "length", Json.Encode.int 1 )
+                                    , ( "0"
+                                      , Json.Encode.object
+                                            [ ( "identifier", Json.Encode.int 0 )
+                                            , ( "clientX", Json.Encode.float 50 )
+                                            , ( "clientY", Json.Encode.float 150 )
+                                            , ( "target", Json.Encode.object [ ( "id", Json.Encode.string "guild_message_1" ) ] )
+                                            ]
+                                      )
+                                    ]
+                              )
+                            , ( "target", Json.Encode.object [ ( "dataset", Json.Encode.object dataset ) ] )
+                            ]
+
+                    touchStartOnReaction : Json.Encode.Value
+                    touchStartOnReaction =
+                        touchStart [ ( "reactionIndex", Json.Encode.string "0" ) ]
+
+                    touchEnd : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    touchEnd =
+                        user.custom 100 (Dom.id "elm-ui-root-id") "touchend" (Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ])
+                in
+                [ E2EHelper.writeMessageMobile user "Hello everyone"
+                , user.custom 1000 (Dom.id "guild_message_1") "touchstart" (touchStart [])
+                , user.click 600 (Dom.id "messageMenu_mobileReactionEmoji_0")
+                , touchEnd
+                , user.checkView 600 (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                , user.custom 100 (Dom.id "guild_message_1") "touchstart" touchStartOnReaction
+                , user.checkView
+                    600
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.class "reaction-long-pressed"
+                        , Test.Html.Selector.containing [ Test.Html.Selector.class "emoji-popup" ]
+                        ]
+                    )
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_close" ])
+                , user.snapshotView 100 { name = "Long pressed reaction on a phone" }
+
+                -- Lifting the finger can count as pressing the reaction
+                , touchEnd
+                , user.click 100 (Dom.id "guild_removeReactionEmoji_0")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.class "reaction-long-pressed" ])
+
+                -- The next touch puts the popup away, after which pressing the reaction
+                -- takes the reaction back
+                , user.custom 1000 (Dom.id "elm-ui-root-id") "touchstart" (touchStart [])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.class "reaction-long-pressed" ])
+                , touchEnd
+                , user.click 100 (Dom.id "guild_removeReactionEmoji_0")
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
                 ]
             )
         ]

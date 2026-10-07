@@ -536,6 +536,9 @@ layout model attributes child =
                     MessageHover _ _ ->
                         Ui.noAttr
 
+                    ReactionPopup _ _ _ ->
+                        Ui.noAttr
+
                     NoMessageHover ->
                         Ui.noAttr
                 ]
@@ -2518,7 +2521,7 @@ isPressMsg msg =
         PressedCancelMessageEdit _ ->
             True
 
-        CheckMessageAltPress _ _ _ _ _ _ ->
+        CheckMessageAltPress _ _ _ _ _ _ _ ->
             False
 
         PressedShowUserOption ->

@@ -40,8 +40,8 @@ type MessageViewMsg
     | MessageView_PressedImage RichText.PressedImageData
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
-    | MessageView_TouchStart Duration Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Coord CssPixels)
+    | MessageView_TouchStart Duration Bool (Maybe String) (Maybe String) (Maybe Int) (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Maybe Int) (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove EmojiOrCustomEmoji
     | MessageView_PressedReactionEmoji_Add EmojiOrCustomEmoji
     | MessageView_PressedReplyLink
@@ -83,10 +83,10 @@ isPressMsg msg =
         MessageView_MouseExitedMessage ->
             False
 
-        MessageView_TouchStart _ _ _ _ _ ->
+        MessageView_TouchStart _ _ _ _ _ _ ->
             False
 
-        MessageView_AltPressedMessage _ _ _ _ ->
+        MessageView_AltPressedMessage _ _ _ _ _ ->
             True
 
         MessageView_PressedReactionEmoji_Remove _ ->
@@ -338,11 +338,13 @@ miniButtonWithPosition htmlId onPress svg =
 
 {-| Whether the popup naming who reacted with an emoji comes up when the pointer is over
 that reaction. It follows whether the thing the reactions belong to is hovered at all, so
-that somewhere showing a message without its menu doesn't bring popups up either.
+that somewhere showing a message without its menu doesn't bring popups up either. Fingers
+can't hover, so on a touch screen long pressing a reaction brings up its popup instead.
 -}
 type ReactionsHover
     = ReactionsHovered
     | ReactionsNotHovered
+    | ReactionLongPressed Int
 
 
 {-| Reaction buttons are a fixed width so that the popup above one can work out where
@@ -517,6 +519,7 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
                             , Ui.background MyUi.background1
                             , Ui.paddingXY 4 0
                             , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                            , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
                             , Ui.borderColor
                                 (if hasReactedTo then
                                     MyUi.highlightedBorder
@@ -541,6 +544,26 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
 
                                 ReactionsNotHovered ->
                                     Ui.noAttr
+
+                                ReactionLongPressed longPressedIndex ->
+                                    if longPressedIndex == index then
+                                        reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+
+                                    else
+                                        Ui.noAttr
+                            , case isHovered of
+                                ReactionsHovered ->
+                                    Ui.noAttr
+
+                                ReactionsNotHovered ->
+                                    Ui.noAttr
+
+                                ReactionLongPressed longPressedIndex ->
+                                    if longPressedIndex == index then
+                                        Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
+
+                                    else
+                                        Ui.noAttr
                             ]
                             [ case emoji of
                                 EmojiOrCustomEmoji_Emoji emoji2 ->
