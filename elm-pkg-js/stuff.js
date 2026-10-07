@@ -1064,11 +1064,6 @@ exports.init = async function init(app)
 
         outer.parentNode.removeChild(outer);
 
-        const isPwa =
-            window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true ||
-            document.referrer.includes('android-app://');
-
         const safeAreaInsets = measureSafeAreaInsets();
 
         let zone;
@@ -1092,7 +1087,7 @@ exports.init = async function init(app)
             loadStartupDataTime: Date.now(),
             userAgent: window.navigator.userAgent,
             scrollbarWidth: scrollbarWidth,
-            isPwa: isPwa,
+            isPwa: isPwa(),
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
             safeAreaInsetTop: safeAreaInsets.top,
             safeAreaInsetBottom: safeAreaInsets.bottom,
@@ -1172,8 +1167,26 @@ exports.init = async function init(app)
         return height;
     }
 
+    function isPwa() {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            document.referrer.includes('android-app://');
+    }
+
+    // Firefox 150+ on Android adds the address bar's height to env(safe-area-inset-bottom) while
+    // the bar is at the top and expanded (https://bugzilla.mozilla.org/show_bug.cgi?id=2057232).
+    // at-chat's page never scrolls, so the bar never collapses and the inset stays wrong. Chrome
+    // reports 0 in a tab, so Firefox gets 0 too.
+    function isFirefoxAndroidTab() {
+        const userAgent = window.navigator.userAgent;
+        return userAgent.includes('Android') && userAgent.includes('Firefox/') && !isPwa();
+    }
+
     function measureSafeAreaInsets() {
-        return { top: measureSafeAreaInset('top'), bottom: measureSafeAreaInset('bottom') };
+        return {
+            top: measureSafeAreaInset('top'),
+            bottom: isFirefoxAndroidTab() ? 0 : measureSafeAreaInset('bottom')
+        };
     }
 
     // Rotating the device changes the insets, and it resizes the window when it does.
