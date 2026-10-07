@@ -514,57 +514,48 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
                                 (Dom.id "guild_addReactionEmoji")
                                 (MessageView_PressedReactionEmoji_Add emoji)
                         )
-                            [ Ui.rounded 8
-                            , Ui.spacing 2
-                            , Ui.background MyUi.background1
-                            , Ui.paddingXY 4 0
-                            , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-                            , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
-                            , Ui.borderColor
+                            ([ Ui.rounded 8
+                             , Ui.spacing 2
+                             , Ui.background MyUi.background1
+                             , Ui.paddingXY 4 0
+                             , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                             , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
+                             , Ui.borderColor
                                 (if hasReactedTo then
                                     MyUi.highlightedBorder
 
                                  else
                                     MyUi.border1
                                 )
-                            , Ui.Font.color
+                             , Ui.Font.color
                                 (if hasReactedTo then
                                     MyUi.highlightedBorder
 
                                  else
                                     MyUi.font2
                                 )
-                            , Ui.border 1
-                            , Ui.width (Ui.px (reactionButtonWidth users))
-                            , Ui.contentCenterX
-                            , Ui.Font.weight 500
-                            , case isHovered of
-                                ReactionsHovered ->
-                                    reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                             , Ui.border 1
+                             , Ui.width (Ui.px (reactionButtonWidth users))
+                             , Ui.contentCenterX
+                             , Ui.Font.weight 500
+                             ]
+                                ++ (case isHovered of
+                                        ReactionsHovered ->
+                                            [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above ]
 
-                                ReactionsNotHovered ->
-                                    Ui.noAttr
+                                        ReactionsNotHovered ->
+                                            []
 
-                                ReactionLongPressed longPressedIndex ->
-                                    if longPressedIndex == index then
-                                        reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                                        ReactionLongPressed longPressedIndex ->
+                                            if longPressedIndex == index then
+                                                [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                                                , Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
+                                                ]
 
-                                    else
-                                        Ui.noAttr
-                            , case isHovered of
-                                ReactionsHovered ->
-                                    Ui.noAttr
-
-                                ReactionsNotHovered ->
-                                    Ui.noAttr
-
-                                ReactionLongPressed longPressedIndex ->
-                                    if longPressedIndex == index then
-                                        Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
-
-                                    else
-                                        Ui.noAttr
-                            ]
+                                            else
+                                                []
+                                   )
+                            )
                             [ case emoji of
                                 EmojiOrCustomEmoji_Emoji emoji2 ->
                                     Emoji.view emojiData emoji2
