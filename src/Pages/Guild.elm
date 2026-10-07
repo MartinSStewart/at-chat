@@ -326,6 +326,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     , Ui.background MyUi.background1
                     , Ui.heightMin 0
                     , Ui.clip
+                    , MyUi.unscrollable
                     , Ui.inFront memberColumn
                     , case maybeOtherUserId of
                         SelectedDmChannel dmRoute ->
@@ -1654,6 +1655,7 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , Ui.clip
+                            , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, isThread ) ->
                                     channelSettingsMobile
@@ -1823,6 +1825,7 @@ discordGuildView model routeData loggedIn local =
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , Ui.clip
+                            , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, _ ) ->
                                     case routeData.channelRoute of

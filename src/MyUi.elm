@@ -102,6 +102,7 @@ module MyUi exposing
     , timeElapsedView
     , timestamp
     , touchPress
+    , unscrollable
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
@@ -1720,6 +1721,15 @@ canScroll isMobile2 drag =
 isMobileAlt : Coord CssPixels -> Bool
 isMobileAlt windowSize =
     Coord.xRaw windowSize < 700
+
+
+{-| Use alongside Ui.clip. Ui.clip sets `overflow: hidden`, which still lets the browser scroll the
+element itself, for example to bring a focused text input into view. `overflow: clip` clips the
+same way but can't be scrolled.
+-}
+unscrollable : Ui.Attribute msg
+unscrollable =
+    htmlStyle "overflow" "clip"
 
 
 noShrinking : Ui.Attribute msg
