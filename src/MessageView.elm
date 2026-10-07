@@ -309,6 +309,8 @@ miniButton htmlId onPress hoverText svg =
         , Ui.pointer
         , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        , MyUi.htmlStyle "user-select" "none"
+        , MyUi.htmlStyle "-webkit-user-select" "none"
         ]
         (Ui.html svg)
 
