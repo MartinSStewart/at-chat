@@ -15,6 +15,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import FileName
 import FileStatus
+import Fuzz
 import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
@@ -339,6 +340,48 @@ threadMentionOnBackendTest =
                 |> Expect.equal (Nonempty (ChannelMention channelId (Just (Id.fromInt 1))) [])
 
 
+messageViewFuzzer :
+    Fuzz.Fuzzer
+        { isMobile : Bool
+        , containerWidth : Int
+        , isEditing : Bool
+        , highlight : HighlightMessage
+        , isHovered : IsHovered
+        , time : Time.Posix
+        }
+messageViewFuzzer =
+    Fuzz.map6
+        (\isMobile containerWidth isEditing highlight isHovered time ->
+            { isMobile = isMobile
+            , containerWidth = containerWidth
+            , isEditing = isEditing
+            , highlight = highlight
+            , isHovered = isHovered
+            , time = time
+            }
+        )
+        Fuzz.bool
+        (Fuzz.intRange 0 65535)
+        Fuzz.bool
+        (Fuzz.oneOfValues [ NoHighlight, ReplyToHighlight, MentionHighlight, UrlHighlight ])
+        (Fuzz.oneOf
+            [ Fuzz.oneOfValues
+                [ IsNotHovered
+                , IsHovered
+                , IsHoveredButNoMenu
+                , IsHoveredReactionsOnly
+                , IsHoveredWhileSelectingAnchor
+                ]
+            , Fuzz.map IsReactionLongPressed (Fuzz.intRange 0 122)
+            ]
+        )
+        -- Only whole minutes survive the round trip, which is all the timestamps in a
+        -- message need. The packed Int has room for them until the year 2097.
+        (Fuzz.intRange 0 (2 ^ 26 - 1)
+            |> Fuzz.map (\minutes -> Time.millisToPosix (minutes * 60000))
+        )
+
+
 tests : Test
 tests =
     Test.describe
@@ -349,38 +392,23 @@ tests =
         , backendMsgLogTests
         , sessionExpiryTests
         , threadMentionOnBackendTest
-        , Test.test "Round trip message view encoding" <|
-            \_ ->
-                let
-                    input =
-                        { isMobile = False
-                        , containerWidth = 400
-                        , isEditing = True
-                        , highlight = MentionHighlight
-                        , isHovered = IsHovered
-                        , time = Time.millisToPosix 1786013400000
-                        }
-                in
+        , Test.fuzz messageViewFuzzer "Round trip message view encoding" <|
+            \input ->
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
                     |> Pages.Guild.decodeMessageView
                     |> Expect.equal input
-        , Test.test "Round trip message view encoding 2" <|
-            \_ ->
-                let
-                    input =
-                        { isMobile = True
-                        , containerWidth = 2000
-                        , isEditing = False
-                        , highlight = NoHighlight
-                        , isHovered = IsHoveredButNoMenu
-                        , -- Only whole minutes survive the round trip, which is all the
-                          -- timestamps in a message need
-                          time = Time.millisToPosix 1786013400000
-                        }
-                in
+        , Test.fuzz
+            (Fuzz.map2
+                (\input reactionIndex -> { input | isHovered = IsReactionLongPressed reactionIndex })
+                messageViewFuzzer
+                (Fuzz.intRange 123 10000)
+            )
+            "A long pressed reaction past the ones the message view encoding has room for isn't hovered"
+          <|
+            \input ->
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
                     |> Pages.Guild.decodeMessageView
-                    |> Expect.equal input
+                    |> Expect.equal { input | isHovered = IsNotHovered }
         , Test.test "Discord thread name is left as is when it's short enough" <|
             \_ ->
                 DiscordSync.threadName "Hello world!"
