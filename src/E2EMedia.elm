@@ -689,7 +689,8 @@ imageViewerTests imageUploadConfig =
                         touchEnd =
                             Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ]
                     in
-                    [ E2EHelper.uploadImageAttachment admin
+                    [ E2EHelper.setIphone14SafeAreaInsets admin
+                    , E2EHelper.uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView
                         0

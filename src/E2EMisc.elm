@@ -2005,7 +2005,8 @@ longMentionTest config =
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.iphone14Window
             (\_ user ->
-                [ E2EHelper.writeMessageMobile user ("@" ++ E2EHelper.adminName)
+                [ E2EHelper.setIphone14SafeAreaInsets user
+                , E2EHelper.writeMessageMobile user ("@" ++ E2EHelper.adminName)
                 , E2EHelper.writeMessageMobile user ("Hello @" ++ E2EHelper.adminName ++ " how are you?")
                 , E2EHelper.writeMessageMobile user "Hello @Stevie Steve how are you? Mentions that fit stay on the line they're written on."
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ("@" ++ E2EHelper.adminName) ])
