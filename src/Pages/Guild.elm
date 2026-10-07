@@ -9958,10 +9958,8 @@ channelColumnContainer safeAreaInsetTop header subHeader content =
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , MyUi.htmlStyle "border-radius" (String.fromInt (safeAreaInsetTop // 2) ++ "px 0 0 0")
-            , MyUi.htmlStyle "border-width" (String.fromInt (min safeAreaInsetTop 1) ++ "px 0 0 0")
-            , Ui.borderColor MyUi.guildColumnBorder
-            , Ui.paddingWith { left = 1, right = 0, top = 0, bottom = 0 }
-            , Ui.behindContent (GuildIcon.columnBorderView (safeAreaInsetTop // 2))
+            , Ui.paddingWith { left = 1, right = 0, top = min safeAreaInsetTop 1, bottom = 0 }
+            , Ui.behindContent (GuildIcon.columnBorderView safeAreaInsetTop)
             ]
             [ Ui.row
                 [ Ui.Font.bold

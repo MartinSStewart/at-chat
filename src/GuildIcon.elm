@@ -382,33 +382,92 @@ size =
 
 
 {-| Match the curves' stroke and horizontal SVG origin: CSS borders and separate
-SVG origins round differently at fractional zoom. Reserve 1px of column padding
-for the line, allowing SVG overflow for antialiasing. Only clip the paint layer
-to the column's rounded corner, not its content.
+SVG origins round differently at fractional zoom. Draw the rounded corner rather
+than clipping a straight line to it. Native SVG coordinates keep the corner radius
+and stroke width fixed while the column stretches.
 -}
 columnBorderView : Int -> Element msg
-columnBorderView topLeftRadius =
+columnBorderView safeAreaInsetTop =
+    let
+        topLeftRadius : Int
+        topLeftRadius =
+            safeAreaInsetTop // 2
+
+        x : String
+        x =
+            String.fromFloat (toFloat size - 0.5)
+
+        radius : String
+        radius =
+            String.fromFloat (toFloat topLeftRadius - 0.5)
+    in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt size)
         , Svg.Attributes.height "100%"
-        , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt size ++ " 1")
-        , Svg.Attributes.preserveAspectRatio "none"
         , Svg.Attributes.style "display:block;overflow:visible;position:absolute;right:0;top:0"
         ]
-        [ Svg.path
-            [ Svg.Attributes.d ("M " ++ String.fromFloat (toFloat size - 0.5) ++ ",0 V 1")
+        (Svg.line
+            [ Svg.Attributes.x1 x
+            , Svg.Attributes.x2 x
+            , Svg.Attributes.y1 (String.fromInt topLeftRadius)
+            , Svg.Attributes.y2 "100%"
             , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
             , Svg.Attributes.strokeWidth "1"
             ]
             []
-        ]
+            :: (if topLeftRadius > 0 then
+                    [ Svg.path
+                        [ Svg.Attributes.d
+                            ("M "
+                                ++ x
+                                ++ ","
+                                ++ String.fromInt topLeftRadius
+                                ++ " A "
+                                ++ radius
+                                ++ " "
+                                ++ radius
+                                ++ " 0 0 1 "
+                                ++ String.fromInt (size + topLeftRadius - 1)
+                                ++ ",0.5"
+                            )
+                        , Svg.Attributes.fill "none"
+                        , Svg.Attributes.strokeLinecap "square"
+                        , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+                        , Svg.Attributes.strokeWidth "1"
+                        ]
+                        []
+                    ]
+
+                else
+                    []
+               )
+        )
         |> Ui.html
         |> Ui.el [ Ui.width (Ui.px 1), Ui.height Ui.fill, Ui.alignLeft, MyUi.htmlStyle "position" "relative", MyUi.noPointerEvents ]
         |> Ui.el
             [ Ui.height Ui.fill
-            , Ui.roundedWith { topLeft = topLeftRadius, topRight = 0, bottomLeft = 0, bottomRight = 0 }
-            , Ui.clip
             , MyUi.noPointerEvents
+            , if safeAreaInsetTop > 0 then
+                Svg.svg
+                    [ Svg.Attributes.width "100%"
+                    , Svg.Attributes.height "1"
+                    , Svg.Attributes.style "display:block;position:absolute;left:0;top:0"
+                    ]
+                    [ Svg.line
+                        [ Svg.Attributes.x1 (String.fromFloat (max 0.5 (toFloat topLeftRadius)))
+                        , Svg.Attributes.x2 "100%"
+                        , Svg.Attributes.y1 "0.5"
+                        , Svg.Attributes.y2 "0.5"
+                        , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+                        , Svg.Attributes.strokeWidth "1"
+                        ]
+                        []
+                    ]
+                    |> Ui.html
+                    |> Ui.inFront
+
+              else
+                Ui.noAttr
             ]
 
 

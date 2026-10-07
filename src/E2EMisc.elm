@@ -2091,6 +2091,10 @@ longMentionTest config =
                 , user.snapshotView 100 { name = "Long mentions on a phone" }
                 , user.click 100 (Dom.id "guild_headerBackButton")
                 , user.snapshotView 100 { name = "Selected guild sidebar on a phone" }
+                , T.andThen
+                    10
+                    (\data -> [ user.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset data.time E2EHelper.firefoxDesktop 40 False) ])
+                , user.snapshotView 100 { name = "Selected guild sidebar with a 40px safe area" }
                 ]
             )
         ]
