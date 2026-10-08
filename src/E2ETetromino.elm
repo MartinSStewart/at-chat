@@ -68,9 +68,9 @@ twoPlayerMatchTest normalConfig =
 
                         -- Early in the round, before any NPCs show up, the admin walks somewhere,
                         -- stops the spinner and drops whatever piece it landed on.
-                        , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 300, 300 ))
+                        , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 300, 300 ))
                         , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = " " }))
-                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 800, 150 ))
+                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 800, 150 ))
                         , T.checkState
                             1500
                             (matchStatesAgree

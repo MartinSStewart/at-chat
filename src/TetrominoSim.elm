@@ -548,6 +548,17 @@ startRound state =
                         row : Int
                         row =
                             gridSize // 2 + offsetY
+
+                        -- Protection only matters with an NPC close enough to throw at the spot,
+                        -- which in the first round there never is.
+                        npcNearby : Bool
+                        npcNearby =
+                            List.any
+                                (\npc ->
+                                    horizontalDistance npc.position { x = toFloat column + 0.5, y = toFloat row + 0.5, z = 0 }
+                                        <= npcThrowRange
+                                )
+                                state.npcs
                     in
                     ( SeqDict.insert
                         userId
@@ -560,7 +571,12 @@ startRound state =
                         , target = Nothing
                         , knockedOutAt = Nothing
                         , cycle = cycle
-                        , protectedUntil = state.frame + spawnProtection
+                        , protectedUntil =
+                            if npcNearby then
+                                state.frame + spawnProtection
+
+                            else
+                                state.frame
                         }
                         players2
                     , seed3

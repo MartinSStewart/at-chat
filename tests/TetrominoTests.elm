@@ -116,6 +116,45 @@ waitingAt frame model =
     TetrominoGame.matchStateAt frame model |> Maybe.map (\state -> SeqSet.toList state.waitingPlayers)
 
 
+{-| An NPC standing still, that won't wander off or throw anything for a good while.
+-}
+npcAt : Float -> Float -> MatchState -> TetrominoSim.Npc
+npcAt x y state =
+    { id = 1000
+    , position = { x = x, y = y, z = 0 }
+    , velocityZ = 0
+    , wanderOffset = { x = 0, y = 0 }
+    , nextWanderFrame = state.frame + 1000
+    , nextThrowFrame = state.frame + 1000
+    }
+
+
+{-| Put a snowball right on userA and see what it does.
+-}
+hitBySnowball : MatchState -> MatchState
+hitBySnowball state =
+    case SeqDict.get userA state.players of
+        Just player ->
+            TetrominoSim.step
+                []
+                { state
+                    | snowballs =
+                        [ { position = { x = player.position.x, y = player.position.y, z = player.position.z + 0.4 }
+                          , velocity = { x = 0, y = 0, z = 0 }
+                          , thrownAt = state.frame
+                          }
+                        ]
+                }
+
+        Nothing ->
+            state
+
+
+knockedOut : MatchState -> Maybe Bool
+knockedOut state =
+    SeqDict.get userA state.players |> Maybe.map (\player -> player.knockedOutAt /= Nothing)
+
+
 knockOut : Id UserId -> MatchState -> MatchState
 knockOut userId state =
     { state | players = SeqDict.updateIfExists userId (\player -> { player | knockedOutAt = Just state.frame }) state.players }
@@ -190,11 +229,11 @@ tests =
         , test "Once everyone is knocked out the next round brings them back" <|
             \_ ->
                 let
-                    knockedOut =
+                    everyoneOut =
                         inFirstRound [ userA ] |> knockOut userA
 
                     nextRound =
-                        runUntil (knockedOut.frame + TetrominoSim.roundBreak + 2) [] knockedOut
+                        runUntil (everyoneOut.frame + TetrominoSim.roundBreak + 2) [] everyoneOut
                 in
                 ( nextRound.round.number
                 , SeqDict.get userA nextRound.players |> Maybe.map .knockedOutAt
@@ -294,35 +333,21 @@ tests =
                     |> SeqDict.get userA
                     |> Maybe.map (\player -> player.position.x < toFloat (center + 2) && player.position.z == 0)
                     |> Expect.equal (Just True)
-        , test "A player just brought into a round shrugs off snowballs for a moment" <|
+        , test "A player brought into a round near an NPC shrugs off snowballs for a moment" <|
             \_ ->
                 let
-                    hitBySnowball : MatchState -> MatchState
-                    hitBySnowball state =
-                        case SeqDict.get userA state.players of
-                            Just player ->
-                                TetrominoSim.step
-                                    []
-                                    { state
-                                        | snowballs =
-                                            [ { position = { x = player.position.x, y = player.position.y, z = player.position.z + 0.4 }
-                                              , velocity = { x = 0, y = 0, z = 0 }
-                                              , thrownAt = state.frame
-                                              }
-                                            ]
-                                    }
-
-                            Nothing ->
-                                state
-
-                    knockedOut : MatchState -> Maybe Bool
-                    knockedOut state =
-                        SeqDict.get userA state.players |> Maybe.map (\player -> player.knockedOutAt /= Nothing)
+                    withNpcNearby : MatchState
+                    withNpcNearby =
+                        runUntil (firstRound - 1) [ join 0 userA ] (TetrominoSim.init 1 0)
+                            |> (\state -> { state | npcs = [ npcAt (toFloat center + 5) (toFloat center) state ] })
                 in
-                ( inFirstRound [ userA ] |> hitBySnowball |> knockedOut
-                , runUntil (firstRound + 4 * TetrominoSim.framesPerSecond) [] (inFirstRound [ userA ]) |> hitBySnowball |> knockedOut
+                ( runUntil firstRound [] withNpcNearby |> hitBySnowball |> knockedOut
+                , runUntil (firstRound + 4 * TetrominoSim.framesPerSecond) [] withNpcNearby |> hitBySnowball |> knockedOut
                 )
                     |> Expect.equal ( Just False, Just True )
+        , test "With no NPCs about, as in the first round, a player is brought in unprotected" <|
+            \_ ->
+                inFirstRound [ userA ] |> hitBySnowball |> knockedOut |> Expect.equal (Just True)
         , test "An NPC aims ahead of a player who is walking" <|
             \_ ->
                 let
@@ -341,13 +366,8 @@ tests =
                                     []
                                     { walking
                                         | npcs =
-                                            [ { id = 1000
-                                              , position = { x = player.position.x + 6, y = player.position.y, z = 0 }
-                                              , velocityZ = 0
-                                              , wanderOffset = { x = 0, y = 0 }
-                                              , nextWanderFrame = walking.frame + 1000
-                                              , nextThrowFrame = walking.frame
-                                              }
+                                            [ npcAt (player.position.x + 6) player.position.y walking
+                                                |> (\npc -> { npc | nextThrowFrame = walking.frame })
                                             ]
                                     }
 

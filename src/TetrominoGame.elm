@@ -573,6 +573,9 @@ updateConnected windowSize currentUserId msg state model =
                     case ( player.knockedOutAt, player.cycle ) of
                         ( Nothing, Ready _ ) ->
                             if button == rightMouseButton then
+                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
+
+                            else
                                 ( model2
                                 , TetrominoSim.Drop
                                     { x = cursor.x
@@ -582,15 +585,12 @@ updateConnected windowSize currentUserId msg state model =
                                     |> Just
                                 )
 
-                            else
-                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
-
                         ( Nothing, Cycling _ ) ->
                             if button == rightMouseButton then
-                                ( model2, Nothing )
+                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
 
                             else
-                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
+                                ( model2, Nothing )
 
                         ( Just _, _ ) ->
                             ( model2, Nothing )
@@ -943,7 +943,7 @@ statusView currentUserId state =
 
                     Nothing ->
                         [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
-                        , Ui.text "Left click to move, right click to drop, Q turns the piece, E stands it up or lays it down, space stops the spinner"
+                        , Ui.text "Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down, space stops the spinner"
                         ]
 
             Nothing ->
