@@ -72,14 +72,13 @@ import EmailAddress
 import Env
 import FileStatus exposing (BackendFileData, FileHash)
 import GuildName
-import Html
 import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminData_InvalidChannelName, AdminData_InvalidChannelNameGuild(..), AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -229,16 +228,11 @@ type Msg
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
-    | PressedHideLog (Id ItemId)
-    | PressedUnhideLog (Id ItemId)
-    | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedDeleteSession SessionIdHash
     | PressedRegenerateServerSecret
     | PressedDeleteOrphanedFiles
     | PressedWebsocketCloseEventsPage Int
-    | PressedStartWebCodecsTest
-    | PressedStopWebCodecsTest
     | PressedSendTypeThatIsAlwaysInvalid
 
 
@@ -293,7 +287,6 @@ type alias Model =
     , postmarkKey : Editable.Model
     , discordLinkLimit : Editable.Model
     , importBackendStatus : ImportBackendStatus
-    , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
@@ -355,7 +348,6 @@ type alias InitAdminData =
     , checkToFrontendValidation : TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
-    , invalidChannelNames : List AdminData_InvalidChannelName
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
@@ -406,8 +398,6 @@ type AdminChange
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (ToBeFilledInByBackend (Result Discord.HttpError (List Discord.Role)))
-    | HideLog (Id ItemId)
-    | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
     | DeleteSession SessionIdHash
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
@@ -454,7 +444,6 @@ initForUser =
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
-    , showHiddenLogs = False
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
@@ -484,7 +473,6 @@ initForAdmin { highlightLog } =
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
-    , showHiddenLogs = False
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
@@ -710,26 +698,6 @@ updateAdmin changedBy change adminData local =
                 _ ->
                     local
 
-        HideLog pageIndex ->
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | logs =
-                                Pagination.updateItem pageIndex (\log -> { log | isHidden = True }) adminData.logs
-                        }
-            }
-
-        UnhideLog pageIndex ->
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | logs =
-                                Pagination.updateItem pageIndex (\log -> { log | isHidden = False }) adminData.logs
-                        }
-            }
-
         DisconnectClient sessionIdHash clientId ->
             { local
                 | adminData =
@@ -881,15 +849,6 @@ update navigationKey time adminData localState msg model =
                 ]
             , NoOutMsg
             )
-
-        PressedHideLog logIndex ->
-            ( model, Command.none, HideLog logIndex |> AdminChange )
-
-        PressedUnhideLog logIndex ->
-            ( model, Command.none, UnhideLog logIndex |> AdminChange )
-
-        PressedShowHiddenLogs show ->
-            ( { model | showHiddenLogs = show }, Command.none, NoOutMsg )
 
         PressedDisconnectClient sessionIdHash clientId ->
             ( model, Command.none, DisconnectClient sessionIdHash clientId |> AdminChange )
@@ -1468,12 +1427,6 @@ update navigationKey time adminData localState msg model =
         PressedDeleteOrphanedFiles ->
             ( model, Command.none, AdminChange (DeleteOrphanedFiles EmptyPlaceholder) )
 
-        PressedStartWebCodecsTest ->
-            ( model, Ports.webCodecsTest True, NoOutMsg )
-
-        PressedStopWebCodecsTest ->
-            ( model, Ports.webCodecsTest False, NoOutMsg )
-
         PressedWebsocketCloseEventsPage page ->
             ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
 
@@ -1872,12 +1825,6 @@ pendingChangesText change =
         ReloadDiscordGuild _ _ _ ->
             "Reloaded Discord guild roles and channel permissions"
 
-        HideLog logIndex ->
-            "Hid log " ++ Id.toString logIndex
-
-        UnhideLog logIndex ->
-            "Unhid log " ++ Id.toString logIndex
-
         DisconnectClient _ _ ->
             "Disconnect client"
 
@@ -1927,7 +1874,6 @@ view isMobile2 version time local adminData model =
             , Ui.Lazy.lazy4 connectionsSection isMobile2 local.localUser.timezone model.expandedSections adminData
             , Ui.Lazy.lazy4 sessionsSection isMobile2 local.localUser.timezone model.expandedSections adminData
             , websocketCloseEventsSection isMobile2 time local.localUser.timezone model.expandedSections adminData model
-            , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 model.expandedSections
             , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 filesSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local model.expandedSections
@@ -2729,75 +2675,6 @@ wordSpellingGameStatusText status =
             "Loaded"
 
 
-{-| Sends the webcam and mic through WebCodecs and the rust server's echo
-websocket, then plays back whatever comes home. The point is to see how the
-round trip behaves before committing to websockets over WebRTC, so the numbers
-under the video matter more than the picture.
-
-Elm only lays out the empty elements here. `elm-pkg-js/webcodecs-test.js` owns
-everything inside them, including the status text, which is why they are all
-rendered with no children.
-
--}
-webCodecsTestSection : Bool -> SeqSet AdminUiSection -> Element Msg
-webCodecsTestSection isMobile expandedSections =
-    section
-        isMobile
-        expandedSections
-        WebCodecsTestSection
-        [ Ui.row
-            [ Ui.spacing 8 ]
-            [ MyUi.simpleButton
-                (Dom.id "admin_startWebCodecsTest")
-                PressedStartWebCodecsTest
-                (Ui.text "Start")
-            , MyUi.simpleButton
-                (Dom.id "admin_stopWebCodecsTest")
-                PressedStopWebCodecsTest
-                (Ui.text "Stop")
-            ]
-        , Html.div
-            [ Html.Attributes.id "webcodecsTest_status"
-            , Html.Attributes.style "font-family" "monospace"
-            , Html.Attributes.style "font-size" "13px"
-            , Html.Attributes.style "white-space" "pre"
-            , Html.Attributes.style "min-height" "90px"
-            ]
-            []
-            |> Ui.html
-        , Ui.row
-            [ Ui.spacing 8, Ui.wrap ]
-            [ Ui.column
-                [ Ui.spacing 4, Ui.width Ui.shrink ]
-                [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Input (camera)")
-                , Html.video
-                    [ Html.Attributes.id "webcodecsTest_localVideo"
-                    , Html.Attributes.style "width" "320px"
-                    , Html.Attributes.style "height" "240px"
-                    , Html.Attributes.style "background-color" "black"
-                    , Html.Attributes.style "border-radius" "4px"
-                    , Html.Attributes.attribute "playsinline" ""
-                    ]
-                    []
-                    |> Ui.html
-                ]
-            , Ui.column
-                [ Ui.spacing 4, Ui.width Ui.shrink ]
-                [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Output (round tripped through the rust server)")
-                , Html.canvas
-                    [ Html.Attributes.id "webcodecsTest_remoteCanvas"
-                    , Html.Attributes.style "width" "320px"
-                    , Html.Attributes.style "height" "240px"
-                    , Html.Attributes.style "background-color" "black"
-                    , Html.Attributes.style "border-radius" "4px"
-                    ]
-                    []
-                    |> Ui.html
-                ]
-            ]
-        ]
-
-
 stickersAndEmojisSection : Bool -> LocalState -> SeqSet AdminUiSection -> Element Msg
 stickersAndEmojisSection isMobile local expandedSections =
     let
@@ -3343,24 +3220,6 @@ exportProgressText progress =
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
 
-invalidChannelNameView : AdminData_InvalidChannelName -> Element msg
-invalidChannelNameView invalid =
-    let
-        guildText : String
-        guildText =
-            case invalid.guild of
-                InvalidChannelName_Guild guildName ->
-                    GuildName.toString guildName
-
-                InvalidChannelName_DeletedGuild guildName ->
-                    GuildName.toString guildName ++ " (deleted)"
-
-                InvalidChannelName_DiscordGuild guildName ->
-                    GuildName.toString guildName ++ " (Discord)"
-    in
-    "\"" ++ ChannelName.toString invalid.channelName ++ "\" in " ++ guildText ++ ": " ++ invalid.error |> Ui.text
-
-
 exportSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
 exportSection isMobile timezone expandedSections adminData model =
     section
@@ -3442,16 +3301,6 @@ exportSection isMobile timezone expandedSections adminData model =
                 ImportedBackendSuccessfully ->
                     Ui.text importedText
             ]
-        , case adminData.invalidChannelNames of
-            [] ->
-                Ui.text "All channel names pass w3_validate_ChannelName"
-
-            invalidChannelNames ->
-                Ui.column
-                    [ Ui.spacing 4 ]
-                    (Ui.text "Channel names that fail w3_validate_ChannelName:"
-                        :: List.map invalidChannelNameView invalidChannelNames
-                    )
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton
@@ -5310,39 +5159,20 @@ logSection isMobile2 localUser expandedSections adminData model =
         isMobile2
         expandedSections
         LogSection
-        [ MyUi.simpleButton
-            (Dom.id "admin_toggleHiddenLogs")
-            (PressedShowHiddenLogs (not model.showHiddenLogs))
-            (Ui.text
-                (if model.showHiddenLogs then
-                    "Hide hidden logs"
-
-                 else
-                    "Show hidden logs"
-                )
-            )
-            |> Ui.el [ Ui.paddingXY 8 0 ]
-        , Pagination.viewPage
+        [ Pagination.viewPage
             logSectionId
             (\logId log ->
-                if log.isHidden && not model.showHiddenLogs then
-                    Ui.none
-
-                else
-                    Log.view
-                        isMobile2
-                        log.isHidden
-                        localUser.timezone
-                        localUser.emojiData
-                        localUser.customEmojis
-                        { onPressCopyLink = PressedCopyLogLink logId
-                        , onPressCopy = PressedCopyText
-                        , onPressHide = PressedHideLog logId
-                        , onPressUnhide = PressedUnhideLog logId
-                        }
-                        (Just logId == model.copiedLogLink)
-                        (Just logId == model.highlightLog)
-                        { time = log.time, log = log.log }
+                Log.view
+                    isMobile2
+                    localUser.timezone
+                    localUser.emojiData
+                    localUser.customEmojis
+                    { onPressCopyLink = PressedCopyLogLink logId
+                    , onPressCopy = PressedCopyText
+                    }
+                    (Just logId == model.copiedLogLink)
+                    (Just logId == model.highlightLog)
+                    log
             )
             adminData.logs
         , (if pageCount <= 1 then
@@ -5462,9 +5292,6 @@ sectionDataToLoad section2 adminData =
         WordSpellingGameSwedishSection ->
             []
 
-        WebCodecsTestSection ->
-            []
-
 
 loadIfNeeded : AdminDataStatus a -> AdminChange -> List AdminChange
 loadIfNeeded adminDataStatus change =
@@ -5502,7 +5329,6 @@ type AdminUiSection
     | WebsocketCloseEventsSection
     | SessionsSection
     | WordSpellingGameSwedishSection
-    | WebCodecsTestSection
 
 
 sectionToString : AdminUiSection -> String
@@ -5549,9 +5375,6 @@ sectionToString section2 =
 
         StickersAndEmojisSection ->
             "Stickers and emojis"
-
-        WebCodecsTestSection ->
-            "WebCodecs streaming test"
 
         WebsocketCloseEventsSection ->
             "Websocket close events"

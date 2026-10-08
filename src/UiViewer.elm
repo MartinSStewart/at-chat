@@ -511,14 +511,11 @@ logExamples =
         logEntry log =
             Log.view
                 False
-                False
                 Time.utc
                 Nothing
                 SeqDict.empty
                 { onPressCopyLink = ()
                 , onPressCopy = \_ -> ()
-                , onPressHide = ()
-                , onPressUnhide = ()
                 }
                 False
                 False

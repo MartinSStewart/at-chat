@@ -86,7 +86,6 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
-                .route("/file/websocket", get(websocket::websocket_endpoint))
                 .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))

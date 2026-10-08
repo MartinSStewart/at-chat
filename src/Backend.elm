@@ -9,7 +9,6 @@ module Backend exposing
 
 import AiChat
 import Array exposing (Array)
-import Array.Extra
 import BackendExtra
 import Broadcast
 import Bytes exposing (Bytes)
@@ -225,7 +224,6 @@ init =
       --        (\index ->
       --            { time = Time.millisToPosix (index * 1000000)
       --            , log = Log.FailedToParseDiscordWebsocket Nothing (String.fromInt index)
-      --            , isHidden = False
       --            }
       --        )
       --    |> Array.fromList
@@ -2629,8 +2627,8 @@ disconnectClient time sessionId clientId model =
 
 deleteOldLogs :
     Time.Posix
-    -> Array { time : Time.Posix, log : Log, isHidden : Bool }
-    -> Array { time : Time.Posix, log : Log, isHidden : Bool }
+    -> Array { time : Time.Posix, log : Log }
+    -> Array { time : Time.Posix, log : Log }
 deleteOldLogs time logs =
     Array.map
         (\log ->
@@ -9205,16 +9203,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 changeId
                 clientId
                 (Pages.Admin.LoadBackendMsgLogs (FilledInByBackend model.backendMsgLogs))
-            )
-
-        Pages.Admin.HideLog logIndex ->
-            ( { model | logs = Array.Extra.update (Id.toInt logIndex) (\log -> { log | isHidden = True }) model.logs }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.UnhideLog logIndex ->
-            ( { model | logs = Array.Extra.update (Id.toInt logIndex) (\log -> { log | isHidden = False }) model.logs }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
         Pages.Admin.SetEmailNotificationsEnabled isEnabled ->

@@ -6,11 +6,10 @@
 // is encoded with WebCodecs, sent as binary messages, and relayed to everyone
 // else in the room; there is no SFU, no signalling and no ICE.
 //
-// The techniques here are the ones proven out by webcodecs-test.js against the
-// echo endpoint: frames come off the camera with requestVideoFrameCallback and
-// off the mic with an AudioWorklet, rather than with MediaStreamTrackProcessor,
-// which reads better but Firefox has never implemented. Everything used works in
-// Chrome 94+, Firefox 132+ and Safari 26+.
+// Frames come off the camera with requestVideoFrameCallback and off the mic
+// with an AudioWorklet, rather than with MediaStreamTrackProcessor, which reads
+// better but Firefox has never implemented. Everything used works in Chrome 94+,
+// Firefox 132+ and Safari 26+.
 //
 // The room only relays bytes, so the sender's name travels inside each message
 // and is not checked by anyone. A DM room holds one other person, who the

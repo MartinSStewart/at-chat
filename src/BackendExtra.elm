@@ -63,7 +63,6 @@ import Broadcast
 import Bytes.Decode
 import Bytes.Encode
 import Call exposing (CallId(..))
-import ChannelName exposing (ChannelName)
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -90,7 +89,7 @@ import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAn
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (AdminData_InvalidChannelName, AdminData_InvalidChannelNameGuild(..), BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..))
 import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
@@ -140,7 +139,7 @@ addLog time log model =
     let
         model2 : BackendModel
         model2 =
-            { model | logs = Array.push { time = time, log = log, isHidden = False } model.logs }
+            { model | logs = Array.push { time = time, log = log } model.logs }
     in
     case
         ( Log.shouldNotifyAdmin log
@@ -1587,51 +1586,9 @@ adminData model lastLogPageViewed =
     , checkToFrontendValidation = TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
     , lastBackup = Maybe.map .backup model.lastBackup
-    , invalidChannelNames = invalidChannelNames model
     , wordSpellingGameEnglish = wordListStatus model.wordSpellingGameEnglish
     , wordSpellingGameSwedish = wordListStatus model.wordSpellingGameSwedish
     }
-
-
-invalidChannelNames : BackendModel -> List AdminData_InvalidChannelName
-invalidChannelNames model =
-    List.concat
-        [ List.concatMap
-            (\guild ->
-                List.map
-                    (\( channelName, error ) -> { guild = InvalidChannelName_Guild guild.name, channelName = channelName, error = error })
-                    (failingChannelNames (SeqDict.values guild.channels |> List.map .name))
-            )
-            (SeqDict.values model.guilds)
-        , List.concatMap
-            (\deleted ->
-                List.map
-                    (\( channelName, error ) -> { guild = InvalidChannelName_DeletedGuild deleted.guild.name, channelName = channelName, error = error })
-                    (failingChannelNames (SeqDict.values deleted.guild.channels |> List.map .name))
-            )
-            (SeqDict.values model.deletedGuilds)
-        , List.concatMap
-            (\guild ->
-                List.map
-                    (\( channelName, error ) -> { guild = InvalidChannelName_DiscordGuild guild.name, channelName = channelName, error = error })
-                    (failingChannelNames (SeqDict.values guild.channels |> List.map .name))
-            )
-            (SeqDict.values model.discordGuilds)
-        ]
-
-
-failingChannelNames : List ChannelName -> List ( ChannelName, String )
-failingChannelNames channelNames =
-    List.filterMap
-        (\channelName ->
-            case ChannelName.w3_validate_ChannelName channelName of
-                Ok () ->
-                    Nothing
-
-                Err error ->
-                    Just ( channelName, error )
-        )
-        channelNames
 
 
 wordListStatus : WordList -> LocalState.WordSpellingGameStatus

@@ -5302,7 +5302,7 @@ changeUpdate localMsg local =
                                         { adminData
                                             | logs =
                                                 Pagination.addItem
-                                                    { time = time, log = log, isHidden = False }
+                                                    { time = time, log = log }
                                                     adminData.logs
                                         }
 
@@ -6473,7 +6473,6 @@ initAdminData adminData =
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , lastBackup = adminData.lastBackup
-    , invalidChannelNames = adminData.invalidChannelNames
     , websocketCloseEvents = LocalState.AdminDataNotLoaded
     , orphanedFiles = LocalState.AdminDataNotLoaded
     , deleteOrphanedFiles = LocalState.NotDeletingOrphanedFiles

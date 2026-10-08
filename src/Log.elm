@@ -213,14 +213,11 @@ timeToString timezone includeYear time =
 type alias MsgConfig msg =
     { onPressCopyLink : msg
     , onPressCopy : String -> msg
-    , onPressHide : msg
-    , onPressUnhide : msg
     }
 
 
 view :
     Bool
-    -> Bool
     -> Time.Zone
     -> Maybe Emoji.CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -229,12 +226,11 @@ view :
     -> Bool
     -> { time : Time.Posix, log : Log }
     -> Element msg
-view isMobile2 isHidden timezone emojiData customEmojis msgConfig isCopied isHighlighted { time, log } =
+view isMobile2 timezone emojiData customEmojis msgConfig isCopied isHighlighted { time, log } =
     Ui.el
         [ Ui.attrIf isHighlighted (Ui.background MyUi.mentionColor)
         , Ui.paddingXY 8 4
         , Ui.widthMin 350
-        , Ui.attrIf isHidden (Ui.opacity 0.5)
         , Ui.row
             [ Ui.Font.color MyUi.font3
             , Ui.width Ui.shrink
@@ -258,35 +254,6 @@ view isMobile2 isHidden timezone emojiData customEmojis msgConfig isCopied isHig
                 ]
                 (Ui.html Icons.link)
             , timeToString timezone False time |> Ui.text
-            , Ui.el
-                [ Ui.Input.button
-                    (if isHidden then
-                        msgConfig.onPressUnhide
-
-                     else
-                        msgConfig.onPressHide
-                    )
-                , Ui.alignTop
-                , Ui.Font.size 12
-                , Ui.Font.color MyUi.font3
-                , Ui.width Ui.shrink
-                , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
-                , MyUi.hoverText
-                    (if isHidden then
-                        "Show"
-
-                     else
-                        "Hide"
-                    )
-                ]
-                (Ui.html
-                    (if isHidden then
-                        Icons.closedEye
-
-                     else
-                        Icons.openEye
-                    )
-                )
             ]
             |> Ui.inFront
         ]

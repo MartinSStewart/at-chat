@@ -7,7 +7,6 @@ const setFavicon = require('./elm-pkg-js/set-favicon.js');
 const cropImage = require('./elm-pkg-js/crop-image.js');
 const voiceChat = require('./elm-pkg-js/voice-chat.js');
 const audio = require('./elm-pkg-js/audio.js');
-const webcodecsTest = require('./elm-pkg-js/webcodecs-test.js');
 const callPreview = require('./elm-pkg-js/call-preview.js');
 
 exports.init = async function init(app) {
@@ -19,6 +18,5 @@ exports.init = async function init(app) {
   cropImage.init(app);
   voiceChat.init(app);
   audio.init(app);
-  webcodecsTest.init(app);
   callPreview.init(app);
 }
