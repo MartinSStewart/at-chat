@@ -1,5 +1,6 @@
 module TetrominoGame exposing
     ( ActionWithTime
+    , CanvasSize
     , Connection
     , GameModel
     , GameMsg(..)
@@ -16,6 +17,7 @@ module TetrominoGame exposing
     , Watcher
     , animationFrame
     , canvasId
+    , canvasSize
     , dropMatchState
     , gameView
     , initGame
@@ -58,6 +60,7 @@ import Html.Attributes
 import Html.Events
 import Id exposing (Id, UserId)
 import Json.Decode
+import List.Extra
 import MyUi
 import Quantity
 import SeqDict exposing (SeqDict)
@@ -494,14 +497,15 @@ updateGame :
     Time.Posix
     -> ValidatedSetup
     -> Coord CssPixels
+    -> Float
     -> Id UserId
     -> GameMsg
     -> GameModel
     -> ( GameModel, Maybe ToBackend )
-updateGame time setup windowSize currentUserId msg model =
+updateGame time setup windowSize devicePixelRatio currentUserId msg model =
     case model.connection of
         Connected timeline ->
-            case updateConnected windowSize currentUserId msg (TetrominoTimeline.latest timeline) model of
+            case updateConnected windowSize devicePixelRatio currentUserId msg (TetrominoTimeline.latest timeline) model of
                 ( model2, Just input ) ->
                     playOwnInput time setup currentUserId input timeline model2 |> Tuple.mapSecond Just
 
@@ -540,20 +544,22 @@ playOwnInput time setup userId input timeline model =
 
 updateConnected :
     Coord CssPixels
+    -> Float
     -> Id UserId
     -> GameMsg
     -> TetrominoSim.MatchState
     -> GameModel
     -> ( GameModel, Maybe TetrominoSim.Input )
-updateConnected windowSize currentUserId msg state model =
+updateConnected windowSize devicePixelRatio currentUserId msg state model =
     case msg of
         PointerMoved position ->
             ( { model | pointer = Just position }, Nothing )
 
         PointerPressed button position ->
             let
-                ( canvasWidth, canvasHeight ) =
-                    canvasSize windowSize
+                canvas : CanvasSize
+                canvas =
+                    canvasSize windowSize devicePixelRatio
 
                 model2 : GameModel
                 model2 =
@@ -562,8 +568,8 @@ updateConnected windowSize currentUserId msg state model =
                 maybeCursor : Maybe Cursor
                 maybeCursor =
                     TetrominoView.screenToCell
-                        canvasWidth
-                        canvasHeight
+                        canvas.width
+                        canvas.height
                         (TetrominoView.cameraFocus currentUserId state)
                         position
                         state
@@ -728,16 +734,55 @@ canvasId =
     Dom.id "tetrominoGame_canvas"
 
 
-{-| The canvas is a fixed shape, as wide as the tab allows.
+{-| `width` and `height` are in CSS pixels, the others are how many pixels of the screen that covers.
 -}
-canvasSize : Coord CssPixels -> ( Int, Int )
-canvasSize windowSize =
+type alias CanvasSize =
+    { width : Int, height : Int, deviceWidth : Int, deviceHeight : Int }
+
+
+{-| The canvas is a fixed shape, as wide as the tab allows. It's drawn at the screen's own
+resolution, so that each pixel of the dithering lands on exactly one pixel of the screen instead
+of being stretched and shimmering as things move.
+-}
+canvasSize : Coord CssPixels -> Float -> CanvasSize
+canvasSize windowSize devicePixelRatio =
     let
         width : Int
         width =
             clamp 320 1100 (Coord.xRaw windowSize - 32)
+
+        ( cssWidth, deviceWidth ) =
+            wholeDevicePixels devicePixelRatio width
+
+        ( cssHeight, deviceHeight ) =
+            wholeDevicePixels devicePixelRatio (round (toFloat width * 0.62))
     in
-    ( width, round (toFloat width * 0.62) )
+    { width = cssWidth, height = cssHeight, deviceWidth = deviceWidth, deviceHeight = deviceHeight }
+
+
+{-| Shrinks a size by up to 9 CSS pixels until it covers a whole number of device pixels, since
+with a device pixel ratio like 1.25 or 2.625 most sizes don't. Gives back the CSS size and how many
+device pixels that is.
+-}
+wholeDevicePixels : Float -> Int -> ( Int, Int )
+wholeDevicePixels devicePixelRatio cssSize =
+    let
+        size : Int
+        size =
+            List.range 0 9
+                |> List.map (\shrinkBy -> cssSize - shrinkBy)
+                |> List.Extra.find
+                    (\candidate ->
+                        let
+                            devicePixels : Float
+                            devicePixels =
+                                toFloat candidate * devicePixelRatio
+                        in
+                        abs (devicePixels - toFloat (round devicePixels)) < 0.001
+                    )
+                |> Maybe.withDefault cssSize
+    in
+    ( size, round (toFloat size * devicePixelRatio) )
 
 
 previewSize : number
@@ -769,8 +814,9 @@ connectedView windowSize localUser model state =
         currentUserId =
             localUser.session.userId
 
-        ( canvasWidth, canvasHeight ) =
-            canvasSize windowSize
+        canvas : CanvasSize
+        canvas =
+            canvasSize windowSize localUser.devicePixelRatio
 
         maybePlayer : Maybe TetrominoSim.Player
         maybePlayer =
@@ -823,43 +869,50 @@ connectedView windowSize localUser model state =
                     )
                 , Html.Events.preventDefaultOn "contextmenu" (Json.Decode.succeed ( PressedNothing, True ))
                 ]
-                [ WebGL.toHtmlWith
-                    [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
-                    [ Html.Attributes.width canvasWidth
-                    , Html.Attributes.height canvasHeight
-                    , Html.Attributes.style "display" "block"
-                    , Html.Attributes.style "border-radius" "8px"
-                    ]
-                    (TetrominoView.worldEntities
-                        { width = canvasWidth
-                        , height = canvasHeight
-                        , currentUserId = currentUserId
-                        , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
-                        , cursor =
-                            Maybe.andThen
-                                (\pointer ->
-                                    TetrominoView.screenToCell
-                                        canvasWidth
-                                        canvasHeight
-                                        (TetrominoView.cameraFocus currentUserId state)
-                                        pointer
-                                        state
-                                )
-                                model.pointer
-                        , ghost =
-                            case shapeShown of
-                                Just { shape, isReady } ->
-                                    if isReady then
-                                        Just { shape = shape, orientation = orientation }
+                [ -- See elm-pkg-js/pixel-snap.js
+                  Html.node
+                    "pixel-snapped"
+                    [ Html.Attributes.style "display" "block" ]
+                    [ WebGL.toHtmlWith
+                        [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
+                        [ Html.Attributes.width canvas.deviceWidth
+                        , Html.Attributes.height canvas.deviceHeight
+                        , Html.Attributes.style "width" (String.fromInt canvas.width ++ "px")
+                        , Html.Attributes.style "height" (String.fromInt canvas.height ++ "px")
+                        , Html.Attributes.style "display" "block"
+                        , Html.Attributes.style "border-radius" "8px"
+                        ]
+                        (TetrominoView.worldEntities
+                            { width = canvas.width
+                            , height = canvas.height
+                            , currentUserId = currentUserId
+                            , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
+                            , cursor =
+                                Maybe.andThen
+                                    (\pointer ->
+                                        TetrominoView.screenToCell
+                                            canvas.width
+                                            canvas.height
+                                            (TetrominoView.cameraFocus currentUserId state)
+                                            pointer
+                                            state
+                                    )
+                                    model.pointer
+                            , ghost =
+                                case shapeShown of
+                                    Just { shape, isReady } ->
+                                        if isReady then
+                                            Just { shape = shape, orientation = orientation }
 
-                                    else
+                                        else
+                                            Nothing
+
+                                    Nothing ->
                                         Nothing
-
-                                Nothing ->
-                                    Nothing
-                        }
-                        state
-                    )
+                            }
+                            state
+                        )
+                    ]
                 ]
                 |> Ui.html
             )

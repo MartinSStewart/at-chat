@@ -108,7 +108,7 @@ openedMatch =
 
 pressJoin : TetrominoGame.GameModel -> ( TetrominoGame.GameModel, Maybe TetrominoGame.ToBackend )
 pressJoin model =
-    TetrominoGame.updateGame (Time.millisToPosix 1000) setup (Coord.xy 1000 800) userA TetrominoGame.PressedJoin model
+    TetrominoGame.updateGame (Time.millisToPosix 1000) setup (Coord.xy 1000 800) 1 userA TetrominoGame.PressedJoin model
 
 
 waitingAt : Int -> TetrominoGame.GameModel -> Maybe (List (Id UserId))
@@ -446,6 +446,27 @@ tests =
                 , List.all (\npc -> npc.position.x < toFloat center + 12) later.npcs
                 )
                     |> Expect.equal ( True, True )
+        , test "The canvas covers a whole number of device pixels, whatever the device pixel ratio" <|
+            \_ ->
+                List.concatMap
+                    (\devicePixelRatio ->
+                        List.map
+                            (\windowWidth ->
+                                let
+                                    canvas : TetrominoGame.CanvasSize
+                                    canvas =
+                                        TetrominoGame.canvasSize (Coord.xy windowWidth 800) devicePixelRatio
+                                in
+                                ( abs (toFloat canvas.width * devicePixelRatio - toFloat canvas.deviceWidth) < 0.001
+                                , abs (toFloat canvas.height * devicePixelRatio - toFloat canvas.deviceHeight) < 0.001
+                                )
+                            )
+                            (List.range 700 720)
+                    )
+                    -- Chrome's ratios at 110%, 133% and 90% zoom, then a few phones and laptops.
+                    [ 1, 1.100000023841858, 1.3333333730697632, 0.8999999761581421, 1.25, 1.5, 2, 2.625, 2.75, 3 ]
+                    |> List.all (\fits -> fits == ( True, True ))
+                    |> Expect.equal True
         , test "The same inputs always give the same state" <|
             \_ ->
                 let

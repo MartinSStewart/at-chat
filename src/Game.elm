@@ -1088,6 +1088,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                         time
                                         setup
                                         windowSize
+                                        localUser.devicePixelRatio
                                         currentUserId
                                         tetrominoMsg
                                         (TetrominoGame.animationFrame time setup game)
