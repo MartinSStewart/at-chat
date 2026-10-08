@@ -325,7 +325,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     [ Ui.height Ui.fill
                     , Ui.background MyUi.background1
                     , Ui.heightMin 0
-                    , Ui.clip
                     , MyUi.unscrollable
                     , Ui.inFront memberColumn
                     , case maybeOtherUserId of
@@ -1654,7 +1653,6 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
-                            , Ui.clip
                             , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, isThread ) ->
@@ -1824,7 +1822,6 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
-                            , Ui.clip
                             , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, _ ) ->

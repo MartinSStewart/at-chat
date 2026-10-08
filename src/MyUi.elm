@@ -1723,9 +1723,9 @@ isMobileAlt windowSize =
     Coord.xRaw windowSize < 700
 
 
-{-| Use alongside Ui.clip. Ui.clip sets `overflow: hidden`, which still lets the browser scroll the
-element itself, for example to bring a focused text input into view. `overflow: clip` clips the
-same way but can't be scrolled.
+{-| Like Ui.clip, but with `overflow: clip` instead of `overflow: hidden`. An element with
+`overflow: hidden` can still be scrolled by the browser, for example to bring a focused text input
+into view, while `overflow: clip` can't be scrolled at all.
 -}
 unscrollable : Ui.Attribute msg
 unscrollable =
