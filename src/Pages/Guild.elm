@@ -366,7 +366,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             Ui.noAttr
                     ]
                     [ Ui.row
-                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                        [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                         [ GuildColumn.guildColumnLazy True model local
                         , friendsColumnLazy
                             canScroll2
@@ -1695,7 +1695,7 @@ guildView model guildId channelRoute loggedIn local =
                                 |> Ui.inFront
                             ]
                             [ Ui.row
-                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
                                 , channelColumnLazy True canScroll2 model loggedIn local.localUser local.calls guildId guild channelRoute
                                 ]
@@ -1872,7 +1872,7 @@ discordGuildView model routeData loggedIn local =
                                 |> Ui.inFront
                             ]
                             [ Ui.row
-                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
                                 , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
                                 ]
@@ -9958,10 +9958,8 @@ channelColumnContainer safeAreaInsetTop header subHeader content =
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , MyUi.htmlStyle "border-radius" (String.fromInt (safeAreaInsetTop // 2) ++ "px 0 0 0")
-            , MyUi.htmlStyle "border-width" (String.fromInt (min safeAreaInsetTop 1) ++ "px 0 0 1px")
-
-            --Ui.borderWith { left = 1, right = 0, bottom = 0, top = 1 }
-            , Ui.borderColor MyUi.guildColumnBorder
+            , Ui.paddingWith { left = 1, right = 0, top = min safeAreaInsetTop 1, bottom = 0 }
+            , Ui.behindContent (GuildIcon.columnBorderView safeAreaInsetTop)
             ]
             [ Ui.row
                 [ Ui.Font.bold
