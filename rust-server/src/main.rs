@@ -28,7 +28,9 @@ use futures_util::StreamExt;
 use rand::RngExt;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::Duration;
+use std::time::Instant;
 use std::time::SystemTime;
 use subtle::ConstantTimeEq;
 use tokio::io::AsyncWriteExt;
@@ -42,6 +44,8 @@ async fn main() {
             }));
 
             let rooms = websocket::rooms();
+
+            watch_for_stalls();
 
             let app = Router::new()
                 .route(
@@ -86,7 +90,6 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
-                .route("/file/websocket", get(websocket::websocket_endpoint))
                 .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
@@ -97,6 +100,7 @@ async fn main() {
                     require_internal_secret,
                 ))
                 .layer(axum::middleware::from_fn(require_allowed_origin))
+                .layer(axum::middleware::from_fn(log_slow_requests))
                 .fallback(fallback)
                 .with_state(state);
 
@@ -126,6 +130,86 @@ const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
 #[derive(Clone)]
 pub struct AppState {
     pub secret_key: Vec<u8>,
+}
+
+// How long a request can take before it is written to the journal.
+const SLOW_REQUEST: Duration = Duration::from_secs(3);
+
+// The time is kept by something that is dropped, rather than taken after the handler
+// returns, so a request that is given up on is still logged. When nginx stops waiting
+// the connection is closed and the handler is dropped partway, and those are the
+// requests most worth seeing.
+struct RequestTimer {
+    method: http::Method,
+    path: String,
+    started: Instant,
+    status: Option<StatusCode>,
+}
+
+impl Drop for RequestTimer {
+    fn drop(&mut self) {
+        let elapsed = self.started.elapsed();
+        if elapsed >= SLOW_REQUEST {
+            match self.status {
+                Some(status) => println!(
+                    "Slow request: {} {} answered {status} after {elapsed:?}",
+                    self.method, self.path
+                ),
+                None => println!(
+                    "Slow request: {} {} was abandoned after {elapsed:?} without an answer",
+                    self.method, self.path
+                ),
+            }
+        }
+    }
+}
+
+async fn log_slow_requests(req: Request, next: Next) -> Response<Body> {
+    let mut timer = RequestTimer {
+        method: req.method().clone(),
+        path: req.uri().path().to_owned(),
+        started: Instant::now(),
+        status: None,
+    };
+    let response = next.run(req).await;
+    timer.status = Some(response.status());
+    response
+}
+
+const STALL_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const STALL_THRESHOLD: Duration = Duration::from_millis(250);
+
+// Every request is handled on a handful of worker threads, one per core. Anything that
+// blocks one of them (a file read on the bucket mount, decoding a large image) holds up
+// every request queued behind it, images and Discord calls alike. A timer that fires
+// late is the sign of that happening, and is logged with how late it was.
+fn watch_for_stalls() {
+    tokio::spawn(async {
+        loop {
+            let started = Instant::now();
+            tokio::time::sleep(STALL_CHECK_INTERVAL).await;
+            let late = started.elapsed().saturating_sub(STALL_CHECK_INTERVAL);
+            if late >= STALL_THRESHOLD {
+                println!("Worker threads stalled: a timer fired {late:?} late");
+            }
+        }
+    });
+}
+
+// One client for every outgoing request, so connections (and their TLS handshakes) to
+// Discord and Lamdera are reused instead of made fresh for each request. Nothing had a
+// timeout before, so a request that never got an answer held its caller forever.
+pub fn http_client() -> reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap_or_default()
+        })
+        .clone()
 }
 
 async fn require_internal_secret(
@@ -273,41 +357,42 @@ fn image_format_name(format: ImageFormat) -> Option<String> {
     }
 }
 
+// Only the header is read. Decoding the whole image to find its size kept a worker
+// thread busy for as long as a ten megabyte image takes to decode.
 fn image_data_from_bytes(url: &str, bytes: &[u8]) -> Option<ImageData> {
     let reader = ImageReader::new(std::io::Cursor::new(bytes));
 
     match reader
         .with_guessed_format()
-        .map(|a| (a.format(), a.decode()))
+        .map(|a| (a.format(), a.into_dimensions()))
     {
-        Ok((Some(format), Ok(image))) => {
-            let (width, height) = image.dimensions();
-            Some(ImageData {
-                url: url.to_string(),
-                width,
-                height,
-                format: image_format_name(format),
-            })
-        }
+        Ok((Some(format), Ok((width, height)))) => Some(ImageData {
+            url: url.to_string(),
+            width,
+            height,
+            format: image_format_name(format),
+        }),
         _ => None,
     }
 }
 
 // Parse already-fetched HTML without letting a parse failure take down the server.
-fn parse_html_safe(body: String, url: String) -> Option<HTML> {
+// The result comes back through a channel rather than join(), which would block the
+// worker thread for as long as the parse takes.
+async fn parse_html_safe(body: String, url: String) -> Option<HTML> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     std::thread::Builder::new()
         .stack_size(1024 * 1024 * 1024) // 1 GiB (lazily committed) headroom for recursion
         .spawn(move || {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let html = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 HTML::from_string(body, Some(url)).ok()
             }))
             .ok()
-            .flatten()
+            .flatten();
+            let _ = sender.send(html);
         })
-        .ok()?
-        .join()
-        .ok()
-        .flatten()
+        .ok()?;
+    receiver.await.ok().flatten()
 }
 
 // Sites that only hand their Opengraph tags to a crawler they recognise. The
@@ -502,7 +587,7 @@ async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedRespons
                 created_at: None,
             });
         }
-        FetchedContent::Html(body) => parse_html_safe(body, url.to_string())?,
+        FetchedContent::Html(body) => parse_html_safe(body, url.to_string()).await?,
     };
 
     // Follow a single meta-refresh redirect, matching the previous behaviour.
@@ -511,7 +596,7 @@ async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedRespons
             let redirect_url = refresh.split('=').skip(1).collect::<Vec<_>>().join("=");
             match fetch_content(client, &redirect_url).await {
                 Some(FetchedContent::Html(body)) => {
-                    parse_html_safe(body, redirect_url).unwrap_or(html)
+                    parse_html_safe(body, redirect_url).await.unwrap_or(html)
                 }
                 _ => html,
             }
@@ -860,15 +945,15 @@ async fn custom_request_endpoint(
         }
     };
 
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     let request = match method.as_str() {
-        "GET" => client.get(url),
-        "POST" => client.post(url),
-        "PUT" => client.put(url),
-        "PATCH" => client.patch(url),
-        "DELETE" => client.delete(url),
-        "HEAD" => client.head(url),
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "PATCH" => client.patch(&url),
+        "DELETE" => client.delete(&url),
+        "HEAD" => client.head(&url),
         _ => {
             return response_with_headers(
                 StatusCode::BAD_REQUEST,
@@ -884,7 +969,25 @@ async fn custom_request_endpoint(
         None => request2,
     };
 
-    match request3.send().await {
+    // The query is left out of the log in case it carries something secret.
+    let url_without_query: &str = url.split('?').next().unwrap_or_default();
+    let started = Instant::now();
+    let sent = request3.send().await;
+    let elapsed = started.elapsed();
+    match &sent {
+        Ok(response) if elapsed >= SLOW_REQUEST => println!(
+            "Custom request {method} {url_without_query} answered {} after {elapsed:?}",
+            response.status()
+        ),
+        Ok(_) => {}
+        Err(error) => println!(
+            "Custom request {method} {url_without_query} failed after {elapsed:?} (timed out: {}, couldn't connect: {})",
+            error.is_timeout(),
+            error.is_connect()
+        ),
+    }
+
+    match sent {
         Ok(response) => {
             let status = response.status();
             let response_text = match response.text().await {
@@ -1165,7 +1268,7 @@ async fn upload_encrypted_endpoint(
 
     // Reached only once the caller is known to be allowed to upload, so that the
     // answer doesn't tell a stranger which files already have a thumbnail.
-    store_encrypted_upload(&hash, &thumbnail, &file)
+    store_encrypted_upload(&hash, &thumbnail, &file).await
 }
 
 /// Writes an encrypted upload, refusing a thumbnail for a file that has one.
@@ -1173,10 +1276,14 @@ async fn upload_encrypted_endpoint(
 /// A thumbnail is written once and never replaced: it is stored under the file's
 /// own hash, so overwriting one would change what everyone sees of a file that is
 /// already stored.
-fn store_encrypted_upload(hash: &str, thumbnail: &Bytes, file: &Bytes) -> Response<String> {
+async fn store_encrypted_upload(hash: &str, thumbnail: &Bytes, file: &Bytes) -> Response<String> {
     let thumbnail_path = thumbnail_filepath(hash);
 
-    if !thumbnail.is_empty() && fs::exists(&thumbnail_path).unwrap_or(false) {
+    if !thumbnail.is_empty()
+        && tokio::fs::try_exists(&thumbnail_path)
+            .await
+            .unwrap_or(false)
+    {
         return response_with_headers(
             StatusCode::CONFLICT,
             String::from("That file already has a thumbnail"),
@@ -1185,14 +1292,16 @@ fn store_encrypted_upload(hash: &str, thumbnail: &Bytes, file: &Bytes) -> Respon
 
     let path = filepath(hash);
 
-    if !fs::exists(&path).unwrap_or(false) && fs::write(&path, file).is_err() {
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false)
+        && tokio::fs::write(&path, file).await.is_err()
+    {
         return response_with_headers(
             StatusCode::INTERNAL_SERVER_ERROR,
             String::from("Internal error"),
         );
     }
 
-    if !thumbnail.is_empty() && fs::write(&thumbnail_path, thumbnail).is_err() {
+    if !thumbnail.is_empty() && tokio::fs::write(&thumbnail_path, thumbnail).await.is_err() {
         return response_with_headers(
             StatusCode::INTERNAL_SERVER_ERROR,
             String::from("Internal error"),
@@ -1219,7 +1328,7 @@ async fn upload_url_endpoint(
 ) -> Response<String> {
     let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
 
-    match reqwest::Client::new().get(url).send().await {
+    match http_client().get(url).send().await {
         Ok(response) => match response.bytes().await {
             Ok(bytes) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
             Err(_) => response_with_headers(
@@ -1266,7 +1375,7 @@ async fn is_file_upload_allowed(
         Uploader::Backend => "",
     };
 
-    match reqwest::Client::new()
+    match http_client()
         .post(rpc_url("is-file-upload-allowed"))
         .header("Content-Type", "text/plain")
         .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
@@ -1403,16 +1512,15 @@ fn image_metadata(
     }
 }
 
-async fn file_upload_helper(
-    secret_key: &[u8],
-    uploader: &Uploader,
-    bytes: Bytes,
-) -> Response<String> {
-    let hash = hash_bytes(&bytes);
+enum DecodedUpload {
+    Image(image::DynamicImage, ImageMetadata),
+    // Not something the image crate can read. It might still be a video, in
+    // which case the container header has plenty to say about it.
+    NotImage(Option<video::VideoMetadata>),
+}
 
-    let size = bytes.len();
-
-    let reader = ImageReader::new(std::io::Cursor::new(&bytes));
+fn decode_upload(bytes: &Bytes) -> DecodedUpload {
+    let reader = ImageReader::new(std::io::Cursor::new(bytes));
 
     match reader
         .with_guessed_format()
@@ -1420,9 +1528,56 @@ async fn file_upload_helper(
     {
         Ok((Some(format), Ok(image))) => {
             let (width, height) = image.dimensions();
-
             let metadata = image_metadata(width, height, format, bytes.to_vec());
+            DecodedUpload::Image(image, metadata)
+        }
+        _ => DecodedUpload::NotImage(video::video_metadata(bytes)),
+    }
+}
 
+fn encode_thumbnail(image: &image::DynamicImage, orientation: Orientation) -> Option<Vec<u8>> {
+    let mut resized_image = image.resize(
+        MAX_THUMBNAIL_HEIGHT * 3,
+        MAX_THUMBNAIL_HEIGHT,
+        image::imageops::FilterType::Triangle,
+    );
+    resized_image.apply_orientation(orientation);
+
+    let mut thumbnail: Vec<u8> = Vec::new();
+    resized_image
+        .write_to(
+            &mut std::io::Cursor::new(&mut thumbnail),
+            image::ImageFormat::WebP,
+        )
+        .ok()?;
+    Some(thumbnail)
+}
+
+// Decoding and resizing a large image is slow enough to hold up a worker thread, and
+// every other request with it, so that runs on the blocking pool.
+async fn file_upload_helper(
+    secret_key: &[u8],
+    uploader: &Uploader,
+    bytes: Bytes,
+) -> Response<String> {
+    let size = bytes.len();
+
+    let bytes2 = bytes.clone();
+    let (hash, decoded) =
+        match tokio::task::spawn_blocking(move || (hash_bytes(&bytes2), decode_upload(&bytes2)))
+            .await
+        {
+            Ok(ok) => ok,
+            Err(_) => {
+                return response_with_headers(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    String::from("Internal error"),
+                );
+            }
+        };
+
+    match decoded {
+        DecodedUpload::Image(image, metadata) => {
             let orientation: Orientation = match metadata.orientation {
                 Some(orientation2) => {
                     Orientation::from_exif(orientation2).unwrap_or(Orientation::NoTransforms)
@@ -1443,25 +1598,21 @@ async fn file_upload_helper(
                     })
                     .unwrap();
 
-                    match fs::exists(&path) {
+                    match tokio::fs::try_exists(&path).await {
                         Ok(true) => json_response_with_headers(StatusCode::OK, response),
-                        _ => match fs::write(path, bytes) {
+                        _ => match tokio::fs::write(path, bytes).await {
                             Ok(()) => {
                                 let (width2, height2) = image_size;
-                                if height2 > MAX_THUMBNAIL_HEIGHT
-                                    || width2 > MAX_THUMBNAIL_HEIGHT * 3
+                                if (height2 > MAX_THUMBNAIL_HEIGHT
+                                    || width2 > MAX_THUMBNAIL_HEIGHT * 3)
+                                    && let Ok(Some(thumbnail)) =
+                                        tokio::task::spawn_blocking(move || {
+                                            encode_thumbnail(&image, orientation)
+                                        })
+                                        .await
                                 {
-                                    let mut resized_image = image.resize(
-                                        MAX_THUMBNAIL_HEIGHT * 3,
-                                        MAX_THUMBNAIL_HEIGHT,
-                                        image::imageops::FilterType::Triangle,
-                                    );
-                                    resized_image.apply_orientation(orientation);
-
-                                    let _ = resized_image.save_with_format(
-                                        thumbnail_filepath(&hash),
-                                        image::ImageFormat::WebP,
-                                    );
+                                    let _ = tokio::fs::write(thumbnail_filepath(&hash), thumbnail)
+                                        .await;
                                 }
 
                                 json_response_with_headers(StatusCode::OK, response)
@@ -1480,10 +1631,7 @@ async fn file_upload_helper(
                 ),
             }
         }
-        // Not something the image crate can read. It might still be a video, in
-        // which case the container header has plenty to say about it.
-        _ => {
-            let metadata: Option<video::VideoMetadata> = video::video_metadata(&bytes);
+        DecodedUpload::NotImage(metadata) => {
             let video_size: (u32, u32) = match &metadata {
                 Some(metadata2) => metadata2.video_size,
                 None => (0, 0),
@@ -1500,10 +1648,10 @@ async fn file_upload_helper(
                     })
                     .unwrap();
 
-                    match fs::exists(&path) {
+                    match tokio::fs::try_exists(&path).await {
                         Ok(true) => json_response_with_headers(StatusCode::OK, response),
 
-                        _ => match fs::write(path, bytes) {
+                        _ => match tokio::fs::write(path, bytes).await {
                             Ok(()) => json_response_with_headers(StatusCode::OK, response),
                             Err(_) => response_with_headers(
                                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1577,7 +1725,7 @@ fn hash_bytes(bytes: &Bytes) -> String {
 
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
     if is_valid_hash(&hash) {
-        match fs::read(thumbnail_filepath(&hash)) {
+        match tokio::fs::read(thumbnail_filepath(&hash)).await {
             Result::Ok(data) => Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/webp")
@@ -1605,11 +1753,20 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
         .all(|x| x.is_ascii_alphanumeric() || x == '.')
         && sticker_path2.len() < 50
     {
-        match reqwest::get(format!("https://discord.com/stickers/{}", sticker_path2)).await {
-            Ok(bytes) => Response::builder()
+        let bytes = match http_client()
+            .get(format!("https://discord.com/stickers/{}", sticker_path2))
+            .send()
+            .await
+        {
+            Ok(response) => response.bytes().await,
+            Err(error) => Err(error),
+        };
+
+        match bytes {
+            Ok(bytes2) => Response::builder()
                 .status(StatusCode::OK)
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                .body(Body::from(bytes.bytes().await.unwrap()))
+                .body(Body::from(bytes2))
                 .unwrap(),
             Err(_) => Response::builder()
                 .status(StatusCode::BAD_REQUEST)
@@ -1759,7 +1916,7 @@ async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
     if is_valid_hash(&hash) {
-        match fs::read(filepath(&hash)) {
+        match tokio::fs::read(filepath(&hash)).await {
             Result::Ok(data) => {
                 let content_type = match content_type_index.parse::<usize>() {
                     Ok(index) => content_types::CONTENT_TYPES.get(index),
@@ -2076,10 +2233,10 @@ mod tests {
     // document recurses far enough in the parser to overflow a normal thread
     // stack. The dedicated large-stack parsing thread must absorb this without
     // aborting the process.
-    #[test]
-    fn parse_html_safe_survives_deeply_nested_html() {
+    #[tokio::test]
+    async fn parse_html_safe_survives_deeply_nested_html() {
         let deep = "<div>".repeat(20_000);
-        let result = parse_html_safe(deep, "https://example.com".to_owned());
+        let result = parse_html_safe(deep, "https://example.com".to_owned()).await;
         assert!(
             result.is_some(),
             "deeply nested HTML should parse without crashing the server"
@@ -2846,7 +3003,7 @@ mod tests {
 
     // Storing writes to the same directory the file endpoints read from, so each
     // test picks its own hash and clears up after itself.
-    fn store_encrypted(hash: &str, thumbnail: &[u8], file: &[u8]) -> Response<String> {
+    async fn store_encrypted(hash: &str, thumbnail: &[u8], file: &[u8]) -> Response<String> {
         create_storage_dir();
 
         store_encrypted_upload(
@@ -2854,6 +3011,7 @@ mod tests {
             &Bytes::copy_from_slice(thumbnail),
             &Bytes::copy_from_slice(file),
         )
+        .await
     }
 
     fn forget_stored(hash: &str) {
@@ -2917,7 +3075,7 @@ mod tests {
         let hash = "encryptedWithThumbnail";
         forget_stored(hash);
 
-        let response = store_encrypted(hash, b"the thumbnail", b"the file");
+        let response = store_encrypted(hash, b"the thumbnail", b"the file").await;
         let stored_file = fs::read(filepath(hash));
         let stored_thumbnail = fs::read(thumbnail_filepath(hash));
         forget_stored(hash);
@@ -2940,7 +3098,7 @@ mod tests {
         let hash = "encryptedWithoutThumbnail";
         forget_stored(hash);
 
-        let response = store_encrypted(hash, b"", b"the file");
+        let response = store_encrypted(hash, b"", b"the file").await;
         let stored_thumbnail_exists = fs::exists(thumbnail_filepath(hash)).unwrap_or(false);
         forget_stored(hash);
 
@@ -2958,8 +3116,8 @@ mod tests {
         let hash = "encryptedThumbnailTwice";
         forget_stored(hash);
 
-        let first = store_encrypted(hash, b"the thumbnail", b"the file");
-        let second = store_encrypted(hash, b"a replacement", b"the file");
+        let first = store_encrypted(hash, b"the thumbnail", b"the file").await;
+        let second = store_encrypted(hash, b"a replacement", b"the file").await;
         let stored_thumbnail = fs::read(thumbnail_filepath(hash));
         forget_stored(hash);
 
@@ -2983,8 +3141,8 @@ mod tests {
         let hash = "encryptedStoredTwice";
         forget_stored(hash);
 
-        let first = store_encrypted(hash, b"", b"the file");
-        let second = store_encrypted(hash, b"", b"the file");
+        let first = store_encrypted(hash, b"", b"the file").await;
+        let second = store_encrypted(hash, b"", b"the file").await;
         forget_stored(hash);
 
         assert_eq!(first.status(), StatusCode::OK);

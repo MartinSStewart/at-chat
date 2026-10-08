@@ -458,7 +458,7 @@ type alias BackendModel =
     , connections : SeqDict SessionId (NonemptyDict ClientId ConnectionData)
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
-    , logs : Array { time : Time.Posix, log : Log, isHidden : Bool }
+    , logs : Array { time : Time.Posix, log : Log }
     , emailNotificationsEnabled : Bool
     , lastErrorLogEmail : Time.Posix
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.

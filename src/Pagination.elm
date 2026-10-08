@@ -9,12 +9,10 @@ module Pagination exposing
     , pageCount
     , pageSize
     , setPage
-    , updateItem
     , viewPage
     )
 
 import Array exposing (Array)
-import Array.Extra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Icons
 import Id exposing (Id)
@@ -94,28 +92,6 @@ addItem item model =
 pageCount : Pagination a -> Int
 pageCount model =
     ((pageSize - 1) + model.totalItems) // pageSize
-
-
-updateItem : Id ItemId -> (a -> a) -> Pagination a -> Pagination a
-updateItem itemIndex updateFunc model =
-    let
-        { pageId, offset } =
-            itemToPageId itemIndex
-    in
-    { model
-        | pages =
-            SeqDict.updateIfExists
-                pageId
-                (\page ->
-                    case page of
-                        PageLoaded page2 ->
-                            Array.Extra.update offset updateFunc page2 |> PageLoaded
-
-                        PageLoading ->
-                            page
-                )
-                model.pages
-    }
 
 
 setPage : Id PageId -> ToBeFilledInByBackend (Array a) -> Pagination a -> Pagination a
