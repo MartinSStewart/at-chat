@@ -260,17 +260,7 @@ worldEntities config state =
                 )
                 alivePlayers
                 ++ List.concatMap
-                    (\npc ->
-                        let
-                            parts : { body : Part, head : Part, hat : Part }
-                            parts =
-                                npcParts npc.position
-                        in
-                        [ silhouetteEntity vp npcSilhouetteColor parts.body
-                        , silhouetteEntity vp npcSilhouetteColor parts.head
-                        , silhouetteEntity vp npcSilhouetteColor parts.hat
-                        ]
-                    )
+                    (\npc -> List.map (\( part, _ ) -> silhouetteEntity vp npcSilhouetteColor part) (npcParts npc))
                     state.npcs
 
         everythingElse : List Entity
@@ -638,15 +628,7 @@ playerEntities vp frame userColor player =
 
 npcEntities : Mat4 -> Npc -> List Entity
 npcEntities vp npc =
-    let
-        parts : { body : Part, head : Part, hat : Part }
-        parts =
-            npcParts npc.position
-    in
-    [ partEntity vp snowWhite parts.body
-    , partEntity vp snowWhite parts.head
-    , partEntity vp (Color.rgb 0.15 0.15 0.18) parts.hat
-    ]
+    List.map (\( part, color ) -> partEntity vp color part) (npcParts npc)
 
 
 {-| One shape of a model, placed in the world.
@@ -675,24 +657,67 @@ playerParts position =
     }
 
 
-npcParts : Point -> { body : Part, head : Part, hat : Part }
-npcParts position =
-    { body =
-        { mesh = sphereMesh
-        , offset = Vec3.vec3 position.x position.y (position.z + 0.27)
-        , scale = Vec3.vec3 0.27 0.27 0.27
-        }
-    , head =
-        { mesh = sphereMesh
-        , offset = Vec3.vec3 position.x position.y (position.z + 0.62)
-        , scale = Vec3.vec3 0.18 0.18 0.18
-        }
-    , hat =
-        { mesh = cubeMesh
-        , offset = Vec3.vec3 (position.x - 0.13) (position.y - 0.13) (position.z + 0.74)
-        , scale = Vec3.vec3 0.26 0.26 0.16
-        }
-    }
+{-| Chasers are a single big icy snowball, throwers a snowman in a black hat, and jumpers a smaller
+snowman in a red hat.
+-}
+npcParts : Npc -> List ( Part, Color )
+npcParts npc =
+    let
+        position : Point
+        position =
+            npc.position
+    in
+    case npc.kind of
+        TetrominoSim.Chaser ->
+            [ ( { mesh = sphereMesh
+                , offset = Vec3.vec3 position.x position.y (position.z + 0.36)
+                , scale = Vec3.vec3 0.36 0.36 0.36
+                }
+              , Color.rgb 0.72 0.86 1
+              )
+            ]
+
+        TetrominoSim.Thrower ->
+            [ ( { mesh = sphereMesh
+                , offset = Vec3.vec3 position.x position.y (position.z + 0.27)
+                , scale = Vec3.vec3 0.27 0.27 0.27
+                }
+              , snowWhite
+              )
+            , ( { mesh = sphereMesh
+                , offset = Vec3.vec3 position.x position.y (position.z + 0.62)
+                , scale = Vec3.vec3 0.18 0.18 0.18
+                }
+              , snowWhite
+              )
+            , ( { mesh = cubeMesh
+                , offset = Vec3.vec3 (position.x - 0.13) (position.y - 0.13) (position.z + 0.74)
+                , scale = Vec3.vec3 0.26 0.26 0.16
+                }
+              , Color.rgb 0.15 0.15 0.18
+              )
+            ]
+
+        TetrominoSim.Jumper ->
+            [ ( { mesh = sphereMesh
+                , offset = Vec3.vec3 position.x position.y (position.z + 0.2)
+                , scale = Vec3.vec3 0.2 0.2 0.2
+                }
+              , snowWhite
+              )
+            , ( { mesh = sphereMesh
+                , offset = Vec3.vec3 position.x position.y (position.z + 0.46)
+                , scale = Vec3.vec3 0.13 0.13 0.13
+                }
+              , snowWhite
+              )
+            , ( { mesh = cubeMesh
+                , offset = Vec3.vec3 (position.x - 0.1) (position.y - 0.1) (position.z + 0.55)
+                , scale = Vec3.vec3 0.2 0.2 0.14
+                }
+              , Color.rgb 0.85 0.15 0.12
+              )
+            ]
 
 
 playerSilhouetteColor : Color

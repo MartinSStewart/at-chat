@@ -11,7 +11,7 @@ import Set
 import Test exposing (Test, describe, test)
 import Tetromino
 import TetrominoGame
-import TetrominoSim exposing (Input(..), InputEvent, MatchState)
+import TetrominoSim exposing (Input(..), InputEvent, MatchState, NpcKind(..))
 import TetrominoTimeline
 import TetrominoWire
 
@@ -121,6 +121,7 @@ waitingAt frame model =
 npcAt : Float -> Float -> MatchState -> TetrominoSim.Npc
 npcAt x y state =
     { id = 1000
+    , kind = TetrominoSim.Thrower
     , position = { x = x, y = y, z = 0 }
     , velocityZ = 0
     , wanderOffset = { x = 0, y = 0 }
@@ -467,6 +468,63 @@ tests =
                     [ 1, 1.100000023841858, 1.3333333730697632, 0.8999999761581421, 1.25, 1.5, 2, 2.625, 2.75, 3 ]
                     |> List.all (\fits -> fits == ( True, True ))
                     |> Expect.equal True
+        , test "The first round only has chasers, later rounds mix in throwers and jumpers" <|
+            \_ ->
+                let
+                    kindsBy : Int -> MatchState -> List NpcKind
+                    kindsBy seconds start =
+                        let
+                            untouchable : MatchState
+                            untouchable =
+                                { start | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) start.players }
+                        in
+                        runUntil (start.frame + seconds * TetrominoSim.framesPerSecond) [] untouchable
+                            |> .npcs
+                            |> List.map .kind
+
+                    firstRoundKinds : List NpcKind
+                    firstRoundKinds =
+                        kindsBy 60 (inFirstRound [ userA ])
+
+                    laterRoundKinds : List NpcKind
+                    laterRoundKinds =
+                        inFirstRound [ userA ]
+                            |> (\state -> { state | round = { number = 2, startedAt = state.frame, nextRoundAt = Nothing } })
+                            |> kindsBy 60
+                in
+                ( List.all (\kind -> kind == Chaser) firstRoundKinds && not (List.isEmpty firstRoundKinds)
+                , List.map (\kind -> List.member kind laterRoundKinds) [ Chaser, Thrower, Jumper ]
+                )
+                    |> Expect.equal ( True, [ True, True, True ] )
+        , test "A chaser that reaches a player knocks them out" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                in
+                { start | npcs = [ npcAt (toFloat center + 3) (toFloat center + 0.5) start |> (\npc -> { npc | kind = Chaser }) ] }
+                    |> runUntil (start.frame + 2 * TetrominoSim.framesPerSecond) []
+                    |> knockedOut
+                    |> Expect.equal (Just True)
+        , test "A wall one block high stops a chaser, but a jumper hops it" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                            |> withBlocks (List.map (\y -> ( center + 2, y, 0 )) (List.range (center - 12) (center + 12)))
+
+                    after : NpcKind -> MatchState
+                    after kind =
+                        { start | npcs = [ npcAt (toFloat center + 6) (toFloat center + 0.5) start |> (\npc -> { npc | kind = kind }) ] }
+                            |> runUntil (start.frame + 4 * TetrominoSim.framesPerSecond) []
+                in
+                ( after Chaser |> knockedOut
+                , List.map (\npc -> npc.position.x > toFloat center + 3) (after Chaser).npcs
+                , after Jumper |> knockedOut
+                )
+                    |> Expect.equal ( Just False, [ True ], Just True )
         , test "The same inputs always give the same state" <|
             \_ ->
                 let

@@ -4,6 +4,7 @@ module TetrominoSim exposing
     , InputEvent
     , MatchState
     , Npc
+    , NpcKind(..)
     , Piece
     , PieceCycle(..)
     , PieceStatus(..)
@@ -101,8 +102,20 @@ type PieceCycle
     | Ready Shape
 
 
+type NpcKind
+    = -- Heads straight for the nearest player as fast as a player walks, but can't hop, so a wall
+      -- one block high stops it. Knocks out a player it reaches.
+      Chaser
+      -- Keeps a few cells away from the nearest player and throws snowballs.
+    | Thrower
+      -- Heads straight for the nearest player a little faster than a player walks, hopping onto
+      -- anything one block high. Knocks out a player it reaches.
+    | Jumper
+
+
 type alias Npc =
     { id : Int
+    , kind : NpcKind
     , position : Point
     , velocityZ : Float
     , wanderOffset : { x : Float, y : Float }
@@ -207,9 +220,19 @@ playerSpeed =
     3
 
 
-npcSpeed : Float
-npcSpeed =
+throwerSpeed : Float
+throwerSpeed =
     1
+
+
+chaserSpeed : Float
+chaserSpeed =
+    playerSpeed
+
+
+jumperSpeed : Float
+jumperSpeed =
+    playerSpeed * 1.15
 
 
 entityRadius : Float
@@ -324,7 +347,7 @@ step inputs state =
 
         state3 : MatchState
         state3 =
-            updateRound state2 |> updatePlayers |> updateNpcs |> spawnNpcs |> updateSnowballs
+            updateRound state2 |> updatePlayers |> updateNpcs |> catchPlayers |> spawnNpcs |> updateSnowballs
 
         ( state4, removedSettled ) =
             updatePieces state3 |> handleKnockouts
@@ -757,6 +780,40 @@ updateNpcs state =
 
 updateNpc : Int -> List Player -> List Npc -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
 updateNpc frame alivePlayers npcs occupied seed npc =
+    case npc.kind of
+        Chaser ->
+            ( moveEntityWithoutHopping
+                chaserSpeed
+                (npcStep chaserSpeed (nearestPlayerPosition npc.position alivePlayers) npcs npc)
+                occupied
+                npc
+            , Nothing
+            , seed
+            )
+
+        Thrower ->
+            updateThrower frame alivePlayers npcs occupied seed npc
+
+        Jumper ->
+            ( moveEntity
+                jumperSpeed
+                (npcStep jumperSpeed (nearestPlayerPosition npc.position alivePlayers) npcs npc)
+                occupied
+                npc
+            , Nothing
+            , seed
+            )
+
+
+nearestPlayerPosition : Point -> List Player -> Maybe { x : Float, y : Float }
+nearestPlayerPosition position alivePlayers =
+    Maybe.map
+        (\( player, _ ) -> { x = player.position.x, y = player.position.y })
+        (nearestPlayer position alivePlayers)
+
+
+updateThrower : Int -> List Player -> List Npc -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
+updateThrower frame alivePlayers npcs occupied seed npc =
     let
         ( npc2, seed2 ) =
             if frame >= npc.nextWanderFrame then
@@ -778,8 +835,9 @@ updateNpc frame alivePlayers npcs occupied seed npc =
                 npc3 : Npc
                 npc3 =
                     moveEntity
-                        npcSpeed
+                        throwerSpeed
                         (npcStep
+                            throwerSpeed
                             (if distance > npcKeepDistance then
                                 Just { x = player.position.x + npc2.wanderOffset.x, y = player.position.y + npc2.wanderOffset.y }
 
@@ -824,14 +882,14 @@ updateNpc frame alivePlayers npcs occupied seed npc =
                 ( npc3, Nothing, seed2 )
 
         Nothing ->
-            ( moveEntity npcSpeed (npcStep Nothing npcs npc2) occupied npc2, Nothing, seed2 )
+            ( moveEntity throwerSpeed (npcStep throwerSpeed Nothing npcs npc2) occupied npc2, Nothing, seed2 )
 
 
 {-| Where an NPC walks to this frame: towards its target, if it has one, and away from the nearest
 other NPC if that's too close, so that they don't all bunch up on the way to a player.
 -}
-npcStep : Maybe { x : Float, y : Float } -> List Npc -> Npc -> Maybe { x : Float, y : Float }
-npcStep maybeTarget npcs npc =
+npcStep : Float -> Maybe { x : Float, y : Float } -> List Npc -> Npc -> Maybe { x : Float, y : Float }
+npcStep speed maybeTarget npcs npc =
     let
         towards : { x : Float, y : Float }
         towards =
@@ -865,7 +923,7 @@ npcStep maybeTarget npcs npc =
         let
             stepLength : Float
             stepLength =
-                min 1 length * npcSpeed * frameSeconds
+                min 1 length * speed * frameSeconds
         in
         Just { x = npc.position.x + x / length * stepLength, y = npc.position.y + y / length * stepLength }
 
@@ -1047,6 +1105,54 @@ throwSnowball frame from to =
     }
 
 
+{-| Chasers and jumpers knock out any player they reach, unless that player has only just come
+into the round.
+-}
+catchPlayers : MatchState -> MatchState
+catchPlayers state =
+    let
+        catchers : List Npc
+        catchers =
+            List.filter (\npc -> catchesPlayers npc.kind) state.npcs
+    in
+    { state
+        | players =
+            SeqDict.map
+                (\_ player ->
+                    if
+                        (player.knockedOutAt == Nothing)
+                            && not (isProtected state.frame player)
+                            && List.any (\npc -> entitiesTouch npc.position player.position) catchers
+                    then
+                        { player | knockedOutAt = Just state.frame, target = Nothing }
+
+                    else
+                        player
+                )
+                state.players
+    }
+
+
+catchesPlayers : NpcKind -> Bool
+catchesPlayers kind =
+    case kind of
+        Chaser ->
+            True
+
+        Thrower ->
+            False
+
+        Jumper ->
+            True
+
+
+entitiesTouch : Point -> Point -> Bool
+entitiesTouch a b =
+    (abs (a.x - b.x) < 2 * entityRadius)
+        && (abs (a.y - b.y) < 2 * entityRadius)
+        && (abs (a.z - b.z) < entityHeight)
+
+
 {-| NPCs turn up a little way off from one of the players still standing, so that how soon they
 arrive doesn't depend on where on the map everyone is.
 -}
@@ -1060,33 +1166,50 @@ spawnNpcs state =
                     alivePlayers =
                         SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
 
-                    ( ( playerIndex, side, along ), seed ) =
+                    ( roll, seed ) =
                         Random.step
-                            (Random.map3
-                                (\a b c -> ( a, b, c ))
+                            (Random.map4
+                                (\playerIndex side along kindRoll -> { playerIndex = playerIndex, side = side, along = along, kindRoll = kindRoll })
                                 (Random.int 0 (max 0 (List.length alivePlayers - 1)))
                                 (Random.int 0 3)
                                 (Random.int -npcSpawnDistance npcSpawnDistance)
+                                (Random.int 0 3)
                             )
                             state.seed
 
+                    kind : NpcKind
+                    kind =
+                        if state.round.number <= 1 then
+                            Chaser
+
+                        else
+                            case roll.kindRoll of
+                                0 ->
+                                    Thrower
+
+                                1 ->
+                                    Jumper
+
+                                _ ->
+                                    Chaser
+
                     ( offsetX, offsetY ) =
-                        case side of
+                        case roll.side of
                             0 ->
-                                ( along, -npcSpawnDistance )
+                                ( roll.along, -npcSpawnDistance )
 
                             1 ->
-                                ( along, npcSpawnDistance )
+                                ( roll.along, npcSpawnDistance )
 
                             2 ->
-                                ( -npcSpawnDistance, along )
+                                ( -npcSpawnDistance, roll.along )
 
                             _ ->
-                                ( npcSpawnDistance, along )
+                                ( npcSpawnDistance, roll.along )
 
                     npcs : List Npc
                     npcs =
-                        case List.drop playerIndex alivePlayers of
+                        case List.drop roll.playerIndex alivePlayers of
                             player :: _ ->
                                 if List.length state.npcs < npcLimit then
                                     let
@@ -1100,6 +1223,7 @@ spawnNpcs state =
                                     in
                                     state.npcs
                                         ++ [ { id = state.nextId
+                                             , kind = kind
                                              , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
                                              , velocityZ = 0
                                              , wanderOffset = { x = 0, y = 0 }
@@ -1140,68 +1264,105 @@ moveEntity speed maybeTarget occupied entity =
     let
         position : Point
         position =
-            if entityCollides occupied entity.position then
-                { x = entity.position.x, y = entity.position.y, z = toFloat (floor entity.position.z + 1) }
+            unstuck occupied entity.position
 
-            else
-                entity.position
-
-        grounded : Bool
-        grounded =
-            entityCollides occupied { position | z = position.z - 0.01 }
-
-        ( afterWalk, wantsToJump ) =
-            case maybeTarget of
-                Just target ->
-                    let
-                        dx : Float
-                        dx =
-                            target.x - position.x
-
-                        dy : Float
-                        dy =
-                            target.y - position.y
-
-                        distance : Float
-                        distance =
-                            sqrt (dx * dx + dy * dy)
-                    in
-                    if distance < 0.001 then
-                        ( position, False )
-
-                    else
-                        let
-                            ( nextX, nextY ) =
-                                if distance <= speed * frameSeconds then
-                                    ( target.x, target.y )
-
-                                else
-                                    ( position.x + dx / distance * speed * frameSeconds
-                                    , position.y + dy / distance * speed * frameSeconds
-                                    )
-
-                            ( afterX, blockedX ) =
-                                tryMove occupied { position | x = nextX } position
-
-                            ( afterY, blockedY ) =
-                                tryMove occupied { afterX | y = nextY } afterX
-                        in
-                        ( afterY
-                        , (blockedX && canHop occupied position { position | x = nextX })
-                            || (blockedY && canHop occupied afterX { afterX | y = nextY })
-                        )
-
-                Nothing ->
-                    ( position, False )
+        walked : { position : Point, couldHop : Bool }
+        walked =
+            walk speed maybeTarget occupied position
 
         velocityZ : Float
         velocityZ =
-            if grounded && wantsToJump then
+            if walked.couldHop && entityCollides occupied { position | z = position.z - 0.01 } then
                 jumpVelocity
 
             else
-                max -maxFallSpeed (entity.velocityZ - gravity * frameSeconds)
+                fallingVelocity entity
+    in
+    moveVertically occupied velocityZ walked.position entity
 
+
+{-| Like `moveEntity`, except it never hops, so anything in the way stops it.
+-}
+moveEntityWithoutHopping : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveEntityWithoutHopping speed maybeTarget occupied entity =
+    let
+        walked : { position : Point, couldHop : Bool }
+        walked =
+            walk speed maybeTarget occupied (unstuck occupied entity.position)
+    in
+    moveVertically occupied (fallingVelocity entity) walked.position entity
+
+
+{-| Something that ends up inside a block, like a player a piece landed next to, is lifted on top
+of it.
+-}
+unstuck : Dict ( Int, Int, Int ) Int -> Point -> Point
+unstuck occupied position =
+    if entityCollides occupied position then
+        { position | z = toFloat (floor position.z + 1) }
+
+    else
+        position
+
+
+{-| A step towards the target that doesn't go into any block, sliding along a wall if it can, and
+whether there was something in the way it could have hopped onto.
+-}
+walk : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Point -> { position : Point, couldHop : Bool }
+walk speed maybeTarget occupied position =
+    case maybeTarget of
+        Just target ->
+            let
+                dx : Float
+                dx =
+                    target.x - position.x
+
+                dy : Float
+                dy =
+                    target.y - position.y
+
+                distance : Float
+                distance =
+                    sqrt (dx * dx + dy * dy)
+            in
+            if distance < 0.001 then
+                { position = position, couldHop = False }
+
+            else
+                let
+                    ( nextX, nextY ) =
+                        if distance <= speed * frameSeconds then
+                            ( target.x, target.y )
+
+                        else
+                            ( position.x + dx / distance * speed * frameSeconds
+                            , position.y + dy / distance * speed * frameSeconds
+                            )
+
+                    ( afterX, blockedX ) =
+                        tryMove occupied { position | x = nextX } position
+
+                    ( afterY, blockedY ) =
+                        tryMove occupied { afterX | y = nextY } afterX
+                in
+                { position = afterY
+                , couldHop =
+                    (blockedX && canHop occupied position { position | x = nextX })
+                        || (blockedY && canHop occupied afterX { afterX | y = nextY })
+                }
+
+        Nothing ->
+            { position = position, couldHop = False }
+
+
+fallingVelocity : { a | velocityZ : Float } -> Float
+fallingVelocity entity =
+    max -maxFallSpeed (entity.velocityZ - gravity * frameSeconds)
+
+
+moveVertically : Dict ( Int, Int, Int ) Int -> Float -> Point -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveVertically occupied velocityZ afterWalk entity =
+    let
         newZ : Float
         newZ =
             afterWalk.z + velocityZ * frameSeconds
