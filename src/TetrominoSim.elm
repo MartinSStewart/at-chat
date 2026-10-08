@@ -18,6 +18,7 @@ module TetrominoSim exposing
     , framesPerSecond
     , gridSize
     , init
+    , isProtected
     , isSettled
     , keepInsideGrid
     , roundBreak
@@ -89,6 +90,9 @@ type alias Player =
     , target : Maybe ( Int, Int )
     , knockedOutAt : Maybe Int
     , cycle : PieceCycle
+    , -- Snowballs do nothing to a player until this frame, so that someone coming into a round
+      -- isn't knocked straight back out.
+      protectedUntil : Int
     }
 
 
@@ -155,7 +159,7 @@ gridSize =
 
 roundLength : Int
 roundLength =
-    60 * framesPerSecond
+    90 * framesPerSecond
 
 
 {-| How long after everyone is knocked out (or after the first player joins) the next round
@@ -170,7 +174,12 @@ roundBreak =
 -}
 npcDelay : Int
 npcDelay =
-    5 * framesPerSecond
+    10 * framesPerSecond
+
+
+spawnProtection : Int
+spawnProtection =
+    3 * framesPerSecond
 
 
 gravity : Float
@@ -180,7 +189,7 @@ gravity =
 
 snowballGravity : Float
 snowballGravity =
-    12
+    6
 
 
 jumpVelocity : Float
@@ -195,12 +204,12 @@ maxFallSpeed =
 
 playerSpeed : Float
 playerSpeed =
-    4
+    3
 
 
 npcSpeed : Float
 npcSpeed =
-    1.3
+    1
 
 
 entityRadius : Float
@@ -236,6 +245,21 @@ npcThrowRange =
 npcKeepDistance : Float
 npcKeepDistance =
     3
+
+
+{-| How far off an NPC's aim can be, in cells along each axis.
+-}
+throwSpread : Float
+throwSpread =
+    0.7
+
+
+{-| How much of the way an NPC aims towards where a walking player will be once the snowball
+gets there.
+-}
+throwLead : Float
+throwLead =
+    0.6
 
 
 {-| How far from a player an NPC turns up, in cells along each axis.
@@ -536,6 +560,7 @@ startRound state =
                         , target = Nothing
                         , knockedOutAt = Nothing
                         , cycle = cycle
+                        , protectedUntil = state.frame + spawnProtection
                         }
                         players2
                     , seed3
@@ -735,11 +760,29 @@ updateNpc frame alivePlayers occupied seed npc =
             in
             if distance <= npcThrowRange && frame >= npc3.nextThrowFrame then
                 let
-                    ( delay, seed3 ) =
-                        Random.step (Random.int 100 200) seed2
+                    ( ( delay, missX, missY ), seed3 ) =
+                        Random.step
+                            (Random.map3
+                                (\a b c -> ( a, b, c ))
+                                (Random.int 100 200)
+                                (Random.float -throwSpread throwSpread)
+                                (Random.float -throwSpread throwSpread)
+                            )
+                            seed2
+
+                    lead : { x : Float, y : Float }
+                    lead =
+                        walkingLead (snowballFlightTime distance * throwLead) player
+
+                    aim : Point
+                    aim =
+                        { x = player.position.x + lead.x + missX
+                        , y = player.position.y + lead.y + missY
+                        , z = player.position.z
+                        }
                 in
                 ( { npc3 | nextThrowFrame = frame + delay }
-                , Just (throwSnowball frame npc3.position player.position)
+                , Just (throwSnowball frame npc3.position aim)
                 , seed3
                 )
 
@@ -779,6 +822,44 @@ horizontalDistance a b =
     sqrt ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
 
 
+{-| How far a player will have walked in the given time, stopping where they're headed.
+-}
+walkingLead : Float -> Player -> { x : Float, y : Float }
+walkingLead seconds player =
+    case player.target of
+        Just ( column, row ) ->
+            let
+                dx : Float
+                dx =
+                    toFloat column + 0.5 - player.position.x
+
+                dy : Float
+                dy =
+                    toFloat row + 0.5 - player.position.y
+
+                distance : Float
+                distance =
+                    sqrt (dx * dx + dy * dy)
+
+                walked : Float
+                walked =
+                    min distance (playerSpeed * seconds)
+            in
+            if distance < 0.01 then
+                { x = 0, y = 0 }
+
+            else
+                { x = dx / distance * walked, y = dy / distance * walked }
+
+        Nothing ->
+            { x = 0, y = 0 }
+
+
+snowballFlightTime : Float -> Float
+snowballFlightTime distance =
+    0.7 + 0.1 * distance
+
+
 throwSnowball : Int -> Point -> Point -> Snowball
 throwSnowball frame from to =
     let
@@ -800,7 +881,7 @@ throwSnowball frame from to =
 
         flightTime : Float
         flightTime =
-            0.5 + 0.07 * sqrt (dx * dx + dy * dy)
+            snowballFlightTime (sqrt (dx * dx + dy * dy))
     in
     { position = start
     , velocity =
@@ -895,7 +976,7 @@ spawnNpcs state =
 
 npcSpawnInterval : Int -> Int
 npcSpawnInterval framesIntoRound =
-    max (2 * framesPerSecond) (7 * framesPerSecond - framesIntoRound // 20)
+    max (3 * framesPerSecond) (8 * framesPerSecond - framesIntoRound // 30)
 
 
 {-| Walk towards a target, hopping onto anything one cell high, and fall under gravity.
@@ -1098,7 +1179,13 @@ updateSnowballs state =
                             ( kept
                             , SeqDict.updateIfExists
                                 userId
-                                (\player -> { player | knockedOutAt = Just state.frame, target = Nothing })
+                                (\player ->
+                                    if isProtected state.frame player then
+                                        player
+
+                                    else
+                                        { player | knockedOutAt = Just state.frame, target = Nothing }
+                                )
                                 players2
                             )
 
@@ -1117,6 +1204,11 @@ updateSnowballs state =
                 state.snowballs
     in
     { state | snowballs = snowballs, players = players }
+
+
+isProtected : Int -> Player -> Bool
+isProtected frame player =
+    frame < player.protectedUntil
 
 
 snowballHitsEntity : Point -> Point -> Bool

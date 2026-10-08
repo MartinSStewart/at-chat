@@ -58,7 +58,8 @@ cameraFocus currentUserId state =
             { x = toFloat TetrominoSim.gridSize / 2, y = toFloat TetrominoSim.gridSize / 2 }
 
 
-{-| Looking down at the focus from the side nearest x = 0, y = 0 at the classic isometric angle.
+{-| Looking down at the focus from the side nearest x = 0, y = 0, a little steeper than the classic
+isometric angle.
 -}
 viewProjection : Int -> Int -> Vec3 -> Mat4
 viewProjection width height focus =
@@ -69,7 +70,7 @@ viewProjection width height focus =
 
         halfWidth : Float
         halfWidth =
-            max 18 (12 * aspect)
+            max 11 (7.5 * aspect)
 
         halfHeight : Float
         halfHeight =
@@ -77,7 +78,7 @@ viewProjection width height focus =
     in
     Mat4.mul
         (Mat4.makeOrtho -halfWidth halfWidth -halfHeight halfHeight -200 200)
-        (Mat4.makeLookAt (Vec3.add focus (Vec3.vec3 -50 -50 49)) focus (Vec3.vec3 0 0 1))
+        (Mat4.makeLookAt (Vec3.add focus (Vec3.vec3 -40 -40 70)) focus (Vec3.vec3 0 0 1))
 
 
 {-| Which column is under a point on the canvas, given in CSS pixels from its top left corner.
@@ -230,7 +231,9 @@ worldEntities config state =
         opaque =
             groundEntity vp
                 :: List.concatMap (pieceEntities vp config.userColor) (SeqDict.values state.pieces)
-                ++ List.concatMap (\( userId, player ) -> playerEntities vp (config.userColor userId) player) alivePlayers
+                ++ List.concatMap
+                    (\( userId, player ) -> playerEntities vp state.frame (config.userColor userId) player)
+                    alivePlayers
                 ++ List.concatMap (npcEntities vp) state.npcs
                 ++ List.map
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
@@ -550,12 +553,25 @@ discShadow vp columns position size =
         }
 
 
-playerEntities : Mat4 -> Color -> Player -> List Entity
-playerEntities vp color player =
+playerEntities : Mat4 -> Int -> Color -> Player -> List Entity
+playerEntities vp frame userColor player =
     let
         position : Point
         position =
             player.position
+
+        color : Color
+        color =
+            if TetrominoSim.isProtected frame player then
+                let
+                    pulse : Float
+                    pulse =
+                        0.5 + 0.5 * sin (toFloat frame * 0.35)
+                in
+                mix (Color.rgb 1 0.8 0.15) (Color.rgb 1 1 1) pulse
+
+            else
+                userColor
 
         bodyHeight : Float
         bodyHeight =
@@ -586,6 +602,23 @@ npcEntities vp npc =
 snowWhite : Color
 snowWhite =
     Color.rgb 0.95 0.97 1
+
+
+mix : Color -> Color -> Float -> Color
+mix from to amount =
+    let
+        a : { red : Float, green : Float, blue : Float, alpha : Float }
+        a =
+            Color.toRgba from
+
+        b : { red : Float, green : Float, blue : Float, alpha : Float }
+        b =
+            Color.toRgba to
+    in
+    Color.rgb
+        (a.red + (b.red - a.red) * amount)
+        (a.green + (b.green - a.green) * amount)
+        (a.blue + (b.blue - a.blue) * amount)
 
 
 colorToVec3 : Color -> Vec3

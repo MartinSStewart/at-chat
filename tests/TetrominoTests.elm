@@ -294,6 +294,68 @@ tests =
                     |> SeqDict.get userA
                     |> Maybe.map (\player -> player.position.x < toFloat (center + 2) && player.position.z == 0)
                     |> Expect.equal (Just True)
+        , test "A player just brought into a round shrugs off snowballs for a moment" <|
+            \_ ->
+                let
+                    hitBySnowball : MatchState -> MatchState
+                    hitBySnowball state =
+                        case SeqDict.get userA state.players of
+                            Just player ->
+                                TetrominoSim.step
+                                    []
+                                    { state
+                                        | snowballs =
+                                            [ { position = { x = player.position.x, y = player.position.y, z = player.position.z + 0.4 }
+                                              , velocity = { x = 0, y = 0, z = 0 }
+                                              , thrownAt = state.frame
+                                              }
+                                            ]
+                                    }
+
+                            Nothing ->
+                                state
+
+                    knockedOut : MatchState -> Maybe Bool
+                    knockedOut state =
+                        SeqDict.get userA state.players |> Maybe.map (\player -> player.knockedOutAt /= Nothing)
+                in
+                ( inFirstRound [ userA ] |> hitBySnowball |> knockedOut
+                , runUntil (firstRound + 4 * TetrominoSim.framesPerSecond) [] (inFirstRound [ userA ]) |> hitBySnowball |> knockedOut
+                )
+                    |> Expect.equal ( Just False, Just True )
+        , test "An NPC aims ahead of a player who is walking" <|
+            \_ ->
+                let
+                    walking : MatchState
+                    walking =
+                        runUntil
+                            (firstRound + 30)
+                            [ { frame = firstRound, userId = userA, input = MoveTo center (center + 20) } ]
+                            (inFirstRound [ userA ])
+
+                    throwing : MatchState
+                    throwing =
+                        case SeqDict.get userA walking.players of
+                            Just player ->
+                                TetrominoSim.step
+                                    []
+                                    { walking
+                                        | npcs =
+                                            [ { id = 1000
+                                              , position = { x = player.position.x + 6, y = player.position.y, z = 0 }
+                                              , velocityZ = 0
+                                              , wanderOffset = { x = 0, y = 0 }
+                                              , nextWanderFrame = walking.frame + 1000
+                                              , nextThrowFrame = walking.frame
+                                              }
+                                            ]
+                                    }
+
+                            Nothing ->
+                                walking
+                in
+                List.map (\snowball -> snowball.velocity.y > 1) throwing.snowballs
+                    |> Expect.equal [ True ]
         , test "A destroyed piece leaves its cubes behind for a moment" <|
             \_ ->
                 let
@@ -311,7 +373,7 @@ tests =
             \_ ->
                 let
                     state =
-                        runUntil (firstRound + 6 * TetrominoSim.framesPerSecond) [] (inFirstRound [ userA ])
+                        runUntil (firstRound + 11 * TetrominoSim.framesPerSecond) [] (inFirstRound [ userA ])
                 in
                 case state.npcs of
                     [] ->
