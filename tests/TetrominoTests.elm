@@ -404,6 +404,48 @@ tests =
                             (\npc -> abs (npc.position.x - toFloat center) < 14 && abs (npc.position.y - toFloat center) < 14)
                             npcs
                             |> Expect.equal True
+        , test "NPCs chasing the same player spread out instead of bunching up" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+
+                    bunched : MatchState
+                    bunched =
+                        { start
+                            | npcs =
+                                List.map
+                                    (\id -> npcAt (toFloat center + 15) (toFloat center) start |> (\npc -> { npc | id = id }))
+                                    (List.range 1000 1004)
+                        }
+
+                    later : MatchState
+                    later =
+                        runUntil (bunched.frame + 8 * TetrominoSim.framesPerSecond) [] bunched
+
+                    closestPair : Float
+                    closestPair =
+                        List.concatMap
+                            (\npc ->
+                                List.filterMap
+                                    (\other ->
+                                        if npc.id < other.id then
+                                            Just (sqrt ((npc.position.x - other.position.x) ^ 2 + (npc.position.y - other.position.y) ^ 2))
+
+                                        else
+                                            Nothing
+                                    )
+                                    later.npcs
+                            )
+                            later.npcs
+                            |> List.minimum
+                            |> Maybe.withDefault 0
+                in
+                ( closestPair > 1.2
+                , List.all (\npc -> npc.position.x < toFloat center + 12) later.npcs
+                )
+                    |> Expect.equal ( True, True )
         , test "The same inputs always give the same state" <|
             \_ ->
                 let

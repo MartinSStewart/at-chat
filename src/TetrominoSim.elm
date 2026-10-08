@@ -247,6 +247,20 @@ npcKeepDistance =
     3
 
 
+{-| How close NPCs come to each other before they start backing off.
+-}
+npcSpacing : Float
+npcSpacing =
+    2
+
+
+{-| How hard backing off from another NPC counts against heading for a player.
+-}
+npcSeparationWeight : Float
+npcSeparationWeight =
+    1.5
+
+
 {-| How far off an NPC's aim can be, in cells along each axis.
 -}
 throwSpread : Float
@@ -723,7 +737,7 @@ updateNpcs state =
                 (\npc ( npcList, snowballList, seed2 ) ->
                     let
                         ( npc2, maybeSnowball, seed3 ) =
-                            updateNpc state.frame alivePlayers state.occupied seed2 npc
+                            updateNpc state.frame alivePlayers state.npcs state.occupied seed2 npc
                     in
                     ( npc2 :: npcList
                     , case maybeSnowball of
@@ -741,8 +755,8 @@ updateNpcs state =
     { state | npcs = npcs, snowballs = snowballs, seed = seed }
 
 
-updateNpc : Int -> List Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
-updateNpc frame alivePlayers occupied seed npc =
+updateNpc : Int -> List Player -> List Npc -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
+updateNpc frame alivePlayers npcs occupied seed npc =
     let
         ( npc2, seed2 ) =
             if frame >= npc.nextWanderFrame then
@@ -765,11 +779,15 @@ updateNpc frame alivePlayers occupied seed npc =
                 npc3 =
                     moveEntity
                         npcSpeed
-                        (if distance > npcKeepDistance then
-                            Just { x = player.position.x + npc2.wanderOffset.x, y = player.position.y + npc2.wanderOffset.y }
+                        (npcStep
+                            (if distance > npcKeepDistance then
+                                Just { x = player.position.x + npc2.wanderOffset.x, y = player.position.y + npc2.wanderOffset.y }
 
-                         else
-                            Nothing
+                             else
+                                Nothing
+                            )
+                            npcs
+                            npc2
                         )
                         occupied
                         npc2
@@ -806,7 +824,127 @@ updateNpc frame alivePlayers occupied seed npc =
                 ( npc3, Nothing, seed2 )
 
         Nothing ->
-            ( moveEntity npcSpeed Nothing occupied npc2, Nothing, seed2 )
+            ( moveEntity npcSpeed (npcStep Nothing npcs npc2) occupied npc2, Nothing, seed2 )
+
+
+{-| Where an NPC walks to this frame: towards its target, if it has one, and away from the nearest
+other NPC if that's too close, so that they don't all bunch up on the way to a player.
+-}
+npcStep : Maybe { x : Float, y : Float } -> List Npc -> Npc -> Maybe { x : Float, y : Float }
+npcStep maybeTarget npcs npc =
+    let
+        towards : { x : Float, y : Float }
+        towards =
+            case maybeTarget of
+                Just target ->
+                    unitVector (target.x - npc.position.x) (target.y - npc.position.y)
+
+                Nothing ->
+                    { x = 0, y = 0 }
+
+        away : { x : Float, y : Float }
+        away =
+            awayFromNearestNpc npcs npc
+
+        x : Float
+        x =
+            towards.x + npcSeparationWeight * away.x
+
+        y : Float
+        y =
+            towards.y + npcSeparationWeight * away.y
+
+        length : Float
+        length =
+            sqrt (x * x + y * y)
+    in
+    if length < 0.05 then
+        Nothing
+
+    else
+        let
+            stepLength : Float
+            stepLength =
+                min 1 length * npcSpeed * frameSeconds
+        in
+        Just { x = npc.position.x + x / length * stepLength, y = npc.position.y + y / length * stepLength }
+
+
+{-| A push away from the nearest other NPC, from nothing at `npcSpacing` apart up to 1 when on
+top of each other.
+-}
+awayFromNearestNpc : List Npc -> Npc -> { x : Float, y : Float }
+awayFromNearestNpc npcs npc =
+    let
+        nearest : Maybe ( Npc, Float )
+        nearest =
+            List.foldl
+                (\other found ->
+                    if other.id == npc.id then
+                        found
+
+                    else
+                        let
+                            distance : Float
+                            distance =
+                                horizontalDistance npc.position other.position
+                        in
+                        case found of
+                            Just ( _, nearestDistance ) ->
+                                if distance < nearestDistance then
+                                    Just ( other, distance )
+
+                                else
+                                    found
+
+                            Nothing ->
+                                Just ( other, distance )
+                )
+                Nothing
+                npcs
+    in
+    case nearest of
+        Just ( other, distance ) ->
+            if distance >= npcSpacing then
+                { x = 0, y = 0 }
+
+            else
+                let
+                    strength : Float
+                    strength =
+                        (npcSpacing - distance) / npcSpacing
+
+                    direction : { x : Float, y : Float }
+                    direction =
+                        if distance < 0.001 then
+                            -- Exactly on top of each other, so split them up by id.
+                            if npc.id < other.id then
+                                { x = 1, y = 0 }
+
+                            else
+                                { x = -1, y = 0 }
+
+                        else
+                            unitVector (npc.position.x - other.position.x) (npc.position.y - other.position.y)
+                in
+                { x = direction.x * strength, y = direction.y * strength }
+
+        Nothing ->
+            { x = 0, y = 0 }
+
+
+unitVector : Float -> Float -> { x : Float, y : Float }
+unitVector x y =
+    let
+        length : Float
+        length =
+            sqrt (x * x + y * y)
+    in
+    if length < 1.0e-9 then
+        { x = 0, y = 0 }
+
+    else
+        { x = x / length, y = y / length }
 
 
 nearestPlayer : Point -> List Player -> Maybe ( Player, Float )

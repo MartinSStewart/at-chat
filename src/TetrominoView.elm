@@ -180,6 +180,18 @@ toColumns occupied =
         occupied
 
 
+{-| The height a piece would come to rest at if dropped on this column right now.
+-}
+landingLevel : Columns -> List ( Int, Int, Int ) -> Int -> Int -> Int
+landingLevel columns cells column row =
+    List.foldl
+        (\( offsetX, offsetY, offsetZ ) level ->
+            max level (surfaceBelow columns (column + offsetX) (row + offsetY) 1000 - offsetZ)
+        )
+        0
+        cells
+
+
 surfaceBelow : Columns -> Int -> Int -> Float -> Int
 surfaceBelow columns column row below =
     case Dict.get ( column, row ) columns of
@@ -265,19 +277,24 @@ worldEntities config state =
 
                                 ( x0, y0 ) =
                                     TetrominoSim.keepInsideGrid cells cursor.x cursor.y
+
+                                level : Int
+                                level =
+                                    landingLevel columns cells x0 y0
+
+                                color : Color
+                                color =
+                                    config.userColor config.currentUserId
                             in
-                            footprint cells
-                                |> List.map
-                                    (\( ( x, y ), _ ) ->
-                                        flatSquare
-                                            vp
-                                            (toFloat (x0 + x))
-                                            (toFloat (y0 + y))
-                                            (toFloat (surfaceBelow columns (x0 + x) (y0 + y) 1000))
-                                            1
-                                            (Vec3.vec3 0 0 0)
-                                            shadowAlpha
-                                    )
+                            List.map
+                                (\( x, y, z ) ->
+                                    translucentCube
+                                        vp
+                                        (Vec3.vec3 (toFloat (x0 + x)) (toFloat (y0 + y)) (toFloat (level + z)))
+                                        color
+                                        0.35
+                                )
+                                cells
 
                         Nothing ->
                             [ flatSquare vp (toFloat cursor.x) (toFloat cursor.y) (toFloat cursor.z) 1 (Vec3.vec3 1 1 1) 0.35 ]
@@ -681,6 +698,22 @@ sphereEntity vp position radius color =
         , color = colorToVec3 color
         , alpha = 1
         , edge = 0
+        }
+
+
+translucentCube : Mat4 -> Vec3 -> Color -> Float -> Entity
+translucentCube vp offset color alpha =
+    WebGL.entityWith
+        translucentSettings
+        vertexShader
+        fragmentShader
+        cubeMesh
+        { viewProjection = vp
+        , offset = offset
+        , scale = Vec3.vec3 1 1 1
+        , color = colorToVec3 color
+        , alpha = alpha
+        , edge = 1
         }
 
 
