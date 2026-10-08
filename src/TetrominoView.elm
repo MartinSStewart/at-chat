@@ -239,13 +239,45 @@ worldEntities config state =
         alivePlayers =
             SeqDict.toList state.players |> List.filter (\( _, player ) -> player.knockedOutAt == Nothing)
 
-        opaque : List Entity
-        opaque =
-            groundEntity vp
-                :: List.concatMap (pieceEntities vp config.userColor) (SeqDict.values state.pieces)
+        groundAndPieces : List Entity
+        groundAndPieces =
+            groundEntity vp :: List.concatMap (pieceEntities vp config.userColor) (SeqDict.values state.pieces)
+
+        -- Drawn while the depth buffer only holds the ground and the pieces, so what passes the
+        -- depth test is exactly the part hidden behind a piece.
+        silhouettes : List Entity
+        silhouettes =
+            List.concatMap
+                (\( _, player ) ->
+                    let
+                        parts : { body : Part, head : Part }
+                        parts =
+                            playerParts player.position
+                    in
+                    [ silhouetteEntity vp playerSilhouetteColor parts.body
+                    , silhouetteEntity vp playerSilhouetteColor parts.head
+                    ]
+                )
+                alivePlayers
                 ++ List.concatMap
-                    (\( userId, player ) -> playerEntities vp state.frame (config.userColor userId) player)
-                    alivePlayers
+                    (\npc ->
+                        let
+                            parts : { body : Part, head : Part, hat : Part }
+                            parts =
+                                npcParts npc.position
+                        in
+                        [ silhouetteEntity vp npcSilhouetteColor parts.body
+                        , silhouetteEntity vp npcSilhouetteColor parts.head
+                        , silhouetteEntity vp npcSilhouetteColor parts.hat
+                        ]
+                    )
+                    state.npcs
+
+        everythingElse : List Entity
+        everythingElse =
+            List.concatMap
+                (\( userId, player ) -> playerEntities vp state.frame (config.userColor userId) player)
+                alivePlayers
                 ++ List.concatMap (npcEntities vp) state.npcs
                 ++ List.map
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
@@ -288,26 +320,27 @@ worldEntities config state =
                             in
                             List.map
                                 (\( x, y, z ) ->
-                                    translucentCube
+                                    ditheredCube
                                         vp
                                         (Vec3.vec3 (toFloat (x0 + x)) (toFloat (y0 + y)) (toFloat (level + z)))
-                                        color
-                                        0.35
+                                        (lighterHigherUp (toFloat (level + z)) color)
                                 )
                                 cells
 
                         Nothing ->
-                            [ flatSquare vp (toFloat cursor.x) (toFloat cursor.y) (toFloat cursor.z) 1 (Vec3.vec3 1 1 1) 0.35 ]
+                            [ flatSquare vp (toFloat cursor.x) (toFloat cursor.y) (toFloat cursor.z) 1 (Vec3.vec3 1 1 1) 0.7 ]
 
                 Nothing ->
                     []
     in
-    opaque ++ shadows ++ overlays
+    groundAndPieces ++ silhouettes ++ everythingElse ++ shadows ++ overlays
 
 
+{-| Only every other pixel of a shadow is drawn, so this is twice as dark as the shadow looks.
+-}
 shadowAlpha : Float
 shadowAlpha =
-    0.3
+    0.6
 
 
 {-| A small jolt of the camera for a moment after a piece lands nearby, fading with distance.
@@ -398,9 +431,19 @@ pieceEntities vp userColor piece =
     in
     List.map
         (\( x, y, z ) ->
-            cubeEntity vp (Vec3.vec3 (toFloat (piece.x + x)) (toFloat (piece.y + y)) (piece.z + toFloat z)) color
+            cubeEntity
+                vp
+                (Vec3.vec3 (toFloat (piece.x + x)) (toFloat (piece.y + y)) (piece.z + toFloat z))
+                (lighterHigherUp (piece.z + toFloat z) color)
         )
         piece.cells
+
+
+{-| Blocks fade towards white the higher they are, to make it easier to tell how tall something is.
+-}
+lighterHigherUp : Float -> Color -> Color
+lighterHigherUp z color =
+    mix color (Color.rgb 1 1 1) (clamp 0 0.75 (z * 0.08))
 
 
 {-| A destroyed piece flying apart into its cubes, each shrinking away to nothing.
@@ -465,7 +508,7 @@ debrisEntities vp userColor frame debris =
                 { viewProjection = vp
                 , offset = Vec3.sub center (Vec3.vec3 (size / 2) (size / 2) (size / 2))
                 , scale = Vec3.vec3 size size size
-                , color = colorToVec3 color
+                , color = colorToVec3 (lighterHigherUp (Vec3.getZ center - 0.5) color)
                 , alpha = 1
                 , edge = 1
                 }
@@ -553,9 +596,9 @@ overhangShadows vp columns occupied =
 discShadow : Mat4 -> Columns -> Point -> Float -> Entity
 discShadow vp columns position size =
     WebGL.entityWith
-        translucentSettings
+        ditheredSettings
         vertexShader
-        discFragmentShader
+        ditheredDiscFragmentShader
         squareMesh
         { viewProjection = vp
         , offset =
@@ -565,7 +608,7 @@ discShadow vp columns position size =
                 (toFloat (surfaceBelow columns (floor position.x) (floor position.y) (position.z + 0.01)) + 0.01)
         , scale = Vec3.vec3 size size 1
         , color = Vec3.vec3 0 0 0
-        , alpha = 0.3
+        , alpha = shadowAlpha
         , edge = 0
         }
 
@@ -573,10 +616,6 @@ discShadow vp columns position size =
 playerEntities : Mat4 -> Int -> Color -> Player -> List Entity
 playerEntities vp frame userColor player =
     let
-        position : Point
-        position =
-            player.position
-
         color : Color
         color =
             if TetrominoSim.isProtected frame player then
@@ -590,30 +629,80 @@ playerEntities vp frame userColor player =
             else
                 userColor
 
-        bodyHeight : Float
-        bodyHeight =
-            TetrominoSim.entityHeight - 0.3
+        parts : { body : Part, head : Part }
+        parts =
+            playerParts player.position
     in
-    [ boxEntity
-        vp
-        (Vec3.vec3 (position.x - 0.25) (position.y - 0.25) position.z)
-        (Vec3.vec3 0.5 0.5 bodyHeight)
-        color
-    , sphereEntity vp { position | z = position.z + bodyHeight + 0.15 } 0.18 color
-    ]
+    [ partEntity vp color parts.body, partEntity vp color parts.head ]
 
 
 npcEntities : Mat4 -> Npc -> List Entity
 npcEntities vp npc =
     let
-        position : Point
-        position =
-            npc.position
+        parts : { body : Part, head : Part, hat : Part }
+        parts =
+            npcParts npc.position
     in
-    [ sphereEntity vp { position | z = position.z + 0.27 } 0.27 snowWhite
-    , sphereEntity vp { position | z = position.z + 0.62 } 0.18 snowWhite
-    , boxEntity vp (Vec3.vec3 (position.x - 0.13) (position.y - 0.13) (position.z + 0.74)) (Vec3.vec3 0.26 0.26 0.16) (Color.rgb 0.15 0.15 0.18)
+    [ partEntity vp snowWhite parts.body
+    , partEntity vp snowWhite parts.head
+    , partEntity vp (Color.rgb 0.15 0.15 0.18) parts.hat
     ]
+
+
+{-| One shape of a model, placed in the world.
+-}
+type alias Part =
+    { mesh : Mesh Vertex, offset : Vec3, scale : Vec3 }
+
+
+playerParts : Point -> { body : Part, head : Part }
+playerParts position =
+    let
+        bodyHeight : Float
+        bodyHeight =
+            TetrominoSim.entityHeight - 0.3
+    in
+    { body =
+        { mesh = cubeMesh
+        , offset = Vec3.vec3 (position.x - 0.25) (position.y - 0.25) position.z
+        , scale = Vec3.vec3 0.5 0.5 bodyHeight
+        }
+    , head =
+        { mesh = sphereMesh
+        , offset = Vec3.vec3 position.x position.y (position.z + bodyHeight + 0.15)
+        , scale = Vec3.vec3 0.18 0.18 0.18
+        }
+    }
+
+
+npcParts : Point -> { body : Part, head : Part, hat : Part }
+npcParts position =
+    { body =
+        { mesh = sphereMesh
+        , offset = Vec3.vec3 position.x position.y (position.z + 0.27)
+        , scale = Vec3.vec3 0.27 0.27 0.27
+        }
+    , head =
+        { mesh = sphereMesh
+        , offset = Vec3.vec3 position.x position.y (position.z + 0.62)
+        , scale = Vec3.vec3 0.18 0.18 0.18
+        }
+    , hat =
+        { mesh = cubeMesh
+        , offset = Vec3.vec3 (position.x - 0.13) (position.y - 0.13) (position.z + 0.74)
+        , scale = Vec3.vec3 0.26 0.26 0.16
+        }
+    }
+
+
+playerSilhouetteColor : Color
+playerSilhouetteColor =
+    Color.rgb 0.6 1 0.6
+
+
+npcSilhouetteColor : Color
+npcSilhouetteColor =
+    Color.rgb 1 0.6 0.6
 
 
 snowWhite : Color
@@ -671,15 +760,34 @@ cubeEntity vp offset color =
         }
 
 
-boxEntity : Mat4 -> Vec3 -> Vec3 -> Color -> Entity
-boxEntity vp offset scale color =
+partEntity : Mat4 -> Color -> Part -> Entity
+partEntity vp color part =
     WebGL.entity
         vertexShader
         fragmentShader
-        cubeMesh
+        part.mesh
         { viewProjection = vp
-        , offset = offset
-        , scale = scale
+        , offset = part.offset
+        , scale = part.scale
+        , color = colorToVec3 color
+        , alpha = 1
+        , edge = 0
+        }
+
+
+{-| The part of a model that's hidden behind something already drawn, in a flat colour on every
+other pixel.
+-}
+silhouetteEntity : Mat4 -> Color -> Part -> Entity
+silhouetteEntity vp color part =
+    WebGL.entityWith
+        [ Effect.WebGL.Settings.DepthTest.greater { write = False, near = 0, far = 1 } ]
+        vertexShader
+        silhouetteFragmentShader
+        part.mesh
+        { viewProjection = vp
+        , offset = part.offset
+        , scale = part.scale
         , color = colorToVec3 color
         , alpha = 1
         , edge = 0
@@ -701,18 +809,18 @@ sphereEntity vp position radius color =
         }
 
 
-translucentCube : Mat4 -> Vec3 -> Color -> Float -> Entity
-translucentCube vp offset color alpha =
+ditheredCube : Mat4 -> Vec3 -> Color -> Entity
+ditheredCube vp offset color =
     WebGL.entityWith
-        translucentSettings
+        ditheredSettings
         vertexShader
-        fragmentShader
+        ditheredFragmentShader
         cubeMesh
         { viewProjection = vp
         , offset = offset
         , scale = Vec3.vec3 1 1 1
         , color = colorToVec3 color
-        , alpha = alpha
+        , alpha = 1
         , edge = 1
         }
 
@@ -720,9 +828,9 @@ translucentCube vp offset color alpha =
 flatSquare : Mat4 -> Float -> Float -> Float -> Float -> Vec3 -> Float -> Entity
 flatSquare vp x y z size color alpha =
     WebGL.entityWith
-        translucentSettings
+        ditheredSettings
         vertexShader
-        fragmentShader
+        ditheredFragmentShader
         squareMesh
         { viewProjection = vp
         , offset = Vec3.vec3 x y (z + 0.01)
@@ -733,10 +841,13 @@ flatSquare vp x y z size color alpha =
         }
 
 
-translucentSettings : List Effect.WebGL.Settings.Setting
-translucentSettings =
+{-| See-through things draw every other pixel and write depth like anything solid, so it doesn't
+matter what order they're drawn in, and two shadows on the same spot don't darken it twice.
+-}
+ditheredSettings : List Effect.WebGL.Settings.Setting
+ditheredSettings =
     [ Blend.add Blend.srcAlpha Blend.oneMinusSrcAlpha
-    , Effect.WebGL.Settings.DepthTest.lessOrEqual { write = False, near = 0, far = 1 }
+    , Effect.WebGL.Settings.DepthTest.less { write = True, near = 0, far = 1 }
     ]
 
 
@@ -881,8 +992,31 @@ void main () {
 |]
 
 
-discFragmentShader : Shader {} Uniforms Varyings
-discFragmentShader =
+ditheredFragmentShader : Shader {} Uniforms Varyings
+ditheredFragmentShader =
+    [glsl|
+precision mediump float;
+uniform vec3 color;
+uniform float alpha;
+uniform float edge;
+varying vec3 vNormal;
+varying vec2 vUv;
+
+void main () {
+    if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) > 0.5) {
+        discard;
+    }
+    vec3 light = normalize(vec3(-0.2, -0.35, 1.0));
+    float shade = 0.5 + 0.5 * max(0.0, dot(normalize(vNormal), light));
+    float distanceToEdge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+    float outline = edge * (1.0 - smoothstep(0.03, 0.06, distanceToEdge));
+    gl_FragColor = vec4(color * shade * (1.0 - 0.35 * outline), alpha);
+}
+|]
+
+
+ditheredDiscFragmentShader : Shader {} Uniforms Varyings
+ditheredDiscFragmentShader =
     [glsl|
 precision mediump float;
 uniform vec3 color;
@@ -891,11 +1025,34 @@ varying vec3 vNormal;
 varying vec2 vUv;
 
 void main () {
+    if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) > 0.5) {
+        discard;
+    }
     float distanceFromCenter = length(vUv - vec2(0.5, 0.5));
     if (distanceFromCenter > 0.5) {
         discard;
     }
     gl_FragColor = vec4(color, alpha);
+}
+|]
+
+
+{-| Uses the other half of the checkerboard from the see-through things, so a silhouette behind a
+shadow or the ghost piece still shows.
+-}
+silhouetteFragmentShader : Shader {} Uniforms Varyings
+silhouetteFragmentShader =
+    [glsl|
+precision mediump float;
+uniform vec3 color;
+varying vec3 vNormal;
+varying vec2 vUv;
+
+void main () {
+    if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) {
+        discard;
+    }
+    gl_FragColor = vec4(color, 1.0);
 }
 |]
 
