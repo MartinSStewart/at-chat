@@ -1628,7 +1628,7 @@ conversationWidth model =
                 False
         )
         - model.startupData.scrollbarWidth
-        - (User.profileImageSize + (messagePaddingX * 2) + MessageView.profileImagePaddingRight)
+        - (profileImageColumnWidth + messagePaddingX * 2)
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
@@ -7017,7 +7017,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad (containerWidth + profileImageColumnWidth) reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -7189,7 +7189,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
         editingView createdBy reactions =
             let
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad (containerWidth + profileImageColumnWidth) reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -7614,6 +7614,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         UserTextMessage data ->
             messageContainer
                 containerWidth
+                profileImageColumnWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7665,6 +7666,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 Just result ->
                     messageContainer
                         containerWidth
+                        profileImageColumnWidth
                         isThreadStarter
                         localUser.timezone
                         time
@@ -7710,6 +7712,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7744,6 +7747,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         DeletedMessage createdAt ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7771,6 +7775,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         CallStarted callStartedData ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7813,6 +7818,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         GameStarted gameStarted ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7874,6 +7880,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         UserTextMessage data ->
             messageContainer
                 containerWidth
+                profileImageColumnWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7920,6 +7927,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         EncryptedUserTextMessage data ->
             messageContainer
                 containerWidth
+                profileImageColumnWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7956,6 +7964,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -7990,6 +7999,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         DeletedMessage createdAt ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8017,6 +8027,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         CallStarted callStartedData ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8059,6 +8070,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
         GameStarted gameStarted ->
             messageContainer
                 containerWidth
+                0
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8124,6 +8136,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         UserTextMessage message2 ->
             threadMessageContainer
                 containerWidth
+                profileImageColumnWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
@@ -8169,6 +8182,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 Just result ->
                     threadMessageContainer
                         containerWidth
+                        profileImageColumnWidth
                         highlight
                         messageId
                         (currentUserId == message2.createdBy)
@@ -8208,6 +8222,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8235,6 +8250,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         DeletedMessage createdAt ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8256,6 +8272,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         CallStarted callStartedData ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8291,6 +8308,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         GameStarted gameStarted ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8343,6 +8361,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         UserTextMessage message2 ->
             threadMessageContainer
                 containerWidth
+                profileImageColumnWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
@@ -8383,6 +8402,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         EncryptedUserTextMessage message2 ->
             threadMessageContainer
                 containerWidth
+                profileImageColumnWidth
                 highlight
                 messageId
                 (currentUserId == message2.createdBy)
@@ -8413,6 +8433,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8440,6 +8461,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         DeletedMessage createdAt ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8461,6 +8483,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         CallStarted callStartedData ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -8496,6 +8519,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
         GameStarted gameStarted ->
             threadMessageContainer
                 containerWidth
+                0
                 highlight
                 messageId
                 False
@@ -9181,7 +9205,7 @@ indentPastProfileImage maybeRepliedTo2 header =
     case maybeRepliedTo2 of
         Just _ ->
             Ui.el
-                [ Ui.paddingLeft (User.profileImageSize + MessageView.profileImagePaddingRight) ]
+                [ Ui.paddingLeft profileImageColumnWidth ]
                 header
 
         Nothing ->
@@ -9371,6 +9395,11 @@ messagePaddingX =
     8
 
 
+profileImageColumnWidth : Int
+profileImageColumnWidth =
+    User.profileImageSize + MessageView.profileImagePaddingRight
+
+
 {-| Decodes a "contextmenu" event into a message that opens the message menu.
 If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
@@ -9455,6 +9484,7 @@ orElseMaybe first second =
 
 messageContainer :
     Int
+    -> Int
     -> Bool
     -> Time.Zone
     -> Time.Posix
@@ -9474,11 +9504,20 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer containerWidth isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers channels highlight messageIndex canEdit currentUserId currentUser reactions maybeThread decrypted isHovered messageContent =
+messageContainer containerWidth reactionsPaddingLeft isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers channels highlight messageIndex canEdit currentUserId currentUser reactions maybeThread decrypted isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            MessageView.reactionEmojiView
+                emojiData
+                (reactionsHover isHovered)
+                currentUserId
+                customEmojis
+                allUsers
+                (isHoveredToAnimationMode isHovered)
+                (containerWidth + profileImageColumnWidth - reactionsPaddingLeft)
+                reactions
+                |> Maybe.map (Ui.el [ Ui.paddingLeft reactionsPaddingLeft ])
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -9550,6 +9589,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
 
 threadMessageContainer :
     Int
+    -> Int
     -> HighlightMessage
     -> Id ThreadMessageId
     -> Bool
@@ -9563,11 +9603,20 @@ threadMessageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions availableCustomEmojis customEmojis emojiData allUsers isHovered messageContent =
+threadMessageContainer containerWidth reactionsPaddingLeft highlight messageIndex canEdit currentUserId currentUser reactions availableCustomEmojis customEmojis emojiData allUsers isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            MessageView.reactionEmojiView
+                emojiData
+                (reactionsHover isHovered)
+                currentUserId
+                customEmojis
+                allUsers
+                (isHoveredToAnimationMode isHovered)
+                (containerWidth + profileImageColumnWidth - reactionsPaddingLeft)
+                reactions
+                |> Maybe.map (Ui.el [ Ui.paddingLeft reactionsPaddingLeft ])
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1

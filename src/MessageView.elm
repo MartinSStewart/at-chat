@@ -372,15 +372,6 @@ profileImagePaddingRight =
     8
 
 
-{-| The reaction row runs the full width of a message rather than being indented under
-the message text the way `containerWidth` is, so it has the profile image's column to
-itself as well.
--}
-reactionRowWidth : Int -> Int
-reactionRowWidth containerWidth =
-    containerWidth + User.profileImageSize + profileImagePaddingRight
-
-
 {-| Where each reaction button ends up, as an offset from the left of the reaction row,
 once the row has wrapped. Buttons are laid out left to right and wrap onto a new line
 when the next one no longer fits, which is what `Ui.wrap` does to them.
@@ -467,7 +458,7 @@ reactionEmojiView :
     -> Int
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Element MessageViewMsg)
-reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animationMode containerWidth reactions =
+reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animationMode rowWidth reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -480,10 +471,6 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
             widths : List Int
             widths =
                 List.map (\( _, users ) -> reactionButtonWidth users) entries
-
-            rowWidth : Int
-            rowWidth =
-                reactionRowWidth containerWidth
 
             placements : List ReactionPopupPlacement
             placements =

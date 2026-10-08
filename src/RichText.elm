@@ -4657,10 +4657,16 @@ viewNodes dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIma
                                         (case level of
                                             Small ->
                                                 [ Html.Attributes.style "font-size" "0.8em"
-                                                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                                                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
                                                 ]
 
-                                            _ ->
+                                            H1 ->
+                                                [ Html.Attributes.style "font-weight" "700" ]
+
+                                            H2 ->
+                                                [ Html.Attributes.style "font-weight" "700" ]
+
+                                            H3 ->
                                                 [ Html.Attributes.style "font-weight" "700" ]
                                         )
                                         list2
