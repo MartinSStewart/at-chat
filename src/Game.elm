@@ -41,6 +41,8 @@ module Game exposing
     , sheepGameInputToSave
     , sheepGameQuestionsSaveDelay
     , sheepGameQuestionsToSave
+    , tetrominoMatchState
+    , tetrominoMatchStateAt
     , update
     , view
     , wordSpellingScrollPosition
@@ -74,6 +76,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SheepGame
 import TetrominoGame
+import TetrominoSim
 import Touch exposing (Drag(..), Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -512,6 +515,31 @@ addWordSpellingGameAction action matchData =
 
         MatchNotLoaded _ ->
             matchData
+
+
+{-| What the tetromino match looks like on this client right now. The end-to-end tests use it to
+check that two clients watching the same match agree about it.
+-}
+tetrominoMatchState : Id ChannelMessageId -> Model -> Maybe TetrominoSim.MatchState
+tetrominoMatchState matchId model =
+    case SeqDict.get matchId model.startedGames of
+        Just (TetrominoGame_Game game) ->
+            TetrominoGame.matchState game |> Just
+
+        _ ->
+            Nothing
+
+
+{-| What the tetromino match looked like on this client on the given frame.
+-}
+tetrominoMatchStateAt : Int -> Id ChannelMessageId -> Model -> Maybe TetrominoSim.MatchState
+tetrominoMatchStateAt frame matchId model =
+    case SeqDict.get matchId model.startedGames of
+        Just (TetrominoGame_Game game) ->
+            TetrominoGame.matchStateAt frame game
+
+        _ ->
+            Nothing
 
 
 addTetrominoAction : TetrominoGame.ActionWithTime -> MatchData -> MatchData
@@ -1067,22 +1095,9 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
         TetrominoSetupMsg tetrominoMsg ->
             let
                 ( setupOrGame, maybeStartMatch ) =
-                    TetrominoGame.updateSetup
-                        currentUserId
-                        time
-                        tetrominoMsg
-                        (case model.setup of
-                            TetrominoGame_Setup setup ->
-                                setup
-
-                            _ ->
-                                TetrominoGame.initSetup
-                        )
+                    TetrominoGame.updateSetup currentUserId time tetrominoMsg
             in
             ( case setupOrGame of
-                TetrominoGame.Setup setup ->
-                    { model | setup = TetrominoGame_Setup setup }
-
                 TetrominoGame.Game gameModel ->
                     { model | startedGames = SeqDict.insert newMatchId (TetrominoGame_Game gameModel) model.startedGames }
 
@@ -1890,8 +1905,8 @@ matchSwitcherView isMobile maybeMatchId matches =
 {-| A key press in a tetromino match turns an input the other players have to be told about, so
 it goes through `update` like a click does rather than through `pressedKey`.
 -}
-keyMsg : Id ChannelMessageId -> String -> MatchData -> Maybe Msg
-keyMsg matchId key matchData =
+keyMsg : String -> MatchData -> Maybe Msg
+keyMsg key matchData =
     case matchData of
         MatchData matchData2 ->
             case matchData2.data of

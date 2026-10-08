@@ -18,10 +18,8 @@ module TetrominoSim exposing
     , isOver
     , keepInsideGrid
     , maxHealth
-    , pieceCells
     , snowballRadius
     , step
-    , topOfColumn
     )
 
 {-| The game itself. Every client runs this on the same inputs and has to land on exactly the

@@ -2,7 +2,6 @@ module TetrominoView exposing
     ( Cursor
     , previewEntities
     , screenToCell
-    , viewProjection
     , worldEntities
     )
 

@@ -1,4 +1,4 @@
-module TetrominoTimeline exposing (Timeline, init, isCaughtUp, latest, update)
+module TetrominoTimeline exposing (Timeline, init, latest, stateAt, update)
 
 {-| Keeps recent states of a match so that an input arriving late (it was stamped with a frame
 this client has already simulated) only costs re-simulating from just before that frame.
@@ -10,7 +10,8 @@ import TetrominoSim exposing (InputEvent, MatchState)
 
 
 type alias Timeline =
-    { initial : MatchState
+    { seed : Int
+    , initial : MatchState
     , cache : List MatchState
     , inputs : Array InputEvent
     , inputsByFrame : Dict Int (List InputEvent)
@@ -20,7 +21,8 @@ type alias Timeline =
 
 init : Int -> Timeline
 init seed =
-    { initial = TetrominoSim.init seed
+    { seed = seed
+    , initial = TetrominoSim.init seed
     , cache = []
     , inputs = Array.empty
     , inputsByFrame = Dict.empty
@@ -59,9 +61,13 @@ latest timeline =
             timeline.initial
 
 
-isCaughtUp : Timeline -> Bool
-isCaughtUp timeline =
-    (latest timeline).frame >= timeline.target
+{-| The match as it was on a frame that has already been simulated, if it is still cached. The
+end-to-end test uses it to compare two clients that are showing the match at slightly different
+frames.
+-}
+stateAt : Int -> Timeline -> Maybe MatchState
+stateAt frame timeline =
+    List.filter (\state -> state.frame == frame) timeline.cache |> List.head
 
 
 update : Int -> Array InputEvent -> Timeline -> Timeline

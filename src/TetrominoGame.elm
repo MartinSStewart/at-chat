@@ -14,8 +14,9 @@ module TetrominoGame exposing
     , gameView
     , initGame
     , initSetup
-    , initShared
     , isValidAction
+    , matchState
+    , matchStateAt
     , pressedKey
     , sampleServerTime
     , serverTimeEstimate
@@ -98,8 +99,7 @@ type SetupMsg
 
 
 type SetupOrGame
-    = Setup SetupModel
-    | Game GameModel
+    = Game GameModel
     | CancelSetup
 
 
@@ -121,6 +121,7 @@ type GameMsg
     | PressedRotateY
     | PressedStopCycling
     | PressedJoin
+    | PressedNothing
 
 
 initSetup : SetupModel
@@ -128,9 +129,17 @@ initSetup =
     {}
 
 
+{-| Two clients only see the same match if they generate the same pieces, so the match's
+randomness comes from the time the backend says it began.
+-}
+matchSeed : ValidatedSetup -> Int
+matchSeed setup =
+    Time.posixToMillis setup.startedAt
+
+
 initGame : ValidatedSetup -> GameModel
 initGame setup =
-    { timeline = TetrominoTimeline.init (Time.posixToMillis setup.startedAt)
+    { timeline = TetrominoTimeline.init (matchSeed setup)
     , orientation = Tetromino.identity
     , cursor = Nothing
     , clockOffset = Quantity.zero
@@ -142,8 +151,8 @@ initShared =
     { inputs = Array.empty }
 
 
-updateSetup : Id UserId -> Time.Posix -> SetupMsg -> SetupModel -> ( SetupOrGame, Maybe ValidatedSetup )
-updateSetup creatorId time msg model =
+updateSetup : Id UserId -> Time.Posix -> SetupMsg -> ( SetupOrGame, Maybe ValidatedSetup )
+updateSetup creatorId time msg =
     case msg of
         PressedStartGame ->
             let
@@ -298,7 +307,7 @@ updateGame windowSize currentUserId msg model =
                         ( Just _, _ ) ->
                             ( model2, Nothing )
 
-                ( _, _ ) ->
+                _ ->
                     ( model2, Nothing )
 
         PressedRotateZ ->
@@ -331,6 +340,9 @@ updateGame windowSize currentUserId msg model =
                 Just TetrominoSim.Join
             )
 
+        PressedNothing ->
+            ( model, Nothing )
+
 
 rightMouseButton : Int
 rightMouseButton =
@@ -350,11 +362,37 @@ pressedKey key =
             PressedStopCycling
 
 
+matchState : GameModel -> TetrominoSim.MatchState
+matchState model =
+    TetrominoTimeline.latest model.timeline
+
+
+{-| The match as this client had it on the given frame. Clients run a little ahead or behind
+each other depending on what they make of the server's clock, so this is what the end-to-end
+test compares.
+-}
+matchStateAt : Int -> GameModel -> Maybe TetrominoSim.MatchState
+matchStateAt frame model =
+    TetrominoTimeline.stateAt frame model.timeline
+
+
 {-| Catch the simulation up with the frame this client is showing.
 -}
 animationFrame : Time.Posix -> ValidatedSetup -> Shared -> GameModel -> GameModel
 animationFrame time setup shared model =
-    { model | timeline = TetrominoTimeline.update (currentFrame time setup model) shared.inputs model.timeline }
+    let
+        timeline : Timeline
+        timeline =
+            if model.timeline.seed == matchSeed setup then
+                model.timeline
+
+            else
+                -- The player who started the match begins playing before the backend has said
+                -- when it began, so the match that was simulated with the guessed time has to
+                -- be thrown away once the real one arrives.
+                TetrominoTimeline.init (matchSeed setup)
+    in
+    { model | timeline = TetrominoTimeline.update (currentFrame time setup model) shared.inputs timeline }
 
 
 
@@ -429,51 +467,55 @@ gameView windowSize localUser model =
                         Ui.none
                 )
             ]
-            (WebGL.toHtmlWith
-                [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
-                [ Html.Attributes.width canvasWidth
-                , Html.Attributes.height canvasHeight
-                , Html.Attributes.style "display" "block"
-                , Html.Attributes.style "border-radius" "8px"
-                , Dom.idToAttribute canvasId
-                , Html.Events.on "mousemove" (Json.Decode.map PointerMoved offsetDecoder)
+            (Html.div
+                [ Dom.idToAttribute canvasId
+                , Html.Attributes.style "line-height" "0"
+                , Html.Events.on "mousemove" (Json.Decode.map PointerMoved decodeOffset)
                 , Html.Events.on "mousedown"
                     (Json.Decode.map2
                         PointerPressed
                         (Json.Decode.field "button" Json.Decode.int)
-                        offsetDecoder
+                        decodeOffset
                     )
-                , Html.Events.preventDefaultOn "contextmenu" (Json.Decode.succeed ( PointerMoved { x = -1, y = -1 }, True ))
+                , Html.Events.preventDefaultOn "contextmenu" (Json.Decode.succeed ( PressedNothing, True ))
                 ]
-                (TetrominoView.worldEntities
-                    { width = canvasWidth
-                    , height = canvasHeight
-                    , frame = state.frame
-                    , currentUserId = currentUserId
-                    , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
-                    , cursor = model.cursor
-                    , ghost =
-                        case ( shapeShown, maybePlayer ) of
-                            ( Just { shape, isReady }, Just player ) ->
-                                if isReady && player.diedAt == Nothing then
-                                    Just { shape = shape, orientation = model.orientation }
+                [ WebGL.toHtmlWith
+                    [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
+                    [ Html.Attributes.width canvasWidth
+                    , Html.Attributes.height canvasHeight
+                    , Html.Attributes.style "display" "block"
+                    , Html.Attributes.style "border-radius" "8px"
+                    ]
+                    (TetrominoView.worldEntities
+                        { width = canvasWidth
+                        , height = canvasHeight
+                        , frame = state.frame
+                        , currentUserId = currentUserId
+                        , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
+                        , cursor = model.cursor
+                        , ghost =
+                            case ( shapeShown, maybePlayer ) of
+                                ( Just { shape, isReady }, Just player ) ->
+                                    if isReady && player.diedAt == Nothing then
+                                        Just { shape = shape, orientation = model.orientation }
 
-                                else
+                                    else
+                                        Nothing
+
+                                _ ->
                                     Nothing
-
-                            _ ->
-                                Nothing
-                    }
-                    state
-                )
+                        }
+                        state
+                    )
+                ]
                 |> Ui.html
             )
         , statusView state maybePlayer
         ]
 
 
-offsetDecoder : Json.Decode.Decoder { x : Float, y : Float }
-offsetDecoder =
+decodeOffset : Json.Decode.Decoder { x : Float, y : Float }
+decodeOffset =
     Json.Decode.map2
         (\x y -> { x = x, y = y })
         (Json.Decode.field "offsetX" Json.Decode.float)
@@ -542,6 +584,9 @@ statusView state maybePlayer =
                 , Ui.text
                     (if SeqDict.isEmpty state.players then
                         "Nobody is playing yet"
+
+                     else if TetrominoSim.isOver state then
+                        "Everyone was knocked out"
 
                      else
                         String.fromInt (SeqDict.size state.players) ++ " playing"

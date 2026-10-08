@@ -9612,8 +9612,8 @@ gameKeyMsg key model =
 
                 Nothing ->
                     case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
-                        Just { matchId, match } ->
-                            Game.keyMsg matchId key match
+                        Just { match } ->
+                            Game.keyMsg key match
 
                         Nothing ->
                             Nothing
