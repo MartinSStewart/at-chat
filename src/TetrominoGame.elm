@@ -191,6 +191,7 @@ type GameMsg
     | PressedStandUpOrLieDown
     | PressedJoin
     | PressedNothing
+    | BotSentInput TetrominoSim.Input
 
 
 initSetup : SetupModel
@@ -624,6 +625,9 @@ updateConnected windowSize devicePixelRatio currentUserId msg state model =
 
         PressedNothing ->
             ( model, Nothing )
+
+        BotSentInput input ->
+            ( model, Just input )
 
 
 rightMouseButton : Int

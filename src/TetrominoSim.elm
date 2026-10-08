@@ -27,6 +27,7 @@ module TetrominoSim exposing
     , maxPieces
     , npcPositions
     , roundBreak
+    , snowballGravity
     , snowballRadius
     , step
     )

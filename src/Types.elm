@@ -140,6 +140,7 @@ import SheepGame
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
+import TetrominoBot
 import TetrominoGame
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
@@ -721,6 +722,7 @@ type FrontendMsg_
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
+    | GotTetrominoBotRequest (Result String TetrominoBot.Request)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab ChannelHeaderTab
     | FileDragEnter Duration
