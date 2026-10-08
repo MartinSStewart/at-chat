@@ -1859,27 +1859,21 @@ updatePieces state =
                                 _ ->
                                     newZ
 
-                        hitNpcs : List Npc
-                        hitNpcs =
-                            List.filter (\npc -> pieceOverlapsEntity piece finalZ npc.position) state2.npcs
-
                         hitPlayer : Bool
                         hitPlayer =
                             List.any
                                 (\player -> player.knockedOutAt == Nothing && pieceOverlapsEntity piece finalZ player.position)
                                 (SeqDict.values state2.players)
-                    in
-                    if not (List.isEmpty hitNpcs) then
-                        { state2
-                            | pieces = SeqDict.remove pieceId state2.pieces
-                            , npcs = List.filter (\npc -> not (List.member npc hitNpcs)) state2.npcs
-                            , debris = { piece = { piece | z = finalZ }, destroyedAt = state2.frame } :: state2.debris
-                        }
 
-                    else if hitPlayer then
-                        { state2
-                            | pieces = SeqDict.remove pieceId state2.pieces
-                            , debris = { piece = { piece | z = finalZ }, destroyedAt = state2.frame } :: state2.debris
+                        -- NPCs it falls on are squashed, and the piece carries on down.
+                        state3 : MatchState
+                        state3 =
+                            { state2 | npcs = List.filter (\npc -> not (pieceOverlapsEntity piece finalZ npc.position)) state2.npcs }
+                    in
+                    if hitPlayer then
+                        { state3
+                            | pieces = SeqDict.remove pieceId state3.pieces
+                            , debris = { piece = { piece | z = finalZ }, destroyedAt = state3.frame } :: state3.debris
                         }
 
                     else
@@ -1888,25 +1882,25 @@ updatePieces state =
                                 let
                                     piece2 : Piece
                                     piece2 =
-                                        { piece | z = toFloat level, status = Settled state2.frame }
+                                        { piece | z = toFloat level, status = Settled state3.frame }
                                 in
-                                { state2
-                                    | pieces = SeqDict.insert pieceId piece2 state2.pieces
+                                { state3
+                                    | pieces = SeqDict.insert pieceId piece2 state3.pieces
                                     , occupied =
                                         List.foldl
                                             (\cell occupied -> Dict.insert cell pieceId occupied)
-                                            state2.occupied
+                                            state3.occupied
                                             (pieceCells piece2)
                                 }
 
                             Just Nothing ->
-                                { state2
-                                    | pieces = SeqDict.remove pieceId state2.pieces
-                                    , debris = { piece = { piece | z = newZ }, destroyedAt = state2.frame } :: state2.debris
+                                { state3
+                                    | pieces = SeqDict.remove pieceId state3.pieces
+                                    , debris = { piece = { piece | z = newZ }, destroyedAt = state3.frame } :: state3.debris
                                 }
 
                             Nothing ->
-                                { state2 | pieces = SeqDict.insert pieceId { piece | z = newZ, status = Falling velocity2 } state2.pieces }
+                                { state3 | pieces = SeqDict.insert pieceId { piece | z = newZ, status = Falling velocity2 } state3.pieces }
 
                 Settled _ ->
                     state2

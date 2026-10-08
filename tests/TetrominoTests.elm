@@ -648,6 +648,38 @@ tests =
                     |> List.length
                     |> (\count -> count > 0 && count <= 3)
                     |> Expect.equal True
+        , test "A piece that lands on an NPC squashes it and stays" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+
+                    falling : MatchState
+                    falling =
+                        { start
+                            | npcs = [ npcAt (toFloat center + 6.5) (toFloat center + 0.5) start ]
+                            , pieces =
+                                SeqDict.singleton
+                                    500
+                                    { owner = Just userA
+                                    , shape = Tetromino.O
+                                    , cells = Tetromino.cells Tetromino.identity Tetromino.O
+                                    , x = center + 6
+                                    , y = center
+                                    , z = 1.5
+                                    , status = TetrominoSim.Falling -4
+                                    }
+                        }
+
+                    after : MatchState
+                    after =
+                        runUntil (falling.frame + 60) [] falling
+                in
+                ( List.length after.npcs
+                , SeqDict.values after.pieces |> List.map (\piece -> ( piece.z, TetrominoSim.isSettled piece.status ))
+                )
+                    |> Expect.equal ( 0, [ ( 0, True ) ] )
         , test "The same inputs always give the same state" <|
             \_ ->
                 let
