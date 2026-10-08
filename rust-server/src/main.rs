@@ -1252,16 +1252,7 @@ async fn upload_encrypted_endpoint(
         );
     }
 
-    let file2 = file.clone();
-    let hash = match tokio::task::spawn_blocking(move || hash_bytes(&file2)).await {
-        Ok(hash2) => hash2,
-        Err(_) => {
-            return response_with_headers(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                String::from("Internal error"),
-            );
-        }
-    };
+    let hash = hash_bytes(&file);
 
     // The size the file is displayed at is in the message the file is attached
     // to, which is encrypted too, so there is nothing to report here.
@@ -1562,8 +1553,8 @@ fn encode_thumbnail(image: &image::DynamicImage, orientation: Orientation) -> Op
     Some(thumbnail)
 }
 
-// Hashing, decoding and resizing an upload are all slow enough on a large file to hold
-// up a worker thread, and every other request with it, so they run on the blocking pool.
+// Decoding and resizing a large image is slow enough to hold up a worker thread, and
+// every other request with it, so that runs on the blocking pool.
 async fn file_upload_helper(
     secret_key: &[u8],
     uploader: &Uploader,
