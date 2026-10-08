@@ -778,7 +778,7 @@ updateLoaded msg model =
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
-            ( { model | time = time }
+            ( advanceGames { model | time = time }
             , -- A big gap between once-per-second ticks means the page was suspended (OS
               -- sleep or browser tab freezing). A new version might have been deployed in
               -- the meantime and no focus/visibility event fires in the OS sleep case.
@@ -1389,29 +1389,34 @@ updateLoaded msg model =
                     FrontendExtra.handleRedo model
 
                 _ ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            case loggedIn.textInputFocus of
-                                Just _ ->
-                                    ( loggedIn, Command.none )
+                    case gameKeyMsg key model of
+                        Just gameMsg ->
+                            updateLoaded (GameMsg gameMsg) model
 
-                                Nothing ->
-                                    case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
-                                        Just { guildOrDmId, matchId, match } ->
-                                            ( { loggedIn
-                                                | games =
-                                                    SeqDict.update
-                                                        guildOrDmId
-                                                        (Game.pressedKey matchId key match)
-                                                        loggedIn.games
-                                              }
-                                            , Command.none
-                                            )
+                        Nothing ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    case loggedIn.textInputFocus of
+                                        Just _ ->
+                                            ( loggedIn, Command.none )
 
                                         Nothing ->
-                                            ( loggedIn, Command.none )
-                        )
-                        model
+                                            case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                                                Just { guildOrDmId, matchId, match } ->
+                                                    ( { loggedIn
+                                                        | games =
+                                                            SeqDict.update
+                                                                guildOrDmId
+                                                                (Game.pressedKey matchId key match)
+                                                                loggedIn.games
+                                                      }
+                                                    , Command.none
+                                                    )
+
+                                                Nothing ->
+                                                    ( loggedIn, Command.none )
+                                )
+                                model
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model
@@ -8389,7 +8394,7 @@ updateLoadedFromBackend msg model =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
                                 -- view state that goes with it to be built from.
-                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend _)) ->
+                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend loaded)) ->
                                     Game.routeRequest
                                         model.time
                                         local.localUser
@@ -8397,6 +8402,9 @@ updateLoadedFromBackend msg model =
                                         matchId
                                         (FrontendExtra.channelGames guildOrDmId local)
                                         loggedIn.games
+                                        |> SeqDict.updateIfExists
+                                            guildOrDmId
+                                            (Game.matchLoaded model.time loaded.serverTime matchId)
 
                                 _ ->
                                     loggedIn.games
@@ -8451,6 +8459,9 @@ updateLoadedFromBackend msg model =
                                         Command.none
 
                                     Game.LocalChange_SheepGame _ _ ->
+                                        Command.none
+
+                                    Game.LocalChange_TetrominoGame _ _ ->
                                         Command.none
 
                             Local_VoiceChatChange callChange ->
@@ -9586,6 +9597,57 @@ scrollElementToTop : Game.ScrollTo -> Command FrontendOnly ToBackend FrontendMsg
 scrollElementToTop { container, target } =
     Scroll.smoothScrollToTopOf container target
         |> Task.attempt (\_ -> SetScrollToBottom)
+
+
+{-| A key press that belongs to the match on screen, for games that answer keys by sending
+something to everyone else rather than by changing what this client is showing.
+-}
+gameKeyMsg : String -> LoadedFrontend -> Maybe Game.Msg
+gameKeyMsg key model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case loggedIn.textInputFocus of
+                Just _ ->
+                    Nothing
+
+                Nothing ->
+                    case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                        Just { matchId, match } ->
+                            Game.keyMsg matchId key match
+
+                        Nothing ->
+                            Nothing
+
+        NotLoggedIn _ ->
+            Nothing
+
+
+{-| Move a running match on to the time now. Games that only change when somebody does something
+ignore this.
+-}
+advanceGames : LoadedFrontend -> LoadedFrontend
+advanceGames model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                Just { guildOrDmId, matchId, match } ->
+                    { model
+                        | loginStatus =
+                            LoggedIn
+                                { loggedIn
+                                    | games =
+                                        SeqDict.updateIfExists
+                                            guildOrDmId
+                                            (Game.animationFrame model.time matchId match)
+                                            loggedIn.games
+                                }
+                    }
+
+                Nothing ->
+                    model
+
+        NotLoggedIn _ ->
+            model
 
 
 handleGameOutMsgs :

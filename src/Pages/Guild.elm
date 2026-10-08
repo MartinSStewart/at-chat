@@ -9311,6 +9311,9 @@ startedGameText game =
         GameType_SheepGame ->
             "started a Sheep Game"
 
+        GameType_TetrominoGame ->
+            "started a game of Tetromino Fort"
+
 
 eventCard :
     (userId -> UserColor)

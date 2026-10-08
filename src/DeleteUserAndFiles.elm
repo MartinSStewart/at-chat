@@ -350,6 +350,9 @@ gameFiles gameData =
         Game.GameData_WordSpellingGame _ _ _ ->
             []
 
+        Game.GameData_TetrominoGame _ _ ->
+            []
+
         Game.GameData_SheepGame setup actions shared ->
             List.Nonempty.toList setup.questions
                 ++ List.filterMap sheepGameActionInput (Array.toList actions)

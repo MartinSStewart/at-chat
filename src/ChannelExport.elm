@@ -59,6 +59,9 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SheepGame
 import String.Nonempty exposing (NonemptyString)
+import Tetromino
+import TetrominoGame
+import TetrominoSim
 import TimeInMinutes exposing (TimeInMinutes)
 import UserSession
 import WordSpellingGame
@@ -561,6 +564,7 @@ gameTypeCodec =
         [ ( "GameType_Go", Message.GameType_Go )
         , ( "GameType_WordSpellingGame", Message.GameType_WordSpellingGame )
         , ( "GameType_SheepGame", Message.GameType_SheepGame )
+        , ( "GameType_TetrominoGame", Message.GameType_TetrominoGame )
         ]
 
 
@@ -1186,7 +1190,7 @@ permissionsCodec =
 backendGameDataCodec : Codec Game.BackendGameData
 backendGameDataCodec =
     Codec.custom
-        (\goEncoder wordSpellingEncoder sheepEncoder value ->
+        (\goEncoder wordSpellingEncoder sheepEncoder tetrominoEncoder value ->
             case value of
                 Game.GameData_Go argA argB ->
                     goEncoder argA argB
@@ -1196,6 +1200,9 @@ backendGameDataCodec =
 
                 Game.GameData_SheepGame argA argB _ ->
                     sheepEncoder argA argB
+
+                Game.GameData_TetrominoGame argA argB ->
+                    tetrominoEncoder argA argB
         )
         |> Codec.variant2 "GameData_Go" Game.GameData_Go goSetupCodec (Codec.array goActionCodec)
         |> Codec.variant2
@@ -1222,7 +1229,80 @@ backendGameDataCodec =
             )
             sheepSetupCodec
             (Codec.array sheepActionCodec)
+        |> Codec.variant2
+            "GameData_TetrominoGame"
+            Game.GameData_TetrominoGame
+            tetrominoSetupCodec
+            (Codec.array tetrominoActionCodec)
         |> Codec.buildCustom
+
+
+tetrominoSetupCodec : Codec TetrominoGame.ValidatedSetup
+tetrominoSetupCodec =
+    Codec.object (\createdBy startedAt -> { createdBy = createdBy, startedAt = startedAt })
+        |> Codec.field "createdBy" .createdBy idCodec
+        |> Codec.field "startedAt" .startedAt CodecExtra.time
+        |> Codec.buildObject
+
+
+tetrominoActionCodec : Codec TetrominoGame.ActionWithTime
+tetrominoActionCodec =
+    Codec.object (\userId time input -> { userId = userId, time = time, input = input })
+        |> Codec.field "userId" .userId idCodec
+        |> Codec.field "time" .time CodecExtra.time
+        |> Codec.field "input" .input tetrominoInputCodec
+        |> Codec.buildObject
+
+
+tetrominoInputCodec : Codec TetrominoSim.Input
+tetrominoInputCodec =
+    Codec.custom
+        (\joinEncoder moveToEncoder dropEncoder stopCyclingEncoder value ->
+            case value of
+                TetrominoSim.Join ->
+                    joinEncoder
+
+                TetrominoSim.MoveTo argA argB ->
+                    moveToEncoder argA argB
+
+                TetrominoSim.Drop argA ->
+                    dropEncoder argA
+
+                TetrominoSim.StopCycling ->
+                    stopCyclingEncoder
+        )
+        |> Codec.variant0 "Join" TetrominoSim.Join
+        |> Codec.variant2 "MoveTo" TetrominoSim.MoveTo Codec.int Codec.int
+        |> Codec.variant1 "Drop" TetrominoSim.Drop tetrominoDropCodec
+        |> Codec.variant0 "StopCycling" TetrominoSim.StopCycling
+        |> Codec.buildCustom
+
+
+tetrominoDropCodec : Codec { x : Int, y : Int, orientation : Tetromino.Orientation }
+tetrominoDropCodec =
+    Codec.object (\x y orientation -> { x = x, y = y, orientation = orientation })
+        |> Codec.field "x" .x Codec.int
+        |> Codec.field "y" .y Codec.int
+        |> Codec.field "orientation" .orientation tetrominoOrientationCodec
+        |> Codec.buildObject
+
+
+tetrominoOrientationCodec : Codec Tetromino.Orientation
+tetrominoOrientationCodec =
+    Codec.object
+        (\xx xy xz yx yy yz zx zy zz ->
+            { xx = xx, xy = xy, xz = xz, yx = yx, yy = yy, yz = yz, zx = zx, zy = zy, zz = zz }
+        )
+        |> Codec.field "xx" .xx Codec.int
+        |> Codec.field "xy" .xy Codec.int
+        |> Codec.field "xz" .xz Codec.int
+        |> Codec.field "yx" .yx Codec.int
+        |> Codec.field "yy" .yy Codec.int
+        |> Codec.field "yz" .yz Codec.int
+        |> Codec.field "zx" .zx Codec.int
+        |> Codec.field "zy" .zy Codec.int
+        |> Codec.field "zz" .zz Codec.int
+        |> Codec.buildObject
 
 
 goSetupCodec : Codec Go.ValidatedSetup

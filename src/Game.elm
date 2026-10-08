@@ -3,6 +3,7 @@ module Game exposing
     , FrontendGameData(..)
     , Game(..)
     , LoadedMatch
+    , LoadedMatchResponse
     , LocalChange(..)
     , MatchData(..)
     , Model
@@ -13,7 +14,9 @@ module Game exposing
     , addGoAction
     , addPublicLink
     , addSheepGameAction
+    , addTetrominoAction
     , addWordSpellingGameAction
+    , animationFrame
     , audio
     , dragEnd
     , dragStart
@@ -24,7 +27,9 @@ module Game exposing
     , insideBoard
     , isAnimating
     , isNotLoaded
+    , keyMsg
     , loadingMatchText
+    , matchLoaded
     , matchNotLoaded
     , pressedKey
     , replyPreview
@@ -68,6 +73,7 @@ import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SheepGame
+import TetrominoGame
 import Touch exposing (Drag(..), Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -101,6 +107,7 @@ type Game
     = GoModel_Game Go.GameModel
     | WordSpellingGame_Game WordSpellingGame.GameData
     | SheepGame_Game SheepGame.GameData
+    | TetrominoGame_Game TetrominoGame.GameModel
 
 
 type Setup
@@ -108,12 +115,14 @@ type Setup
     | GoModel_Setup Go.SetupModel
     | WordSpellingGame_Setup WordSpellingGame.SetupModel
     | SheepGame_Setup SheepGame.SetupModel
+    | TetrominoGame_Setup TetrominoGame.SetupModel
 
 
 type BackendGameData
     = GameData_Go Go.ValidatedSetup (Array Go.ActionWithTime)
     | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
     | GameData_SheepGame SheepGame.ValidatedSetup (Array SheepGame.ActionWithTime) SheepGame.Shared
+    | GameData_TetrominoGame TetrominoGame.ValidatedSetup (Array TetrominoGame.ActionWithTime)
 
 
 {-| OpaqueVariants
@@ -122,6 +131,7 @@ type FrontendGameData
     = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.Shared
     | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
     | FrontendGameData_SheepGame SheepGame.ValidatedSetup (Array SheepGame.ActionWithTime) SheepGame.Shared
+    | FrontendGameData_TetrominoGame TetrominoGame.ValidatedSetup (Array TetrominoGame.ActionWithTime) TetrominoGame.Shared
 
 
 type Msg
@@ -131,6 +141,8 @@ type Msg
     | WordSpellingSetupMsg WordSpellingGame.SetupMsg
     | SheepGameMsg SheepGame.GameMsg
     | SheepSetupMsg SheepGame.SetupMsg
+    | TetrominoGameMsg TetrominoGame.GameMsg
+    | TetrominoSetupMsg TetrominoGame.SetupMsg
     | PressedShareMatch (Id ChannelMessageId)
     | PressedCopyLink String
     | SelectedMatch (Id ChannelMessageId)
@@ -183,6 +195,9 @@ audio popSound currentUserId matchId matchData model =
                 FrontendGameData_SheepGame _ _ _ ->
                     Audio.silence
 
+                FrontendGameData_TetrominoGame _ _ _ ->
+                    Audio.silence
+
         MatchNotLoaded _ ->
             Audio.silence
 
@@ -208,6 +223,9 @@ isAnimating time windowSize matchId matchData model =
 
                 FrontendGameData_SheepGame _ _ _ ->
                     False
+
+                FrontendGameData_TetrominoGame _ _ _ ->
+                    True
 
         MatchNotLoaded _ ->
             False
@@ -236,6 +254,9 @@ insideBoard windowSize coord guildOrDmId matchId matchData games =
                 FrontendGameData_SheepGame _ _ _ ->
                     False
 
+                FrontendGameData_TetrominoGame _ _ _ ->
+                    False
+
         MatchNotLoaded _ ->
             False
 
@@ -261,6 +282,9 @@ initMatchData gameData publicLink =
 
             GameData_SheepGame setup actions shared ->
                 FrontendGameData_SheepGame setup actions shared
+
+            GameData_TetrominoGame setup actions ->
+                FrontendGameData_TetrominoGame setup actions (TetrominoGame.foldActions setup actions)
     , publicLink = publicLink
     }
         |> MatchData
@@ -270,6 +294,14 @@ initMatchData gameData publicLink =
 -}
 type alias LoadedMatch =
     { gameData : BackendGameData, publicLink : Maybe (SecretId GamePublicId) }
+
+
+{-| A match the backend has just sent, with what its clock said at the time. The tetromino game
+counts frames from the moment the match started, so a client that has just opened one has to know
+how far its own clock is out.
+-}
+type alias LoadedMatchResponse =
+    { match : LoadedMatch, serverTime : Time.Posix }
 
 
 matchNotLoaded : BackendGameData -> MatchData
@@ -284,6 +316,9 @@ matchNotLoaded gameData =
 
             GameData_SheepGame _ _ _ ->
                 GameType_SheepGame
+
+            GameData_TetrominoGame _ _ ->
+                GameType_TetrominoGame
         )
 
 
@@ -426,6 +461,22 @@ routeRequest time localUser guildOrDmId matchId matchData models =
                                         )
                                         model.startedGames
                             }
+
+                        FrontendGameData_TetrominoGame setup _ _ ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just _ ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    TetrominoGame.initGame setup |> TetrominoGame_Game |> Just
+                                        )
+                                        model.startedGames
+                            }
                     )
                         |> Just
                 )
@@ -463,6 +514,80 @@ addWordSpellingGameAction action matchData =
             matchData
 
 
+addTetrominoAction : TetrominoGame.ActionWithTime -> MatchData -> MatchData
+addTetrominoAction action matchData =
+    case matchData of
+        MatchData matchData2 ->
+            { matchData2
+                | data =
+                    case matchData2.data of
+                        FrontendGameData_TetrominoGame setup actions cache ->
+                            FrontendGameData_TetrominoGame
+                                setup
+                                (Array.push action actions)
+                                (TetrominoGame.updateAction setup action cache)
+
+                        _ ->
+                            matchData2.data
+            }
+                |> MatchData
+
+        MatchNotLoaded _ ->
+            matchData
+
+
+{-| Catch a running match up with the time now, so that the next redraw shows where everything
+has got to. Only the tetromino game needs this; the other games only move when somebody does
+something.
+-}
+animationFrame : Time.Posix -> Id ChannelMessageId -> MatchData -> Model -> Model
+animationFrame time matchId matchData model =
+    case matchData of
+        MatchData matchData2 ->
+            case ( matchData2.data, SeqDict.get matchId model.startedGames ) of
+                ( FrontendGameData_TetrominoGame setup _ shared, Just (TetrominoGame_Game game) ) ->
+                    { model
+                        | startedGames =
+                            SeqDict.insert
+                                matchId
+                                (TetrominoGame.animationFrame time setup shared game |> TetrominoGame_Game)
+                                model.startedGames
+                    }
+
+                _ ->
+                    model
+
+        MatchNotLoaded _ ->
+            model
+
+
+{-| The backend has just answered with a match. Its reply carries the server's clock, which the
+tetromino game needs so that it counts frames from the same moment everyone else does.
+-}
+matchLoaded : Time.Posix -> Time.Posix -> Id ChannelMessageId -> Model -> Model
+matchLoaded localTime serverTime matchId model =
+    { model
+        | startedGames =
+            SeqDict.updateIfExists
+                matchId
+                (\game ->
+                    case game of
+                        TetrominoGame_Game game2 ->
+                            TetrominoGame.sampleServerTime localTime serverTime game2 |> TetrominoGame_Game
+
+                        GoModel_Game _ ->
+                            game
+
+                        WordSpellingGame_Game _ ->
+                            game
+
+                        SheepGame_Game _ ->
+                            game
+                )
+                model.startedGames
+    }
+
+
 addSheepGameAction : SheepGame.ActionWithTime -> MatchData -> MatchData
 addSheepGameAction action matchData =
     case matchData of
@@ -490,10 +615,11 @@ type LocalChange
       -- Ask the backend for a match it only told us the existence of. Matches are sent as
       -- `MatchNotLoaded` until someone opens one, so that a channel with a lot of finished
       -- games costs nothing to load.
-    | LoadMatch (Id ChannelMessageId) (ToBeFilledInByBackend LoadedMatch)
+    | LoadMatch (Id ChannelMessageId) (ToBeFilledInByBackend LoadedMatchResponse)
     | LocalChange_Go (Id ChannelMessageId) Go.LocalChange
     | LocalChange_WordSpellingGame (Id ChannelMessageId) WordSpellingGame.LocalChange
     | LocalChange_SheepGame (Id ChannelMessageId) SheepGame.LocalChange
+    | LocalChange_TetrominoGame (Id ChannelMessageId) TetrominoGame.LocalChange
 
 
 {-| Somewhere a view has to be scrolled to once a change has been applied.
@@ -894,6 +1020,84 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     , []
                     )
 
+                GameType_TetrominoGame ->
+                    ( { model | setup = TetrominoGame_Setup TetrominoGame.initSetup }, [] )
+
+        TetrominoGameMsg tetrominoMsg ->
+            case maybeMatch of
+                Just ( matchId, MatchData matchData ) ->
+                    case ( matchData.data, SeqDict.get matchId model.startedGames ) of
+                        ( FrontendGameData_TetrominoGame setup _ shared, Just (TetrominoGame_Game game) ) ->
+                            let
+                                ( game2, maybeInput ) =
+                                    TetrominoGame.updateGame
+                                        windowSize
+                                        currentUserId
+                                        tetrominoMsg
+                                        (TetrominoGame.animationFrame time setup shared game)
+                            in
+                            ( { model | startedGames = SeqDict.insert matchId (TetrominoGame_Game game2) model.startedGames }
+                            , case maybeInput of
+                                Just input ->
+                                    [ OutLocalChange
+                                        (LocalChange_TetrominoGame
+                                            matchId
+                                            (TetrominoGame.Action
+                                                { userId = currentUserId
+                                                , time = TetrominoGame.serverTimeEstimate time game2
+                                                , input = input
+                                                }
+                                            )
+                                        )
+                                    ]
+
+                                Nothing ->
+                                    []
+                            )
+
+                        _ ->
+                            ( model, [] )
+
+                Just ( _, MatchNotLoaded _ ) ->
+                    ( model, [] )
+
+                Nothing ->
+                    ( model, [] )
+
+        TetrominoSetupMsg tetrominoMsg ->
+            let
+                ( setupOrGame, maybeStartMatch ) =
+                    TetrominoGame.updateSetup
+                        currentUserId
+                        time
+                        tetrominoMsg
+                        (case model.setup of
+                            TetrominoGame_Setup setup ->
+                                setup
+
+                            _ ->
+                                TetrominoGame.initSetup
+                        )
+            in
+            ( case setupOrGame of
+                TetrominoGame.Setup setup ->
+                    { model | setup = TetrominoGame_Setup setup }
+
+                TetrominoGame.Game gameModel ->
+                    { model | startedGames = SeqDict.insert newMatchId (TetrominoGame_Game gameModel) model.startedGames }
+
+                TetrominoGame.CancelSetup ->
+                    { model | setup = GameSelect }
+            , case maybeStartMatch of
+                Just setup ->
+                    [ OutLocalChange (LocalChange_TetrominoGame newMatchId (TetrominoGame.StartMatch time setup))
+                    , OutSelectMatch (Just newMatchId)
+                    ]
+
+                Nothing ->
+                    []
+            )
+
         PressedReset ->
             ( { model | setup = GameSelect }, [ OutSelectMatch Nothing ] )
 
@@ -1150,6 +1354,9 @@ dragStart time windowSize currentUserId touches matchId matchData model =
 
                                 FrontendGameData_SheepGame _ _ _ ->
                                     game
+
+                                FrontendGameData_TetrominoGame _ _ _ ->
+                                    game
                         )
                         model.startedGames
             }
@@ -1212,6 +1419,9 @@ dragEnd time windowSize currentUserId touches matchId matchData model =
                                     ( game, Nothing )
 
                         FrontendGameData_SheepGame _ _ _ ->
+                            ( game, Nothing )
+
+                        FrontendGameData_TetrominoGame _ _ _ ->
                             ( game, Nothing )
             in
             ( { model | startedGames = SeqDict.insert matchId game4 model.startedGames }, outMsg )
@@ -1334,6 +1544,22 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                 _ ->
                                     matchNotFound
 
+                        FrontendGameData_TetrominoGame _ _ _ ->
+                            case game of
+                                TetrominoGame_Game game2 ->
+                                    Ui.column
+                                        [ Ui.height (Ui.px (Go.viewHeight windowSize))
+                                        , Ui.scrollable
+                                        , Ui.background MyUi.tabBackground
+                                        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                                        , Ui.borderColor MyUi.border2
+                                        , MyUi.noShrinking
+                                        ]
+                                        [ TetrominoGame.gameView windowSize localUser game2 |> Ui.map TetrominoGameMsg ]
+
+                                _ ->
+                                    matchNotFound
+
                         FrontendGameData_SheepGame setup _ cache ->
                             case game of
                                 SheepGame_Game game2 ->
@@ -1377,6 +1603,9 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                         SheepGame.setupView windowSize localUser loggedIn (User.allUsers localUser) setup
                             |> Ui.map SheepSetupMsg
 
+                    TetrominoGame_Setup setup ->
+                        TetrominoGame.setupView windowSize setup |> Ui.map TetrominoSetupMsg
+
                     GameSelect ->
                         Ui.row
                             [ Ui.spacing 8
@@ -1397,6 +1626,7 @@ allGames =
     [ GameType_Go
     , GameType_WordSpellingGame
     , GameType_SheepGame
+    , GameType_TetrominoGame
     ]
 
 
@@ -1453,6 +1683,9 @@ gameToString game =
         GameType_SheepGame ->
             sheepGameName
 
+        GameType_TetrominoGame ->
+            tetrominoGameName
+
 
 goName : String
 goName =
@@ -1469,6 +1702,11 @@ sheepGameName =
     "Sheep Game (WIP)"
 
 
+tetrominoGameName : String
+tetrominoGameName =
+    "Tetromino Fort"
+
+
 gameToPreviewUrl : GameType -> String
 gameToPreviewUrl game =
     case game of
@@ -1480,6 +1718,9 @@ gameToPreviewUrl game =
 
         GameType_SheepGame ->
             "/cacheable/sheep-game-preview.webp"
+
+        GameType_TetrominoGame ->
+            "/cacheable/tetromino-game-preview.webp"
 
 
 gameSelectButton : Bool -> GameType -> Element Msg
@@ -1628,6 +1869,9 @@ matchSwitcherView isMobile maybeMatchId matches =
                                                     FrontendGameData_SheepGame _ _ _ ->
                                                         sheepGameName
 
+                                                    FrontendGameData_TetrominoGame _ _ _ ->
+                                                        tetrominoGameName
+
                                             MatchNotLoaded gameType ->
                                                 gameToString gameType
                                 in
@@ -1641,6 +1885,30 @@ matchSwitcherView isMobile maybeMatchId matches =
                     )
                 )
             )
+
+
+{-| A key press in a tetromino match turns an input the other players have to be told about, so
+it goes through `update` like a click does rather than through `pressedKey`.
+-}
+keyMsg : Id ChannelMessageId -> String -> MatchData -> Maybe Msg
+keyMsg matchId key matchData =
+    case matchData of
+        MatchData matchData2 ->
+            case matchData2.data of
+                FrontendGameData_TetrominoGame _ _ _ ->
+                    TetrominoGame.pressedKey key |> TetrominoGameMsg |> Just
+
+                FrontendGameData_Go _ _ _ ->
+                    Nothing
+
+                FrontendGameData_WordSpellingGame _ _ _ ->
+                    Nothing
+
+                FrontendGameData_SheepGame _ _ _ ->
+                    Nothing
+
+        MatchNotLoaded _ ->
+            Nothing
 
 
 pressedKey : Id ChannelMessageId -> String -> MatchData -> Maybe Model -> Maybe Model
@@ -1677,6 +1945,9 @@ pressedKey matchId key matchData maybeGameModel =
                                             game
 
                                 FrontendGameData_SheepGame _ _ _ ->
+                                    game
+
+                                FrontendGameData_TetrominoGame _ _ _ ->
                                     game
                         )
                         model.startedGames
@@ -1819,6 +2090,39 @@ gameChangeFromServer time localUser gameChange maybeModel =
 
                         SheepGame.Action _ ->
                             model
+
+                LocalChange_TetrominoGame matchId tetrominoChange ->
+                    case tetrominoChange of
+                        TetrominoGame.StartMatch _ setup ->
+                            { model
+                                | startedGames =
+                                    SeqDict.insert matchId (TetrominoGame_Game (TetrominoGame.initGame setup)) model.startedGames
+                            }
+
+                        TetrominoGame.Action action ->
+                            -- The time the server stamped on somebody else's input says how far
+                            -- ahead of this browser the server's clock is.
+                            { model
+                                | startedGames =
+                                    SeqDict.updateIfExists
+                                        matchId
+                                        (\game ->
+                                            case game of
+                                                TetrominoGame_Game game2 ->
+                                                    TetrominoGame.sampleServerTime time action.time game2
+                                                        |> TetrominoGame_Game
+
+                                                GoModel_Game _ ->
+                                                    game
+
+                                                WordSpellingGame_Game _ ->
+                                                    game
+
+                                                SheepGame_Game _ ->
+                                                    game
+                                        )
+                                        model.startedGames
+                            }
     in
     case gameChange of
         LocalChange_SheepGame matchId (SheepGame.Action action) ->

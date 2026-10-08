@@ -826,6 +826,9 @@ gameStartedText game =
         Message.GameType_SheepGame ->
             "Sheep Game started"
 
+        Message.GameType_TetrominoGame ->
+            "Tetromino Fort started"
+
 
 messageDeleted : String
 messageDeleted =

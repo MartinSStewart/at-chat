@@ -101,6 +101,7 @@ type GameType
     = GameType_Go
     | GameType_WordSpellingGame
     | GameType_SheepGame
+    | GameType_TetrominoGame
 
 
 maxEmbeds : number
