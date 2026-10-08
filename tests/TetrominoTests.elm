@@ -1,6 +1,8 @@
 module TetrominoTests exposing (tests)
 
+import Coord
 import Dict
+import Effect.Time as Time
 import Expect
 import Id exposing (Id, UserId)
 import SeqDict
@@ -8,7 +10,8 @@ import SeqSet
 import Set
 import Test exposing (Test, describe, test)
 import Tetromino
-import TetrominoSim exposing (Input(..), InputEvent, MatchState, PieceStatus(..))
+import TetrominoGame
+import TetrominoSim exposing (Input(..), InputEvent, MatchState)
 import TetrominoTimeline
 import TetrominoWire
 
@@ -64,6 +67,11 @@ inFirstRound userIds =
     runUntil firstRound (List.map (join 0) userIds) (TetrominoSim.init 1 0)
 
 
+center : Int
+center =
+    TetrominoSim.gridSize // 2
+
+
 occupiedCells : MatchState -> List ( Int, Int, Int )
 occupiedCells state =
     Dict.keys state.occupied
@@ -77,6 +85,35 @@ withBlocks cells state =
     { state
         | occupied = List.foldl (\cell occupied -> Dict.insert cell -1 occupied) state.occupied cells
     }
+
+
+setup : TetrominoGame.ValidatedSetup
+setup =
+    { createdBy = userA, startedAt = Time.millisToPosix 0 }
+
+
+{-| A client that has just opened a brand new match, one second (60 frames) after it began.
+-}
+openedMatch : TetrominoGame.GameModel
+openedMatch =
+    TetrominoGame.updateFromBackend
+        (Time.millisToPosix 1000)
+        setup
+        (TetrominoGame.JoinedMatch
+            { frame = 60, startingState = TetrominoGame.FreshMatch, inputs = [], serverTime = Time.millisToPosix 1000 }
+        )
+        TetrominoGame.initGame
+        |> Tuple.first
+
+
+pressJoin : TetrominoGame.GameModel -> ( TetrominoGame.GameModel, Maybe TetrominoGame.ToBackend )
+pressJoin model =
+    TetrominoGame.updateGame (Time.millisToPosix 1000) setup (Coord.xy 1000 800) userA TetrominoGame.PressedJoin model
+
+
+waitingAt : Int -> TetrominoGame.GameModel -> Maybe (List (Id UserId))
+waitingAt frame model =
+    TetrominoGame.matchStateAt frame model |> Maybe.map (\state -> SeqSet.toList state.waitingPlayers)
 
 
 knockOut : Id UserId -> MatchState -> MatchState
@@ -120,12 +157,18 @@ tests =
                     Tetromino.all
                     |> List.all (\result -> result == ( 4, Just 0 ))
                     |> Expect.equal True
-        , test "Four turns about the same axis come back to the start" <|
+        , test "Four quarter turns come back to the start" <|
             \_ ->
-                ( Tetromino.identity |> Tetromino.rotateAroundZ |> Tetromino.rotateAroundZ |> Tetromino.rotateAroundZ |> Tetromino.rotateAroundZ
-                , Tetromino.identity |> Tetromino.rotateAroundY |> Tetromino.rotateAroundY |> Tetromino.rotateAroundY |> Tetromino.rotateAroundY
-                )
-                    |> Expect.equal ( Tetromino.identity, Tetromino.identity )
+                ( Tetromino.orientation Tetromino.Flat 4, Tetromino.orientation Tetromino.Upright 4 )
+                    |> Expect.equal ( Tetromino.orientation Tetromino.Flat 0, Tetromino.orientation Tetromino.Upright 0 )
+        , test "An upright I piece stands on end, and turning it doesn't change that" <|
+            \_ ->
+                List.map
+                    (\quarterTurns ->
+                        Tetromino.cells (Tetromino.orientation Tetromino.Upright quarterTurns) Tetromino.I |> List.sort
+                    )
+                    [ 0, 1, 2, 3 ]
+                    |> Expect.equal (List.repeat 4 [ ( 0, 0, 0 ), ( 0, 0, 1 ), ( 0, 0, 2 ), ( 0, 0, 3 ) ])
         , test "Players who join wait for the round to start" <|
             \_ ->
                 let
@@ -192,7 +235,7 @@ tests =
                                     |> Maybe.withDefault 0
                         in
                         SeqDict.values state.pieces
-                            |> List.map (\piece -> ( piece.z, piece.status == Settled ))
+                            |> List.map (\piece -> ( piece.z, TetrominoSim.isSettled piece.status ))
                             |> Expect.equal [ ( 0, True ), ( toFloat expectedHeight, True ) ]
 
                     _ ->
@@ -210,7 +253,7 @@ tests =
                         knockOut userA built |> runUntil (built.frame + 100) []
                 in
                 ( SeqDict.values built.pieces |> List.map .owner
-                , SeqDict.values afterKnockout.pieces |> List.map (\piece -> ( piece.owner, piece.z, piece.status == Settled ))
+                , SeqDict.values afterKnockout.pieces |> List.map (\piece -> ( piece.owner, piece.z, TetrominoSim.isSettled piece.status ))
                 )
                     |> Expect.equal ( [ userA, userB ], [ ( userB, 0, True ) ] )
         , test "A player who leaves takes their pieces with them" <|
@@ -228,12 +271,12 @@ tests =
             \_ ->
                 let
                     state =
-                        inFirstRound [ userA ] |> withBlocks [ ( 14, 12, 0 ) ]
+                        inFirstRound [ userA ] |> withBlocks [ ( center + 2, center, 0 ) ]
                 in
-                runUntil (firstRound + 120) [ { frame = firstRound, userId = userA, input = MoveTo 14 12 } ] state
+                runUntil (firstRound + 120) [ { frame = firstRound, userId = userA, input = MoveTo (center + 2) center } ] state
                     |> .players
                     |> SeqDict.get userA
-                    |> Maybe.map (\player -> ( abs (player.position.x - 14.5) < 0.01, player.position.z ))
+                    |> Maybe.map (\player -> ( abs (player.position.x - toFloat center - 2.5) < 0.01, player.position.z ))
                     |> Expect.equal (Just ( True, 1 ))
         , test "A player can't get past a wall two high" <|
             \_ ->
@@ -241,13 +284,44 @@ tests =
                     state =
                         inFirstRound [ userA ]
                             |> withBlocks
-                                (List.concatMap (\y -> [ ( 14, y, 0 ), ( 14, y, 1 ) ]) (List.range 0 (TetrominoSim.gridSize - 1)))
+                                (List.concatMap
+                                    (\y -> [ ( center + 2, y, 0 ), ( center + 2, y, 1 ) ])
+                                    (List.range 0 (TetrominoSim.gridSize - 1))
+                                )
                 in
-                runUntil (firstRound + 200) [ { frame = firstRound, userId = userA, input = MoveTo 16 12 } ] state
+                runUntil (firstRound + 200) [ { frame = firstRound, userId = userA, input = MoveTo (center + 4) center } ] state
                     |> .players
                     |> SeqDict.get userA
-                    |> Maybe.map (\player -> player.position.x < 14 && player.position.z == 0)
+                    |> Maybe.map (\player -> player.position.x < toFloat (center + 2) && player.position.z == 0)
                     |> Expect.equal (Just True)
+        , test "A destroyed piece leaves its cubes behind for a moment" <|
+            \_ ->
+                let
+                    built =
+                        runUntil (firstRound + 200) (dropAt (firstRound + 10) userA 3 3) (inFirstRound [ userA ])
+
+                    afterKnockout =
+                        knockOut userA built |> runUntil (built.frame + 1) []
+                in
+                ( List.map (\debris -> debris.piece.owner) afterKnockout.debris
+                , runUntil (afterKnockout.frame + TetrominoSim.debrisFrames) [] afterKnockout |> .debris |> List.length
+                )
+                    |> Expect.equal ( [ userA ], 0 )
+        , test "NPCs turn up near a player, however big the map is" <|
+            \_ ->
+                let
+                    state =
+                        runUntil (firstRound + 6 * TetrominoSim.framesPerSecond) [] (inFirstRound [ userA ])
+                in
+                case state.npcs of
+                    [] ->
+                        Expect.fail "Expected an NPC by now"
+
+                    npcs ->
+                        List.all
+                            (\npc -> abs (npc.position.x - toFloat center) < 14 && abs (npc.position.y - toFloat center) < 14)
+                            npcs
+                            |> Expect.equal True
         , test "The same inputs always give the same state" <|
             \_ ->
                 let
@@ -277,6 +351,50 @@ tests =
                 in
                 TetrominoTimeline.latest timeline
                     |> Expect.equal (runUntil (firstRound + 600) (early ++ late) (TetrominoSim.init 7 0))
+        , test "Taking back a guessed input gives the same state as if it had never been played" <|
+            \_ ->
+                let
+                    inputs =
+                        [ join 0 userA, { frame = firstRound + 30, userId = userA, input = MoveTo 2 20 } ]
+
+                    guess =
+                        { frame = firstRound + 50, userId = userA, input = MoveTo 30 30 }
+
+                    timeline =
+                        List.foldl TetrominoTimeline.addInput (TetrominoTimeline.init (TetrominoSim.init 7 0)) (guess :: inputs)
+                            |> TetrominoTimeline.advance (firstRound + 80)
+                            |> TetrominoTimeline.removeInput guess
+                            |> TetrominoTimeline.advance (firstRound + 100)
+                in
+                TetrominoTimeline.latest timeline
+                    |> Expect.equal (runUntil (firstRound + 100) inputs (TetrominoSim.init 7 0))
+        , test "Your own input is played straight away, before the backend answers" <|
+            \_ ->
+                let
+                    ( joined, toBackend ) =
+                        pressJoin openedMatch
+                in
+                ( TetrominoGame.animationFrame (Time.millisToPosix 1100) setup joined
+                    |> TetrominoGame.matchState
+                    |> Maybe.map (\state -> SeqSet.toList state.waitingPlayers)
+                , toBackend
+                )
+                    |> Expect.equal ( Just [ userA ], Just (TetrominoGame.SendInput 0 (Time.millisToPosix 1000) Join) )
+        , test "When the backend moves your input to a later frame, the guess is taken back" <|
+            \_ ->
+                let
+                    accepted =
+                        pressJoin openedMatch
+                            |> Tuple.first
+                            |> TetrominoGame.updateFromBackend
+                                (Time.millisToPosix 1250)
+                                setup
+                                (TetrominoGame.InputAccepted 0 { userId = userA, time = Time.millisToPosix 1200, input = Join })
+                            |> Tuple.first
+                            |> TetrominoGame.animationFrame (Time.millisToPosix 1500) setup
+                in
+                ( waitingAt 70 accepted, waitingAt 80 accepted )
+                    |> Expect.equal ( Just [], Just [ userA ] )
         , test "A match carries on the same after being sent to another player" <|
             \_ ->
                 let

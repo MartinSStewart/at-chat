@@ -25,7 +25,6 @@ module TetrominoGame exposing
     , matchStateAt
     , pressedKey
     , pruneInputs
-    , serverTimeEstimate
     , setupView
     , snapshotFrame
     , stampInput
@@ -101,7 +100,8 @@ type LocalChange
 type ToBackend
     = OpenedMatch
     | ClosedMatch
-    | SendInput Time.Posix TetrominoSim.Input
+      -- The Int lets the client match up the backend's answer with the input it guessed at.
+    | SendInput Int Time.Posix TetrominoSim.Input
       -- The state of the match at the start of a frame the backend asked for, for someone who
       -- has just opened it.
     | CurrentState Int Bytes
@@ -116,6 +116,8 @@ type ToFrontend
         , serverTime : Time.Posix
         }
     | InputBroadcast ActionWithTime
+      -- One of this client's own inputs, with the time the backend settled on for it.
+    | InputAccepted Int ActionWithTime
     | MatchOver
 
 
@@ -156,12 +158,19 @@ type SetupOrGame
 
 type alias GameModel =
     { connection : Connection
-    , orientation : Orientation
-    , cursor : Maybe Cursor
+    , stance : Tetromino.Stance
+    , quarterTurns : Int
+    , -- Where the mouse is over the canvas. The cell under it changes as the camera follows the
+      -- player, so that is worked out when it's needed.
+      pointer : Maybe { x : Float, y : Float }
     , -- How far ahead of this browser's clock the server's clock is, as far as anything the
       -- server has stamped shows. Network delay only makes a sample look smaller, so the largest
       -- one is the closest to the truth.
       clockOffset : Duration
+    , -- This client's own inputs, already played on its copy of the match on the frame it guessed,
+      -- that the backend hasn't answered for yet.
+      unconfirmed : List { id : Int, event : TetrominoSim.InputEvent }
+    , nextInputId : Int
     }
 
 
@@ -176,7 +185,7 @@ type GameMsg
     = PointerMoved { x : Float, y : Float }
     | PointerPressed Int { x : Float, y : Float }
     | PressedRotateZ
-    | PressedRotateY
+    | PressedStandUpOrLieDown
     | PressedStopCycling
     | PressedJoin
     | PressedNothing
@@ -198,9 +207,12 @@ matchSeed setup =
 initGame : GameModel
 initGame =
     { connection = WaitingForState []
-    , orientation = Tetromino.identity
-    , cursor = Nothing
+    , stance = Tetromino.Flat
+    , quarterTurns = 0
+    , pointer = Nothing
     , clockOffset = Quantity.zero
+    , unconfirmed = []
+    , nextInputId = 0
     }
 
 
@@ -209,7 +221,7 @@ and opening one means getting it afresh from another player.
 -}
 dropMatchState : GameModel -> GameModel
 dropMatchState model =
-    { model | connection = WaitingForState [], cursor = Nothing }
+    { model | connection = WaitingForState [], pointer = Nothing, unconfirmed = [] }
 
 
 initLiveMatch : LiveMatch
@@ -352,9 +364,20 @@ updateFromBackend time setup msg model =
 
                             else
                                 timeline
+
+                        -- Inputs the backend hasn't answered for yet will reach whoever is joining
+                        -- through the backend, on whatever frame it gives them, so the state sent
+                        -- over has to be without them.
+                        withoutUnconfirmed : Timeline
+                        withoutUnconfirmed =
+                            List.foldl
+                                (\unconfirmed timeline3 -> TetrominoTimeline.removeInput unconfirmed.event timeline3)
+                                timeline2
+                                model.unconfirmed
+                                |> TetrominoTimeline.advance frame
                     in
                     ( { model | connection = Connected timeline2 }
-                    , case TetrominoTimeline.stateAt frame timeline2 of
+                    , case TetrominoTimeline.stateAt frame withoutUnconfirmed of
                         Just state ->
                             CurrentState frame (TetrominoWire.encodeMatchState state) |> Just
 
@@ -417,26 +440,102 @@ updateFromBackend time setup msg model =
             , Nothing
             )
 
+        InputAccepted inputId action ->
+            let
+                model2 : GameModel
+                model2 =
+                    sampleServerTime time action.time model
+
+                accepted : TetrominoSim.InputEvent
+                accepted =
+                    toInputEvent setup action
+
+                guessed : Maybe TetrominoSim.InputEvent
+                guessed =
+                    List.filter (\unconfirmed -> unconfirmed.id == inputId) model2.unconfirmed
+                        |> List.head
+                        |> Maybe.map .event
+
+                model3 : GameModel
+                model3 =
+                    { model2 | unconfirmed = List.filter (\unconfirmed -> unconfirmed.id /= inputId) model2.unconfirmed }
+            in
+            ( case model3.connection of
+                Connected timeline ->
+                    { model3
+                        | connection =
+                            case guessed of
+                                Just event ->
+                                    if event == accepted then
+                                        Connected timeline
+
+                                    else
+                                        TetrominoTimeline.removeInput event timeline
+                                            |> TetrominoTimeline.addInput accepted
+                                            |> Connected
+
+                                Nothing ->
+                                    Connected (TetrominoTimeline.addInput accepted timeline)
+                    }
+
+                WaitingForState arrivedEarly ->
+                    { model3 | connection = WaitingForState (arrivedEarly ++ [ action ]) }
+
+                MatchIsOver ->
+                    model3
+            , Nothing
+            )
+
         MatchOver ->
             ( { model | connection = MatchIsOver }, Nothing )
 
 
 updateGame :
-    Coord CssPixels
+    Time.Posix
+    -> ValidatedSetup
+    -> Coord CssPixels
     -> Id UserId
     -> GameMsg
     -> GameModel
-    -> ( GameModel, Maybe TetrominoSim.Input )
-updateGame windowSize currentUserId msg model =
+    -> ( GameModel, Maybe ToBackend )
+updateGame time setup windowSize currentUserId msg model =
     case model.connection of
         Connected timeline ->
-            updateConnected windowSize currentUserId msg (TetrominoTimeline.latest timeline) model
+            case updateConnected windowSize currentUserId msg (TetrominoTimeline.latest timeline) model of
+                ( model2, Just input ) ->
+                    playOwnInput time setup currentUserId input timeline model2 |> Tuple.mapSecond Just
+
+                ( model2, Nothing ) ->
+                    ( model2, Nothing )
 
         WaitingForState _ ->
             ( model, Nothing )
 
         MatchIsOver ->
             ( model, Nothing )
+
+
+{-| Play an input on this client's copy of the match straight away, on the frame it's showing,
+rather than waiting for it to come back from the backend.
+-}
+playOwnInput : Time.Posix -> ValidatedSetup -> Id UserId -> TetrominoSim.Input -> Timeline -> GameModel -> ( GameModel, ToBackend )
+playOwnInput time setup userId input timeline model =
+    let
+        serverTime : Time.Posix
+        serverTime =
+            serverTimeEstimate time model
+
+        event : TetrominoSim.InputEvent
+        event =
+            { frame = frameOf setup serverTime, userId = userId, input = input }
+    in
+    ( { model
+        | connection = Connected (TetrominoTimeline.addInput event timeline)
+        , unconfirmed = model.unconfirmed ++ [ { id = model.nextInputId, event = event } ]
+        , nextInputId = model.nextInputId + 1
+      }
+    , SendInput model.nextInputId serverTime input
+    )
 
 
 updateConnected :
@@ -447,27 +546,39 @@ updateConnected :
     -> GameModel
     -> ( GameModel, Maybe TetrominoSim.Input )
 updateConnected windowSize currentUserId msg state model =
-    let
-        ( canvasWidth, canvasHeight ) =
-            canvasSize windowSize
-    in
     case msg of
         PointerMoved position ->
-            ( { model | cursor = TetrominoView.screenToCell canvasWidth canvasHeight position state }, Nothing )
+            ( { model | pointer = Just position }, Nothing )
 
         PointerPressed button position ->
             let
+                ( canvasWidth, canvasHeight ) =
+                    canvasSize windowSize
+
                 model2 : GameModel
                 model2 =
-                    { model | cursor = TetrominoView.screenToCell canvasWidth canvasHeight position state }
+                    { model | pointer = Just position }
+
+                maybeCursor : Maybe Cursor
+                maybeCursor =
+                    TetrominoView.screenToCell
+                        canvasWidth
+                        canvasHeight
+                        (TetrominoView.cameraFocus currentUserId state)
+                        position
+                        state
             in
-            case ( model2.cursor, SeqDict.get currentUserId state.players ) of
+            case ( maybeCursor, SeqDict.get currentUserId state.players ) of
                 ( Just cursor, Just player ) ->
                     case ( player.knockedOutAt, player.cycle ) of
                         ( Nothing, Ready _ ) ->
                             if button == rightMouseButton then
                                 ( model2
-                                , TetrominoSim.Drop { x = cursor.x, y = cursor.y, orientation = model2.orientation }
+                                , TetrominoSim.Drop
+                                    { x = cursor.x
+                                    , y = cursor.y
+                                    , orientation = Tetromino.orientation model2.stance model2.quarterTurns
+                                    }
                                     |> Just
                                 )
 
@@ -488,10 +599,20 @@ updateConnected windowSize currentUserId msg state model =
                     ( model2, Nothing )
 
         PressedRotateZ ->
-            ( { model | orientation = Tetromino.rotateAroundZ model.orientation }, Nothing )
+            ( { model | quarterTurns = modBy 4 (model.quarterTurns + 1) }, Nothing )
 
-        PressedRotateY ->
-            ( { model | orientation = Tetromino.rotateAroundY model.orientation }, Nothing )
+        PressedStandUpOrLieDown ->
+            ( { model
+                | stance =
+                    case model.stance of
+                        Tetromino.Flat ->
+                            Tetromino.Upright
+
+                        Tetromino.Upright ->
+                            Tetromino.Flat
+              }
+            , Nothing
+            )
 
         PressedStopCycling ->
             ( model
@@ -533,7 +654,7 @@ pressedKey key =
             PressedRotateZ
 
         "e" ->
-            PressedRotateY
+            PressedStandUpOrLieDown
 
         _ ->
             PressedStopCycling
@@ -655,6 +776,10 @@ connectedView windowSize localUser model state =
         maybePlayer =
             SeqDict.get currentUserId state.players
 
+        orientation : Orientation
+        orientation =
+            Tetromino.orientation model.stance model.quarterTurns
+
         shapeShown : Maybe { shape : Shape, isReady : Bool }
         shapeShown =
             case maybePlayer of
@@ -680,7 +805,7 @@ connectedView windowSize localUser model state =
             , Ui.inFront
                 (case shapeShown of
                     Just { shape, isReady } ->
-                        previewView (User.userColor localUser currentUserId) model.orientation shape isReady
+                        previewView (User.userColor localUser currentUserId) orientation shape isReady
 
                     Nothing ->
                         Ui.none
@@ -708,15 +833,24 @@ connectedView windowSize localUser model state =
                     (TetrominoView.worldEntities
                         { width = canvasWidth
                         , height = canvasHeight
-                        , frame = state.frame
                         , currentUserId = currentUserId
                         , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
-                        , cursor = model.cursor
+                        , cursor =
+                            Maybe.andThen
+                                (\pointer ->
+                                    TetrominoView.screenToCell
+                                        canvasWidth
+                                        canvasHeight
+                                        (TetrominoView.cameraFocus currentUserId state)
+                                        pointer
+                                        state
+                                )
+                                model.pointer
                         , ghost =
                             case shapeShown of
                                 Just { shape, isReady } ->
                                     if isReady then
-                                        Just { shape = shape, orientation = model.orientation }
+                                        Just { shape = shape, orientation = orientation }
 
                                     else
                                         Nothing
@@ -809,7 +943,7 @@ statusView currentUserId state =
 
                     Nothing ->
                         [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
-                        , Ui.text "Left click to move, right click to drop, Q and E turn the piece, space stops the spinner"
+                        , Ui.text "Left click to move, right click to drop, Q turns the piece, E stands it up or lays it down, space stops the spinner"
                         ]
 
             Nothing ->

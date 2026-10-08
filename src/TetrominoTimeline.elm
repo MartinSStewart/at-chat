@@ -1,4 +1,4 @@
-module TetrominoTimeline exposing (Timeline, addInput, advance, init, latest, stateAt)
+module TetrominoTimeline exposing (Timeline, addInput, advance, init, latest, removeInput, stateAt)
 
 {-| Keeps the last couple of seconds of a match, one state per frame, so that an input arriving
 late (stamped with a frame this client has already simulated) only costs re-simulating from just
@@ -61,16 +61,46 @@ addInput event timeline =
                     (\maybeList -> Just (Maybe.withDefault [] maybeList ++ [ event ]))
                     timeline.inputs
         in
-        if event.frame < timeline.latest.frame then
-            case dropWhile (\state -> state.frame > event.frame) timeline.previous of
-                state :: rest ->
-                    { latest = state, previous = rest, inputs = inputs }
+        windBack event.frame { timeline | inputs = inputs }
 
-                [] ->
-                    { timeline | inputs = inputs }
 
-        else
-            { timeline | inputs = inputs }
+{-| Take back an input this client guessed at, winding back to its frame if that has already
+been simulated.
+-}
+removeInput : InputEvent -> Timeline -> Timeline
+removeInput event timeline =
+    case Dict.get event.frame timeline.inputs of
+        Just events ->
+            if List.member event events then
+                let
+                    inputs : Dict Int (List InputEvent)
+                    inputs =
+                        Dict.insert event.frame (List.filter (\other -> other /= event) events) timeline.inputs
+                in
+                windBack event.frame { timeline | inputs = inputs }
+
+            else
+                timeline
+
+        Nothing ->
+            timeline
+
+
+{-| Go back to the start of a frame so that it gets simulated again, if the state then is still
+kept.
+-}
+windBack : Int -> Timeline -> Timeline
+windBack frame timeline =
+    if frame < timeline.latest.frame then
+        case dropWhile (\state -> state.frame > frame) timeline.previous of
+            state :: rest ->
+                { timeline | latest = state, previous = rest }
+
+            [] ->
+                timeline
+
+    else
+        timeline
 
 
 {-| Simulate up to the given frame and forget whatever has fallen out of the recent window.

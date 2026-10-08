@@ -8077,7 +8077,7 @@ handleTetrominoToBackend time userId clientId key msg model =
                 TetrominoGame.ClosedMatch ->
                     tetrominoWatcherLeft time clientId key model
 
-                TetrominoGame.SendInput clientTime input ->
+                TetrominoGame.SendInput inputId clientTime input ->
                     case SeqDict.get clientId liveMatch.watchers of
                         Just watcher ->
                             if watcher.waitingForFrame == Nothing then
@@ -8098,7 +8098,18 @@ handleTetrominoToBackend time userId clientId key msg model =
                                             model.tetrominoMatches
                                   }
                                 , SeqDict.toList liveMatch.watchers
-                                    |> List.map (sendToTetrominoWatcher key (TetrominoGame.InputBroadcast action))
+                                    |> List.map
+                                        (\( otherClientId, otherWatcher ) ->
+                                            sendToTetrominoWatcher
+                                                key
+                                                (if otherClientId == clientId then
+                                                    TetrominoGame.InputAccepted inputId action
+
+                                                 else
+                                                    TetrominoGame.InputBroadcast action
+                                                )
+                                                ( otherClientId, otherWatcher )
+                                        )
                                     |> Command.batch
                                 )
 

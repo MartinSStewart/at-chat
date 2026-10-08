@@ -3017,7 +3017,7 @@ allAttackerToBackendChanges =
     , TetrominoToBackend
         (GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 })
         (Id.fromInt 0)
-        (TetrominoGame.SendInput (Time.millisToPosix 0) (TetrominoSim.MoveTo 1 1))
+        (TetrominoGame.SendInput 0 (Time.millisToPosix 0) (TetrominoSim.MoveTo 1 1))
     , -- Make sure this one is last. It actually logs out the attacker
       LogOutRequest sessionIdAttackerHash
     ]

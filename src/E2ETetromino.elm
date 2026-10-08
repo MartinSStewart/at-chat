@@ -70,14 +70,14 @@ twoPlayerMatchTest normalConfig =
                         -- stops the spinner and drops whatever piece it landed on.
                         , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 300, 300 ))
                         , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = " " }))
-                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 420, 320 ))
+                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 800, 150 ))
                         , T.checkState
                             1500
                             (matchStatesAgree
                                 admin
                                 user
                                 (\state ->
-                                    if SeqDict.size state.players == 2 && List.map .status (SeqDict.values state.pieces) == [ TetrominoSim.Settled ] then
+                                    if SeqDict.size state.players == 2 && List.map (\piece -> TetrominoSim.isSettled piece.status) (SeqDict.values state.pieces) == [ True ] then
                                         Ok ()
 
                                     else

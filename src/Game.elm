@@ -1083,19 +1083,19 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     case ( matchData.data, SeqDict.get matchId model.startedGames ) of
                         ( FrontendGameData_TetrominoGame setup _, Just (TetrominoGame_Game game) ) ->
                             let
-                                ( game2, maybeInput ) =
+                                ( game2, maybeToBackend ) =
                                     TetrominoGame.updateGame
+                                        time
+                                        setup
                                         windowSize
                                         currentUserId
                                         tetrominoMsg
                                         (TetrominoGame.animationFrame time setup game)
                             in
                             ( { model | startedGames = SeqDict.insert matchId (TetrominoGame_Game game2) model.startedGames }
-                            , case maybeInput of
-                                Just input ->
-                                    [ TetrominoGame.SendInput (TetrominoGame.serverTimeEstimate time game2) input
-                                        |> OutTetrominoToBackend matchId
-                                    ]
+                            , case maybeToBackend of
+                                Just toBackend ->
+                                    [ OutTetrominoToBackend matchId toBackend ]
 
                                 Nothing ->
                                     []

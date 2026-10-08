@@ -1,5 +1,6 @@
 module TetrominoView exposing
     ( Cursor
+    , cameraFocus
     , previewEntities
     , screenToCell
     , worldEntities
@@ -17,7 +18,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import SeqDict
 import Tetromino exposing (Orientation, Shape)
-import TetrominoSim exposing (MatchState, Npc, Piece, PieceStatus(..), Player, Point)
+import TetrominoSim exposing (Debris, MatchState, Npc, Piece, PieceStatus(..), Player, Point)
 
 
 {-| The column the pointer is over, and the height of the surface there.
@@ -44,23 +45,31 @@ type alias Varyings =
     { vNormal : Vec3, vUv : Vec2 }
 
 
-{-| Looking down from the corner nearest x = 0, y = 0 at the classic isometric angle, and
-zoomed out just far enough for the whole grid to fit.
+{-| The point on the ground the camera looks at: this client's player, or the middle of the map
+while they aren't in a round.
 -}
-viewProjection : Int -> Int -> Mat4
-viewProjection width height =
-    let
-        center : Float
-        center =
-            toFloat TetrominoSim.gridSize / 2
+cameraFocus : Id UserId -> MatchState -> { x : Float, y : Float }
+cameraFocus currentUserId state =
+    case SeqDict.get currentUserId state.players of
+        Just player ->
+            { x = player.position.x, y = player.position.y }
 
+        Nothing ->
+            { x = toFloat TetrominoSim.gridSize / 2, y = toFloat TetrominoSim.gridSize / 2 }
+
+
+{-| Looking down at the focus from the side nearest x = 0, y = 0 at the classic isometric angle.
+-}
+viewProjection : Int -> Int -> Vec3 -> Mat4
+viewProjection width height focus =
+    let
         aspect : Float
         aspect =
             toFloat (max 1 width) / toFloat (max 1 height)
 
         halfWidth : Float
         halfWidth =
-            max (toFloat TetrominoSim.gridSize * 0.75) (toFloat TetrominoSim.gridSize * 0.5 * aspect)
+            max 18 (12 * aspect)
 
         halfHeight : Float
         halfHeight =
@@ -68,18 +77,14 @@ viewProjection width height =
     in
     Mat4.mul
         (Mat4.makeOrtho -halfWidth halfWidth -halfHeight halfHeight -200 200)
-        (Mat4.makeLookAt
-            (Vec3.vec3 (center - 50) (center - 50) 50)
-            (Vec3.vec3 center center 1)
-            (Vec3.vec3 0 0 1)
-        )
+        (Mat4.makeLookAt (Vec3.add focus (Vec3.vec3 -50 -50 49)) focus (Vec3.vec3 0 0 1))
 
 
 {-| Which column is under a point on the canvas, given in CSS pixels from its top left corner.
 -}
-screenToCell : Int -> Int -> { x : Float, y : Float } -> MatchState -> Maybe Cursor
-screenToCell width height screenPosition state =
-    case Mat4.inverse (viewProjection width height) of
+screenToCell : Int -> Int -> { x : Float, y : Float } -> { x : Float, y : Float } -> MatchState -> Maybe Cursor
+screenToCell width height focus screenPosition state =
+    case Mat4.inverse (viewProjection width height (Vec3.vec3 focus.x focus.y 1)) of
         Just inverse ->
             let
                 ndcX : Float
@@ -174,18 +179,6 @@ toColumns occupied =
         occupied
 
 
-{-| The height a piece would come to rest at if dropped on this column right now.
--}
-landingLevel : Columns -> List ( Int, Int, Int ) -> Int -> Int -> Int
-landingLevel columns cells column row =
-    List.foldl
-        (\( offsetX, offsetY, offsetZ ) level ->
-            max level (surfaceBelow columns (column + offsetX) (row + offsetY) 1000 - offsetZ)
-        )
-        0
-        cells
-
-
 surfaceBelow : Columns -> Int -> Int -> Float -> Int
 surfaceBelow columns column row below =
     case Dict.get ( column, row ) columns of
@@ -208,7 +201,6 @@ surfaceBelow columns column row below =
 worldEntities :
     { width : Int
     , height : Int
-    , frame : Int
     , currentUserId : Id UserId
     , userColor : Id UserId -> Color
     , cursor : Maybe Cursor
@@ -218,9 +210,13 @@ worldEntities :
     -> List Entity
 worldEntities config state =
     let
+        focus : { x : Float, y : Float }
+        focus =
+            cameraFocus config.currentUserId state
+
         vp : Mat4
         vp =
-            viewProjection config.width config.height
+            viewProjection config.width config.height (Vec3.add (Vec3.vec3 focus.x focus.y 1) (screenShake focus state))
 
         columns : Columns
         columns =
@@ -239,10 +235,12 @@ worldEntities config state =
                 ++ List.map
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
                     state.snowballs
+                ++ List.concatMap (debrisEntities vp config.userColor state.frame) state.debris
 
         shadows : List Entity
         shadows =
             List.concatMap (fallingPieceShadows vp columns) (SeqDict.values state.pieces)
+                ++ overhangShadows vp columns state.occupied
                 ++ List.map
                     (\( _, player ) -> discShadow vp columns player.position (TetrominoSim.entityRadius * 2))
                     alivePlayers
@@ -264,24 +262,19 @@ worldEntities config state =
 
                                 ( x0, y0 ) =
                                     TetrominoSim.keepInsideGrid cells cursor.x cursor.y
-
-                                level : Int
-                                level =
-                                    landingLevel columns cells x0 y0
-
-                                color : Color
-                                color =
-                                    config.userColor config.currentUserId
                             in
-                            List.map
-                                (\( x, y, z ) ->
-                                    translucentCube
-                                        vp
-                                        (Vec3.vec3 (toFloat (x0 + x)) (toFloat (y0 + y)) (toFloat (level + z)))
-                                        color
-                                        0.35
-                                )
-                                cells
+                            footprint cells
+                                |> List.map
+                                    (\( ( x, y ), _ ) ->
+                                        flatSquare
+                                            vp
+                                            (toFloat (x0 + x))
+                                            (toFloat (y0 + y))
+                                            (toFloat (surfaceBelow columns (x0 + x) (y0 + y) 1000))
+                                            1
+                                            (Vec3.vec3 0 0 0)
+                                            shadowAlpha
+                                    )
 
                         Nothing ->
                             [ flatSquare vp (toFloat cursor.x) (toFloat cursor.y) (toFloat cursor.z) 1 (Vec3.vec3 1 1 1) 0.35 ]
@@ -290,6 +283,55 @@ worldEntities config state =
                     []
     in
     opaque ++ shadows ++ overlays
+
+
+shadowAlpha : Float
+shadowAlpha =
+    0.3
+
+
+{-| A small jolt of the camera for a moment after a piece lands nearby, fading with distance.
+-}
+screenShake : { x : Float, y : Float } -> MatchState -> Vec3
+screenShake focus state =
+    let
+        shakeFrames : Int
+        shakeFrames =
+            12
+
+        strength : Float
+        strength =
+            SeqDict.foldl
+                (\_ piece total ->
+                    case piece.status of
+                        Settled landedAt ->
+                            let
+                                age : Int
+                                age =
+                                    state.frame - landedAt
+
+                                distance : Float
+                                distance =
+                                    sqrt ((toFloat piece.x - focus.x) ^ 2 + (toFloat piece.y - focus.y) ^ 2)
+                            in
+                            if age < shakeFrames then
+                                total + (1 - toFloat age / toFloat shakeFrames) * max 0 (1 - distance / 24)
+
+                            else
+                                total
+
+                        Falling _ ->
+                            total
+                )
+                0
+                state.pieces
+                |> min 1
+
+        frame : Float
+        frame =
+            toFloat state.frame
+    in
+    Vec3.vec3 (0.06 * strength * sin (frame * 3.3)) (-0.06 * strength * sin (frame * 3.3)) (0.16 * strength * cos (frame * 2.1))
 
 
 previewEntities : Int -> Int -> Color -> Orientation -> Shape -> List Entity
@@ -341,27 +383,81 @@ pieceEntities vp userColor piece =
         piece.cells
 
 
+{-| A destroyed piece flying apart into its cubes, each shrinking away to nothing.
+-}
+debrisEntities : Mat4 -> (Id UserId -> Color) -> Int -> Debris -> List Entity
+debrisEntities vp userColor frame debris =
+    let
+        piece : Piece
+        piece =
+            debris.piece
+
+        progress : Float
+        progress =
+            toFloat (frame - debris.destroyedAt) / toFloat TetrominoSim.debrisFrames
+
+        seconds : Float
+        seconds =
+            toFloat (frame - debris.destroyedAt) / TetrominoSim.framesPerSecond
+
+        cellCount : Float
+        cellCount =
+            toFloat (max 1 (List.length piece.cells))
+
+        middle : Vec3
+        middle =
+            List.foldl
+                (\( x, y, z ) sum -> Vec3.add sum (Vec3.vec3 (toFloat x) (toFloat y) (toFloat z)))
+                (Vec3.vec3 0 0 0)
+                piece.cells
+                |> Vec3.scale (1 / cellCount)
+
+        size : Float
+        size =
+            max 0 (1 - progress * progress)
+
+        color : Color
+        color =
+            userColor piece.owner
+    in
+    List.map
+        (\( x, y, z ) ->
+            let
+                cell : Vec3
+                cell =
+                    Vec3.vec3 (toFloat x) (toFloat y) (toFloat z)
+
+                outwards : Vec3
+                outwards =
+                    Vec3.add (Vec3.scale 4 (Vec3.sub cell middle)) (Vec3.vec3 0 0 3)
+
+                center : Vec3
+                center =
+                    Vec3.vec3 (toFloat piece.x + 0.5) (toFloat piece.y + 0.5) (piece.z + 0.5)
+                        |> Vec3.add cell
+                        |> Vec3.add (Vec3.scale seconds outwards)
+                        |> Vec3.add (Vec3.vec3 0 0 (-6 * seconds * seconds))
+            in
+            WebGL.entity
+                vertexShader
+                fragmentShader
+                cubeMesh
+                { viewProjection = vp
+                , offset = Vec3.sub center (Vec3.vec3 (size / 2) (size / 2) (size / 2))
+                , scale = Vec3.vec3 size size size
+                , color = colorToVec3 color
+                , alpha = 1
+                , edge = 1
+                }
+        )
+        piece.cells
+
+
 fallingPieceShadows : Mat4 -> Columns -> Piece -> List Entity
 fallingPieceShadows vp columns piece =
     case piece.status of
         Falling _ ->
-            List.foldl
-                (\( offsetX, offsetY, offsetZ ) lowest ->
-                    Dict.update
-                        ( offsetX, offsetY )
-                        (\maybe ->
-                            case maybe of
-                                Just lowestSoFar ->
-                                    Just (min offsetZ lowestSoFar)
-
-                                Nothing ->
-                                    Just offsetZ
-                        )
-                        lowest
-                )
-                Dict.empty
-                piece.cells
-                |> Dict.toList
+            footprint piece.cells
                 |> List.map
                     (\( ( offsetX, offsetY ), offsetZ ) ->
                         let
@@ -380,11 +476,58 @@ fallingPieceShadows vp columns piece =
                             (toFloat (surfaceBelow columns cellX cellY (piece.z + toFloat offsetZ)))
                             1
                             (Vec3.vec3 0 0 0)
-                            0.3
+                            shadowAlpha
                     )
 
-        Settled ->
+        Settled _ ->
             []
+
+
+{-| The columns a piece covers, each with the height of its lowest cell there.
+-}
+footprint : List ( Int, Int, Int ) -> List ( ( Int, Int ), Int )
+footprint cells =
+    List.foldl
+        (\( offsetX, offsetY, offsetZ ) lowest ->
+            Dict.update
+                ( offsetX, offsetY )
+                (\maybe ->
+                    case maybe of
+                        Just lowestSoFar ->
+                            Just (min offsetZ lowestSoFar)
+
+                        Nothing ->
+                            Just offsetZ
+                )
+                lowest
+        )
+        Dict.empty
+        cells
+        |> Dict.toList
+
+
+{-| Every block with nothing under it casts a shadow straight down onto whatever is below.
+-}
+overhangShadows : Mat4 -> Columns -> Dict ( Int, Int, Int ) Int -> List Entity
+overhangShadows vp columns occupied =
+    Dict.foldl
+        (\( x, y, z ) _ shadows ->
+            if z > 0 && not (Dict.member ( x, y, z - 1 ) occupied) then
+                flatSquare
+                    vp
+                    (toFloat x)
+                    (toFloat y)
+                    (toFloat (surfaceBelow columns x y (toFloat z)))
+                    1
+                    (Vec3.vec3 0 0 0)
+                    shadowAlpha
+                    :: shadows
+
+            else
+                shadows
+        )
+        []
+        occupied
 
 
 discShadow : Mat4 -> Columns -> Point -> Float -> Entity
@@ -490,22 +633,6 @@ boxEntity vp offset scale color =
         , color = colorToVec3 color
         , alpha = 1
         , edge = 0
-        }
-
-
-translucentCube : Mat4 -> Vec3 -> Color -> Float -> Entity
-translucentCube vp offset color alpha =
-    WebGL.entityWith
-        translucentSettings
-        vertexShader
-        fragmentShader
-        cubeMesh
-        { viewProjection = vp
-        , offset = offset
-        , scale = Vec3.vec3 1 1 1
-        , color = colorToVec3 color
-        , alpha = alpha
-        , edge = 1
         }
 
 

@@ -1,5 +1,6 @@
 module TetrominoSim exposing
-    ( Input(..)
+    ( Debris
+    , Input(..)
     , InputEvent
     , MatchState
     , Npc
@@ -11,11 +12,13 @@ module TetrominoSim exposing
     , Round
     , Snowball
     , cycleShape
+    , debrisFrames
     , entityHeight
     , entityRadius
     , framesPerSecond
     , gridSize
     , init
+    , isSettled
     , keepInsideGrid
     , roundBreak
     , snowballRadius
@@ -60,6 +63,7 @@ type alias MatchState =
     , pieces : SeqDict Int Piece
     , occupied : Dict ( Int, Int, Int ) Int
     , snowballs : List Snowball
+    , debris : List Debris
     , nextId : Int
     , seed : Random.Seed
     , nextNpcSpawn : Maybe Int
@@ -114,9 +118,17 @@ type alias Piece =
     }
 
 
+{-| A falling piece's vertical speed, or the frame a settled one landed on.
+-}
 type PieceStatus
     = Falling Float
-    | Settled
+    | Settled Int
+
+
+{-| A piece that has just been destroyed, kept for a moment so that it can be drawn breaking apart.
+-}
+type alias Debris =
+    { piece : Piece, destroyedAt : Int }
 
 
 type alias Snowball =
@@ -138,7 +150,7 @@ frameSeconds =
 
 gridSize : Int
 gridSize =
-    24
+    64
 
 
 roundLength : Int
@@ -226,6 +238,18 @@ npcKeepDistance =
     3
 
 
+{-| How far from a player an NPC turns up, in cells along each axis.
+-}
+npcSpawnDistance : Int
+npcSpawnDistance =
+    12
+
+
+debrisFrames : Int
+debrisFrames =
+    30
+
+
 epsilon : Float
 epsilon =
     1.0e-9
@@ -243,6 +267,7 @@ init seed frame =
     , pieces = SeqDict.empty
     , occupied = Dict.empty
     , snowballs = []
+    , debris = []
     , nextId = 0
     , seed = Random.initialSeed seed
     , nextNpcSpawn = Nothing
@@ -274,7 +299,10 @@ step inputs state =
             else
                 state4
     in
-    { state5 | frame = state5.frame + 1 }
+    { state5
+        | frame = state5.frame + 1
+        , debris = List.filter (\debris -> state5.frame - debris.destroyedAt < debrisFrames) state5.debris
+    }
 
 
 
@@ -784,50 +812,75 @@ throwSnowball frame from to =
     }
 
 
+{-| NPCs turn up a little way off from one of the players still standing, so that how soon they
+arrive doesn't depend on where on the map everyone is.
+-}
 spawnNpcs : MatchState -> MatchState
 spawnNpcs state =
     case state.nextNpcSpawn of
         Just spawnFrame ->
             if state.frame >= spawnFrame then
                 let
-                    ( ( side, along ), seed ) =
+                    alivePlayers : List Player
+                    alivePlayers =
+                        SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
+
+                    ( ( playerIndex, side, along ), seed ) =
                         Random.step
-                            (Random.pair (Random.int 0 3) (Random.int 0 (gridSize - 1)))
+                            (Random.map3
+                                (\a b c -> ( a, b, c ))
+                                (Random.int 0 (max 0 (List.length alivePlayers - 1)))
+                                (Random.int 0 3)
+                                (Random.int -npcSpawnDistance npcSpawnDistance)
+                            )
                             state.seed
 
-                    ( x, y ) =
+                    ( offsetX, offsetY ) =
                         case side of
                             0 ->
-                                ( along, 0 )
+                                ( along, -npcSpawnDistance )
 
                             1 ->
-                                ( along, gridSize - 1 )
+                                ( along, npcSpawnDistance )
 
                             2 ->
-                                ( 0, along )
+                                ( -npcSpawnDistance, along )
 
                             _ ->
-                                ( gridSize - 1, along )
+                                ( npcSpawnDistance, along )
 
-                    anyoneAlive : Bool
-                    anyoneAlive =
-                        List.any (\player -> player.knockedOutAt == Nothing) (SeqDict.values state.players)
+                    npcs : List Npc
+                    npcs =
+                        case List.drop playerIndex alivePlayers of
+                            player :: _ ->
+                                if List.length state.npcs < npcLimit then
+                                    let
+                                        x : Int
+                                        x =
+                                            clamp 0 (gridSize - 1) (floor player.position.x + offsetX)
+
+                                        y : Int
+                                        y =
+                                            clamp 0 (gridSize - 1) (floor player.position.y + offsetY)
+                                    in
+                                    state.npcs
+                                        ++ [ { id = state.nextId
+                                             , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
+                                             , velocityZ = 0
+                                             , wanderOffset = { x = 0, y = 0 }
+                                             , nextWanderFrame = state.frame
+                                             , nextThrowFrame = state.frame + 2 * framesPerSecond
+                                             }
+                                           ]
+
+                                else
+                                    state.npcs
+
+                            [] ->
+                                state.npcs
                 in
                 { state
-                    | npcs =
-                        if List.length state.npcs < npcLimit && anyoneAlive then
-                            state.npcs
-                                ++ [ { id = state.nextId
-                                     , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
-                                     , velocityZ = 0
-                                     , wanderOffset = { x = 0, y = 0 }
-                                     , nextWanderFrame = state.frame
-                                     , nextThrowFrame = state.frame + 2 * framesPerSecond
-                                     }
-                                   ]
-
-                        else
-                            state.npcs
+                    | npcs = npcs
                     , nextId = state.nextId + 1
                     , seed = seed
                     , nextNpcSpawn = Just (state.frame + npcSpawnInterval (state.frame - state.round.startedAt))
@@ -1187,10 +1240,14 @@ updatePieces state =
                         { state2
                             | pieces = SeqDict.remove pieceId state2.pieces
                             , npcs = List.filter (\npc -> not (List.member npc hitNpcs)) state2.npcs
+                            , debris = { piece = { piece | z = finalZ }, destroyedAt = state2.frame } :: state2.debris
                         }
 
                     else if hitPlayer then
-                        { state2 | pieces = SeqDict.remove pieceId state2.pieces }
+                        { state2
+                            | pieces = SeqDict.remove pieceId state2.pieces
+                            , debris = { piece = { piece | z = finalZ }, destroyedAt = state2.frame } :: state2.debris
+                        }
 
                     else
                         case landing of
@@ -1198,7 +1255,7 @@ updatePieces state =
                                 let
                                     piece2 : Piece
                                     piece2 =
-                                        { piece | z = toFloat level, status = Settled }
+                                        { piece | z = toFloat level, status = Settled state2.frame }
                                 in
                                 { state2
                                     | pieces = SeqDict.insert pieceId piece2 state2.pieces
@@ -1210,12 +1267,15 @@ updatePieces state =
                                 }
 
                             Just Nothing ->
-                                { state2 | pieces = SeqDict.remove pieceId state2.pieces }
+                                { state2
+                                    | pieces = SeqDict.remove pieceId state2.pieces
+                                    , debris = { piece = { piece | z = newZ }, destroyedAt = state2.frame } :: state2.debris
+                                }
 
                             Nothing ->
                                 { state2 | pieces = SeqDict.insert pieceId { piece | z = newZ, status = Falling velocity2 } state2.pieces }
 
-                Settled ->
+                Settled _ ->
                     state2
         )
         state
@@ -1258,8 +1318,10 @@ removePiecesOf owners state =
     ( { state
         | pieces = kept
         , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId removed)) state.occupied
+        , debris =
+            SeqDict.foldl (\_ piece debris -> { piece = piece, destroyedAt = state.frame } :: debris) state.debris removed
       }
-    , SeqDict.foldl (\_ piece anySettled -> anySettled || piece.status == Settled) False removed
+    , SeqDict.foldl (\_ piece anySettled -> anySettled || isSettled piece.status) False removed
     )
 
 
@@ -1273,7 +1335,7 @@ dropUnsupportedPieces state =
         unsupported =
             SeqDict.foldr
                 (\pieceId piece list ->
-                    if piece.status == Settled && not (isSupported pieceId piece state.occupied) then
+                    if isSettled piece.status && not (isSupported pieceId piece state.occupied) then
                         pieceId :: list
 
                     else
@@ -1301,6 +1363,16 @@ dropUnsupportedPieces state =
                             state.pieces
                     , occupied = Dict.filter (\_ pieceId -> not (List.member pieceId unsupported)) state.occupied
                 }
+
+
+isSettled : PieceStatus -> Bool
+isSettled status =
+    case status of
+        Falling _ ->
+            False
+
+        Settled _ ->
+            True
 
 
 isSupported : Int -> Piece -> Dict ( Int, Int, Int ) Int -> Bool

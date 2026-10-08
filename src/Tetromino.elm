@@ -1,13 +1,13 @@
 module Tetromino exposing
     ( Orientation
     , Shape(..)
+    , Stance(..)
     , all
     , allOrientations
     , cells
     , identity
     , isValidOrientation
-    , rotateAroundY
-    , rotateAroundZ
+    , orientation
     )
 
 {-| The seven pieces and the 24 ways a piece can be turned, all on whole grid cells.
@@ -74,18 +74,38 @@ multiply a b =
     }
 
 
-{-| Turn a quarter turn about the vertical axis, as seen from above.
+{-| Whether a piece is dropped lying down, or stood on end with its long side upright.
 -}
+type Stance
+    = Flat
+    | Upright
+
+
+{-| A piece in the given stance, then turned some number of quarter turns about the vertical axis.
+-}
+orientation : Stance -> Int -> Orientation
+orientation stance quarterTurns =
+    let
+        stood : Orientation
+        stood =
+            case stance of
+                Flat ->
+                    identity
+
+                Upright ->
+                    aroundY
+    in
+    List.foldl (\_ turned -> rotateAroundZ turned) stood (List.range 1 (modBy 4 quarterTurns))
+
+
 rotateAroundZ : Orientation -> Orientation
-rotateAroundZ orientation =
-    multiply aroundZ orientation
+rotateAroundZ turned =
+    multiply aroundZ turned
 
 
-{-| Tip over a quarter turn about the world's Y axis.
--}
 rotateAroundY : Orientation -> Orientation
-rotateAroundY orientation =
-    multiply aroundY orientation
+rotateAroundY turned =
+    multiply aroundY turned
 
 
 allOrientations : List Orientation
@@ -96,13 +116,13 @@ allOrientations =
 allOrientationsHelper : List Orientation -> List Orientation -> List Orientation
 allOrientationsHelper found toVisit =
     case toVisit of
-        orientation :: rest ->
+        turned :: rest ->
             let
                 next : List Orientation
                 next =
                     List.filter
                         (\candidate -> not (List.member candidate found))
-                        [ rotateAroundZ orientation, rotateAroundY orientation ]
+                        [ rotateAroundZ turned, rotateAroundY turned ]
             in
             allOrientationsHelper (found ++ next) (rest ++ next)
 
@@ -111,8 +131,8 @@ allOrientationsHelper found toVisit =
 
 
 isValidOrientation : Orientation -> Bool
-isValidOrientation orientation =
-    List.member orientation allOrientations
+isValidOrientation turned =
+    List.member turned allOrientations
 
 
 baseCells : Shape -> List ( Int, Int, Int )
