@@ -1,6 +1,5 @@
 module E2ETetromino exposing (tests)
 
-import Array
 import Audio
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -35,29 +34,12 @@ mouseEvent button ( x, y ) =
         ]
 
 
-{-| The inputs of every tetromino match the backend knows about, oldest first.
--}
-matchInputs : E2EHelper.BackendModel2 -> List ( Id ChannelMessageId, List TetrominoSim.Input )
-matchInputs backend =
-    SeqDict.values (E2EHelper.unwrapBackend backend).dmChannels
-        |> List.concatMap (\dmChannel -> SeqDict.toList dmChannel.games)
-        |> List.filterMap
-            (\( matchId, gameData ) ->
-                case gameData of
-                    Game.GameData_TetrominoGame _ actions ->
-                        Just ( matchId, List.map .input (Array.toList actions) )
-
-                    _ ->
-                        Nothing
-            )
-
-
 twoPlayerMatchTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 twoPlayerMatchTest normalConfig =
     E2EHelper.startTest
-        "Two players join a Tetromino Fort match and both see each other's pieces"
+        "Someone opening a match gets it from the other player, and it ends when everyone leaves"
         E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
@@ -77,37 +59,63 @@ twoPlayerMatchTest normalConfig =
                         , admin.click 100 (Dom.id "game_select_Tetromino Fort")
                         , admin.click 100 (Dom.id "tetrominoGame_start")
                         , admin.click 100 (Dom.id "tetrominoGame_join")
+
+                        -- The user gets the match from the admin, the only one who has it.
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
                         , user.click 100 (Dom.id "tetrominoGame_join")
-
-                        -- Both players are in the match, so both show their health instead of the
-                        -- join button.
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
 
-                        -- Clicking the board walks the player there, right clicking drops the piece
-                        -- that the spinner has stopped on.
-                        , admin.custom 100 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 300, 300 ))
-                        , admin.custom 2000 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 420, 320 ))
-                        , T.checkState 2000 (matchStatesAgree admin user)
-                        , T.checkBackend 100
-                            (\backend ->
-                                case matchInputs backend of
-                                    [ ( _, inputs ) ] ->
-                                        if List.any isDrop inputs && List.any isMoveTo inputs then
+                        -- Early in the round, before any NPCs show up, the admin walks somewhere,
+                        -- stops the spinner and drops whatever piece it landed on.
+                        , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 300, 300 ))
+                        , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = " " }))
+                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 420, 320 ))
+                        , T.checkState
+                            1500
+                            (matchStatesAgree
+                                admin
+                                user
+                                (\state ->
+                                    if SeqDict.size state.players == 2 && List.map .status (SeqDict.values state.pieces) == [ TetrominoSim.Settled ] then
+                                        Ok ()
+
+                                    else
+                                        Err "Expected both players to be in the round and the admin's piece to have landed"
+                                )
+                            )
+
+                        -- Closing the match takes the user's player out of it.
+                        , user.click 100 (Dom.id "guild_openGamesTab")
+                        , T.checkState
+                            1000
+                            (\data ->
+                                case clientGames admin data |> Maybe.andThen (Game.tetrominoMatchState matchId) of
+                                    Just state ->
+                                        if SeqDict.size state.players == 1 then
                                             Ok ()
 
                                         else
-                                            Err "Expected the backend to have both a move and a drop"
+                                            Err "Expected the user to have left the match"
 
-                                    matches ->
-                                        Err ("Expected one match, got " ++ String.fromInt (List.length matches))
+                                    Nothing ->
+                                        Err "Expected the admin to still have the match"
                             )
+
+                        -- With the admin gone too nobody has the match any more, so it's over.
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , user.click 1000 (Dom.id "guild_gameStartedCard_0")
+                        , user.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "tetrominoGame_over" ])
                         ]
                     )
                 ]
             )
         ]
+
+
+matchId : Id ChannelMessageId
+matchId =
+    Id.fromInt 0
 
 
 {-| Both clients run the same simulation over the same inputs, so once they have both heard
@@ -118,19 +126,18 @@ is of the newest frame they have both simulated.
 matchStatesAgree :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> (TetrominoSim.MatchState -> Result String ())
     -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Result String ()
-matchStatesAgree admin user data =
-    case matchInputs data.backend of
-        [ ( matchId, _ ) ] ->
-            case ( clientGames admin matchId data, clientGames user matchId data ) of
-                ( Just adminGame, Just userGame ) ->
+matchStatesAgree admin user checkState data =
+    case ( clientGames admin data, clientGames user data ) of
+        ( Just adminGame, Just userGame ) ->
+            case ( Game.tetrominoMatchState matchId adminGame, Game.tetrominoMatchState matchId userGame ) of
+                ( Just adminLatest, Just userLatest ) ->
                     let
                         frame : Int
                         frame =
-                            min
-                                (Game.tetrominoMatchState matchId adminGame |> Maybe.map .frame |> Maybe.withDefault 0)
-                                (Game.tetrominoMatchState matchId userGame |> Maybe.map .frame |> Maybe.withDefault 0)
+                            min adminLatest.frame userLatest.frame
                     in
                     case
                         ( Game.tetrominoMatchStateAt frame matchId adminGame
@@ -139,7 +146,7 @@ matchStatesAgree admin user data =
                     of
                         ( Just adminState, Just userState ) ->
                             if adminState == userState then
-                                Ok ()
+                                checkState adminState
 
                             else
                                 Err
@@ -152,18 +159,17 @@ matchStatesAgree admin user data =
                             Err ("Expected both clients to have simulated frame " ++ String.fromInt frame)
 
                 _ ->
-                    Err "Expected both clients to be showing the match"
+                    Err "Expected both clients to have the match"
 
-        matches ->
-            Err ("Expected one match, got " ++ String.fromInt (List.length matches))
+        _ ->
+            Err "Expected both clients to be showing the match"
 
 
 clientGames :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> Id ChannelMessageId
     -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Maybe Game.Model
-clientGames client matchId data =
+clientGames client data =
     case SeqDict.get client.clientId data.frontends |> Maybe.map Audio.userModel of
         Just (Types.Loaded loaded) ->
             case loaded.loginStatus of
@@ -177,35 +183,3 @@ clientGames client matchId data =
 
         _ ->
             Nothing
-
-
-isDrop : TetrominoSim.Input -> Bool
-isDrop input =
-    case input of
-        TetrominoSim.Drop _ ->
-            True
-
-        TetrominoSim.Join ->
-            False
-
-        TetrominoSim.MoveTo _ _ ->
-            False
-
-        TetrominoSim.StopCycling ->
-            False
-
-
-isMoveTo : TetrominoSim.Input -> Bool
-isMoveTo input =
-    case input of
-        TetrominoSim.MoveTo _ _ ->
-            True
-
-        TetrominoSim.Join ->
-            False
-
-        TetrominoSim.Drop _ ->
-            False
-
-        TetrominoSim.StopCycling ->
-            False

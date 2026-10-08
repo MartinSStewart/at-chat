@@ -3066,6 +3066,9 @@ toBackendLog toBackend =
         ImportChannelRequest _ _ ->
             ToBackendLog_ImportChannelRequest
 
+        TetrominoToBackend _ _ _ ->
+            ToBackendLog_TetrominoToBackend
+
 
 asGuildMember :
     BackendModel

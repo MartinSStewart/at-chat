@@ -1,27 +1,35 @@
 module TetrominoGame exposing
     ( ActionWithTime
+    , Connection
     , GameModel
     , GameMsg(..)
+    , LiveMatch
     , LocalChange(..)
+    , MatchProgress(..)
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
-    , Shared
+    , StartingState(..)
+    , ToBackend(..)
+    , ToFrontend(..)
     , ValidatedSetup
+    , Watcher
     , animationFrame
     , canvasId
-    , foldActions
+    , dropMatchState
     , gameView
     , initGame
+    , initLiveMatch
     , initSetup
-    , isValidAction
     , matchState
     , matchStateAt
     , pressedKey
-    , sampleServerTime
+    , pruneInputs
     , serverTimeEstimate
     , setupView
-    , updateAction
+    , snapshotFrame
+    , stampInput
+    , updateFromBackend
     , updateGame
     , updateSetup
     )
@@ -29,19 +37,20 @@ module TetrominoGame exposing
 {-| The tetromino fort game: the part that at-chat's game framework talks to. The rules live in
 `TetrominoSim` and the drawing in `TetrominoView`.
 
-Every client runs the same simulation over the same inputs, so an input only counts once the
-backend has stamped it with the time it arrived (`isValidAction` keeps that stamp inside the
-window the server allows). A client applies its own inputs straight away at the frame it is
-showing and `TetrominoTimeline` re-runs the affected frames when the server's stamp turns out to
-differ.
+The match only exists on the clients that have it open. The backend passes inputs between them,
+stamping each with the time it arrived (`stampInput` keeps that stamp inside the window the server
+allows), and every client runs the same simulation over them. Someone opening a match gets its
+state from one of the players who already has it open, the way snowball-fight-attempt-2 does it,
+and once nobody has it open the match is over.
 
 -}
 
-import Array exposing (Array)
+import Bytes exposing (Bytes)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Effect.WebGL as WebGL
 import Go
@@ -52,11 +61,13 @@ import Id exposing (Id, UserId)
 import Json.Decode
 import MyUi
 import Quantity
-import SeqDict
+import SeqDict exposing (SeqDict)
+import SeqSet
 import Tetromino exposing (Orientation, Shape)
 import TetrominoSim exposing (PieceCycle(..))
 import TetrominoTimeline exposing (Timeline)
 import TetrominoView exposing (Cursor)
+import TetrominoWire
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Prose
@@ -72,21 +83,61 @@ type alias ValidatedSetup =
     }
 
 
+{-| A match ends once nobody has it open, since then nobody has its state any more.
+-}
+type MatchProgress
+    = MatchInProgress
+    | MatchEnded
+
+
 type alias ActionWithTime =
     { userId : Id UserId, time : Time.Posix, input : TetrominoSim.Input }
 
 
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
-    | Action ActionWithTime
 
 
-{-| The inputs of a match, with the times turned into frame numbers. The states they lead to are
-too expensive to keep here, since every open match would recompute them on each change; they live
-in `GameModel` instead.
+type ToBackend
+    = OpenedMatch
+    | ClosedMatch
+    | SendInput Time.Posix TetrominoSim.Input
+      -- The state of the match at the start of a frame the backend asked for, for someone who
+      -- has just opened it.
+    | CurrentState Int Bytes
+
+
+type ToFrontend
+    = StateRequest Int
+    | JoinedMatch
+        { frame : Int
+        , startingState : StartingState
+        , inputs : List ActionWithTime
+        , serverTime : Time.Posix
+        }
+    | InputBroadcast ActionWithTime
+    | MatchOver
+
+
+type StartingState
+    = FreshMatch
+    | FromAnotherPlayer Bytes
+
+
+{-| What the backend keeps about a match while anyone has it open.
 -}
-type alias Shared =
-    { inputs : Array TetrominoSim.InputEvent }
+type alias LiveMatch =
+    { watchers : SeqDict ClientId Watcher
+    , -- Oldest first. Kept for as long as someone joining might still need them.
+      recentInputs : List ActionWithTime
+    }
+
+
+{-| A client with the match open. `waitingForFrame` is set until another player has sent the
+state the match was in at the start of that frame.
+-}
+type alias Watcher =
+    { userId : Id UserId, waitingForFrame : Maybe Int }
 
 
 type alias SetupModel =
@@ -104,7 +155,7 @@ type SetupOrGame
 
 
 type alias GameModel =
-    { timeline : Timeline
+    { connection : Connection
     , orientation : Orientation
     , cursor : Maybe Cursor
     , -- How far ahead of this browser's clock the server's clock is, as far as anything the
@@ -112,6 +163,13 @@ type alias GameModel =
       -- one is the closest to the truth.
       clockOffset : Duration
     }
+
+
+type Connection
+    = -- Inputs can arrive before the state they apply to does.
+      WaitingForState (List ActionWithTime)
+    | Connected Timeline
+    | MatchIsOver
 
 
 type GameMsg
@@ -137,37 +195,40 @@ matchSeed setup =
     Time.posixToMillis setup.startedAt
 
 
-initGame : ValidatedSetup -> GameModel
-initGame setup =
-    { timeline = TetrominoTimeline.init (matchSeed setup)
+initGame : GameModel
+initGame =
+    { connection = WaitingForState []
     , orientation = Tetromino.identity
     , cursor = Nothing
     , clockOffset = Quantity.zero
     }
 
 
-initShared : Shared
-initShared =
-    { inputs = Array.empty }
+{-| Forget this client's copy of the match. Closing a match means it is no longer kept up to date,
+and opening one means getting it afresh from another player.
+-}
+dropMatchState : GameModel -> GameModel
+dropMatchState model =
+    { model | connection = WaitingForState [], cursor = Nothing }
+
+
+initLiveMatch : LiveMatch
+initLiveMatch =
+    { watchers = SeqDict.empty, recentInputs = [] }
 
 
 updateSetup : Id UserId -> Time.Posix -> SetupMsg -> ( SetupOrGame, Maybe ValidatedSetup )
 updateSetup creatorId time msg =
     case msg of
         PressedStartGame ->
-            let
-                setup : ValidatedSetup
-                setup =
-                    { createdBy = creatorId, startedAt = time }
-            in
-            ( Game (initGame setup), Just setup )
+            ( Game initGame, Just { createdBy = creatorId, startedAt = time } )
 
         PressedCancel ->
             ( CancelSetup, Nothing )
 
 
 
--- Actions
+-- Time
 
 
 frameOf : ValidatedSetup -> Time.Posix -> Int
@@ -189,38 +250,56 @@ maxInputDelay =
     Duration.milliseconds 300
 
 
-{-| Whether the backend should take an action as it stands. The time a client sends is its guess
-at the server's clock, so it gets pulled back into the window the server will accept.
+{-| The time the backend gives an input: the client's guess at the server's clock, pulled back
+into the window the server accepts.
 -}
-isValidAction : Time.Posix -> Id UserId -> ActionWithTime -> Maybe ActionWithTime
-isValidAction serverTime userId action =
-    if action.userId == userId then
-        Just
-            { action
-                | time =
-                    clamp
-                        (Duration.subtractFrom serverTime maxInputDelay |> Time.posixToMillis)
-                        (Time.posixToMillis serverTime)
-                        (Time.posixToMillis action.time)
-                        |> Time.millisToPosix
-            }
-
-    else
-        Nothing
-
-
-foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
-foldActions setup actions =
-    Array.foldl (updateAction setup) initShared actions
-
-
-updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
-updateAction setup action shared =
-    { inputs =
-        Array.push
-            { frame = frameOf setup action.time, userId = action.userId, input = action.input }
-            shared.inputs
+stampInput : Time.Posix -> Id UserId -> Time.Posix -> TetrominoSim.Input -> ActionWithTime
+stampInput serverTime userId clientTime input =
+    { userId = userId
+    , time =
+        clamp
+            (Duration.subtractFrom serverTime maxInputDelay |> Time.posixToMillis)
+            (Time.posixToMillis serverTime)
+            (Time.posixToMillis clientTime)
+            |> Time.millisToPosix
+    , input = input
     }
+
+
+{-| The latest frame no input can arrive for any more, which is the one someone opening the match
+gets the state of.
+-}
+snapshotFrame : Time.Posix -> ValidatedSetup -> Int
+snapshotFrame serverTime setup =
+    frameOf setup (Duration.subtractFrom serverTime maxInputDelay)
+
+
+{-| Forget inputs that nobody can need: ones before the frame a waiting watcher will get the state
+of, and ones too old to change anything for those already playing.
+-}
+pruneInputs : Time.Posix -> ValidatedSetup -> LiveMatch -> LiveMatch
+pruneInputs serverTime setup liveMatch =
+    let
+        neededFrom : Int
+        neededFrom =
+            SeqDict.foldl
+                (\_ watcher frame ->
+                    case watcher.waitingForFrame of
+                        Just waitingFor ->
+                            min frame waitingFor
+
+                        Nothing ->
+                            frame
+                )
+                (snapshotFrame serverTime setup)
+                liveMatch.watchers
+    in
+    { liveMatch | recentInputs = List.filter (\action -> frameOf setup action.time >= neededFrom) liveMatch.recentInputs }
+
+
+toInputEvent : ValidatedSetup -> ActionWithTime -> TetrominoSim.InputEvent
+toInputEvent setup action =
+    { frame = frameOf setup action.time, userId = action.userId, input = action.input }
 
 
 {-| Note how far ahead the server's clock looks, going by something it stamped that has just
@@ -240,10 +319,6 @@ sampleServerTime localTime serverTime model =
         model
 
 
-
--- Playing
-
-
 {-| What this client thinks the server's clock says. Inputs are stamped with it so that they
 land on the frame the player saw when they acted.
 -}
@@ -259,6 +334,93 @@ currentFrame localTime setup model =
     frameOf setup (serverTimeEstimate localTime model)
 
 
+
+-- Playing
+
+
+updateFromBackend : Time.Posix -> ValidatedSetup -> ToFrontend -> GameModel -> ( GameModel, Maybe ToBackend )
+updateFromBackend time setup msg model =
+    case msg of
+        StateRequest frame ->
+            case model.connection of
+                Connected timeline ->
+                    let
+                        timeline2 : Timeline
+                        timeline2 =
+                            if (TetrominoTimeline.latest timeline).frame < frame then
+                                TetrominoTimeline.advance frame timeline
+
+                            else
+                                timeline
+                    in
+                    ( { model | connection = Connected timeline2 }
+                    , case TetrominoTimeline.stateAt frame timeline2 of
+                        Just state ->
+                            CurrentState frame (TetrominoWire.encodeMatchState state) |> Just
+
+                        Nothing ->
+                            Nothing
+                    )
+
+                WaitingForState _ ->
+                    ( model, Nothing )
+
+                MatchIsOver ->
+                    ( model, Nothing )
+
+        JoinedMatch joined ->
+            let
+                model2 : GameModel
+                model2 =
+                    sampleServerTime time joined.serverTime model
+
+                maybeState : Maybe TetrominoSim.MatchState
+                maybeState =
+                    case joined.startingState of
+                        FreshMatch ->
+                            TetrominoSim.init (matchSeed setup) joined.frame |> Just
+
+                        FromAnotherPlayer bytes ->
+                            TetrominoWire.decodeMatchState bytes
+            in
+            case ( maybeState, model2.connection ) of
+                ( Just state, WaitingForState arrivedEarly ) ->
+                    ( { model2
+                        | connection =
+                            List.foldl
+                                (\action timeline -> TetrominoTimeline.addInput (toInputEvent setup action) timeline)
+                                (TetrominoTimeline.init state)
+                                (joined.inputs ++ arrivedEarly)
+                                |> Connected
+                      }
+                    , Nothing
+                    )
+
+                _ ->
+                    ( model2, Nothing )
+
+        InputBroadcast action ->
+            let
+                model2 : GameModel
+                model2 =
+                    sampleServerTime time action.time model
+            in
+            ( case model2.connection of
+                Connected timeline ->
+                    { model2 | connection = Connected (TetrominoTimeline.addInput (toInputEvent setup action) timeline) }
+
+                WaitingForState arrivedEarly ->
+                    { model2 | connection = WaitingForState (arrivedEarly ++ [ action ]) }
+
+                MatchIsOver ->
+                    model2
+            , Nothing
+            )
+
+        MatchOver ->
+            ( { model | connection = MatchIsOver }, Nothing )
+
+
 updateGame :
     Coord CssPixels
     -> Id UserId
@@ -266,11 +428,26 @@ updateGame :
     -> GameModel
     -> ( GameModel, Maybe TetrominoSim.Input )
 updateGame windowSize currentUserId msg model =
-    let
-        state : TetrominoSim.MatchState
-        state =
-            TetrominoTimeline.latest model.timeline
+    case model.connection of
+        Connected timeline ->
+            updateConnected windowSize currentUserId msg (TetrominoTimeline.latest timeline) model
 
+        WaitingForState _ ->
+            ( model, Nothing )
+
+        MatchIsOver ->
+            ( model, Nothing )
+
+
+updateConnected :
+    Coord CssPixels
+    -> Id UserId
+    -> GameMsg
+    -> TetrominoSim.MatchState
+    -> GameModel
+    -> ( GameModel, Maybe TetrominoSim.Input )
+updateConnected windowSize currentUserId msg state model =
+    let
         ( canvasWidth, canvasHeight ) =
             canvasSize windowSize
     in
@@ -286,7 +463,7 @@ updateGame windowSize currentUserId msg model =
             in
             case ( model2.cursor, SeqDict.get currentUserId state.players ) of
                 ( Just cursor, Just player ) ->
-                    case ( player.diedAt, player.cycle ) of
+                    case ( player.knockedOutAt, player.cycle ) of
                         ( Nothing, Ready _ ) ->
                             if button == rightMouseButton then
                                 ( model2
@@ -333,7 +510,7 @@ updateGame windowSize currentUserId msg model =
 
         PressedJoin ->
             ( model
-            , if SeqDict.member currentUserId state.players then
+            , if SeqDict.member currentUserId state.players || SeqSet.member currentUserId state.waitingPlayers then
                 Nothing
 
               else
@@ -362,9 +539,17 @@ pressedKey key =
             PressedStopCycling
 
 
-matchState : GameModel -> TetrominoSim.MatchState
+matchState : GameModel -> Maybe TetrominoSim.MatchState
 matchState model =
-    TetrominoTimeline.latest model.timeline
+    case model.connection of
+        Connected timeline ->
+            TetrominoTimeline.latest timeline |> Just
+
+        WaitingForState _ ->
+            Nothing
+
+        MatchIsOver ->
+            Nothing
 
 
 {-| The match as this client had it on the given frame. Clients run a little ahead or behind
@@ -373,26 +558,44 @@ test compares.
 -}
 matchStateAt : Int -> GameModel -> Maybe TetrominoSim.MatchState
 matchStateAt frame model =
-    TetrominoTimeline.stateAt frame model.timeline
+    case model.connection of
+        Connected timeline ->
+            TetrominoTimeline.stateAt frame timeline
+
+        WaitingForState _ ->
+            Nothing
+
+        MatchIsOver ->
+            Nothing
+
+
+{-| Simulating a lot of frames at once (after the tab has been in the background) is spread over
+several animation frames so that the page keeps drawing while it catches up.
+-}
+maxStepsPerFrame : Int
+maxStepsPerFrame =
+    3000
 
 
 {-| Catch the simulation up with the frame this client is showing.
 -}
-animationFrame : Time.Posix -> ValidatedSetup -> Shared -> GameModel -> GameModel
-animationFrame time setup shared model =
-    let
-        timeline : Timeline
-        timeline =
-            if model.timeline.seed == matchSeed setup then
-                model.timeline
+animationFrame : Time.Posix -> ValidatedSetup -> GameModel -> GameModel
+animationFrame time setup model =
+    case model.connection of
+        Connected timeline ->
+            { model
+                | connection =
+                    TetrominoTimeline.advance
+                        (min (currentFrame time setup model) ((TetrominoTimeline.latest timeline).frame + maxStepsPerFrame))
+                        timeline
+                        |> Connected
+            }
 
-            else
-                -- The player who started the match begins playing before the backend has said
-                -- when it began, so the match that was simulated with the guessed time has to
-                -- be thrown away once the real one arrives.
-                TetrominoTimeline.init (matchSeed setup)
-    in
-    { model | timeline = TetrominoTimeline.update (currentFrame time setup model) shared.inputs timeline }
+        WaitingForState _ ->
+            model
+
+        MatchIsOver ->
+            model
 
 
 
@@ -423,11 +626,24 @@ previewSize =
 
 gameView : Coord CssPixels -> LocalUser -> GameModel -> Element GameMsg
 gameView windowSize localUser model =
-    let
-        state : TetrominoSim.MatchState
-        state =
-            TetrominoTimeline.latest model.timeline
+    case model.connection of
+        Connected timeline ->
+            connectedView windowSize localUser model (TetrominoTimeline.latest timeline)
 
+        WaitingForState _ ->
+            Ui.el
+                [ Ui.padding 16, Ui.Font.size 14, Ui.contentCenterX ]
+                (Ui.text "Getting the match from the players who have it open…")
+
+        MatchIsOver ->
+            Ui.el
+                [ Ui.padding 16, Ui.Font.size 14, Ui.contentCenterX, Ui.id "tetrominoGame_over" ]
+                (Ui.text "This match is over, everyone left it.")
+
+
+connectedView : Coord CssPixels -> LocalUser -> GameModel -> TetrominoSim.MatchState -> Element GameMsg
+connectedView windowSize localUser model state =
+    let
         currentUserId : Id UserId
         currentUserId =
             localUser.session.userId
@@ -443,12 +659,15 @@ gameView windowSize localUser model =
         shapeShown =
             case maybePlayer of
                 Just player ->
-                    case player.cycle of
-                        Cycling cycle ->
+                    case ( player.knockedOutAt, player.cycle ) of
+                        ( Nothing, Cycling cycle ) ->
                             Just { shape = (TetrominoSim.cycleShape state.frame cycle).shape, isReady = False }
 
-                        Ready shape ->
+                        ( Nothing, Ready shape ) ->
                             Just { shape = shape, isReady = True }
+
+                        ( Just _, _ ) ->
+                            Nothing
 
                 Nothing ->
                     Nothing
@@ -494,15 +713,15 @@ gameView windowSize localUser model =
                         , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
                         , cursor = model.cursor
                         , ghost =
-                            case ( shapeShown, maybePlayer ) of
-                                ( Just { shape, isReady }, Just player ) ->
-                                    if isReady && player.diedAt == Nothing then
+                            case shapeShown of
+                                Just { shape, isReady } ->
+                                    if isReady then
                                         Just { shape = shape, orientation = model.orientation }
 
                                     else
                                         Nothing
 
-                                _ ->
+                                Nothing ->
                                     Nothing
                         }
                         state
@@ -510,7 +729,7 @@ gameView windowSize localUser model =
                 ]
                 |> Ui.html
             )
-        , statusView state maybePlayer
+        , statusView currentUserId state
         ]
 
 
@@ -558,41 +777,57 @@ previewView userColor orientation shape isReady =
         )
 
 
-statusView : TetrominoSim.MatchState -> Maybe TetrominoSim.Player -> Element GameMsg
-statusView state maybePlayer =
+statusView : Id UserId -> TetrominoSim.MatchState -> Element GameMsg
+statusView currentUserId state =
+    let
+        nextRound : String
+        nextRound =
+            case state.round.nextRoundAt of
+                Just nextRoundAt ->
+                    "Next round in " ++ secondsUntil state.frame nextRoundAt
+
+                Nothing ->
+                    "The next round starts once someone joins"
+
+        roundInfo : String
+        roundInfo =
+            if state.round.number == 0 then
+                nextRound
+
+            else
+                "Round " ++ String.fromInt state.round.number ++ ". " ++ nextRound
+    in
     Ui.row
         [ Ui.spacing 12, Ui.Font.size 14, Ui.contentCenterX ]
-        (case maybePlayer of
+        (case SeqDict.get currentUserId state.players of
             Just player ->
-                case player.diedAt of
+                case player.knockedOutAt of
                     Just _ ->
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out") ]
+                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out")
+                        , Ui.text roundInfo
+                        ]
 
                     Nothing ->
-                        [ Ui.el
-                            [ Ui.Font.bold, Ui.width Ui.shrink ]
-                            (Ui.text
-                                (String.repeat player.health "♥"
-                                    ++ String.repeat (TetrominoSim.maxHealth - player.health) "♡"
-                                )
-                            )
+                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
                         , Ui.text "Left click to move, right click to drop, Q and E turn the piece, space stops the spinner"
                         ]
 
             Nothing ->
-                [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
-                , Ui.text
-                    (if SeqDict.isEmpty state.players then
-                        "Nobody is playing yet"
+                if SeqSet.member currentUserId state.waitingPlayers then
+                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You're in the next round")
+                    , Ui.text roundInfo
+                    ]
 
-                     else if TetrominoSim.isOver state then
-                        "Everyone was knocked out"
-
-                     else
-                        String.fromInt (SeqDict.size state.players) ++ " playing"
-                    )
-                ]
+                else
+                    [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
+                    , Ui.text roundInfo
+                    ]
         )
+
+
+secondsUntil : Int -> Int -> String
+secondsUntil frame endFrame =
+    String.fromInt (max 0 (ceiling (toFloat (endFrame - frame) / TetrominoSim.framesPerSecond))) ++ "s"
 
 
 setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
@@ -601,6 +836,6 @@ setupView windowSize _ =
         [ Ui.spacing 16, Ui.padding 16 ]
         [ Ui.Prose.paragraph
             [ Ui.Font.size 14 ]
-            [ Ui.text "Drop tetrominoes to build walls that keep the snowball throwing snowmen away from you. Anyone in the channel can join the match while it's running." ]
+            [ Ui.text "Drop tetrominoes to build walls that keep the snowball throwing snowmen away from you. One hit knocks you out until the next round. Anyone in the channel can join, and the match lasts until everyone has left it." ]
         , Go.startOrCancel "tetrominoGame" (MyUi.isMobileAlt windowSize) PressedCancel PressedStartGame
         ]

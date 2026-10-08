@@ -90,6 +90,7 @@ import SheepGame
 import Sticker
 import String.Extra
 import String.Nonempty exposing (NonemptyString)
+import TetrominoGame
 import TextEditor
 import Thread
 import Toop exposing (T4(..))
@@ -641,8 +642,16 @@ tryInitLoadedFrontend loading =
             let
                 ( loaded, audioCmd, cmd ) =
                     initLoadedFrontend loading clientId time startupData loginStatus
+
+                ( loaded2, tetrominoCmd ) =
+                    case openTetrominoMatch loaded of
+                        Just opened ->
+                            tetrominoMatchOpened opened loaded
+
+                        Nothing ->
+                            ( loaded, Command.none )
             in
-            ( Loaded loaded, audioCmd, cmd )
+            ( Loaded loaded2, Command.batch [ audioCmd, tetrominoCmd ], cmd )
 
         _ ->
             ( Loading loading, Command.none, Audio.cmdNone )
@@ -684,20 +693,24 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, tetrominoCmd ) =
+                            checkTetrominoMatchOpened loaded loadedNew
                     in
-                    ( case loadedNew.loginStatus of
+                    ( case loadedNew2.loginStatus of
                         LoggedIn loggedIn ->
-                            { loadedNew
+                            { loadedNew2
                                 | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
                             }
                                 |> Loaded
 
                         NotLoggedIn _ ->
-                            Loaded loadedNew
+                            Loaded loadedNew2
                     , Command.batch
                         [ cmd
-                        , checkCallDisplayModeChange loaded loadedNew
-                        , checkCallPreviewShown loaded loadedNew
+                        , checkCallDisplayModeChange loaded loadedNew2
+                        , checkCallPreviewShown loaded loadedNew2
+                        , tetrominoCmd
                         ]
                     , Audio.cmdNone
                     )
@@ -706,12 +719,16 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, tetrominoCmd ) =
+                            checkTetrominoMatchOpened loaded loadedNew
                     in
-                    ( Loaded loadedNew
+                    ( Loaded loadedNew2
                     , Command.batch
                         [ cmd
-                        , checkCallDisplayModeChange loaded loadedNew
-                        , checkCallPreviewShown loaded loadedNew
+                        , checkCallDisplayModeChange loaded loadedNew2
+                        , checkCallPreviewShown loaded loadedNew2
+                        , tetrominoCmd
                         ]
                     , Audio.cmdNone
                     )
@@ -2299,6 +2316,15 @@ updateLoaded msg model =
                                                         (Just (Local_SetSheepGameQuestions questions))
                                                         accLoggedIn
                                                         accCmd
+
+                                                Game.OutTetrominoToBackend matchId tetrominoMsg ->
+                                                    ( accLoggedIn
+                                                    , Command.batch
+                                                        [ accCmd
+                                                        , TetrominoToBackend gamesTab.guildOrDmId matchId tetrominoMsg
+                                                            |> Lamdera.sendToBackend
+                                                        ]
+                                                    )
 
                                                 _ ->
                                                     ( accLoggedIn, accCmd )
@@ -8165,9 +8191,12 @@ updateFromBackend _ msg model =
                             Nothing ->
                                 loaded
                         )
+
+                ( loadedNew2, tetrominoCmd ) =
+                    checkTetrominoMatchOpened loaded loadedNew
             in
-            ( Loaded loadedNew
-            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew ]
+            ( Loaded loadedNew2
+            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew2, tetrominoCmd ]
             , Audio.cmdNone
             )
 
@@ -8394,7 +8423,7 @@ updateLoadedFromBackend msg model =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
                                 -- view state that goes with it to be built from.
-                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend loaded)) ->
+                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend _)) ->
                                     Game.routeRequest
                                         model.time
                                         local.localUser
@@ -8402,9 +8431,6 @@ updateLoadedFromBackend msg model =
                                         matchId
                                         (FrontendExtra.channelGames guildOrDmId local)
                                         loggedIn.games
-                                        |> SeqDict.updateIfExists
-                                            guildOrDmId
-                                            (Game.matchLoaded model.time loaded.serverTime matchId)
 
                                 _ ->
                                     loggedIn.games
@@ -8993,13 +9019,55 @@ updateLoadedFromBackend msg model =
             ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
 
         YouConnected clientId ->
+            let
+                ( model2, cmd ) =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | isReloading = True }
+                            , Lamdera.sendToBackend (ReloadDataRequest (routeToInitialDataRequest model.route))
+                            )
+                        )
+                        { model | clientId = clientId }
+
+                -- The backend forgets who has a tetromino match open when they disconnect, so
+                -- this client has to open it again.
+                ( model3, tetrominoCmd ) =
+                    case openTetrominoMatch model2 of
+                        Just opened ->
+                            tetrominoMatchOpened opened model2
+
+                        Nothing ->
+                            ( model2, Command.none )
+            in
+            ( model3, Command.batch [ cmd, tetrominoCmd ] )
+
+        TetrominoToFrontend guildOrDmId matchId tetrominoMsg ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | isReloading = True }
-                    , Lamdera.sendToBackend (ReloadDataRequest (routeToInitialDataRequest model.route))
-                    )
+                    case SeqDict.get matchId (FrontendExtra.channelGames guildOrDmId (Local.model loggedIn.localState)) of
+                        Just matchData ->
+                            let
+                                ( gameModel, maybeReply ) =
+                                    Game.tetrominoFromBackend
+                                        model.time
+                                        matchId
+                                        matchData
+                                        tetrominoMsg
+                                        (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
+                            in
+                            ( { loggedIn | games = SeqDict.insert guildOrDmId gameModel loggedIn.games }
+                            , case maybeReply of
+                                Just reply ->
+                                    TetrominoToBackend guildOrDmId matchId reply |> Lamdera.sendToBackend
+
+                                Nothing ->
+                                    Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
-                { model | clientId = clientId }
+                model
 
         ReloadDataResponse reloadData ->
             case reloadData of
@@ -9622,6 +9690,94 @@ gameKeyMsg key model =
             Nothing
 
 
+{-| The tetromino match this client is showing, if any. The backend has to be told whenever this
+changes, since a tetromino match only exists on the clients that have it open.
+-}
+openTetrominoMatch : LoadedFrontend -> Maybe ( GuildOrDmId, Id ChannelMessageId )
+openTetrominoMatch model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                Just { guildOrDmId, matchId, match } ->
+                    if Game.isTetrominoMatch match then
+                        Just ( guildOrDmId, matchId )
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+
+        NotLoggedIn _ ->
+            Nothing
+
+
+checkTetrominoMatchOpened : LoadedFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+checkTetrominoMatchOpened oldModel newModel =
+    let
+        old : Maybe ( GuildOrDmId, Id ChannelMessageId )
+        old =
+            openTetrominoMatch oldModel
+
+        new : Maybe ( GuildOrDmId, Id ChannelMessageId )
+        new =
+            openTetrominoMatch newModel
+    in
+    if old == new then
+        ( newModel, Command.none )
+
+    else
+        let
+            ( newModel2, closedCmd ) =
+                case old of
+                    Just closed ->
+                        tetrominoMatchClosed closed newModel
+
+                    Nothing ->
+                        ( newModel, Command.none )
+
+            ( newModel3, openedCmd ) =
+                case new of
+                    Just opened ->
+                        tetrominoMatchOpened opened newModel2
+
+                    Nothing ->
+                        ( newModel2, Command.none )
+        in
+        ( newModel3, Command.batch [ closedCmd, openedCmd ] )
+
+
+tetrominoMatchOpened : ( GuildOrDmId, Id ChannelMessageId ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+tetrominoMatchOpened ( guildOrDmId, matchId ) model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | games =
+                    SeqDict.insert
+                        guildOrDmId
+                        (SeqDict.get guildOrDmId loggedIn.games
+                            |> Maybe.withDefault Game.initModel
+                            |> Game.dropTetrominoMatchState matchId
+                        )
+                        loggedIn.games
+              }
+            , TetrominoToBackend guildOrDmId matchId TetrominoGame.OpenedMatch |> Lamdera.sendToBackend
+            )
+        )
+        model
+
+
+tetrominoMatchClosed : ( GuildOrDmId, Id ChannelMessageId ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+tetrominoMatchClosed ( guildOrDmId, matchId ) model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn | games = SeqDict.updateIfExists guildOrDmId (Game.dropTetrominoMatchState matchId) loggedIn.games }
+            , TetrominoToBackend guildOrDmId matchId TetrominoGame.ClosedMatch |> Lamdera.sendToBackend
+            )
+        )
+        model
+
+
 {-| Move a running match on to the time now. Games that only change when somebody does something
 ignore this.
 -}
@@ -9708,6 +9864,9 @@ handleGameOutMsgs outMsgs model =
                     ( model2, scrollElementToTop scrollTo :: cmds )
 
                 Game.SaveSheepGameQuestions _ ->
+                    ( model2, cmds )
+
+                Game.OutTetrominoToBackend _ _ ->
                     ( model2, cmds )
 
                 Game.SaveSheepGameQuestionsAfterDelay guildOrDmId counter ->

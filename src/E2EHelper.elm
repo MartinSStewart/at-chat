@@ -180,6 +180,8 @@ import String.Nonempty exposing (NonemptyString(..))
 import Svg.Attributes
 import Test.Html.Query
 import Test.Html.Selector
+import TetrominoGame
+import TetrominoSim
 import TextEditor
 import Time
 import TwoFactorAuthentication
@@ -2956,6 +2958,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         ImportChannelResponse _ _ ->
             True
 
+        TetrominoToFrontend _ _ _ ->
+            True
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -3001,6 +3006,18 @@ allAttackerToBackendChanges =
     , LogOutRequest sessionId2Hash
     , LogOutRequest sessionId4Hash
     , LoginWithRecoveryPasswordRequest InitialLoadRequested_None "123" UserAgent.init
+    , TetrominoToBackend
+        (GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 })
+        (Id.fromInt 0)
+        TetrominoGame.OpenedMatch
+    , TetrominoToBackend
+        (GuildOrDmId_Dm { otherUserId = Id.fromInt 1 })
+        (Id.fromInt 0)
+        TetrominoGame.OpenedMatch
+    , TetrominoToBackend
+        (GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 })
+        (Id.fromInt 0)
+        (TetrominoGame.SendInput (Time.millisToPosix 0) (TetrominoSim.MoveTo 1 1))
     , -- Make sure this one is last. It actually logs out the attacker
       LogOutRequest sessionIdAttackerHash
     ]

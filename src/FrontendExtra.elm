@@ -364,16 +364,8 @@ pendingChangesText localChange =
                 Game.LocalChange_SheepGame _ _ ->
                     Just "Sheep game change"
 
-                Game.LocalChange_TetrominoGame _ tetrominoChange ->
-                    case tetrominoChange of
-                        TetrominoGame.StartMatch _ _ ->
-                            Just "Started Tetromino Fort match"
-
-                        TetrominoGame.Action _ ->
-                            -- Inputs in a running match are sent constantly, so a slow connection
-                            -- would fill the warning with them. The game shows the trouble by
-                            -- stuttering anyway.
-                            Nothing
+                Game.LocalChange_TetrominoGame _ (TetrominoGame.StartMatch _ _) ->
+                    Just "Started Tetromino Fort match"
 
         Local_Drawing _ _ _ ->
             Just "Drew on a message"
@@ -6178,7 +6170,7 @@ gameChangeUpdateChannel changeBy gameChange channel =
                         | games =
                             SeqDict.updateIfExists
                                 matchId
-                                (\_ -> Game.initMatchData loaded.match.gameData loaded.match.publicLink)
+                                (\_ -> Game.initMatchData loaded.gameData loaded.publicLink)
                                 channel.games
                     }
 
@@ -6262,37 +6254,32 @@ gameChangeUpdateChannel changeBy gameChange channel =
                             SeqDict.updateIfExists matchId (Game.addSheepGameAction action) channel.games
                     }
 
-        Game.LocalChange_TetrominoGame matchId tetrominoChange ->
-            case tetrominoChange of
-                TetrominoGame.StartMatch createdAt setup ->
-                    let
-                        channel2 =
-                            LocalState.createChannelMessageFrontend
-                                (GameStarted
-                                    { startedAt = createdAt
-                                    , startedBy = changeBy
-                                    , reactions = SeqDict.empty
-                                    , gameType = GameType_TetrominoGame
-                                    , timestampDrawings = Drawing.emptyDrawing
-                                    , cardDrawings = Drawing.emptyDrawing
-                                    }
-                                )
-                                channel
+        Game.LocalChange_TetrominoGame _ (TetrominoGame.StartMatch createdAt setup) ->
+            let
+                channel2 =
+                    LocalState.createChannelMessageFrontend
+                        (GameStarted
+                            { startedAt = createdAt
+                            , startedBy = changeBy
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_TetrominoGame
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
+                        )
+                        channel
 
-                        newMatchId : Id ChannelMessageId
-                        newMatchId =
-                            DmChannel.latestFrontendMessageId channel2
-                    in
-                    { channel2
-                        | games =
-                            SeqDict.insert
-                                newMatchId
-                                (Game.initMatchData (Game.GameData_TetrominoGame setup Array.empty) Nothing)
-                                channel2.games
-                    }
-
-                TetrominoGame.Action action ->
-                    { channel | games = SeqDict.updateIfExists matchId (Game.addTetrominoAction action) channel.games }
+                newMatchId : Id ChannelMessageId
+                newMatchId =
+                    DmChannel.latestFrontendMessageId channel2
+            in
+            { channel2
+                | games =
+                    SeqDict.insert
+                        newMatchId
+                        (Game.initMatchData (Game.GameData_TetrominoGame setup TetrominoGame.MatchInProgress) Nothing)
+                        channel2.games
+            }
 
 
 otherUserLeaveCall : Time.Posix -> Call.ConnectionId -> LocalState -> LocalState

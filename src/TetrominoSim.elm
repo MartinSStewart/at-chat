@@ -8,6 +8,7 @@ module TetrominoSim exposing
     , PieceStatus(..)
     , Player
     , Point
+    , Round
     , Snowball
     , cycleShape
     , entityHeight
@@ -15,9 +16,8 @@ module TetrominoSim exposing
     , framesPerSecond
     , gridSize
     , init
-    , isOver
     , keepInsideGrid
-    , maxHealth
+    , roundBreak
     , snowballRadius
     , step
     )
@@ -31,6 +31,7 @@ import Dict exposing (Dict)
 import Id exposing (Id, UserId)
 import Random
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Tetromino exposing (Orientation, Shape)
 
 
@@ -40,6 +41,7 @@ type alias Point =
 
 type Input
     = Join
+    | Leave
     | MoveTo Int Int
     | Drop { x : Int, y : Int, orientation : Orientation }
     | StopCycling
@@ -51,7 +53,9 @@ type alias InputEvent =
 
 type alias MatchState =
     { frame : Int
+    , round : Round
     , players : SeqDict (Id UserId) Player
+    , waitingPlayers : SeqSet (Id UserId)
     , npcs : List Npc
     , pieces : SeqDict Int Piece
     , occupied : Dict ( Int, Int, Int ) Int
@@ -62,13 +66,24 @@ type alias MatchState =
     }
 
 
+{-| Before the first round `number` is 0. `nextRoundAt` is Nothing while there's nobody to play
+in one.
+-}
+type alias Round =
+    { number : Int
+    , startedAt : Int
+    , nextRoundAt : Maybe Int
+    }
+
+
+{-| Someone who has been in a round. A player who joins while a round is running waits in
+`waitingPlayers` instead, and one knocked out sits the rest of the round out.
+-}
 type alias Player =
     { position : Point
     , velocityZ : Float
     , target : Maybe ( Int, Int )
-    , health : Int
-    , diedAt : Maybe Int
-    , hitAt : Maybe Int
+    , knockedOutAt : Maybe Int
     , cycle : PieceCycle
     }
 
@@ -126,9 +141,24 @@ gridSize =
     24
 
 
-maxHealth : Int
-maxHealth =
-    3
+roundLength : Int
+roundLength =
+    60 * framesPerSecond
+
+
+{-| How long after everyone is knocked out (or after the first player joins) the next round
+starts.
+-}
+roundBreak : Int
+roundBreak =
+    5 * framesPerSecond
+
+
+{-| NPCs only start turning up a little while into a round, so there is time to build.
+-}
+npcDelay : Int
+npcDelay =
+    5 * framesPerSecond
 
 
 gravity : Float
@@ -201,10 +231,14 @@ epsilon =
     1.0e-9
 
 
-init : Int -> MatchState
-init seed =
-    { frame = 0
+{-| A new match, starting on the given frame.
+-}
+init : Int -> Int -> MatchState
+init seed frame =
+    { frame = frame
+    , round = { number = 0, startedAt = frame, nextRoundAt = Nothing }
     , players = SeqDict.empty
+    , waitingPlayers = SeqSet.empty
     , npcs = []
     , pieces = SeqDict.empty
     , occupied = Dict.empty
@@ -213,14 +247,6 @@ init seed =
     , seed = Random.initialSeed seed
     , nextNpcSpawn = Nothing
     }
-
-
-{-| A match is over once someone has played and everyone who played has died.
--}
-isOver : MatchState -> Bool
-isOver state =
-    not (SeqDict.isEmpty state.players)
-        && List.all (\player -> player.diedAt /= Nothing) (SeqDict.values state.players)
 
 
 {-| Advance by one frame, applying the inputs stamped with this frame first.
@@ -235,10 +261,10 @@ step inputs state =
 
         state3 : MatchState
         state3 =
-            updatePlayers state2 |> updateNpcs |> spawnNpcs |> updateSnowballs
+            updateRound state2 |> updatePlayers |> updateNpcs |> spawnNpcs |> updateSnowballs
 
         ( state4, removedSettled ) =
-            updatePieces state3 |> handleDeaths
+            updatePieces state3 |> handleKnockouts
 
         state5 : MatchState
         state5 =
@@ -263,40 +289,23 @@ applyInput event state =
                 state
 
             else
-                let
-                    ( cycle, seed ) =
-                        startCycle state.frame state.seed
+                { state | waitingPlayers = SeqSet.insert event.userId state.waitingPlayers }
 
-                    center : Int
-                    center =
-                        gridSize // 2
-                in
-                { state
-                    | players =
-                        SeqDict.insert
-                            event.userId
-                            { position =
-                                { x = toFloat center + 0.5
-                                , y = toFloat center + 0.5
-                                , z = toFloat (topOfColumn center center state)
-                                }
-                            , velocityZ = 0
-                            , target = Nothing
-                            , health = maxHealth
-                            , diedAt = Nothing
-                            , hitAt = Nothing
-                            , cycle = cycle
-                            }
-                            state.players
-                    , seed = seed
-                    , nextNpcSpawn =
-                        case state.nextNpcSpawn of
-                            Just _ ->
-                                state.nextNpcSpawn
+        Leave ->
+            let
+                ( state2, removedSettled ) =
+                    removePiecesOf
+                        [ event.userId ]
+                        { state
+                            | players = SeqDict.remove event.userId state.players
+                            , waitingPlayers = SeqSet.remove event.userId state.waitingPlayers
+                        }
+            in
+            if removedSettled then
+                dropUnsupportedPieces state2
 
-                            Nothing ->
-                                Just (state.frame + 4 * framesPerSecond)
-                }
+            else
+                state2
 
         MoveTo x y ->
             updateAlivePlayer
@@ -320,7 +329,7 @@ applyInput event state =
         Drop drop ->
             case SeqDict.get event.userId state.players of
                 Just player ->
-                    case ( player.diedAt, player.cycle ) of
+                    case ( player.knockedOutAt, player.cycle ) of
                         ( Nothing, Ready shape ) ->
                             if Tetromino.isValidOrientation drop.orientation then
                                 dropPiece event.userId shape drop player state
@@ -342,7 +351,7 @@ updateAlivePlayer userId updateFunc state =
             SeqDict.updateIfExists
                 userId
                 (\player ->
-                    case player.diedAt of
+                    case player.knockedOutAt of
                         Just _ ->
                             player
 
@@ -404,6 +413,133 @@ keepInsideGrid cells column row =
             clamp -low (gridSize - 1 - high) position
     in
     ( fit (\( cellX, _, _ ) -> cellX) column, fit (\( _, cellY, _ ) -> cellY) row )
+
+
+
+-- Rounds
+
+
+{-| Start the next round when it's due, bringing in everyone who was waiting or knocked out. A
+round ends early once nobody in it is left standing.
+-}
+updateRound : MatchState -> MatchState
+updateRound state =
+    let
+        round : Round
+        round =
+            state.round
+
+        nobodyStanding : Bool
+        nobodyStanding =
+            List.all (\player -> player.knockedOutAt /= Nothing) (SeqDict.values state.players)
+
+        anyoneToBringIn : Bool
+        anyoneToBringIn =
+            not (SeqSet.isEmpty state.waitingPlayers)
+                || List.any (\player -> player.knockedOutAt /= Nothing) (SeqDict.values state.players)
+    in
+    case round.nextRoundAt of
+        Just nextRoundAt ->
+            if state.frame >= nextRoundAt then
+                if anyoneToBringIn || not nobodyStanding then
+                    startRound state
+
+                else
+                    { state | round = { round | nextRoundAt = Nothing } }
+
+            else if nobodyStanding && nextRoundAt > state.frame + roundBreak then
+                { state | round = { round | nextRoundAt = Just (state.frame + roundBreak) } }
+
+            else
+                state
+
+        Nothing ->
+            if anyoneToBringIn then
+                { state | round = { round | nextRoundAt = Just (state.frame + roundBreak) } }
+
+            else
+                state
+
+
+startRound : MatchState -> MatchState
+startRound state =
+    let
+        broughtIn : List (Id UserId)
+        broughtIn =
+            SeqSet.toList state.waitingPlayers
+                ++ List.filterMap
+                    (\( userId, player ) ->
+                        case player.knockedOutAt of
+                            Just _ ->
+                                Just userId
+
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqDict.toList state.players)
+                |> List.sortBy Id.toInt
+
+        ( players, seed ) =
+            List.foldl
+                (\( index, userId ) ( players2, seed2 ) ->
+                    let
+                        ( cycle, seed3 ) =
+                            startCycle state.frame seed2
+
+                        ( offsetX, offsetY ) =
+                            spawnOffset index
+
+                        column : Int
+                        column =
+                            gridSize // 2 + offsetX
+
+                        row : Int
+                        row =
+                            gridSize // 2 + offsetY
+                    in
+                    ( SeqDict.insert
+                        userId
+                        { position =
+                            { x = toFloat column + 0.5
+                            , y = toFloat row + 0.5
+                            , z = toFloat (topOfColumn column row state)
+                            }
+                        , velocityZ = 0
+                        , target = Nothing
+                        , knockedOutAt = Nothing
+                        , cycle = cycle
+                        }
+                        players2
+                    , seed3
+                    )
+                )
+                ( state.players, state.seed )
+                (List.indexedMap Tuple.pair broughtIn)
+    in
+    { state
+        | round =
+            { number = state.round.number + 1
+            , startedAt = state.frame
+            , nextRoundAt = Just (state.frame + roundLength)
+            }
+        , players = players
+        , waitingPlayers = SeqSet.empty
+        , seed = seed
+        , nextNpcSpawn = Just (state.frame + npcDelay)
+    }
+
+
+{-| Where around the middle of the grid each player brought into a round appears, so that they
+don't all start on top of each other.
+-}
+spawnOffset : Int -> ( Int, Int )
+spawnOffset index =
+    case List.drop (modBy 9 index) [ ( 0, 0 ), ( 1, 0 ), ( 0, 1 ), ( -1, 0 ), ( 0, -1 ), ( 1, 1 ), ( -1, -1 ), ( 1, -1 ), ( -1, 1 ) ] of
+        offset :: _ ->
+            offset
+
+        [] ->
+            ( 0, 0 )
 
 
 
@@ -469,7 +605,7 @@ updatePlayers state =
         | players =
             SeqDict.map
                 (\_ player ->
-                    case player.diedAt of
+                    case player.knockedOutAt of
                         Just _ ->
                             player
 
@@ -511,7 +647,7 @@ updateNpcs state =
     let
         alivePlayers : List Player
         alivePlayers =
-            SeqDict.values state.players |> List.filter (\player -> player.diedAt == Nothing)
+            SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
 
         ( npcs, snowballs, seed ) =
             List.foldr
@@ -675,7 +811,7 @@ spawnNpcs state =
 
                     anyoneAlive : Bool
                     anyoneAlive =
-                        List.any (\player -> player.diedAt == Nothing) (SeqDict.values state.players)
+                        List.any (\player -> player.knockedOutAt == Nothing) (SeqDict.values state.players)
                 in
                 { state
                     | npcs =
@@ -694,7 +830,7 @@ spawnNpcs state =
                             state.npcs
                     , nextId = state.nextId + 1
                     , seed = seed
-                    , nextNpcSpawn = Just (state.frame + npcSpawnInterval state.frame)
+                    , nextNpcSpawn = Just (state.frame + npcSpawnInterval (state.frame - state.round.startedAt))
                 }
 
             else
@@ -705,8 +841,8 @@ spawnNpcs state =
 
 
 npcSpawnInterval : Int -> Int
-npcSpawnInterval frame =
-    max (2 * framesPerSecond) (7 * framesPerSecond - frame // 20)
+npcSpawnInterval framesIntoRound =
+    max (2 * framesPerSecond) (7 * framesPerSecond - framesIntoRound // 20)
 
 
 {-| Walk towards a target, hopping onto anything one cell high, and fall under gravity.
@@ -895,7 +1031,7 @@ updateSnowballs state =
                                             found
 
                                         Nothing ->
-                                            if player.diedAt == Nothing && snowballHitsEntity position player.position then
+                                            if player.knockedOutAt == Nothing && snowballHitsEntity position player.position then
                                                 Just userId
 
                                             else
@@ -909,7 +1045,7 @@ updateSnowballs state =
                             ( kept
                             , SeqDict.updateIfExists
                                 userId
-                                (\player -> { player | health = player.health - 1, hitAt = Just state.frame })
+                                (\player -> { player | knockedOutAt = Just state.frame, target = Nothing })
                                 players2
                             )
 
@@ -1044,7 +1180,7 @@ updatePieces state =
                         hitPlayer : Bool
                         hitPlayer =
                             List.any
-                                (\player -> player.diedAt == Nothing && pieceOverlapsEntity piece finalZ player.position)
+                                (\player -> player.knockedOutAt == Nothing && pieceOverlapsEntity piece finalZ player.position)
                                 (SeqDict.values state2.players)
                     in
                     if not (List.isEmpty hitNpcs) then
@@ -1086,14 +1222,17 @@ updatePieces state =
         state.pieces
 
 
-handleDeaths : MatchState -> ( MatchState, Bool )
-handleDeaths state =
+{-| A player knocked out this frame takes all their pieces with them. The Bool says whether any
+of those had settled, since that can leave others hanging in the air.
+-}
+handleKnockouts : MatchState -> ( MatchState, Bool )
+handleKnockouts state =
     let
-        justDied : List (Id UserId)
-        justDied =
+        justKnockedOut : List (Id UserId)
+        justKnockedOut =
             SeqDict.foldr
                 (\userId player list ->
-                    if player.health <= 0 && player.diedAt == Nothing then
+                    if player.knockedOutAt == Just state.frame then
                         userId :: list
 
                     else
@@ -1102,31 +1241,26 @@ handleDeaths state =
                 []
                 state.players
     in
-    case justDied of
+    case justKnockedOut of
         [] ->
             ( state, False )
 
         _ ->
-            let
-                ( removed, kept ) =
-                    SeqDict.partition (\_ piece -> List.member piece.owner justDied) state.pieces
-            in
-            ( { state
-                | players =
-                    SeqDict.map
-                        (\userId player ->
-                            if List.member userId justDied then
-                                { player | diedAt = Just state.frame, target = Nothing }
+            removePiecesOf justKnockedOut state
 
-                            else
-                                player
-                        )
-                        state.players
-                , pieces = kept
-                , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId removed)) state.occupied
-              }
-            , SeqDict.foldl (\_ piece anySettled -> anySettled || piece.status == Settled) False removed
-            )
+
+removePiecesOf : List (Id UserId) -> MatchState -> ( MatchState, Bool )
+removePiecesOf owners state =
+    let
+        ( removed, kept ) =
+            SeqDict.partition (\_ piece -> List.member piece.owner owners) state.pieces
+    in
+    ( { state
+        | pieces = kept
+        , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId removed)) state.occupied
+      }
+    , SeqDict.foldl (\_ piece anySettled -> anySettled || piece.status == Settled) False removed
+    )
 
 
 {-| Let go of every settled piece that has nothing under it any more. Letting go of one can

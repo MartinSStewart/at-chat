@@ -228,13 +228,13 @@ worldEntities config state =
 
         alivePlayers : List ( Id UserId, Player )
         alivePlayers =
-            SeqDict.toList state.players |> List.filter (\( _, player ) -> player.diedAt == Nothing)
+            SeqDict.toList state.players |> List.filter (\( _, player ) -> player.knockedOutAt == Nothing)
 
         opaque : List Entity
         opaque =
             groundEntity vp
                 :: List.concatMap (pieceEntities vp config.userColor) (SeqDict.values state.pieces)
-                ++ List.concatMap (\( userId, player ) -> playerEntities vp config.frame (config.userColor userId) player) alivePlayers
+                ++ List.concatMap (\( userId, player ) -> playerEntities vp (config.userColor userId) player) alivePlayers
                 ++ List.concatMap (npcEntities vp) state.npcs
                 ++ List.map
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
@@ -407,22 +407,9 @@ discShadow vp columns position size =
         }
 
 
-playerEntities : Mat4 -> Int -> Color -> Player -> List Entity
-playerEntities vp frame color player =
+playerEntities : Mat4 -> Color -> Player -> List Entity
+playerEntities vp color player =
     let
-        color2 : Color
-        color2 =
-            case player.hitAt of
-                Just hitAt ->
-                    if frame - hitAt < 12 then
-                        Color.rgb 1 1 1
-
-                    else
-                        color
-
-                Nothing ->
-                    color
-
         position : Point
         position =
             player.position
@@ -435,8 +422,8 @@ playerEntities vp frame color player =
         vp
         (Vec3.vec3 (position.x - 0.25) (position.y - 0.25) position.z)
         (Vec3.vec3 0.5 0.5 bodyHeight)
-        color2
-    , sphereEntity vp { position | z = position.z + bodyHeight + 0.15 } 0.18 color2
+        color
+    , sphereEntity vp { position | z = position.z + bodyHeight + 0.15 } 0.18 color
     ]
 
 

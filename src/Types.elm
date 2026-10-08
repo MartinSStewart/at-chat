@@ -140,6 +140,7 @@ import SheepGame
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
+import TetrominoGame
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Drag, Touch)
@@ -512,6 +513,9 @@ type alias BackendModel =
     , wordSpellingGameEnglish : WordList
     , wordSpellingGameSwedish : WordList
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
+    , -- Tetromino matches somebody has open. A match only exists on the clients that have it
+      -- open, so this is just who they are and the inputs someone joining might still need.
+      tetrominoMatches : SeqDict ( GuildOrFullDmId, Id ChannelMessageId ) TetrominoGame.LiveMatch
     }
 
 
@@ -823,6 +827,7 @@ type ToBackend
     | GetPublicGoMatchRequest (SecretId GamePublicId)
     | ExportChannelRequest ExportChannelId
     | ImportChannelRequest (Id GuildId) { fileName : String, json : String }
+    | TetrominoToBackend GuildOrDmId (Id ChannelMessageId) TetrominoGame.ToBackend
 
 
 type BackendMsg
@@ -1059,6 +1064,7 @@ type ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
     | ExportChannelResponse { fileName : String, json : String }
     | ImportChannelResponse (Id GuildId) (Result ImportChannelError { encryptedMessages : Int })
+    | TetrominoToFrontend GuildOrDmId (Id ChannelMessageId) TetrominoGame.ToFrontend
 
 
 type alias LoginData =

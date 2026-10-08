@@ -83,6 +83,7 @@ import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TetrominoGame
+import TetrominoSim
 import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
@@ -290,6 +291,7 @@ init =
       , wordSpellingGameEnglish = WordList_NotLoaded
       , wordSpellingGameSwedish = WordList_NotLoaded
       , pendingGatewayReconnects = SeqDict.empty
+      , tetrominoMatches = SeqDict.empty
       }
     , Command.none
     )
@@ -454,7 +456,23 @@ updateHelper msg model =
             ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
 
         UserDisconnectedWithTime sessionId clientId time ->
-            disconnectClient time sessionId clientId model
+            let
+                ( model2, cmd ) =
+                    disconnectClient time sessionId clientId model
+
+                ( model3, tetrominoCmds ) =
+                    List.foldl
+                        (\key ( model4, cmds ) ->
+                            let
+                                ( model5, cmd2 ) =
+                                    tetrominoWatcherLeft time clientId key model4
+                            in
+                            ( model5, cmd2 :: cmds )
+                        )
+                        ( model2, [] )
+                        (SeqDict.keys model2.tetrominoMatches)
+            in
+            ( model3, Command.batch (cmd :: tetrominoCmds) )
 
         BackendGotTime sessionId clientId toBackend time ->
             case RateLimit.checkAndUpdateSessionRateLimit time sessionId model.sessionRateLimits of
@@ -6045,7 +6063,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Game.LoadMatch matchId _ ->
                                             ( model
                                             , loadMatchResponse
-                                                time
                                                 clientId
                                                 changeId
                                                 guildOrDmId
@@ -6100,10 +6117,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     ( model2, cmd )
 
-                                        Game.LocalChange_TetrominoGame matchId tetrominoChange ->
+                                        Game.LocalChange_TetrominoGame _ (TetrominoGame.StartMatch _ setup) ->
                                             let
                                                 ( model2, cmd ) =
-                                                    handleTetrominoGame
+                                                    startTetrominoMatch
                                                         time
                                                         session
                                                         clientId
@@ -6123,27 +6140,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 )
                                                                 model3
                                                         )
-                                                        matchId
-                                                        tetrominoChange
+                                                        setup
                                                         model
-                                            in
-                                            case tetrominoChange of
-                                                TetrominoGame.StartMatch _ _ ->
-                                                    let
-                                                        ( sessions, notificationCmd ) =
-                                                            Broadcast.gameStartedDmNotification
-                                                                time
-                                                                session.userId
-                                                                id
-                                                                GameType_TetrominoGame
-                                                                model2
-                                                    in
-                                                    ( { model2 | sessions = sessions }
-                                                    , Command.batch [ cmd, notificationCmd ]
-                                                    )
 
-                                                TetrominoGame.Action _ ->
-                                                    ( model2, cmd )
+                                                ( sessions, notificationCmd ) =
+                                                    Broadcast.gameStartedDmNotification
+                                                        time
+                                                        session.userId
+                                                        id
+                                                        GameType_TetrominoGame
+                                                        model2
+                                            in
+                                            ( { model2 | sessions = sessions }
+                                            , Command.batch [ cmd, notificationCmd ]
+                                            )
 
                                         Game.LocalChange_SheepGame matchId sheepChange ->
                                             let
@@ -6244,10 +6254,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         _ ->
                                                             ( model2, cmd )
 
-                                                Game.LocalChange_TetrominoGame matchId tetrominoChange ->
+                                                Game.LocalChange_TetrominoGame _ (TetrominoGame.StartMatch _ setup) ->
                                                     let
                                                         ( model2, cmd ) =
-                                                            handleTetrominoGame
+                                                            startTetrominoMatch
                                                                 time
                                                                 session
                                                                 clientId
@@ -6270,23 +6280,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         (Server_Game session.userId guildOrDmId localMsg2 |> ServerChange)
                                                                         model3
                                                                 )
-                                                                matchId
-                                                                tetrominoChange
+                                                                setup
                                                                 model
                                                     in
-                                                    case tetrominoChange of
-                                                        TetrominoGame.StartMatch _ _ ->
-                                                            notifyGameStartedInGuild
-                                                                time
-                                                                session.userId
-                                                                id
-                                                                GameType_TetrominoGame
-                                                                guild
-                                                                model2
-                                                                cmd
-
-                                                        TetrominoGame.Action _ ->
-                                                            ( model2, cmd )
+                                                    notifyGameStartedInGuild
+                                                        time
+                                                        session.userId
+                                                        id
+                                                        GameType_TetrominoGame
+                                                        guild
+                                                        model2
+                                                        cmd
 
                                                 Game.LocalChange_SheepGame matchId sheepChange ->
                                                     let
@@ -6398,7 +6402,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 Game.LoadMatch matchId _ ->
                                                     ( model
                                                     , loadMatchResponse
-                                                        time
                                                         clientId
                                                         changeId
                                                         guildOrDmId
@@ -7301,6 +7304,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+        TetrominoToBackend guildOrDmId matchId tetrominoMsg ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    case tetrominoMatchLocation session.userId guildOrDmId model of
+                        Just location ->
+                            handleTetrominoToBackend time session.userId clientId ( location, matchId ) tetrominoMsg model
+
+                        Nothing ->
+                            ( model, Command.none )
+                )
+
 
 {-| A DM export carries no channel name of its own, so the name of the file it arrived in
 stands in for one.
@@ -7359,8 +7375,7 @@ handleGoMatchRequest messageId channel model =
 so this goes to that client alone rather than being broadcast.
 -}
 loadMatchResponse :
-    Time.Posix
-    -> ClientId
+    ClientId
     -> ChangeId
     -> GuildOrDmId
     -> GuildOrFullDmId
@@ -7368,17 +7383,14 @@ loadMatchResponse :
     -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-loadMatchResponse time clientId changeId guildOrDmId guildOrFullDmId matchId channel model =
+loadMatchResponse clientId changeId guildOrDmId guildOrFullDmId matchId channel model =
     case SeqDict.get matchId channel.games of
         Just gameData ->
             Game.LoadMatch
                 matchId
                 (FilledInByBackend
-                    { match =
-                        { gameData = gameData
-                        , publicLink = OneToOne.first ( guildOrFullDmId, matchId ) model.goMatchPublicIds
-                        }
-                    , serverTime = time
+                    { gameData = gameData
+                    , publicLink = OneToOne.first ( guildOrFullDmId, matchId ) model.goMatchPublicIds
                     }
                 )
                 |> Local_Game guildOrDmId
@@ -7880,7 +7892,7 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
-handleTetrominoGame :
+startTetrominoMatch :
     Time.Posix
     -> UserSession
     -> ClientId
@@ -7900,93 +7912,455 @@ handleTetrominoGame :
          -> BackendModel
         )
     -> (Game.LocalChange -> BackendModel -> Command BackendOnly ToFrontend BackendMsg)
-    -> Id ChannelMessageId
-    -> TetrominoGame.LocalChange
+    -> TetrominoGame.ValidatedSetup
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleTetrominoGame time session clientId changeId guildOrDmId channel setChannel broadcast matchId tetrominoChange model =
-    case tetrominoChange of
-        TetrominoGame.StartMatch _ setup ->
+startTetrominoMatch time session clientId changeId guildOrDmId channel setChannel broadcast setup model =
+    let
+        ( messageId, channel2 ) =
+            LocalState.createChannelMessageBackend
+                (GameStarted
+                    { startedAt = time
+                    , startedBy = session.userId
+                    , reactions = SeqDict.empty
+                    , gameType = GameType_TetrominoGame
+                    , timestampDrawings = Drawing.emptyDrawing
+                    , cardDrawings = Drawing.emptyDrawing
+                    }
+                )
+                channel
+
+        -- Everyone counts frames from the moment the backend started the match, so the
+        -- time the client suggested is thrown away.
+        setup2 : TetrominoGame.ValidatedSetup
+        setup2 =
+            { setup | createdBy = session.userId, startedAt = time }
+
+        localMsg2 : Game.LocalChange
+        localMsg2 =
+            Game.LocalChange_TetrominoGame messageId (TetrominoGame.StartMatch time setup2)
+    in
+    ( setChannel
+        { channel2
+            | games =
+                SeqDict.insert messageId (Game.GameData_TetrominoGame setup2 TetrominoGame.MatchInProgress) channel2.games
+        }
+        { model
+            | users =
+                BackendExtra.ownMessageIsReadBackend
+                    session.userId
+                    (GuildOrDmId guildOrDmId)
+                    messageId
+                    model.users
+        }
+    , Command.batch
+        [ Local_Game guildOrDmId localMsg2
+            |> LocalChangeResponse changeId
+            |> Lamdera.sendToFrontend clientId
+        , broadcast localMsg2 model
+        ]
+    )
+
+
+{-| Where a tetromino match's channel is, as long as the user is allowed to see it.
+-}
+tetrominoMatchLocation : Id UserId -> GuildOrDmId -> BackendModel -> Maybe GuildOrFullDmId
+tetrominoMatchLocation userId guildOrDmId model =
+    case guildOrDmId of
+        GuildOrDmId_Guild { guildId, channelId } ->
+            case SeqDict.get guildId model.guilds of
+                Just guild ->
+                    case MembersAndOwner.isMember userId guild.membersAndOwner of
+                        MembersAndOwner.IsNotMember ->
+                            Nothing
+
+                        MembersAndOwner.IsMember ->
+                            GuildOrFullDmId_Guild guildId channelId |> Just
+
+                        MembersAndOwner.IsOwner ->
+                            GuildOrFullDmId_Guild guildId channelId |> Just
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm { otherUserId } ->
+            DmChannelId.fromUserIds userId otherUserId |> GuildOrFullDmId_Dm |> Just
+
+
+tetrominoChannelGames : GuildOrFullDmId -> BackendModel -> Maybe (SeqDict (Id ChannelMessageId) Game.BackendGameData)
+tetrominoChannelGames location model =
+    case location of
+        GuildOrFullDmId_Guild guildId channelId ->
+            SeqDict.get guildId model.guilds
+                |> Maybe.andThen (\guild -> SeqDict.get channelId guild.channels)
+                |> Maybe.map .games
+
+        GuildOrFullDmId_Dm dmChannelId ->
+            SeqDict.get dmChannelId model.dmChannels |> Maybe.map .games
+
+
+tetrominoSetup :
+    ( GuildOrFullDmId, Id ChannelMessageId )
+    -> BackendModel
+    -> Maybe ( TetrominoGame.ValidatedSetup, TetrominoGame.MatchProgress )
+tetrominoSetup ( location, matchId ) model =
+    case tetrominoChannelGames location model |> Maybe.andThen (SeqDict.get matchId) of
+        Just (Game.GameData_TetrominoGame setup progress) ->
+            Just ( setup, progress )
+
+        Just (Game.GameData_Go _ _) ->
+            Nothing
+
+        Just (Game.GameData_WordSpellingGame _ _ _) ->
+            Nothing
+
+        Just (Game.GameData_SheepGame _ _ _) ->
+            Nothing
+
+        Nothing ->
+            Nothing
+
+
+handleTetrominoToBackend :
+    Time.Posix
+    -> Id UserId
+    -> ClientId
+    -> ( GuildOrFullDmId, Id ChannelMessageId )
+    -> TetrominoGame.ToBackend
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleTetrominoToBackend time userId clientId key msg model =
+    case tetrominoSetup key model of
+        Just ( setup, progress ) ->
             let
-                ( messageId, channel2 ) =
-                    LocalState.createChannelMessageBackend
-                        (GameStarted
-                            { startedAt = time
-                            , startedBy = session.userId
-                            , reactions = SeqDict.empty
-                            , gameType = GameType_TetrominoGame
-                            , timestampDrawings = Drawing.emptyDrawing
-                            , cardDrawings = Drawing.emptyDrawing
-                            }
-                        )
-                        channel
-
-                -- Everyone counts frames from the moment the backend started the match, so the
-                -- time the client suggested is thrown away.
-                setup2 : TetrominoGame.ValidatedSetup
-                setup2 =
-                    { setup | startedAt = time }
-
-                localMsg2 : Game.LocalChange
-                localMsg2 =
-                    Game.LocalChange_TetrominoGame messageId (TetrominoGame.StartMatch time setup2)
+                liveMatch : TetrominoGame.LiveMatch
+                liveMatch =
+                    SeqDict.get key model.tetrominoMatches |> Maybe.withDefault TetrominoGame.initLiveMatch
             in
-            ( setChannel
-                { channel2
-                    | games =
-                        SeqDict.insert messageId (Game.GameData_TetrominoGame setup2 Array.empty) channel2.games
-                }
-                { model
-                    | users =
-                        BackendExtra.ownMessageIsReadBackend
-                            session.userId
-                            (GuildOrDmId guildOrDmId)
-                            messageId
-                            model.users
-                }
-            , Command.batch
-                [ Local_Game guildOrDmId localMsg2
-                    |> LocalChangeResponse changeId
-                    |> Lamdera.sendToFrontend clientId
-                , broadcast localMsg2 model
-                ]
+            case msg of
+                TetrominoGame.OpenedMatch ->
+                    case progress of
+                        TetrominoGame.MatchInProgress ->
+                            let
+                                -- A client opening a match it already had open has lost its copy
+                                -- (it reconnected), so that counts as leaving first.
+                                ( model2, leftCmd ) =
+                                    tetrominoWatcherLeft time clientId key model
+                            in
+                            case tetrominoSetup key model2 of
+                                Just ( _, TetrominoGame.MatchInProgress ) ->
+                                    let
+                                        ( model3, openCmd ) =
+                                            openTetrominoMatch time userId clientId key setup model2
+                                    in
+                                    ( model3, Command.batch [ leftCmd, openCmd ] )
+
+                                _ ->
+                                    ( model2
+                                    , Command.batch
+                                        [ leftCmd
+                                        , sendToTetrominoWatcher
+                                            key
+                                            TetrominoGame.MatchOver
+                                            ( clientId, { userId = userId, waitingForFrame = Nothing } )
+                                        ]
+                                    )
+
+                        TetrominoGame.MatchEnded ->
+                            ( model
+                            , sendToTetrominoWatcher
+                                key
+                                TetrominoGame.MatchOver
+                                ( clientId, { userId = userId, waitingForFrame = Nothing } )
+                            )
+
+                TetrominoGame.ClosedMatch ->
+                    tetrominoWatcherLeft time clientId key model
+
+                TetrominoGame.SendInput clientTime input ->
+                    case SeqDict.get clientId liveMatch.watchers of
+                        Just watcher ->
+                            if watcher.waitingForFrame == Nothing then
+                                let
+                                    action : TetrominoGame.ActionWithTime
+                                    action =
+                                        TetrominoGame.stampInput time watcher.userId clientTime input
+                                in
+                                ( { model
+                                    | tetrominoMatches =
+                                        SeqDict.insert
+                                            key
+                                            (TetrominoGame.pruneInputs
+                                                time
+                                                setup
+                                                { liveMatch | recentInputs = liveMatch.recentInputs ++ [ action ] }
+                                            )
+                                            model.tetrominoMatches
+                                  }
+                                , SeqDict.toList liveMatch.watchers
+                                    |> List.map (sendToTetrominoWatcher key (TetrominoGame.InputBroadcast action))
+                                    |> Command.batch
+                                )
+
+                            else
+                                ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                TetrominoGame.CurrentState frame bytes ->
+                    case SeqDict.get clientId liveMatch.watchers of
+                        Just sender ->
+                            if sender.waitingForFrame == Nothing then
+                                let
+                                    joined : TetrominoGame.ToFrontend
+                                    joined =
+                                        TetrominoGame.JoinedMatch
+                                            { frame = frame
+                                            , startingState = TetrominoGame.FromAnotherPlayer bytes
+                                            , inputs = liveMatch.recentInputs
+                                            , serverTime = time
+                                            }
+                                in
+                                ( { model
+                                    | tetrominoMatches =
+                                        SeqDict.insert
+                                            key
+                                            (TetrominoGame.pruneInputs
+                                                time
+                                                setup
+                                                { liveMatch
+                                                    | watchers =
+                                                        SeqDict.map
+                                                            (\_ watcher ->
+                                                                if watcher.waitingForFrame == Just frame then
+                                                                    { watcher | waitingForFrame = Nothing }
+
+                                                                else
+                                                                    watcher
+                                                            )
+                                                            liveMatch.watchers
+                                                }
+                                            )
+                                            model.tetrominoMatches
+                                  }
+                                , SeqDict.toList liveMatch.watchers
+                                    |> List.filter (\( _, watcher ) -> watcher.waitingForFrame == Just frame)
+                                    |> List.map (sendToTetrominoWatcher key joined)
+                                    |> Command.batch
+                                )
+
+                            else
+                                ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+{-| Someone has opened a match. If anyone else has it, they're asked for its state as of the
+latest frame no input can still arrive for. Otherwise nobody has played it yet and it starts here.
+-}
+openTetrominoMatch :
+    Time.Posix
+    -> Id UserId
+    -> ClientId
+    -> ( GuildOrFullDmId, Id ChannelMessageId )
+    -> TetrominoGame.ValidatedSetup
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+openTetrominoMatch time userId clientId key setup model =
+    let
+        liveMatch : TetrominoGame.LiveMatch
+        liveMatch =
+            SeqDict.get key model.tetrominoMatches |> Maybe.withDefault TetrominoGame.initLiveMatch
+
+        frame : Int
+        frame =
+            TetrominoGame.snapshotFrame time setup
+
+        haveTheMatch : List ( ClientId, TetrominoGame.Watcher )
+        haveTheMatch =
+            SeqDict.toList liveMatch.watchers |> List.filter (\( _, watcher ) -> watcher.waitingForFrame == Nothing)
+    in
+    case haveTheMatch of
+        [] ->
+            let
+                watchers : SeqDict ClientId TetrominoGame.Watcher
+                watchers =
+                    SeqDict.insert clientId { userId = userId, waitingForFrame = Nothing } liveMatch.watchers
+                        |> SeqDict.map (\_ watcher -> { watcher | waitingForFrame = Nothing })
+
+                joined : TetrominoGame.ToFrontend
+                joined =
+                    TetrominoGame.JoinedMatch
+                        { frame = frame
+                        , startingState = TetrominoGame.FreshMatch
+                        , inputs = []
+                        , serverTime = time
+                        }
+            in
+            ( { model
+                | tetrominoMatches =
+                    SeqDict.insert key { watchers = watchers, recentInputs = [] } model.tetrominoMatches
+              }
+            , SeqDict.toList watchers |> List.map (sendToTetrominoWatcher key joined) |> Command.batch
             )
 
-        TetrominoGame.Action action ->
-            case
-                ( TetrominoGame.isValidAction time session.userId action
-                , SeqDict.get matchId channel.games
-                )
-            of
-                ( Just action2, Just (Game.GameData_TetrominoGame setup actions) ) ->
+        _ ->
+            ( { model
+                | tetrominoMatches =
+                    SeqDict.insert
+                        key
+                        (TetrominoGame.pruneInputs
+                            time
+                            setup
+                            { liveMatch
+                                | watchers =
+                                    SeqDict.insert
+                                        clientId
+                                        { userId = userId, waitingForFrame = Just frame }
+                                        liveMatch.watchers
+                            }
+                        )
+                        model.tetrominoMatches
+              }
+            , List.map (sendToTetrominoWatcher key (TetrominoGame.StateRequest frame)) haveTheMatch
+                |> Command.batch
+            )
+
+
+{-| A client has closed a match or disconnected. If nobody left has the match, it's over.
+Otherwise, if that was the last of this user's clients with it open, their player leaves it.
+-}
+tetrominoWatcherLeft :
+    Time.Posix
+    -> ClientId
+    -> ( GuildOrFullDmId, Id ChannelMessageId )
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+tetrominoWatcherLeft time clientId key model =
+    case ( SeqDict.get key model.tetrominoMatches, tetrominoSetup key model ) of
+        ( Just liveMatch, Just ( setup, _ ) ) ->
+            case SeqDict.get clientId liveMatch.watchers of
+                Just leaving ->
                     let
-                        localMsg2 : Game.LocalChange
-                        localMsg2 =
-                            Game.LocalChange_TetrominoGame matchId (TetrominoGame.Action action2)
-
-                        model2 : BackendModel
-                        model2 =
-                            setChannel
-                                { channel
-                                    | games =
-                                        SeqDict.insert
-                                            matchId
-                                            (Game.GameData_TetrominoGame setup (Array.push action2 actions))
-                                            channel.games
-                                }
-                                model
+                        watchers : List ( ClientId, TetrominoGame.Watcher )
+                        watchers =
+                            SeqDict.remove clientId liveMatch.watchers |> SeqDict.toList
                     in
-                    ( model2
-                    , Command.batch
-                        [ Local_Game guildOrDmId localMsg2
-                            |> LocalChangeResponse changeId
-                            |> Lamdera.sendToFrontend clientId
-                        , broadcast localMsg2 model2
-                        ]
-                    )
+                    if List.any (\( _, watcher ) -> watcher.waitingForFrame == Nothing) watchers then
+                        if List.any (\( _, watcher ) -> watcher.userId == leaving.userId) watchers then
+                            ( { model
+                                | tetrominoMatches =
+                                    SeqDict.insert
+                                        key
+                                        { liveMatch | watchers = SeqDict.remove clientId liveMatch.watchers }
+                                        model.tetrominoMatches
+                              }
+                            , Command.none
+                            )
 
-                _ ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        else
+                            let
+                                leave : TetrominoGame.ActionWithTime
+                                leave =
+                                    { userId = leaving.userId, time = time, input = TetrominoSim.Leave }
+                            in
+                            ( { model
+                                | tetrominoMatches =
+                                    SeqDict.insert
+                                        key
+                                        (TetrominoGame.pruneInputs
+                                            time
+                                            setup
+                                            { watchers = SeqDict.remove clientId liveMatch.watchers
+                                            , recentInputs = liveMatch.recentInputs ++ [ leave ]
+                                            }
+                                        )
+                                        model.tetrominoMatches
+                              }
+                            , List.map (sendToTetrominoWatcher key (TetrominoGame.InputBroadcast leave)) watchers
+                                |> Command.batch
+                            )
+
+                    else
+                        ( endTetrominoMatch key model
+                        , List.map (sendToTetrominoWatcher key TetrominoGame.MatchOver) watchers |> Command.batch
+                        )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+endTetrominoMatch : ( GuildOrFullDmId, Id ChannelMessageId ) -> BackendModel -> BackendModel
+endTetrominoMatch ( location, matchId ) model =
+    let
+        endMatch : { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData } -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
+        endMatch channel =
+            { channel
+                | games =
+                    SeqDict.updateIfExists
+                        matchId
+                        (\gameData ->
+                            case gameData of
+                                Game.GameData_TetrominoGame setup _ ->
+                                    Game.GameData_TetrominoGame setup TetrominoGame.MatchEnded
+
+                                Game.GameData_Go _ _ ->
+                                    gameData
+
+                                Game.GameData_WordSpellingGame _ _ _ ->
+                                    gameData
+
+                                Game.GameData_SheepGame _ _ _ ->
+                                    gameData
+                        )
+                        channel.games
+            }
+
+        model2 : BackendModel
+        model2 =
+            { model | tetrominoMatches = SeqDict.remove ( location, matchId ) model.tetrominoMatches }
+    in
+    case location of
+        GuildOrFullDmId_Guild guildId channelId ->
+            { model2
+                | guilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild -> { guild | channels = SeqDict.updateIfExists channelId endMatch guild.channels })
+                        model2.guilds
+            }
+
+        GuildOrFullDmId_Dm dmChannelId ->
+            { model2 | dmChannels = SeqDict.updateIfExists dmChannelId endMatch model2.dmChannels }
+
+
+sendToTetrominoWatcher :
+    ( GuildOrFullDmId, Id ChannelMessageId )
+    -> TetrominoGame.ToFrontend
+    -> ( ClientId, TetrominoGame.Watcher )
+    -> Command BackendOnly ToFrontend BackendMsg
+sendToTetrominoWatcher ( location, matchId ) msg ( clientId, watcher ) =
+    case location of
+        GuildOrFullDmId_Guild guildId channelId ->
+            TetrominoToFrontend (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }) matchId msg
+                |> Lamdera.sendToFrontend clientId
+
+        GuildOrFullDmId_Dm dmChannelId ->
+            case DmChannelId.otherUserId watcher.userId dmChannelId of
+                Just otherUserId ->
+                    TetrominoToFrontend (GuildOrDmId_Dm { otherUserId = otherUserId }) matchId msg
+                        |> Lamdera.sendToFrontend clientId
+
+                Nothing ->
+                    Command.none
 
 
 handleWordSpellingGame :
