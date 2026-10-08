@@ -97,6 +97,7 @@ loginTests isMobile normalConfig =
                         case List.filterMap (E2EHelper.isLoginEmail E2EHelper.adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ client.input 100 LoginForm.loginCodeInputId "12345678"
+                                , E2EHelper.selectionEvent client 100 LoginForm.loginCodeInputId { start = 8, end = 8 }
                                 , client.snapshotView 100 { name = "invalid code" }
                                 , client.input 100 LoginForm.loginCodeInputId (String.fromInt loginCode)
                                 , client.snapshotView 100 { name = "logged in" }

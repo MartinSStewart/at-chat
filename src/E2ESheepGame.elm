@@ -766,6 +766,7 @@ mobileHostMatchTest normalConfig =
                 [ -- Everything the host does from here on happens at phone size, while the
                   -- three playing along stay on desktop.
                   admin.resizeWindow 0 E2EHelper.iphone14Window
+                , E2EHelper.setIphone14SafeAreaInsets admin
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
 

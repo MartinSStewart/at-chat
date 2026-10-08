@@ -20,8 +20,9 @@ fromString text =
         Just nonempty ->
             if String.Nonempty.length nonempty > maxLength then
                 Err "Too long"
-                --else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}' || char == ' ') nonempty then
-                --    Err "Name can't contain line breaks or whitespace"
+
+            else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}') nonempty then
+                Err "Name can't contain line breaks"
 
             else
                 ChannelName nonempty |> Ok
@@ -32,7 +33,7 @@ fromString text =
 
 w3_validate_ChannelName : ChannelName -> Result String ()
 w3_validate_ChannelName (ChannelName text) =
-    fromString (String.Nonempty.toString text) |> Result.map (\_ -> ())
+    fromString (String.Nonempty.toString text) |> Result.map (\_ -> ()) |> Result.mapError (\error -> error ++ " " ++ String.Nonempty.toString text)
 
 
 fromStringLossy : String -> ChannelName

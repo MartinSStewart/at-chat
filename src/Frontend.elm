@@ -397,6 +397,9 @@ subscriptions _ model =
                                     MessageHover _ _ ->
                                         Subscription.none
 
+                                    ReactionPopup _ _ _ ->
+                                        Subscription.none
+
                                     MessageMenu messageMenuExtraOptions ->
                                         case messageMenuExtraOptions.mobileMode of
                                             MessageMenuClosing _ _ ->
@@ -1427,6 +1430,9 @@ updateLoaded msg model =
                         MessageHover guildOrDmId threadRoute ->
                             MessageMenu.close model loggedIn
                                 |> toggleReactionEmoji emoji guildOrDmId threadRoute model
+
+                        ReactionPopup _ _ _ ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -1705,7 +1711,7 @@ updateLoaded msg model =
             ( { model | startupData = { startupData | notificationPermission = notificationPermission } }, Command.none )
 
         TouchStart timeStamp touches ->
-            touchStart Nothing Nothing Nothing (Duration.addTo model.startupData.timeOrigin timeStamp) touches model
+            touchStart Nothing Nothing Nothing Nothing (Duration.addTo model.startupData.timeOrigin timeStamp) touches model
 
         TouchMoved timeStamp newTouches ->
             let
@@ -2089,22 +2095,27 @@ updateLoaded msg model =
                 )
                 model
 
-        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl ->
+        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl maybeReactionIndex ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
                         FrontendExtra.updateLoggedIn
                             (\loggedIn ->
-                                ( handleAltPressedMessage
-                                    guildOrDmId
-                                    threadRoute
-                                    isThreadStarter
-                                    maybeImageUrl
-                                    maybeLinkUrl
-                                    Coord.origin
-                                    loggedIn
-                                    (Local.model loggedIn.localState)
-                                    model
+                                ( case maybeReactionIndex of
+                                    Just reactionIndex ->
+                                        { loggedIn | messageHover = ReactionPopup guildOrDmId threadRoute reactionIndex }
+
+                                    Nothing ->
+                                        handleAltPressedMessage
+                                            guildOrDmId
+                                            threadRoute
+                                            isThreadStarter
+                                            maybeImageUrl
+                                            maybeLinkUrl
+                                            Coord.origin
+                                            loggedIn
+                                            (Local.model loggedIn.localState)
+                                            model
                                 , Ports.hapticFeedback
                                 )
                             )
@@ -2129,6 +2140,9 @@ updateLoaded msg model =
                                     loggedIn.messageHover
 
                                 MessageHover _ _ ->
+                                    loggedIn.messageHover
+
+                                ReactionPopup _ _ _ ->
                                     loggedIn.messageHover
 
                                 MessageMenu messageMenu ->
@@ -2589,28 +2603,35 @@ updateLoaded msg model =
                 MessageView.MessageView_MouseExitedMessage ->
                     handleMouseExitedMessage guildOrDmId threadRoute model
 
-                MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl touches ->
+                MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl maybeReactionIndex touches ->
                     touchStart
                         (Just ( guildOrDmId, threadRoute, isThreadStarter ))
                         maybeImageUrl
                         maybeLinkUrl
+                        maybeReactionIndex
                         (Duration.addTo model.startupData.timeOrigin timeStamp)
                         touches
                         model
 
-                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl maybeReactionIndex clickedAt ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            ( handleAltPressedMessage
-                                guildOrDmId
-                                threadRoute
-                                isThreadStarter
-                                maybeImageUrl
-                                maybeLinkUrl
-                                clickedAt
-                                loggedIn
-                                (Local.model loggedIn.localState)
-                                model
+                            ( case ( maybeReactionIndex, MyUi.isMobile model, model.drag ) of
+                                -- A long press on Android opens the context menu as well
+                                ( Just reactionIndex, True, DragStart _ _ ) ->
+                                    { loggedIn | messageHover = ReactionPopup guildOrDmId threadRoute reactionIndex }
+
+                                _ ->
+                                    handleAltPressedMessage
+                                        guildOrDmId
+                                        threadRoute
+                                        isThreadStarter
+                                        maybeImageUrl
+                                        maybeLinkUrl
+                                        clickedAt
+                                        loggedIn
+                                        (Local.model loggedIn.localState)
+                                        model
                             , Command.none
                             )
                         )
@@ -2619,22 +2640,30 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_RemoveReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                loggedIn
-                                Command.none
+                            if isReleasingReactionLongPress guildOrDmId threadRoute loggedIn then
+                                ( loggedIn, Command.none )
+
+                            else
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_RemoveReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                    loggedIn
+                                    Command.none
                         )
                         model
 
                 MessageView.MessageView_PressedReactionEmoji_Add emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                loggedIn
-                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
+                            if isReleasingReactionLongPress guildOrDmId threadRoute loggedIn then
+                                ( loggedIn, Command.none )
+
+                            else
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                    loggedIn
+                                    (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
                         )
                         model
 
@@ -4201,6 +4230,9 @@ updateLoaded msg model =
                                                                 loggedIn2.messageHover
 
                                                             MessageHover _ _ ->
+                                                                loggedIn2.messageHover
+
+                                                            ReactionPopup _ _ _ ->
                                                                 loggedIn2.messageHover
 
                                                             MessageMenu extraOptions ->
@@ -5796,10 +5828,10 @@ updateLoaded msg model =
                 MessageView.MessageView_MouseExitedMessage ->
                     handleMouseExitedMessage guildOrDmId (NoThreadWithMessage messageId) model
 
-                MessageView.MessageView_TouchStart _ _ _ _ _ ->
+                MessageView.MessageView_TouchStart _ _ _ _ _ _ ->
                     ( model, Command.none )
 
-                MessageView.MessageView_AltPressedMessage _ _ _ _ ->
+                MessageView.MessageView_AltPressedMessage _ _ _ _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
@@ -5964,10 +5996,10 @@ updateLoaded msg model =
                 MessageView.MessageView_MouseExitedMessage ->
                     handleMouseExitedMessage guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
-                MessageView.MessageView_TouchStart _ _ _ _ _ ->
+                MessageView.MessageView_TouchStart _ _ _ _ _ _ ->
                     ( model, Command.none )
 
-                MessageView.MessageView_AltPressedMessage _ _ _ _ ->
+                MessageView.MessageView_AltPressedMessage _ _ _ _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
@@ -7490,6 +7522,9 @@ pressedEditMessage guildOrDmId threadRoute model =
                                     MessageHover _ _ ->
                                         loggedIn2.messageHover
 
+                                    ReactionPopup _ _ _ ->
+                                        loggedIn2.messageHover
+
                                     MessageMenu extraOptions ->
                                         { extraOptions
                                             | mobileMode =
@@ -7614,18 +7649,24 @@ touchStart :
     Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )
     -> Maybe String
     -> Maybe String
+    -> Maybe Int
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touches model =
-    case model.drag of
+touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl maybeReactionIndex time touches model =
+    let
+        model2 : LoadedFrontend
+        model2 =
+            hideReactionPopup model
+    in
+    case model2.drag of
         NoDrag ->
             if isTouchingTextInput touches then
-                ( model, Command.none )
+                ( model2, Command.none )
 
             else
-                ( { model | drag = DragStart time touches, dragPrevious = model.drag }
+                ( { model2 | drag = DragStart time touches, dragPrevious = model2.drag }
                 , Command.batch
                     [ case NonemptyDict.toList touches of
                         [ _ ] ->
@@ -7633,7 +7674,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
                                 Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                                     Process.sleep (Duration.seconds 0.5)
                                         |> Task.perform
-                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl)
+                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl maybeReactionIndex)
 
                                 Nothing ->
                                     Command.none
@@ -7641,7 +7682,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
                         _ ->
                             Command.none
                     , -- This is so the virtual keyboard gets hidden when we start dragging the channel sidebar
-                      case ( model.loginStatus, MyUi.isMobile model ) of
+                      case ( model2.loginStatus, MyUi.isMobile model2 ) of
                         ( LoggedIn loggedIn, True ) ->
                             case loggedIn.textInputFocus of
                                 Just textInputFocus ->
@@ -7656,10 +7697,53 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
                 )
 
         DragStart _ _ ->
-            ( model, Command.none )
+            ( model2, Command.none )
 
         Dragging _ ->
-            ( model, Command.none )
+            ( model2, Command.none )
+
+
+{-| A long pressed reaction's popup stays up after the finger lifts, so that it can be read,
+until the next touch anywhere.
+-}
+hideReactionPopup : LoadedFrontend -> LoadedFrontend
+hideReactionPopup model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case loggedIn.messageHover of
+                ReactionPopup _ _ _ ->
+                    { model | loginStatus = LoggedIn { loggedIn | messageHover = NoMessageHover } }
+
+                NoMessageHover ->
+                    model
+
+                MessageHover _ _ ->
+                    model
+
+                MessageMenu _ ->
+                    model
+
+        NotLoggedIn _ ->
+            model
+
+
+{-| Lifting the finger off a long pressed reaction can count as pressing it, which would
+toggle the reaction when all that was wanted was to see who reacted.
+-}
+isReleasingReactionLongPress : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> Bool
+isReleasingReactionLongPress guildOrDmId threadRoute loggedIn =
+    case loggedIn.messageHover of
+        ReactionPopup guildOrDmIdA threadRouteA _ ->
+            guildOrDmId == guildOrDmIdA && threadRoute == threadRouteA
+
+        NoMessageHover ->
+            False
+
+        MessageHover _ _ ->
+            False
+
+        MessageMenu _ ->
+            False
 
 
 handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
@@ -7762,6 +7846,9 @@ handleTouchEnd time model =
                                 loggedIn2
 
                             MessageHover _ _ ->
+                                loggedIn2
+
+                            ReactionPopup _ _ _ ->
                                 loggedIn2
                         )
             in

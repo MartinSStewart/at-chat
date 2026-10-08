@@ -666,6 +666,26 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
                                                             )
                                                         ]
 
+                                                    else if range.start == range.end && range.start == codeLength && index == codeLength - 1 then
+                                                        [ Ui.background MyUi.inputBackground
+                                                        , Ui.inFront
+                                                            (Ui.el
+                                                                [ Ui.paddingXY 4 0
+                                                                , Ui.height Ui.fill
+                                                                , Ui.alignRight
+                                                                , MyUi.noPointerEvents
+                                                                ]
+                                                                (Ui.el
+                                                                    [ Ui.height Ui.fill
+                                                                    , Ui.background MyUi.white
+                                                                    , Ui.borderWith { left = 2, right = 0, top = 0, bottom = 0 }
+                                                                    , cursorBlinking
+                                                                    ]
+                                                                    Ui.none
+                                                                )
+                                                            )
+                                                        ]
+
                                                     else if range.start <= index && index < range.end then
                                                         [ Ui.background MyUi.selectedTextBackground ]
 
@@ -694,7 +714,14 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
             , Ui.htmlAttribute (Html.Attributes.attribute "inputmode" "numeric")
             , Ui.htmlAttribute (Html.Attributes.attribute "autocomplete" "one-time-code")
             , Ui.border 0
-            , Ui.opacity 0
+
+            -- iOS Safari hides the paste menu on inputs with opacity below 0.01, so the text is made transparent instead
+            , Ui.background (Ui.rgba 0 0 0 0)
+            , Ui.Font.color (Ui.rgba 0 0 0 0)
+            , Ui.htmlAttribute (Html.Attributes.style "-webkit-text-fill-color" "transparent")
+            , Ui.htmlAttribute (Html.Attributes.style "caret-color" "transparent")
+            , Ui.htmlAttribute (Html.Attributes.style "outline" "none")
+            , Ui.htmlAttribute (Html.Attributes.class "rich-text-input")
             ]
             { onChange = onInput
             , text = loginCode

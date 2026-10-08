@@ -98,6 +98,7 @@ module E2EHelper exposing
     , sessionId2
     , sessionId4
     , sessionIdAttacker
+    , setIphone14SafeAreaInsets
     , startTest
     , startTime
     , startupDataJson
@@ -400,6 +401,18 @@ tallDesktopWindow =
 iphone14Window : { width : number, height : number }
 iphone14Window =
     { width = 393, height = 852 }
+
+
+{-| The insets an iPhone 14 reports for the notch and home indicator when at-chat runs as an installed app, sent the way stuff.js sends them after a resize.
+-}
+setIphone14SafeAreaInsets :
+    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+setIphone14SafeAreaInsets client =
+    client.portEvent
+        0
+        "safe_area_insets_from_js"
+        (Json.Encode.object [ ( "top", Json.Encode.int 47 ), ( "bottom", Json.Encode.int 34 ) ])
 
 
 parseLoginCode : Parser.Parser Int

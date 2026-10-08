@@ -340,7 +340,15 @@ dmCallTest isMobile normalConfig =
                     expectedThumbnailX =
                         clamp 0 1 (1 - dragDistanceX / availableWidth)
                 in
-                [ T.collapsableGroup
+                [ if isMobile then
+                    T.group
+                        [ E2EHelper.setIphone14SafeAreaInsets admin
+                        , E2EHelper.setIphone14SafeAreaInsets user
+                        ]
+
+                  else
+                    T.group []
+                , T.collapsableGroup
                     "Voice chat"
                     [ E2EHelper.openDm admin 100 "2"
                     , E2EHelper.openDm user 100 "0"

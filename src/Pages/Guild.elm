@@ -325,7 +325,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     [ Ui.height Ui.fill
                     , Ui.background MyUi.background1
                     , Ui.heightMin 0
-                    , Ui.clip
+                    , MyUi.unscrollable
                     , Ui.inFront memberColumn
                     , case maybeOtherUserId of
                         SelectedDmChannel dmRoute ->
@@ -1653,7 +1653,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
-                            , Ui.clip
+                            , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, isThread ) ->
                                     channelSettingsMobile
@@ -1822,7 +1822,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
-                            , Ui.clip
+                            , MyUi.unscrollable
                             , (case showMembers of
                                 ( ShowChannelSettings, _ ) ->
                                     case routeData.channelRoute of
@@ -3939,7 +3939,14 @@ messageHover guildOrDmId threadRoute loggedIn model =
             else
                 notHoveredWhileSelectingAnchor loggedIn model
 
-        _ ->
+        ReactionPopup guildOrDmIdA threadRouteA reactionIndex ->
+            if guildOrDmId == guildOrDmIdA && threadRouteA == threadRoute then
+                IsReactionLongPressed reactionIndex
+
+            else
+                notHoveredWhileSelectingAnchor loggedIn model
+
+        NoMessageHover ->
             notHoveredWhileSelectingAnchor loggedIn model
 
 
@@ -3958,7 +3965,17 @@ unreadOverviewMessageHover guildOrDmId threadRoute loggedIn =
             else
                 IsNotHovered
 
-        _ ->
+        ReactionPopup hoveredGuildOrDmId hoveredThreadRoute reactionIndex ->
+            if guildOrDmId == hoveredGuildOrDmId && threadRoute == hoveredThreadRoute then
+                IsReactionLongPressed reactionIndex
+
+            else
+                IsNotHovered
+
+        NoMessageHover ->
+            IsNotHovered
+
+        MessageMenu _ ->
             IsNotHovered
 
 
@@ -5276,6 +5293,11 @@ the container width and the current time travel as a single Int. The time is wha
 timestamps in a message count down from, rounded to the minute so that a message is only
 redrawn when that countdown would read differently. It is multiplied in rather than shifted
 in because Bitwise only reaches 32 bits.
+
+A long pressed reaction is told apart by its index, so the hover state takes the top seven
+bits below the time. A message with more reactions than fit there doesn't bring up the
+popup for the ones past that.
+
 -}
 encodeMessageView : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Time.Posix -> Int
 encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight time =
@@ -5287,6 +5309,30 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
     )
         + Bitwise.shiftLeftBy
             1
+            (case highlight of
+                NoHighlight ->
+                    0
+
+                ReplyToHighlight ->
+                    1
+
+                MentionHighlight ->
+                    2
+
+                UrlHighlight ->
+                    3
+            )
+        + Bitwise.shiftLeftBy
+            3
+            (if isMobile then
+                1
+
+             else
+                0
+            )
+        + Bitwise.shiftLeftBy 4 containerWidth
+        + Bitwise.shiftLeftBy
+            20
             (case isHovered of
                 IsNotHovered ->
                     0
@@ -5302,41 +5348,25 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
 
                 IsHoveredReactionsOnly ->
                     4
+
+                IsReactionLongPressed reactionIndex ->
+                    if reactionIndex > Message.maxReactionEmojis then
+                        0
+
+                    else
+                        5 + reactionIndex
             )
-        + Bitwise.shiftLeftBy
-            4
-            (case highlight of
-                NoHighlight ->
-                    0
-
-                ReplyToHighlight ->
-                    1
-
-                MentionHighlight ->
-                    2
-
-                UrlHighlight ->
-                    3
-            )
-        + Bitwise.shiftLeftBy
-            6
-            (if isMobile then
-                1
-
-             else
-                0
-            )
-        + Bitwise.shiftLeftBy 7 containerWidth
         + (Time.posixToMillis time // msInMinute * timePackingOffset)
 
 
-{-| Where the time starts in the Int `encodeMessageView` packs. The flags take the bottom
-seven bits and the container width sits above them, so this leaves room for a container up to
-65535px wide, and the whole packed number stays well inside the range integers are exact in.
+{-| Where the time starts in the Int `encodeMessageView` packs. The flags and container width
+take the bottom twenty bits, which leaves room for a container up to 65535px wide, and the
+hover state the seven above them. The whole packed number stays inside the range integers are
+exact in until the year 2097.
 -}
 timePackingOffset : Int
 timePackingOffset =
-    2 ^ 23
+    2 ^ 27
 
 
 msInMinute : Int
@@ -5361,8 +5391,26 @@ decodeMessageView packed =
             modBy timePackingOffset packed
     in
     { isEditing = Bitwise.and 0x01 value == 1
+    , highlight =
+        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
+            1 ->
+                ReplyToHighlight
+
+            2 ->
+                MentionHighlight
+
+            3 ->
+                UrlHighlight
+
+            _ ->
+                NoHighlight
+    , isMobile = Bitwise.shiftRightBy 3 value |> Bitwise.and 0x01 |> (==) 1
+    , containerWidth = Bitwise.shiftRightBy 4 value |> Bitwise.and 0xFFFF
     , isHovered =
-        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x07 of
+        case Bitwise.shiftRightBy 20 value of
+            0 ->
+                IsNotHovered
+
             1 ->
                 IsHovered
 
@@ -5375,23 +5423,8 @@ decodeMessageView packed =
             4 ->
                 IsHoveredReactionsOnly
 
-            _ ->
-                IsNotHovered
-    , highlight =
-        case Bitwise.shiftRightBy 4 value |> Bitwise.and 0x03 of
-            1 ->
-                ReplyToHighlight
-
-            2 ->
-                MentionHighlight
-
-            3 ->
-                UrlHighlight
-
-            _ ->
-                NoHighlight
-    , isMobile = Bitwise.shiftRightBy 6 value |> Bitwise.and 0x01 |> (==) 1
-    , containerWidth = Bitwise.shiftRightBy 7 value
+            hover ->
+                IsReactionLongPressed (hover - 5)
     , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
     }
 
@@ -7283,6 +7316,7 @@ type IsHovered
     | IsHoveredButNoMenu
     | IsHoveredReactionsOnly
     | IsHoveredWhileSelectingAnchor
+    | IsReactionLongPressed Int
 
 
 messageViewNotThreadStarter :
@@ -8516,6 +8550,9 @@ reactionsHover isHovered =
         IsHoveredWhileSelectingAnchor ->
             MessageView.ReactionsNotHovered
 
+        IsReactionLongPressed reactionIndex ->
+            MessageView.ReactionLongPressed reactionIndex
+
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
 isHoveredToAnimationMode isHovered =
@@ -8534,6 +8571,9 @@ isHoveredToAnimationMode isHovered =
 
         IsHoveredWhileSelectingAnchor ->
             Sticker.ResetAndLoopAFewTimes
+
+        IsReactionLongPressed _ ->
+            Sticker.LoopAFewTimesOnLoad
 
 
 profileImageButtonId : Id messageId -> HtmlId
@@ -8690,6 +8730,9 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                     True
 
                                 IsHoveredWhileSelectingAnchor ->
+                                    False
+
+                                IsReactionLongPressed _ ->
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedChannelMention
@@ -8867,6 +8910,9 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                     True
 
                                 IsHoveredWhileSelectingAnchor ->
+                                    False
+
+                                IsReactionLongPressed _ ->
                                     False
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedDiscordChannelMention
@@ -9328,13 +9374,14 @@ messagePaddingX =
 {-| Decodes a "contextmenu" event into a message that opens the message menu.
 If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
-the menu can offer "Copy image"/"Copy image link"/"Copy link" options.
+the menu can offer "Copy image"/"Copy image link"/"Copy link" options. A long press
+on a phone's reaction (exposed via "data-reaction-index") brings up who reacted instead.
 -}
 decodeMessageContextMenu : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
 decodeMessageContextMenu isThreadStarter =
     Json.Decode.map3
         (\x y target ->
-            ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl (Coord.xy (round x) (round y))
+            ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl target.reactionIndex (Coord.xy (round x) (round y))
             , True
             )
         )
@@ -9343,7 +9390,7 @@ decodeMessageContextMenu isThreadStarter =
         decodeEventTarget
 
 
-{-| Reads the "data-image-url"/"data-link-url" off the event's target (walking up
+{-| Reads the "data-image-url"/"data-link-url"/"data-reaction-index" off the event's target (walking up
 its ancestors). Falls back to no urls when there is no target (e.g. in tests).
 -}
 decodeEventTarget : Json.Decode.Decoder ContextMenuTarget
@@ -9355,16 +9402,16 @@ decodeEventTarget =
 
 
 type alias ContextMenuTarget =
-    { imageUrl : Maybe String, linkUrl : Maybe String }
+    { imageUrl : Maybe String, linkUrl : Maybe String, reactionIndex : Maybe Int }
 
 
 emptyContextMenuTarget : ContextMenuTarget
 emptyContextMenuTarget =
-    { imageUrl = Nothing, linkUrl = Nothing }
+    { imageUrl = Nothing, linkUrl = Nothing, reactionIndex = Nothing }
 
 
 {-| Walks up from the event target through its ancestors looking for the nearest
-"data-image-url"/"data-link-url" attributes. We have to climb the tree because
+"data-image-url"/"data-link-url"/"data-reaction-index" attributes. We have to climb the tree because
 the element actually under the cursor is often a descendant of the one carrying
 the attribute (e.g. the <canvas>/<img> that an animated-image-player web
 component appends inside itself, or the favicon/label inside a link).
@@ -9375,11 +9422,15 @@ decodeContextMenuTarget depth =
         (\here parent ->
             { imageUrl = orElseMaybe here.imageUrl parent.imageUrl
             , linkUrl = orElseMaybe here.linkUrl parent.linkUrl
+            , reactionIndex = orElseMaybe here.reactionIndex parent.reactionIndex
             }
         )
-        (Json.Decode.map2 ContextMenuTarget
+        (Json.Decode.map3 ContextMenuTarget
             (Json.Decode.maybe (Json.Decode.at [ "dataset", "imageUrl" ] Json.Decode.string))
             (Json.Decode.maybe (Json.Decode.at [ "dataset", "linkUrl" ] Json.Decode.string))
+            (Json.Decode.maybe (Json.Decode.at [ "dataset", "reactionIndex" ] Json.Decode.string)
+                |> Json.Decode.map (Maybe.andThen String.toInt)
+            )
         )
         (if depth <= 0 then
             Json.Decode.succeed emptyContextMenuTarget
@@ -9436,10 +9487,10 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
          , Ui.Events.on
             "touchstart"
             (Json.Decode.map2
-                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.reactionIndex)
                 (Touch.decodeTouchEvent
-                    (\time touches imageUrl linkUrl ->
-                        MessageView_TouchStart time isThreadStarter imageUrl linkUrl touches
+                    (\time touches imageUrl linkUrl reactionIndex ->
+                        MessageView_TouchStart time isThreadStarter imageUrl linkUrl reactionIndex touches
                     )
                 )
                 decodeEventTarget
@@ -9477,6 +9528,9 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsReactionLongPressed _ ->
                         [ Ui.behindContent Ui.none ]
                )
             ++ [ highlightLayer highlight ]
@@ -9522,10 +9576,10 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
          , Ui.Events.on
             "touchstart"
             (Json.Decode.map2
-                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.reactionIndex)
                 (Touch.decodeTouchEvent
-                    (\time touches imageUrl linkUrl ->
-                        MessageView_TouchStart time False imageUrl linkUrl touches
+                    (\time touches imageUrl linkUrl reactionIndex ->
+                        MessageView_TouchStart time False imageUrl linkUrl reactionIndex touches
                     )
                 )
                 decodeEventTarget
@@ -9563,6 +9617,9 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsReactionLongPressed _ ->
                         [ Ui.behindContent Ui.none ]
                )
             ++ [ highlightLayer highlight ]

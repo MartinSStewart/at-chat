@@ -2812,6 +2812,7 @@
             "position": 0,
             "permission_overwrites": [],
             "name": "general",
+            "last_pin_timestamp": null,
             "last_message_id": "1490640499013320814",
             "id": "213136010802888706",
             "flags": 0

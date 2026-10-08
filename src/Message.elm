@@ -24,6 +24,7 @@ module Message exposing
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
+    , maxReactionEmojis
     , maybeToReply
     , mentionsChannel
     , noDrawings
@@ -970,7 +971,16 @@ addReactionEmoji userId emoji message =
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 addReactionEmojiHelper userId emoji reactions =
-    SeqDictHelper.addToSet emoji userId reactions
+    if SeqDict.size reactions > maxReactionEmojis then
+        reactions
+
+    else
+        SeqDictHelper.addToSet emoji userId reactions
+
+
+maxReactionEmojis : number
+maxReactionEmojis =
+    100
 
 
 removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId channelId -> Message messageId userId channelId

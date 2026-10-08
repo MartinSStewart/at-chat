@@ -102,6 +102,7 @@ module MyUi exposing
     , timeElapsedView
     , timestamp
     , touchPress
+    , unscrollable
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
@@ -1411,6 +1412,11 @@ body {
   display: block;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
+/* A long press has already waited, so the popup comes straight in */
+.reaction-long-pressed .emoji-popup {
+  display: flex;
+  animation: emoji-popup-fade-in 0.2s ease forwards;
+}
 @keyframes emoji-popup-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1715,6 +1721,15 @@ canScroll isMobile2 drag =
 isMobileAlt : Coord CssPixels -> Bool
 isMobileAlt windowSize =
     Coord.xRaw windowSize < 700
+
+
+{-| Like Ui.clip, but with `overflow: clip` instead of `overflow: hidden`. An element with
+`overflow: hidden` can still be scrolled by the browser, for example to bring a focused text input
+into view, while `overflow: clip` can't be scrolled at all.
+-}
+unscrollable : Ui.Attribute msg
+unscrollable =
+    htmlStyle "overflow" "clip"
 
 
 noShrinking : Ui.Attribute msg

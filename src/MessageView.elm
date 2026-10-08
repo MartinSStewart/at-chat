@@ -40,8 +40,8 @@ type MessageViewMsg
     | MessageView_PressedImage RichText.PressedImageData
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
-    | MessageView_TouchStart Duration Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Coord CssPixels)
+    | MessageView_TouchStart Duration Bool (Maybe String) (Maybe String) (Maybe Int) (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Maybe Int) (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove EmojiOrCustomEmoji
     | MessageView_PressedReactionEmoji_Add EmojiOrCustomEmoji
     | MessageView_PressedReplyLink
@@ -83,10 +83,10 @@ isPressMsg msg =
         MessageView_MouseExitedMessage ->
             False
 
-        MessageView_TouchStart _ _ _ _ _ ->
+        MessageView_TouchStart _ _ _ _ _ _ ->
             False
 
-        MessageView_AltPressedMessage _ _ _ _ ->
+        MessageView_AltPressedMessage _ _ _ _ _ ->
             True
 
         MessageView_PressedReactionEmoji_Remove _ ->
@@ -309,6 +309,8 @@ miniButton htmlId onPress hoverText svg =
         , Ui.pointer
         , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        , MyUi.htmlStyle "user-select" "none"
+        , MyUi.htmlStyle "-webkit-user-select" "none"
         ]
         (Ui.html svg)
 
@@ -336,11 +338,13 @@ miniButtonWithPosition htmlId onPress svg =
 
 {-| Whether the popup naming who reacted with an emoji comes up when the pointer is over
 that reaction. It follows whether the thing the reactions belong to is hovered at all, so
-that somewhere showing a message without its menu doesn't bring popups up either.
+that somewhere showing a message without its menu doesn't bring popups up either. Fingers
+can't hover, so on a touch screen long pressing a reaction brings up its popup instead.
 -}
 type ReactionsHover
     = ReactionsHovered
     | ReactionsNotHovered
+    | ReactionLongPressed Int
 
 
 {-| Reaction buttons are a fixed width so that the popup above one can work out where
@@ -510,36 +514,48 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
                                 (Dom.id "guild_addReactionEmoji")
                                 (MessageView_PressedReactionEmoji_Add emoji)
                         )
-                            [ Ui.rounded 8
-                            , Ui.spacing 2
-                            , Ui.background MyUi.background1
-                            , Ui.paddingXY 4 0
-                            , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-                            , Ui.borderColor
+                            ([ Ui.rounded 8
+                             , Ui.spacing 2
+                             , Ui.background MyUi.background1
+                             , Ui.paddingXY 4 0
+                             , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                             , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
+                             , Ui.borderColor
                                 (if hasReactedTo then
                                     MyUi.highlightedBorder
 
                                  else
                                     MyUi.border1
                                 )
-                            , Ui.Font.color
+                             , Ui.Font.color
                                 (if hasReactedTo then
                                     MyUi.highlightedBorder
 
                                  else
                                     MyUi.font2
                                 )
-                            , Ui.border 1
-                            , Ui.width (Ui.px (reactionButtonWidth users))
-                            , Ui.contentCenterX
-                            , Ui.Font.weight 500
-                            , case isHovered of
-                                ReactionsHovered ->
-                                    reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                             , Ui.border 1
+                             , Ui.width (Ui.px (reactionButtonWidth users))
+                             , Ui.contentCenterX
+                             , Ui.Font.weight 500
+                             ]
+                                ++ (case isHovered of
+                                        ReactionsHovered ->
+                                            [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above ]
 
-                                ReactionsNotHovered ->
-                                    Ui.noAttr
-                            ]
+                                        ReactionsNotHovered ->
+                                            []
+
+                                        ReactionLongPressed longPressedIndex ->
+                                            if longPressedIndex == index then
+                                                [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                                                , Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
+                                                ]
+
+                                            else
+                                                []
+                                   )
+                            )
                             [ case emoji of
                                 EmojiOrCustomEmoji_Emoji emoji2 ->
                                     Emoji.view emojiData emoji2
