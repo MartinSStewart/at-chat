@@ -4,7 +4,7 @@
 //! `/file/websocket/{room_id}` passes each message on to everyone else in the
 //! same room and never back to whoever sent it.
 
-use crate::{AppState, rpc_url, session_id_from_cookie};
+use crate::{AppState, http_client, rpc_url, session_id_from_cookie};
 use axum::Extension;
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -68,7 +68,7 @@ async fn is_call_allowed(
         "roomId": room_id,
     });
 
-    match reqwest::Client::new()
+    match http_client()
         .post(rpc_url("is-call-allowed"))
         .header("Content-Type", "text/plain")
         .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
