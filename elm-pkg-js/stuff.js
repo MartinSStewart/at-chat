@@ -1466,10 +1466,33 @@ exports.init = async function init(app)
 
     });
 
+    // When the virtual keyboard opens, iOS pans the page so the focused text input sits above it.
+    // Android only does that once something is typed, so until then the input is hidden behind
+    // the keyboard. Panning it into view here as soon as the keyboard shrinks the visual
+    // viewport gives Android the same behaviour as iOS.
+    function scrollFocusedTextInputIntoView() {
+        const element = document.activeElement;
+        if (element instanceof HTMLTextAreaElement
+            || element instanceof HTMLInputElement
+            || (element instanceof HTMLElement && element.isContentEditable)) {
+            element.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+    }
+
+    const isAndroid = window.navigator.userAgent.includes('Android');
+    let previousVisualViewportHeight = window.visualViewport.height;
+
     window.visualViewport.addEventListener(
         "resize",
         () => {
-            app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
+            const height = window.visualViewport.height;
+            app.ports.visual_viewport_resized_from_js.send(height);
+            if (isAndroid && height < previousVisualViewportHeight) {
+                // Elm redraws on the next animation frame in response to the message above, so
+                // this waits until after that to measure where the input ended up.
+                requestAnimationFrame(scrollFocusedTextInputIntoView);
+            }
+            previousVisualViewportHeight = height;
         });
 
     app.ports.request_device_pixel_ratio_to_js.subscribe((a) => {
