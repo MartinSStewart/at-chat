@@ -13,6 +13,7 @@ module TetrominoSim exposing
     , Point
     , Round
     , Snowball
+    , Tower
     , canDrop
     , debrisFrames
     , entityHeight
@@ -24,6 +25,7 @@ module TetrominoSim exposing
     , isSettled
     , keepInsideGrid
     , maxPieces
+    , npcPositions
     , roundBreak
     , snowballRadius
     , step
@@ -62,7 +64,7 @@ type alias MatchState =
     , round : Round
     , players : SeqDict (Id UserId) Player
     , waitingPlayers : SeqSet (Id UserId)
-    , npcs : List Npc
+    , towers : List Tower
     , pieces : SeqDict Int Piece
     , occupied : Dict ( Int, Int, Int ) Int
     , snowballs : List Snowball
@@ -126,13 +128,23 @@ type NpcKind
     | Jumper
 
 
-type alias Npc =
-    { id : Int
-    , kind : NpcKind
-    , position : Point
+{-| NPCs that walk into each other stand on each other's heads. A tower goes wherever its bottom
+NPC would, `position` is where that one stands, and each NPC in `above` stands on the one before
+it. A lone NPC is a tower of one.
+-}
+type alias Tower =
+    { position : Point
     , velocityZ : Float
     , wanderOffset : { x : Float, y : Float }
     , nextWanderFrame : Int
+    , bottom : Npc
+    , above : List Npc
+    }
+
+
+type alias Npc =
+    { id : Int
+    , kind : NpcKind
     , nextThrowFrame : Int
     }
 
@@ -285,20 +297,6 @@ npcKeepDistance =
     3
 
 
-{-| How close NPCs come to each other before they start backing off.
--}
-npcSpacing : Float
-npcSpacing =
-    2
-
-
-{-| How hard backing off from another NPC counts against heading for a player.
--}
-npcSeparationWeight : Float
-npcSeparationWeight =
-    1.5
-
-
 {-| How far off an NPC's aim can be, in cells along each axis.
 -}
 throwSpread : Float
@@ -381,7 +379,7 @@ init seed frame =
     , round = { number = 0, startedAt = frame, nextRoundAt = Nothing }
     , players = SeqDict.empty
     , waitingPlayers = SeqSet.empty
-    , npcs = []
+    , towers = []
     , pieces = SeqDict.empty
     , occupied = Dict.empty
     , snowballs = []
@@ -500,7 +498,7 @@ step inputs state =
             updateRound state2
                 |> updatePlayers
                 |> collectPickups
-                |> updateNpcs
+                |> updateTowers
                 |> catchPlayers
                 |> spawnNpcs
                 |> spawnPickups
@@ -750,11 +748,11 @@ startRound state =
                         npcNearby : Bool
                         npcNearby =
                             List.any
-                                (\npc ->
-                                    horizontalDistance npc.position { x = toFloat column + 0.5, y = toFloat row + 0.5, z = 0 }
+                                (\tower ->
+                                    horizontalDistance tower.position { x = toFloat column + 0.5, y = toFloat row + 0.5, z = 0 }
                                         <= npcThrowRange
                                 )
-                                state.npcs
+                                state.towers
                     in
                     ( SeqDict.insert
                         userId
@@ -841,6 +839,7 @@ updatePlayers state =
                         Nothing ->
                             moveEntity
                                 playerSpeed
+                                entityHeight
                                 (Maybe.map
                                     (\( x, y ) -> { x = toFloat x + 0.5, y = toFloat y + 0.5 })
                                     player.target
@@ -852,61 +851,84 @@ updatePlayers state =
     }
 
 
-updateNpcs : MatchState -> MatchState
-updateNpcs state =
+updateTowers : MatchState -> MatchState
+updateTowers state =
     let
         alivePlayers : List Player
         alivePlayers =
             SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
 
-        ( npcs, snowballs, seed ) =
+        ( moved, seed ) =
             List.foldr
-                (\npc ( npcList, snowballList, seed2 ) ->
+                (\tower ( towerList, seed2 ) ->
                     let
-                        ( npc2, maybeSnowball, seed3 ) =
-                            updateNpc state.frame alivePlayers state.npcs state.occupied seed2 npc
+                        ( towers, seed3 ) =
+                            moveTower state.frame alivePlayers state.occupied seed2 tower
                     in
-                    ( npc2 :: npcList
-                    , case maybeSnowball of
-                        Just snowball ->
-                            snowball :: snowballList
-
-                        Nothing ->
-                            snowballList
-                    , seed3
-                    )
+                    ( towers ++ towerList, seed3 )
                 )
-                ( [], state.snowballs, state.seed )
-                state.npcs
+                ( [], state.seed )
+                state.towers
+
+        ( thrown, snowballs, seed4 ) =
+            List.foldr
+                (\tower ( towerList, snowballList, seed2 ) ->
+                    let
+                        ( tower2, newSnowballs, seed3 ) =
+                            throwFromTower state.frame alivePlayers seed2 tower
+                    in
+                    ( tower2 :: towerList, newSnowballs ++ snowballList, seed3 )
+                )
+                ( [], state.snowballs, seed )
+                moved
     in
-    { state | npcs = npcs, snowballs = snowballs, seed = seed }
+    { state | towers = mergeTowers state.occupied thrown, snowballs = snowballs, seed = seed4 }
 
 
-updateNpc : Int -> List Player -> List Npc -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
-updateNpc frame alivePlayers npcs occupied seed npc =
-    case npc.kind of
+{-| A tower walks the way its bottom NPC would on its own. It can come out of this as two towers,
+if it walked into a wall the NPCs at the top could step onto.
+-}
+moveTower : Int -> List Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+moveTower frame alivePlayers occupied seed tower =
+    case tower.bottom.kind of
         Chaser ->
-            ( moveEntityWithoutHopping
-                chaserSpeed
-                (npcStep chaserSpeed (nearestPlayerPosition npc.position alivePlayers) npcs npc)
-                occupied
-                npc
-            , Nothing
+            ( walkTowerWithoutHopping frame chaserSpeed (nearestPlayerPosition tower.position alivePlayers) occupied tower
             , seed
             )
 
         Thrower ->
-            updateThrower frame alivePlayers npcs occupied seed npc
+            let
+                ( tower2, seed2 ) =
+                    if frame >= tower.nextWanderFrame then
+                        Random.step
+                            (Random.map3
+                                (\x y delay -> { tower | wanderOffset = { x = x, y = y }, nextWanderFrame = frame + delay })
+                                (Random.float -2 2)
+                                (Random.float -2 2)
+                                (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
+                            )
+                            seed
+
+                    else
+                        ( tower, seed )
+
+                target : Maybe { x : Float, y : Float }
+                target =
+                    case nearestPlayer tower2.position alivePlayers of
+                        Just ( player, distance ) ->
+                            if distance > npcKeepDistance then
+                                Just { x = player.position.x + tower2.wanderOffset.x, y = player.position.y + tower2.wanderOffset.y }
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+            in
+            ( walkTower frame throwerSpeed target occupied tower2, seed2 )
 
         Jumper ->
-            ( moveEntity
-                jumperSpeed
-                (npcStep jumperSpeed (nearestPlayerPosition npc.position alivePlayers) npcs npc)
-                occupied
-                npc
-            , Nothing
-            , seed
-            )
+            ( walkTower frame jumperSpeed (nearestPlayerPosition tower.position alivePlayers) occupied tower, seed )
 
 
 nearestPlayerPosition : Point -> List Player -> Maybe { x : Float, y : Float }
@@ -916,197 +938,268 @@ nearestPlayerPosition position alivePlayers =
         (nearestPlayer position alivePlayers)
 
 
-updateThrower : Int -> List Player -> List Npc -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Npc -> ( Npc, Maybe Snowball, Random.Seed )
-updateThrower frame alivePlayers npcs occupied seed npc =
-    let
-        ( npc2, seed2 ) =
-            if frame >= npc.nextWanderFrame then
-                Random.step
-                    (Random.map3
-                        (\x y delay -> { npc | wanderOffset = { x = x, y = y }, nextWanderFrame = frame + delay })
-                        (Random.float -2 2)
-                        (Random.float -2 2)
-                        (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
-                    )
-                    seed
-
-            else
-                ( npc, seed )
-    in
-    case nearestPlayer npc2.position alivePlayers of
-        Just ( player, distance ) ->
-            let
-                npc3 : Npc
-                npc3 =
-                    moveEntity
-                        throwerSpeed
-                        (npcStep
-                            throwerSpeed
-                            (if distance > npcKeepDistance then
-                                Just { x = player.position.x + npc2.wanderOffset.x, y = player.position.y + npc2.wanderOffset.y }
-
-                             else
-                                Nothing
-                            )
-                            npcs
-                            npc2
-                        )
-                        occupied
-                        npc2
-            in
-            if distance <= npcThrowRange && frame >= npc3.nextThrowFrame then
-                let
-                    ( ( delay, missX, missY ), seed3 ) =
-                        Random.step
-                            (Random.map3
-                                (\a b c -> ( a, b, c ))
-                                (Random.int 100 200)
-                                (Random.float -throwSpread throwSpread)
-                                (Random.float -throwSpread throwSpread)
-                            )
-                            seed2
-
-                    lead : { x : Float, y : Float }
-                    lead =
-                        walkingLead (snowballFlightTime distance * throwLead) player
-
-                    aim : Point
-                    aim =
-                        { x = player.position.x + lead.x + missX
-                        , y = player.position.y + lead.y + missY
-                        , z = player.position.z
-                        }
-                in
-                ( { npc3 | nextThrowFrame = frame + delay }
-                , Just (throwSnowball frame npc3.position aim)
-                , seed3
-                )
-
-            else
-                ( npc3, Nothing, seed2 )
-
-        Nothing ->
-            ( moveEntity throwerSpeed (npcStep throwerSpeed Nothing npcs npc2) occupied npc2, Nothing, seed2 )
-
-
-{-| Where an NPC walks to this frame: towards its target, if it has one, and away from the nearest
-other NPC if that's too close, so that they don't all bunch up on the way to a player.
+{-| Walk a tower towards a target, hopping onto anything one block high if the whole tower has
+room to. Against a wall it can't hop, the NPCs high enough to clear it step onto it.
 -}
-npcStep : Float -> Maybe { x : Float, y : Float } -> List Npc -> Npc -> Maybe { x : Float, y : Float }
-npcStep speed maybeTarget npcs npc =
+walkTower : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Tower -> List Tower
+walkTower frame speed maybeTarget occupied tower =
     let
-        towards : { x : Float, y : Float }
-        towards =
-            case maybeTarget of
-                Just target ->
-                    unitVector (target.x - npc.position.x) (target.y - npc.position.y)
+        height : Float
+        height =
+            towerHeight tower
 
-                Nothing ->
-                    { x = 0, y = 0 }
-
-        away : { x : Float, y : Float }
-        away =
-            awayFromNearestNpc npcs npc
-
-        x : Float
-        x =
-            towards.x + npcSeparationWeight * away.x
-
-        y : Float
-        y =
-            towards.y + npcSeparationWeight * away.y
-
-        length : Float
-        length =
-            sqrt (x * x + y * y)
-    in
-    if length < 0.05 then
-        Nothing
-
-    else
-        let
-            stepLength : Float
-            stepLength =
-                min 1 length * speed * frameSeconds
-        in
-        Just { x = npc.position.x + x / length * stepLength, y = npc.position.y + y / length * stepLength }
-
-
-{-| A push away from the nearest other NPC, from nothing at `npcSpacing` apart up to 1 when on
-top of each other.
--}
-awayFromNearestNpc : List Npc -> Npc -> { x : Float, y : Float }
-awayFromNearestNpc npcs npc =
-    let
-        nearest : Maybe ( Npc, Float )
-        nearest =
-            List.foldl
-                (\other found ->
-                    if other.id == npc.id then
-                        found
+        blockedStep : Maybe Point
+        blockedStep =
+            case Maybe.andThen (\target -> stepTowards speed target tower.position) maybeTarget of
+                Just next ->
+                    if entityCollides occupied height next && not (canHop occupied height tower.position next) then
+                        Just next
 
                     else
-                        let
-                            distance : Float
-                            distance =
-                                horizontalDistance npc.position other.position
-                        in
-                        case found of
-                            Just ( _, nearestDistance ) ->
-                                if distance < nearestDistance then
-                                    Just ( other, distance )
+                        Nothing
 
-                                else
-                                    found
-
-                            Nothing ->
-                                Just ( other, distance )
-                )
-                Nothing
-                npcs
+                Nothing ->
+                    Nothing
     in
-    case nearest of
-        Just ( other, distance ) ->
-            if distance >= npcSpacing then
-                { x = 0, y = 0 }
-
-            else
-                let
-                    strength : Float
-                    strength =
-                        (npcSpacing - distance) / npcSpacing
-
-                    direction : { x : Float, y : Float }
-                    direction =
-                        if distance < 0.001 then
-                            -- Exactly on top of each other, so split them up by id.
-                            if npc.id < other.id then
-                                { x = 1, y = 0 }
-
-                            else
-                                { x = -1, y = 0 }
-
-                        else
-                            unitVector (npc.position.x - other.position.x) (npc.position.y - other.position.y)
-                in
-                { x = direction.x * strength, y = direction.y * strength }
+    case Maybe.andThen (\next -> splitAtWall frame occupied next tower) blockedStep of
+        Just ( lower, upper ) ->
+            [ moveEntity speed (towerHeight lower) maybeTarget occupied lower, upper ]
 
         Nothing ->
-            { x = 0, y = 0 }
+            [ moveEntity speed height maybeTarget occupied tower ]
 
 
-unitVector : Float -> Float -> { x : Float, y : Float }
-unitVector x y =
+{-| Like `walkTower`, except the tower never hops, so the NPCs high enough to clear anything in
+the way step onto it.
+-}
+walkTowerWithoutHopping : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Tower -> List Tower
+walkTowerWithoutHopping frame speed maybeTarget occupied tower =
     let
-        length : Float
-        length =
-            sqrt (x * x + y * y)
+        height : Float
+        height =
+            towerHeight tower
+
+        blockedStep : Maybe Point
+        blockedStep =
+            case Maybe.andThen (\target -> stepTowards speed target tower.position) maybeTarget of
+                Just next ->
+                    if entityCollides occupied height next then
+                        Just next
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
     in
-    if length < 1.0e-9 then
-        { x = 0, y = 0 }
+    case Maybe.andThen (\next -> splitAtWall frame occupied next tower) blockedStep of
+        Just ( lower, upper ) ->
+            [ moveEntityWithoutHopping speed (towerHeight lower) maybeTarget occupied lower, upper ]
+
+        Nothing ->
+            [ moveEntityWithoutHopping speed height maybeTarget occupied tower ]
+
+
+{-| The lowest NPC in a tower that fits at `next` along with everyone above it takes them all
+there, as a tower of their own. Whatever is in the way is under them, so they come down on top
+of it.
+-}
+splitAtWall : Int -> Dict ( Int, Int, Int ) Int -> Point -> Tower -> Maybe ( Tower, Tower )
+splitAtWall frame occupied next tower =
+    splitAtWallHelper frame occupied next tower [] tower.above
+
+
+splitAtWallHelper : Int -> Dict ( Int, Int, Int ) Int -> Point -> Tower -> List Npc -> List Npc -> Maybe ( Tower, Tower )
+splitAtWallHelper frame occupied next tower stayingTopFirst rest =
+    case rest of
+        npc :: higher ->
+            let
+                upper : Tower
+                upper =
+                    { position = heightInTower (List.length stayingTopFirst + 1) { next | z = tower.position.z }
+                    , velocityZ = 0
+                    , wanderOffset = { x = 0, y = 0 }
+                    , nextWanderFrame = frame
+                    , bottom = npc
+                    , above = higher
+                    }
+            in
+            if entityCollides occupied (towerHeight upper) upper.position then
+                splitAtWallHelper frame occupied next tower (npc :: stayingTopFirst) higher
+
+            else
+                Just ( { tower | above = List.reverse stayingTopFirst }, upper )
+
+        [] ->
+            Nothing
+
+
+{-| Towers that walk into each other become one, unless it wouldn't fit there.
+-}
+mergeTowers : Dict ( Int, Int, Int ) Int -> List Tower -> List Tower
+mergeTowers occupied towers =
+    case towers of
+        tower :: rest ->
+            case mergeWithFirstMet occupied tower [] rest of
+                Just ( merged, rest2 ) ->
+                    mergeTowers occupied (merged :: rest2)
+
+                Nothing ->
+                    tower :: mergeTowers occupied rest
+
+        [] ->
+            []
+
+
+mergeWithFirstMet : Dict ( Int, Int, Int ) Int -> Tower -> List Tower -> List Tower -> Maybe ( Tower, List Tower )
+mergeWithFirstMet occupied tower skipped rest =
+    case rest of
+        other :: rest2 ->
+            if towersMeet tower other then
+                let
+                    merged : Tower
+                    merged =
+                        stack tower other
+                in
+                if entityCollides occupied (towerHeight merged) merged.position then
+                    mergeWithFirstMet occupied tower (other :: skipped) rest2
+
+                else
+                    Just ( merged, List.reverse skipped ++ rest2 )
+
+            else
+                mergeWithFirstMet occupied tower (other :: skipped) rest2
+
+        [] ->
+            Nothing
+
+
+{-| Only towers standing at about the same level meet, so that NPCs who have just stepped off a
+tower onto a wall don't climb straight back on.
+-}
+towersMeet : Tower -> Tower -> Bool
+towersMeet a b =
+    (abs (a.position.x - b.position.x) < 2 * entityRadius)
+        && (abs (a.position.y - b.position.y) < 2 * entityRadius)
+        && (abs (a.position.z - b.position.z) < entityHeight / 2)
+
+
+{-| The smaller tower goes underneath, and stays where it is with the bigger one on top. Between
+two the same size, the one whose bottom NPC turned up first goes underneath.
+-}
+stack : Tower -> Tower -> Tower
+stack a b =
+    let
+        sizeA : Int
+        sizeA =
+            List.length a.above
+
+        sizeB : Int
+        sizeB =
+            List.length b.above
+    in
+    if sizeA < sizeB || (sizeA == sizeB && a.bottom.id < b.bottom.id) then
+        { a | above = a.above ++ b.bottom :: b.above }
 
     else
-        { x = x / length, y = y / length }
+        { b | above = b.above ++ a.bottom :: a.above }
+
+
+towerHeight : Tower -> Float
+towerHeight tower =
+    toFloat (List.length tower.above + 1) * entityHeight
+
+
+{-| Where the NPC this many places up a tower stands.
+-}
+heightInTower : Int -> Point -> Point
+heightInTower index position =
+    { position | z = position.z + toFloat index * entityHeight }
+
+
+{-| Every NPC in a tower, bottom first, with where it stands.
+-}
+npcPositions : Tower -> List ( Npc, Point )
+npcPositions tower =
+    List.indexedMap (\index npc -> ( npc, heightInTower index tower.position )) (tower.bottom :: tower.above)
+
+
+npcCount : List Tower -> Int
+npcCount towers =
+    List.foldl (\tower count -> count + 1 + List.length tower.above) 0 towers
+
+
+{-| Every thrower in a tower throws from wherever in it they stand.
+-}
+throwFromTower : Int -> List Player -> Random.Seed -> Tower -> ( Tower, List Snowball, Random.Seed )
+throwFromTower frame alivePlayers seed tower =
+    let
+        ( bottom, bottomSnowball, seed2 ) =
+            npcThrow frame alivePlayers tower.position tower.bottom seed
+
+        ( aboveTopFirst, snowballs, seed3 ) =
+            List.foldl
+                (\( index, npc ) ( npcList, snowballList, seed4 ) ->
+                    let
+                        ( npc2, snowball, seed5 ) =
+                            npcThrow frame alivePlayers (heightInTower index tower.position) npc seed4
+                    in
+                    ( npc2 :: npcList, snowball :: snowballList, seed5 )
+                )
+                ( [], [ bottomSnowball ], seed2 )
+                (List.indexedMap (\index npc -> ( index + 1, npc )) tower.above)
+    in
+    ( { tower | bottom = bottom, above = List.reverse aboveTopFirst }
+    , List.filterMap identity snowballs
+    , seed3
+    )
+
+
+npcThrow : Int -> List Player -> Point -> Npc -> Random.Seed -> ( Npc, Maybe Snowball, Random.Seed )
+npcThrow frame alivePlayers position npc seed =
+    case npc.kind of
+        Chaser ->
+            ( npc, Nothing, seed )
+
+        Thrower ->
+            case nearestPlayer position alivePlayers of
+                Just ( player, distance ) ->
+                    if distance <= npcThrowRange && frame >= npc.nextThrowFrame then
+                        let
+                            ( ( delay, missX, missY ), seed2 ) =
+                                Random.step
+                                    (Random.map3
+                                        (\a b c -> ( a, b, c ))
+                                        (Random.int 100 200)
+                                        (Random.float -throwSpread throwSpread)
+                                        (Random.float -throwSpread throwSpread)
+                                    )
+                                    seed
+
+                            lead : { x : Float, y : Float }
+                            lead =
+                                walkingLead (snowballFlightTime distance * throwLead) player
+
+                            aim : Point
+                            aim =
+                                { x = player.position.x + lead.x + missX
+                                , y = player.position.y + lead.y + missY
+                                , z = player.position.z
+                                }
+                        in
+                        ( { npc | nextThrowFrame = frame + delay }
+                        , Just (throwSnowball frame position aim)
+                        , seed2
+                        )
+
+                    else
+                        ( npc, Nothing, seed )
+
+                Nothing ->
+                    ( npc, Nothing, seed )
+
+        Jumper ->
+            ( npc, Nothing, seed )
 
 
 nearestPlayer : Point -> List Player -> Maybe ( Player, Float )
@@ -1209,15 +1302,27 @@ throwSnowball frame from to =
     }
 
 
-{-| Chasers and jumpers knock out any player they reach, unless that player has only just come
-into the round.
+{-| Chasers and jumpers knock out any player they reach, from anywhere in a tower, unless that
+player has only just come into the round.
 -}
 catchPlayers : MatchState -> MatchState
 catchPlayers state =
     let
-        catchers : List Npc
+        catchers : List Point
         catchers =
-            List.filter (\npc -> catchesPlayers npc.kind) state.npcs
+            List.concatMap
+                (\tower ->
+                    List.filterMap
+                        (\( npc, position ) ->
+                            if catchesPlayers npc.kind then
+                                Just position
+
+                            else
+                                Nothing
+                        )
+                        (npcPositions tower)
+                )
+                state.towers
     in
     { state
         | players =
@@ -1226,7 +1331,7 @@ catchPlayers state =
                     if
                         (player.knockedOutAt == Nothing)
                             && not (isProtected state.frame player)
-                            && List.any (\npc -> entitiesTouch npc.position player.position) catchers
+                            && List.any (\position -> entitiesTouch position player.position) catchers
                     then
                         { player | knockedOutAt = Just state.frame, target = Nothing }
 
@@ -1311,11 +1416,11 @@ spawnNpcs state =
                             _ ->
                                 ( npcSpawnDistance, roll.along )
 
-                    npcs : List Npc
-                    npcs =
+                    towers : List Tower
+                    towers =
                         case List.drop roll.playerIndex alivePlayers of
                             player :: _ ->
-                                if List.length state.npcs < npcLimit then
+                                if npcCount state.towers < npcLimit then
                                     let
                                         x : Int
                                         x =
@@ -1325,25 +1430,24 @@ spawnNpcs state =
                                         y =
                                             clamp 0 (gridSize - 1) (floor player.position.y + offsetY)
                                     in
-                                    state.npcs
-                                        ++ [ { id = state.nextId
-                                             , kind = kind
-                                             , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
+                                    state.towers
+                                        ++ [ { position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
                                              , velocityZ = 0
                                              , wanderOffset = { x = 0, y = 0 }
                                              , nextWanderFrame = state.frame
-                                             , nextThrowFrame = state.frame + 2 * framesPerSecond
+                                             , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 2 * framesPerSecond }
+                                             , above = []
                                              }
                                            ]
 
                                 else
-                                    state.npcs
+                                    state.towers
 
                             [] ->
-                                state.npcs
+                                state.towers
                 in
                 { state
-                    | npcs = npcs
+                    | towers = towers
                     , nextId = state.nextId + 1
                     , seed = seed
                     , nextNpcSpawn = Just (state.frame + npcSpawnInterval (state.frame - state.round.startedAt))
@@ -1485,8 +1589,8 @@ collectPickups state =
 
 {-| Walk towards a target, hopping onto anything one cell high, and fall under gravity.
 -}
-moveEntity : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveEntity speed maybeTarget occupied entity =
+moveEntity : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveEntity speed height maybeTarget occupied entity =
     let
         position : Point
         position =
@@ -1494,29 +1598,29 @@ moveEntity speed maybeTarget occupied entity =
 
         walked : { position : Point, couldHop : Bool }
         walked =
-            walk speed maybeTarget occupied position
+            walk speed height maybeTarget occupied position
 
         velocityZ : Float
         velocityZ =
-            if walked.couldHop && entityCollides occupied { position | z = position.z - 0.01 } then
+            if walked.couldHop && entityCollides occupied height { position | z = position.z - 0.01 } then
                 jumpVelocity
 
             else
                 fallingVelocity entity
     in
-    moveVertically occupied velocityZ walked.position entity
+    moveVertically occupied height velocityZ walked.position entity
 
 
 {-| Like `moveEntity`, except it never hops, so anything in the way stops it.
 -}
-moveEntityWithoutHopping : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveEntityWithoutHopping speed maybeTarget occupied entity =
+moveEntityWithoutHopping : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveEntityWithoutHopping speed height maybeTarget occupied entity =
     let
         walked : { position : Point, couldHop : Bool }
         walked =
-            walk speed maybeTarget occupied (unstuck occupied entity.position)
+            walk speed height maybeTarget occupied (unstuck occupied entity.position)
     in
-    moveVertically occupied (fallingVelocity entity) walked.position entity
+    moveVertically occupied height (fallingVelocity entity) walked.position entity
 
 
 {-| Something that ends up inside a block, like a player a piece landed next to, is lifted on top
@@ -1524,7 +1628,7 @@ of it.
 -}
 unstuck : Dict ( Int, Int, Int ) Int -> Point -> Point
 unstuck occupied position =
-    if entityCollides occupied position then
+    if entityCollides occupied entityHeight position then
         { position | z = toFloat (floor position.z + 1) }
 
     else
@@ -1534,51 +1638,57 @@ unstuck occupied position =
 {-| A step towards the target that doesn't go into any block, sliding along a wall if it can, and
 whether there was something in the way it could have hopped onto.
 -}
-walk : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Point -> { position : Point, couldHop : Bool }
-walk speed maybeTarget occupied position =
-    case maybeTarget of
-        Just target ->
+walk : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Point -> { position : Point, couldHop : Bool }
+walk speed height maybeTarget occupied position =
+    case Maybe.andThen (\target -> stepTowards speed target position) maybeTarget of
+        Just next ->
             let
-                dx : Float
-                dx =
-                    target.x - position.x
+                ( afterX, blockedX ) =
+                    tryMove occupied height { position | x = next.x } position
 
-                dy : Float
-                dy =
-                    target.y - position.y
-
-                distance : Float
-                distance =
-                    sqrt (dx * dx + dy * dy)
+                ( afterY, blockedY ) =
+                    tryMove occupied height { afterX | y = next.y } afterX
             in
-            if distance < 0.001 then
-                { position = position, couldHop = False }
-
-            else
-                let
-                    ( nextX, nextY ) =
-                        if distance <= speed * frameSeconds then
-                            ( target.x, target.y )
-
-                        else
-                            ( position.x + dx / distance * speed * frameSeconds
-                            , position.y + dy / distance * speed * frameSeconds
-                            )
-
-                    ( afterX, blockedX ) =
-                        tryMove occupied { position | x = nextX } position
-
-                    ( afterY, blockedY ) =
-                        tryMove occupied { afterX | y = nextY } afterX
-                in
-                { position = afterY
-                , couldHop =
-                    (blockedX && canHop occupied position { position | x = nextX })
-                        || (blockedY && canHop occupied afterX { afterX | y = nextY })
-                }
+            { position = afterY
+            , couldHop =
+                (blockedX && canHop occupied height position { position | x = next.x })
+                    || (blockedY && canHop occupied height afterX { afterX | y = next.y })
+            }
 
         Nothing ->
             { position = position, couldHop = False }
+
+
+{-| Where one frame's walk towards the target gets to if nothing is in the way, or Nothing if
+already there.
+-}
+stepTowards : Float -> { x : Float, y : Float } -> Point -> Maybe Point
+stepTowards speed target position =
+    let
+        dx : Float
+        dx =
+            target.x - position.x
+
+        dy : Float
+        dy =
+            target.y - position.y
+
+        distance : Float
+        distance =
+            sqrt (dx * dx + dy * dy)
+    in
+    if distance < 0.001 then
+        Nothing
+
+    else if distance <= speed * frameSeconds then
+        Just { position | x = target.x, y = target.y }
+
+    else
+        Just
+            { position
+                | x = position.x + dx / distance * speed * frameSeconds
+                , y = position.y + dy / distance * speed * frameSeconds
+            }
 
 
 fallingVelocity : { a | velocityZ : Float } -> Float
@@ -1586,44 +1696,46 @@ fallingVelocity entity =
     max -maxFallSpeed (entity.velocityZ - gravity * frameSeconds)
 
 
-moveVertically : Dict ( Int, Int, Int ) Int -> Float -> Point -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveVertically occupied velocityZ afterWalk entity =
+moveVertically : Dict ( Int, Int, Int ) Int -> Float -> Float -> Point -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveVertically occupied height velocityZ afterWalk entity =
     let
         newZ : Float
         newZ =
             afterWalk.z + velocityZ * frameSeconds
     in
     if velocityZ <= 0 then
-        if entityCollides occupied { afterWalk | z = newZ } then
+        if entityCollides occupied height { afterWalk | z = newZ } then
             { entity | position = { afterWalk | z = max 0 (toFloat (floor newZ + 1)) }, velocityZ = 0 }
 
         else
             { entity | position = { afterWalk | z = newZ }, velocityZ = velocityZ }
 
-    else if entityCollides occupied { afterWalk | z = newZ } then
+    else if entityCollides occupied height { afterWalk | z = newZ } then
         { entity | position = afterWalk, velocityZ = 0 }
 
     else
         { entity | position = { afterWalk | z = newZ }, velocityZ = velocityZ }
 
 
-tryMove : Dict ( Int, Int, Int ) Int -> Point -> Point -> ( Point, Bool )
-tryMove occupied candidate current =
-    if entityCollides occupied candidate then
+tryMove : Dict ( Int, Int, Int ) Int -> Float -> Point -> Point -> ( Point, Bool )
+tryMove occupied height candidate current =
+    if entityCollides occupied height candidate then
         ( current, True )
 
     else
         ( candidate, False )
 
 
-canHop : Dict ( Int, Int, Int ) Int -> Point -> Point -> Bool
-canHop occupied current candidate =
-    not (entityCollides occupied { current | z = current.z + 1.05 })
-        && not (entityCollides occupied { candidate | z = candidate.z + 1.05 })
+canHop : Dict ( Int, Int, Int ) Int -> Float -> Point -> Point -> Bool
+canHop occupied height current candidate =
+    not (entityCollides occupied height { current | z = current.z + 1.05 })
+        && not (entityCollides occupied height { candidate | z = candidate.z + 1.05 })
 
 
-entityCollides : Dict ( Int, Int, Int ) Int -> Point -> Bool
-entityCollides occupied position =
+{-| Whether something this tall standing here would be inside a block or off the map.
+-}
+entityCollides : Dict ( Int, Int, Int ) Int -> Float -> Point -> Bool
+entityCollides occupied height position =
     if
         (position.z < 0)
             || (position.x - entityRadius < 0)
@@ -1641,7 +1753,7 @@ entityCollides occupied position =
             (floor (position.y - entityRadius))
             (floor (position.y + entityRadius - epsilon))
             (floor position.z)
-            (floor (position.z + entityHeight - epsilon))
+            (floor (position.z + height - epsilon))
 
 
 boxCollides : Dict ( Int, Int, Int ) Int -> Int -> Int -> Int -> Int -> Int -> Int -> Bool
@@ -1868,7 +1980,7 @@ updatePieces state =
                         -- NPCs it falls on are squashed, and the piece carries on down.
                         state3 : MatchState
                         state3 =
-                            { state2 | npcs = List.filter (\npc -> not (pieceOverlapsEntity piece finalZ npc.position)) state2.npcs }
+                            { state2 | towers = List.filterMap (squash piece finalZ) state2.towers }
                     in
                     if hitPlayer then
                         { state3
@@ -1907,6 +2019,19 @@ updatePieces state =
         )
         state
         state.pieces
+
+
+{-| Take out the NPCs in a tower that a piece at this level overlaps. Whoever is left stays
+standing where they were, and falls if there's nothing under them any more.
+-}
+squash : Piece -> Float -> Tower -> Maybe Tower
+squash piece level tower =
+    case List.filter (\( _, position ) -> not (pieceOverlapsEntity piece level position)) (npcPositions tower) of
+        ( lowest, position ) :: higher ->
+            Just { tower | position = position, bottom = lowest, above = List.map Tuple.first higher }
+
+        [] ->
+            Nothing
 
 
 {-| A player knocked out this frame takes all their pieces with them. The Bool says whether any

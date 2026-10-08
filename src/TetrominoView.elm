@@ -18,7 +18,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import SeqDict
 import Tetromino exposing (Orientation, Shape)
-import TetrominoSim exposing (Debris, MatchState, Npc, Pickup, Piece, PieceStatus(..), Player, Point)
+import TetrominoSim exposing (Debris, MatchState, NpcKind, Pickup, Piece, PieceStatus(..), Player, Point)
 
 
 {-| The column the pointer is over, and the height of the surface there.
@@ -239,6 +239,10 @@ worldEntities config state =
         alivePlayers =
             SeqDict.toList state.players |> List.filter (\( _, player ) -> player.knockedOutAt == Nothing)
 
+        npcs : List ( TetrominoSim.Npc, Point )
+        npcs =
+            List.concatMap TetrominoSim.npcPositions state.towers
+
         groundAndPieces : List Entity
         groundAndPieces =
             groundEntity vp :: List.concatMap (pieceEntities vp config.userColor) (SeqDict.values state.pieces)
@@ -260,15 +264,17 @@ worldEntities config state =
                 )
                 alivePlayers
                 ++ List.concatMap
-                    (\npc -> List.map (\( part, _ ) -> silhouetteEntity vp npcSilhouetteColor part) (npcParts npc))
-                    state.npcs
+                    (\( npc, position ) ->
+                        List.map (\( part, _ ) -> silhouetteEntity vp npcSilhouetteColor part) (npcParts npc.kind position)
+                    )
+                    npcs
 
         everythingElse : List Entity
         everythingElse =
             List.concatMap
                 (\( userId, player ) -> playerEntities vp state.frame (config.userColor userId) player)
                 alivePlayers
-                ++ List.concatMap (npcEntities vp) state.npcs
+                ++ List.concatMap (\( npc, position ) -> npcEntities vp npc.kind position) npcs
                 ++ List.map
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
                     state.snowballs
@@ -282,7 +288,7 @@ worldEntities config state =
                 ++ List.map
                     (\( _, player ) -> discShadow vp columns player.position (TetrominoSim.entityRadius * 2))
                     alivePlayers
-                ++ List.map (\npc -> discShadow vp columns npc.position (TetrominoSim.entityRadius * 2)) state.npcs
+                ++ List.map (\tower -> discShadow vp columns tower.position (TetrominoSim.entityRadius * 2)) state.towers
                 ++ List.map
                     (\snowball -> discShadow vp columns snowball.position (TetrominoSim.snowballRadius * 2))
                     state.snowballs
@@ -648,9 +654,9 @@ playerEntities vp frame userColor player =
     [ partEntity vp color parts.body, partEntity vp color parts.head ]
 
 
-npcEntities : Mat4 -> Npc -> List Entity
-npcEntities vp npc =
-    List.map (\( part, color ) -> partEntity vp color part) (npcParts npc)
+npcEntities : Mat4 -> NpcKind -> Point -> List Entity
+npcEntities vp kind position =
+    List.map (\( part, color ) -> partEntity vp color part) (npcParts kind position)
 
 
 {-| A little gold T-piece bobbing over its column.
@@ -715,14 +721,9 @@ playerParts position =
 {-| Chasers are a single big icy snowball, throwers a snowman in a black hat, and jumpers a smaller
 snowman in a red hat.
 -}
-npcParts : Npc -> List ( Part, Color )
-npcParts npc =
-    let
-        position : Point
-        position =
-            npc.position
-    in
-    case npc.kind of
+npcParts : NpcKind -> Point -> List ( Part, Color )
+npcParts kind position =
+    case kind of
         TetrominoSim.Chaser ->
             [ ( { mesh = sphereMesh
                 , offset = Vec3.vec3 position.x position.y (position.z + 0.36)
