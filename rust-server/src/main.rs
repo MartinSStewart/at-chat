@@ -1753,15 +1753,20 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
         .all(|x| x.is_ascii_alphanumeric() || x == '.')
         && sticker_path2.len() < 50
     {
-        match http_client()
+        let bytes = match http_client()
             .get(format!("https://discord.com/stickers/{}", sticker_path2))
             .send()
             .await
         {
-            Ok(bytes) => Response::builder()
+            Ok(response) => response.bytes().await,
+            Err(error) => Err(error),
+        };
+
+        match bytes {
+            Ok(bytes2) => Response::builder()
                 .status(StatusCode::OK)
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                .body(Body::from(bytes.bytes().await.unwrap()))
+                .body(Body::from(bytes2))
                 .unwrap(),
             Err(_) => Response::builder()
                 .status(StatusCode::BAD_REQUEST)
