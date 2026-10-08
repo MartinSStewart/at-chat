@@ -66,18 +66,24 @@ twoPlayerMatchTest normalConfig =
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
 
-                        -- Early in the round, before any NPCs show up, the admin walks somewhere,
-                        -- stops the spinner and drops whatever piece it landed on.
+                        -- Early in the round, before any NPCs show up, the admin walks somewhere and
+                        -- drops the first piece in their queue.
                         , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 300, 300 ))
-                        , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = " " }))
-                        , admin.custom 300 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 800, 150 ))
+                        , admin.custom 400 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 800, 150 ))
                         , T.checkState
                             1500
                             (matchStatesAgree
                                 admin
                                 user
                                 (\state ->
-                                    if SeqDict.size state.players == 2 && List.map (\piece -> TetrominoSim.isSettled piece.status) (SeqDict.values state.pieces) == [ True ] then
+                                    if
+                                        (SeqDict.size state.players == 2)
+                                            && (SeqDict.values state.pieces
+                                                    |> List.filter (\piece -> piece.owner /= Nothing)
+                                                    |> List.map (\piece -> TetrominoSim.isSettled piece.status)
+                                                    |> (==) [ True ]
+                                               )
+                                    then
                                         Ok ()
 
                                     else

@@ -66,7 +66,7 @@ import Quantity
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Tetromino exposing (Orientation, Shape)
-import TetrominoSim exposing (PieceCycle(..))
+import TetrominoSim
 import TetrominoTimeline exposing (Timeline)
 import TetrominoView exposing (Cursor)
 import TetrominoWire
@@ -189,7 +189,6 @@ type GameMsg
     | PointerPressed Int { x : Float, y : Float }
     | PressedRotateZ
     | PressedStandUpOrLieDown
-    | PressedStopCycling
     | PressedJoin
     | PressedNothing
 
@@ -576,30 +575,24 @@ updateConnected windowSize devicePixelRatio currentUserId msg state model =
             in
             case ( maybeCursor, SeqDict.get currentUserId state.players ) of
                 ( Just cursor, Just player ) ->
-                    case ( player.knockedOutAt, player.cycle ) of
-                        ( Nothing, Ready _ ) ->
-                            if button == rightMouseButton then
-                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
+                    if player.knockedOutAt /= Nothing then
+                        ( model2, Nothing )
 
-                            else
-                                ( model2
-                                , TetrominoSim.Drop
-                                    { x = cursor.x
-                                    , y = cursor.y
-                                    , orientation = Tetromino.orientation model2.stance model2.quarterTurns
-                                    }
-                                    |> Just
-                                )
+                    else if button == rightMouseButton then
+                        ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
 
-                        ( Nothing, Cycling _ ) ->
-                            if button == rightMouseButton then
-                                ( model2, TetrominoSim.MoveTo cursor.x cursor.y |> Just )
+                    else if TetrominoSim.canDrop state.frame player then
+                        ( model2
+                        , TetrominoSim.Drop
+                            { x = cursor.x
+                            , y = cursor.y
+                            , orientation = Tetromino.orientation model2.stance model2.quarterTurns
+                            }
+                            |> Just
+                        )
 
-                            else
-                                ( model2, Nothing )
-
-                        ( Just _, _ ) ->
-                            ( model2, Nothing )
+                    else
+                        ( model2, Nothing )
 
                 _ ->
                     ( model2, Nothing )
@@ -618,21 +611,6 @@ updateConnected windowSize devicePixelRatio currentUserId msg state model =
                             Tetromino.Flat
               }
             , Nothing
-            )
-
-        PressedStopCycling ->
-            ( model
-            , case SeqDict.get currentUserId state.players of
-                Just player ->
-                    case player.cycle of
-                        Cycling _ ->
-                            Just TetrominoSim.StopCycling
-
-                        Ready _ ->
-                            Nothing
-
-                Nothing ->
-                    Nothing
             )
 
         PressedJoin ->
@@ -663,7 +641,7 @@ pressedKey key =
             PressedStandUpOrLieDown
 
         _ ->
-            PressedStopCycling
+            PressedNothing
 
 
 matchState : GameModel -> Maybe TetrominoSim.MatchState
@@ -826,19 +804,15 @@ connectedView windowSize localUser model state =
         orientation =
             Tetromino.orientation model.stance model.quarterTurns
 
-        shapeShown : Maybe { shape : Shape, isReady : Bool }
-        shapeShown =
+        standingPlayer : Maybe TetrominoSim.Player
+        standingPlayer =
             case maybePlayer of
                 Just player ->
-                    case ( player.knockedOutAt, player.cycle ) of
-                        ( Nothing, Cycling cycle ) ->
-                            Just { shape = (TetrominoSim.cycleShape state.frame cycle).shape, isReady = False }
+                    if player.knockedOutAt == Nothing then
+                        Just player
 
-                        ( Nothing, Ready shape ) ->
-                            Just { shape = shape, isReady = True }
-
-                        ( Just _, _ ) ->
-                            Nothing
+                    else
+                        Nothing
 
                 Nothing ->
                     Nothing
@@ -849,9 +823,9 @@ connectedView windowSize localUser model state =
             [ Ui.width Ui.shrink
             , Ui.centerX
             , Ui.inFront
-                (case shapeShown of
-                    Just { shape, isReady } ->
-                        previewView (User.userColor localUser currentUserId) orientation shape isReady
+                (case standingPlayer of
+                    Just player ->
+                        previewView (User.userColor localUser currentUserId) orientation state.frame player
 
                     Nothing ->
                         Ui.none
@@ -899,10 +873,10 @@ connectedView windowSize localUser model state =
                                     )
                                     model.pointer
                             , ghost =
-                                case shapeShown of
-                                    Just { shape, isReady } ->
-                                        if isReady then
-                                            Just { shape = shape, orientation = orientation }
+                                case standingPlayer of
+                                    Just player ->
+                                        if player.piecesLeft > 0 then
+                                            Just { shape = player.queue.current, orientation = orientation }
 
                                         else
                                             Nothing
@@ -928,40 +902,78 @@ decodeOffset =
         (Json.Decode.field "offsetY" Json.Decode.float)
 
 
-previewView : UserColor -> Orientation -> Shape -> Bool -> Element msg
-previewView userColor orientation shape isReady =
-    Ui.el
+{-| The piece the player drops next, with the two after it underneath. The border lights up when
+they're able to drop it.
+-}
+previewView : UserColor -> Orientation -> Int -> TetrominoSim.Player -> Element msg
+previewView userColor orientation frame player =
+    Ui.column
         [ Ui.alignRight
         , Ui.alignTop
         , Ui.move { x = -8, y = 8, z = 0 }
-        , Ui.width (Ui.px previewSize)
-        , Ui.height (Ui.px previewSize)
-        , Ui.rounded 8
-        , Ui.background (Ui.rgba 0 0 0 0.35)
-        , Ui.border 2
-        , Ui.borderColor
-            (if isReady then
-                UserColor.toColor userColor
+        , Ui.width Ui.shrink
+        , Ui.spacing 6
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px previewSize)
+            , Ui.height (Ui.px previewSize)
+            , Ui.rounded 8
+            , Ui.background (Ui.rgba 0 0 0 0.35)
+            , Ui.border 2
+            , Ui.borderColor
+                (if TetrominoSim.canDrop frame player then
+                    UserColor.toColor userColor
+
+                 else
+                    Ui.rgba 0 0 0 0
+                )
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.alignBottom
+                    , Ui.alignRight
+                    , Ui.width Ui.shrink
+                    , Ui.paddingXY 6 4
+                    , Ui.Font.size 13
+                    , Ui.Font.bold
+                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.id "tetrominoGame_piecesLeft"
+                    ]
+                    (Ui.text (String.fromInt player.piecesLeft ++ "/" ++ String.fromInt TetrominoSim.maxPieces))
+                )
+            ]
+            (if player.piecesLeft > 0 then
+                pieceCanvas previewSize userColor orientation player.queue.current
 
              else
-                Ui.rgba 0 0 0 0
+                Ui.none
             )
-        ]
-        (WebGL.toHtmlWith
-            [ WebGL.alpha True, WebGL.depth 1, WebGL.antialias ]
-            [ Html.Attributes.width previewSize
-            , Html.Attributes.height previewSize
-            , Html.Attributes.style "display" "block"
+        , Ui.row
+            [ Ui.spacing 6, Ui.width Ui.shrink, Ui.alignRight ]
+            [ Ui.el
+                [ Ui.width (Ui.px nextPreviewSize), Ui.height (Ui.px nextPreviewSize), Ui.rounded 6, Ui.background (Ui.rgba 0 0 0 0.35) ]
+                (pieceCanvas nextPreviewSize userColor orientation player.queue.next)
+            , Ui.el
+                [ Ui.width (Ui.px nextPreviewSize), Ui.height (Ui.px nextPreviewSize), Ui.rounded 6, Ui.background (Ui.rgba 0 0 0 0.35) ]
+                (pieceCanvas nextPreviewSize userColor orientation player.queue.afterNext)
             ]
-            (TetrominoView.previewEntities
-                previewSize
-                previewSize
-                (UserColor.toColor userColor)
-                orientation
-                shape
-            )
-            |> Ui.html
-        )
+        ]
+
+
+nextPreviewSize : number
+nextPreviewSize =
+    61
+
+
+pieceCanvas : Int -> UserColor -> Orientation -> Shape -> Element msg
+pieceCanvas size userColor orientation shape =
+    WebGL.toHtmlWith
+        [ WebGL.alpha True, WebGL.depth 1, WebGL.antialias ]
+        [ Html.Attributes.width size
+        , Html.Attributes.height size
+        , Html.Attributes.style "display" "block"
+        ]
+        (TetrominoView.previewEntities size size (UserColor.toColor userColor) orientation shape)
+        |> Ui.html
 
 
 statusView : Id UserId -> TetrominoSim.MatchState -> Element GameMsg
@@ -996,7 +1008,7 @@ statusView currentUserId state =
 
                     Nothing ->
                         [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
-                        , Ui.text "Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down, space stops the spinner"
+                        , Ui.text "Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down. Grab the gold pickups for more pieces."
                         ]
 
             Nothing ->

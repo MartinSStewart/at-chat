@@ -5,14 +5,15 @@ module TetrominoSim exposing
     , MatchState
     , Npc
     , NpcKind(..)
+    , Pickup
     , Piece
-    , PieceCycle(..)
+    , PieceQueue
     , PieceStatus(..)
     , Player
     , Point
     , Round
     , Snowball
-    , cycleShape
+    , canDrop
     , debrisFrames
     , entityHeight
     , entityRadius
@@ -22,6 +23,7 @@ module TetrominoSim exposing
     , isProtected
     , isSettled
     , keepInsideGrid
+    , maxPieces
     , roundBreak
     , snowballRadius
     , step
@@ -49,7 +51,6 @@ type Input
     | Leave
     | MoveTo Int Int
     | Drop { x : Int, y : Int, orientation : Orientation }
-    | StopCycling
 
 
 type alias InputEvent =
@@ -66,9 +67,11 @@ type alias MatchState =
     , occupied : Dict ( Int, Int, Int ) Int
     , snowballs : List Snowball
     , debris : List Debris
+    , pickups : List Pickup
     , nextId : Int
     , seed : Random.Seed
     , nextNpcSpawn : Maybe Int
+    , nextPickupSpawn : Maybe Int
     }
 
 
@@ -90,16 +93,26 @@ type alias Player =
     , velocityZ : Float
     , target : Maybe ( Int, Int )
     , knockedOutAt : Maybe Int
-    , cycle : PieceCycle
+    , queue : PieceQueue
+    , piecesLeft : Int
+    , -- Dropping a piece makes the player wait a moment before they can drop another.
+      nextDropAt : Int
     , -- Snowballs do nothing to a player until this frame, so that someone coming into a round
       -- isn't knocked straight back out.
       protectedUntil : Int
     }
 
 
-type PieceCycle
-    = Cycling { startFrame : Int, firstIndex : Int, steps : Int }
-    | Ready Shape
+{-| The piece a player drops next, and the two after it.
+-}
+type alias PieceQueue =
+    { current : Shape, next : Shape, afterNext : Shape }
+
+
+{-| Touching one gives every player more pieces. It sits on top of whatever is in its column.
+-}
+type alias Pickup =
+    { id : Int, x : Int, y : Int, z : Int }
 
 
 type NpcKind
@@ -124,8 +137,10 @@ type alias Npc =
     }
 
 
+{-| `owner` is Nothing for the pieces a match starts with lying around the map.
+-}
 type alias Piece =
-    { owner : Id UserId
+    { owner : Maybe (Id UserId)
     , shape : Shape
     , cells : List ( Int, Int, Int )
     , x : Int
@@ -306,6 +321,48 @@ npcSpawnDistance =
     12
 
 
+startingPieces : Int
+startingPieces =
+    10
+
+
+maxPieces : Int
+maxPieces =
+    15
+
+
+dropCooldown : Int
+dropCooldown =
+    framesPerSecond
+
+
+{-| How many pieces every player gets when anyone touches a pickup.
+-}
+piecesPerPickup : Int
+piecesPerPickup =
+    2
+
+
+maxPickups : Int
+maxPickups =
+    3
+
+
+{-| How many pieces a match starts with lying around the map. Some don't fit where they're rolled
+and are left out.
+-}
+sceneryPieces : Int
+sceneryPieces =
+    60
+
+
+{-| No pieces start this close to the middle of the map, where players come into a round.
+-}
+sceneryClearance : Int
+sceneryClearance =
+    4
+
+
 debrisFrames : Int
 debrisFrames =
     30
@@ -329,10 +386,103 @@ init seed frame =
     , occupied = Dict.empty
     , snowballs = []
     , debris = []
+    , pickups = []
     , nextId = 0
     , seed = Random.initialSeed seed
     , nextNpcSpawn = Nothing
+    , nextPickupSpawn = Nothing
     }
+        |> scatterPieces sceneryPieces
+
+
+{-| Lay pieces around the map, on the ground and not touching each other.
+-}
+scatterPieces : Int -> MatchState -> MatchState
+scatterPieces count state =
+    if count <= 0 then
+        state
+
+    else
+        let
+            ( roll, seed ) =
+                Random.step
+                    (Random.map5
+                        (\shape stood quarterTurns column row -> { shape = shape, stood = stood, quarterTurns = quarterTurns, x = column, y = row })
+                        randomShape
+                        (Random.int 0 2)
+                        (Random.int 0 3)
+                        (Random.int 0 (gridSize - 1))
+                        (Random.int 0 (gridSize - 1))
+                    )
+                    state.seed
+
+            cells : List ( Int, Int, Int )
+            cells =
+                Tetromino.cells
+                    (Tetromino.orientation
+                        -- Mostly lying flat, since a field of pillars is hard to walk through.
+                        (if roll.stood == 0 then
+                            Tetromino.Upright
+
+                         else
+                            Tetromino.Flat
+                        )
+                        roll.quarterTurns
+                    )
+                    roll.shape
+
+            ( x, y ) =
+                keepInsideGrid cells roll.x roll.y
+
+            nearTheMiddle : Bool
+            nearTheMiddle =
+                List.any
+                    (\( cellX, cellY, _ ) ->
+                        (abs (x + cellX - gridSize // 2) <= sceneryClearance)
+                            && (abs (y + cellY - gridSize // 2) <= sceneryClearance)
+                    )
+                    cells
+
+            -- Leaving a gap around each piece keeps them from merging into walls that box things in.
+            crowded : Bool
+            crowded =
+                List.any
+                    (\( cellX, cellY, _ ) ->
+                        List.any
+                            (\( dx, dy ) -> Dict.member ( x + cellX + dx, y + cellY + dy, 0 ) state.occupied)
+                            [ ( 0, 0 ), ( 1, 0 ), ( -1, 0 ), ( 0, 1 ), ( 0, -1 ) ]
+                    )
+                    cells
+
+            state2 : MatchState
+            state2 =
+                if nearTheMiddle || crowded then
+                    { state | seed = seed }
+
+                else
+                    { state
+                        | pieces =
+                            SeqDict.insert
+                                state.nextId
+                                { owner = Nothing
+                                , shape = roll.shape
+                                , cells = cells
+                                , x = x
+                                , y = y
+                                , z = 0
+                                , status = Settled state.frame
+                                }
+                                state.pieces
+                        , occupied =
+                            List.foldl
+                                (\( cellX, cellY, cellZ ) occupied -> Dict.insert ( x + cellX, y + cellY, cellZ ) state.nextId occupied)
+                                state.occupied
+                                cells
+                        , nextId = state.nextId + 1
+                        , seed = seed
+                    }
+        in
+        scatterPieces (count - 1) state2
 
 
 {-| Advance by one frame, applying the inputs stamped with this frame first.
@@ -347,7 +497,14 @@ step inputs state =
 
         state3 : MatchState
         state3 =
-            updateRound state2 |> updatePlayers |> updateNpcs |> catchPlayers |> spawnNpcs |> updateSnowballs
+            updateRound state2
+                |> updatePlayers
+                |> collectPickups
+                |> updateNpcs
+                |> catchPlayers
+                |> spawnNpcs
+                |> spawnPickups
+                |> updateSnowballs
 
         ( state4, removedSettled ) =
             updatePieces state3 |> handleKnockouts
@@ -363,6 +520,7 @@ step inputs state =
     { state5
         | frame = state5.frame + 1
         , debris = List.filter (\debris -> state5.frame - debris.destroyedAt < debrisFrames) state5.debris
+        , pickups = List.map (\pickup -> { pickup | z = topOfColumn pickup.x pickup.y state5 }) state5.pickups
     }
 
 
@@ -402,32 +560,14 @@ applyInput event state =
                 (\player -> { player | target = Just ( clamp 0 (gridSize - 1) x, clamp 0 (gridSize - 1) y ) })
                 state
 
-        StopCycling ->
-            updateAlivePlayer
-                event.userId
-                (\player ->
-                    case player.cycle of
-                        Cycling cycle ->
-                            { player | cycle = Ready (cycleShape state.frame cycle).shape }
-
-                        Ready _ ->
-                            player
-                )
-                state
-
         Drop drop ->
             case SeqDict.get event.userId state.players of
                 Just player ->
-                    case ( player.knockedOutAt, player.cycle ) of
-                        ( Nothing, Ready shape ) ->
-                            if Tetromino.isValidOrientation drop.orientation then
-                                dropPiece event.userId shape drop player state
+                    if canDrop state.frame player && Tetromino.isValidOrientation drop.orientation then
+                        dropPiece event.userId drop player state
 
-                            else
-                                state
-
-                        _ ->
-                            state
+                    else
+                        state
 
                 Nothing ->
                     state
@@ -451,25 +591,36 @@ updateAlivePlayer userId updateFunc state =
     }
 
 
-dropPiece : Id UserId -> Shape -> { x : Int, y : Int, orientation : Orientation } -> Player -> MatchState -> MatchState
-dropPiece userId shape drop player state =
+{-| Whether a player standing in the round has a piece and isn't waiting after their last drop.
+-}
+canDrop : Int -> Player -> Bool
+canDrop frame player =
+    (player.knockedOutAt == Nothing) && (player.piecesLeft > 0) && (frame >= player.nextDropAt)
+
+
+dropPiece : Id UserId -> { x : Int, y : Int, orientation : Orientation } -> Player -> MatchState -> MatchState
+dropPiece userId drop player state =
     let
+        queue : PieceQueue
+        queue =
+            player.queue
+
         cells : List ( Int, Int, Int )
         cells =
-            Tetromino.cells drop.orientation shape
+            Tetromino.cells drop.orientation queue.current
 
         ( x, y ) =
             keepInsideGrid cells drop.x drop.y
 
-        ( cycle, seed ) =
-            startCycle state.frame state.seed
+        ( newShape, seed ) =
+            Random.step randomShape state.seed
     in
     { state
         | pieces =
             SeqDict.insert
                 state.nextId
-                { owner = userId
-                , shape = shape
+                { owner = Just userId
+                , shape = queue.current
                 , cells = cells
                 , x = x
                 , y = y
@@ -478,7 +629,15 @@ dropPiece userId shape drop player state =
                 }
                 state.pieces
         , nextId = state.nextId + 1
-        , players = SeqDict.insert userId { player | cycle = cycle } state.players
+        , players =
+            SeqDict.insert
+                userId
+                { player
+                    | queue = { current = queue.next, next = queue.afterNext, afterNext = newShape }
+                    , piecesLeft = player.piecesLeft - 1
+                    , nextDropAt = state.frame + dropCooldown
+                }
+                state.players
         , seed = seed
     }
 
@@ -572,8 +731,8 @@ startRound state =
             List.foldl
                 (\( index, userId ) ( players2, seed2 ) ->
                     let
-                        ( cycle, seed3 ) =
-                            startCycle state.frame seed2
+                        ( queue, seed3 ) =
+                            Random.step randomQueue seed2
 
                         ( offsetX, offsetY ) =
                             spawnOffset index
@@ -607,7 +766,9 @@ startRound state =
                         , velocityZ = 0
                         , target = Nothing
                         , knockedOutAt = Nothing
-                        , cycle = cycle
+                        , queue = queue
+                        , piecesLeft = startingPieces
+                        , nextDropAt = state.frame
                         , protectedUntil =
                             if npcNearby then
                                 state.frame + spawnProtection
@@ -632,6 +793,7 @@ startRound state =
         , waitingPlayers = SeqSet.empty
         , seed = seed
         , nextNpcSpawn = Just (state.frame + npcDelay)
+        , nextPickupSpawn = Just (state.frame + firstPickupDelay)
     }
 
 
@@ -649,56 +811,17 @@ spawnOffset index =
 
 
 
--- Piece preview cycle
+-- Piece queue
 
 
-startCycle : Int -> Random.Seed -> ( PieceCycle, Random.Seed )
-startCycle frame seed =
-    Random.step
-        (Random.map2
-            (\firstIndex steps -> Cycling { startFrame = frame, firstIndex = firstIndex, steps = steps })
-            (Random.int 0 (List.length Tetromino.all - 1))
-            (Random.int 16 19)
-        )
-        seed
+randomShape : Random.Generator Shape
+randomShape =
+    Random.uniform Tetromino.I [ Tetromino.O, Tetromino.T, Tetromino.S, Tetromino.Z, Tetromino.J, Tetromino.L ]
 
 
-cycleStepFrames : Int -> Int
-cycleStepFrames stepIndex =
-    2 + (stepIndex * stepIndex) // 12
-
-
-{-| Which piece a spinning preview shows on the given frame, and whether it has come to rest.
--}
-cycleShape : Int -> { startFrame : Int, firstIndex : Int, steps : Int } -> { shape : Shape, finished : Bool }
-cycleShape frame cycle =
-    let
-        stepIndex : Int
-        stepIndex =
-            cycleShapeHelper (frame - cycle.startFrame) cycle.steps 0
-    in
-    { shape = shapeAt (cycle.firstIndex + stepIndex)
-    , finished = stepIndex >= cycle.steps - 1
-    }
-
-
-cycleShapeHelper : Int -> Int -> Int -> Int
-cycleShapeHelper framesLeft steps stepIndex =
-    if stepIndex >= steps - 1 || framesLeft < cycleStepFrames stepIndex then
-        stepIndex
-
-    else
-        cycleShapeHelper (framesLeft - cycleStepFrames stepIndex) steps (stepIndex + 1)
-
-
-shapeAt : Int -> Shape
-shapeAt index =
-    case List.drop (modBy (List.length Tetromino.all) index) Tetromino.all of
-        shape :: _ ->
-            shape
-
-        [] ->
-            Tetromino.I
+randomQueue : Random.Generator PieceQueue
+randomQueue =
+    Random.map3 PieceQueue randomShape randomShape randomShape
 
 
 
@@ -716,33 +839,14 @@ updatePlayers state =
                             player
 
                         Nothing ->
-                            let
-                                player2 : Player
-                                player2 =
-                                    case player.cycle of
-                                        Cycling cycle ->
-                                            let
-                                                shown : { shape : Shape, finished : Bool }
-                                                shown =
-                                                    cycleShape state.frame cycle
-                                            in
-                                            if shown.finished then
-                                                { player | cycle = Ready shown.shape }
-
-                                            else
-                                                player
-
-                                        Ready _ ->
-                                            player
-                            in
                             moveEntity
                                 playerSpeed
                                 (Maybe.map
                                     (\( x, y ) -> { x = toFloat x + 0.5, y = toFloat y + 0.5 })
-                                    player2.target
+                                    player.target
                                 )
                                 state.occupied
-                                player2
+                                player
                 )
                 state.players
     }
@@ -1257,6 +1361,128 @@ npcSpawnInterval framesIntoRound =
     max (3 * framesPerSecond) (8 * framesPerSecond - framesIntoRound // 30)
 
 
+
+-- Pickups
+
+
+firstPickupDelay : Int
+firstPickupDelay =
+    5 * framesPerSecond
+
+
+{-| Pickups turn up every so often a few cells from one of the players still standing, up to
+`maxPickups` at a time.
+-}
+spawnPickups : MatchState -> MatchState
+spawnPickups state =
+    case state.nextPickupSpawn of
+        Just spawnFrame ->
+            if state.frame >= spawnFrame then
+                let
+                    alivePlayers : List Player
+                    alivePlayers =
+                        SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
+
+                    ( roll, seed ) =
+                        Random.step
+                            (Random.map5
+                                (\playerIndex side along distance delay ->
+                                    { playerIndex = playerIndex, side = side, along = along, distance = distance, delay = delay }
+                                )
+                                (Random.int 0 (max 0 (List.length alivePlayers - 1)))
+                                (Random.int 0 3)
+                                (Random.int -10 10)
+                                (Random.int 4 10)
+                                (Random.int (6 * framesPerSecond) (12 * framesPerSecond))
+                            )
+                            state.seed
+
+                    ( offsetX, offsetY ) =
+                        case roll.side of
+                            0 ->
+                                ( roll.along, -roll.distance )
+
+                            1 ->
+                                ( roll.along, roll.distance )
+
+                            2 ->
+                                ( -roll.distance, roll.along )
+
+                            _ ->
+                                ( roll.distance, roll.along )
+
+                    pickups : List Pickup
+                    pickups =
+                        case List.drop roll.playerIndex alivePlayers of
+                            player :: _ ->
+                                if List.length state.pickups < maxPickups then
+                                    let
+                                        x : Int
+                                        x =
+                                            clamp 0 (gridSize - 1) (floor player.position.x + offsetX)
+
+                                        y : Int
+                                        y =
+                                            clamp 0 (gridSize - 1) (floor player.position.y + offsetY)
+                                    in
+                                    state.pickups ++ [ { id = state.nextId, x = x, y = y, z = topOfColumn x y state } ]
+
+                                else
+                                    state.pickups
+
+                            [] ->
+                                state.pickups
+                in
+                { state
+                    | pickups = pickups
+                    , nextId = state.nextId + 1
+                    , seed = seed
+                    , nextPickupSpawn = Just (state.frame + roll.delay)
+                }
+
+            else
+                state
+
+        Nothing ->
+            state
+
+
+{-| A player standing in the round who touches a pickup takes it, and everyone gets more pieces.
+-}
+collectPickups : MatchState -> MatchState
+collectPickups state =
+    let
+        ( taken, left ) =
+            List.partition
+                (\pickup ->
+                    List.any
+                        (\player ->
+                            (player.knockedOutAt == Nothing)
+                                && entitiesTouch
+                                    { x = toFloat pickup.x + 0.5, y = toFloat pickup.y + 0.5, z = toFloat pickup.z }
+                                    player.position
+                        )
+                        (SeqDict.values state.players)
+                )
+                state.pickups
+
+        gained : Int
+        gained =
+            piecesPerPickup * List.length taken
+    in
+    if gained > 0 then
+        { state
+            | pickups = left
+            , players =
+                SeqDict.map
+                    (\_ player -> { player | piecesLeft = min maxPieces (player.piecesLeft + gained) })
+                    state.players
+        }
+
+    else
+        state
+
+
 {-| Walk towards a target, hopping onto anything one cell high, and fall under gravity.
 -}
 moveEntity : Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
@@ -1720,7 +1946,16 @@ removePiecesOf : List (Id UserId) -> MatchState -> ( MatchState, Bool )
 removePiecesOf owners state =
     let
         ( removed, kept ) =
-            SeqDict.partition (\_ piece -> List.member piece.owner owners) state.pieces
+            SeqDict.partition
+                (\_ piece ->
+                    case piece.owner of
+                        Just owner ->
+                            List.member owner owners
+
+                        Nothing ->
+                            False
+                )
+                state.pieces
     in
     ( { state
         | pieces = kept

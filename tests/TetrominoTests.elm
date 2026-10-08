@@ -48,9 +48,7 @@ join frame userId =
 
 dropAt : Int -> Id UserId -> Int -> Int -> List InputEvent
 dropAt frame userId x y =
-    [ { frame = frame, userId = userId, input = StopCycling }
-    , { frame = frame + 1, userId = userId, input = Drop { x = x, y = y, orientation = Tetromino.identity } }
-    ]
+    [ { frame = frame, userId = userId, input = Drop { x = x, y = y, orientation = Tetromino.identity } } ]
 
 
 {-| The first frame of the first round, for players who joined on frame 0.
@@ -64,7 +62,20 @@ firstRound =
 -}
 inFirstRound : List (Id UserId) -> MatchState
 inFirstRound userIds =
-    runUntil firstRound (List.map (join 0) userIds) (TetrominoSim.init 1 0)
+    runUntil firstRound (List.map (join 0) userIds) (emptyMatch 1 0)
+
+
+{-| A new match without the pieces a match starts with lying around, so a test only sees the
+pieces it drops.
+-}
+emptyMatch : Int -> Int -> MatchState
+emptyMatch seed frame =
+    let
+        state : MatchState
+        state =
+            TetrominoSim.init seed frame
+    in
+    { state | pieces = SeqDict.empty, occupied = Dict.empty }
 
 
 center : Int
@@ -295,7 +306,7 @@ tests =
                 ( SeqDict.values built.pieces |> List.map .owner
                 , SeqDict.values afterKnockout.pieces |> List.map (\piece -> ( piece.owner, piece.z, TetrominoSim.isSettled piece.status ))
                 )
-                    |> Expect.equal ( [ userA, userB ], [ ( userB, 0, True ) ] )
+                    |> Expect.equal ( [ Just userA, Just userB ], [ ( Just userB, 0, True ) ] )
         , test "A player who leaves takes their pieces with them" <|
             \_ ->
                 let
@@ -389,7 +400,7 @@ tests =
                 ( List.map (\debris -> debris.piece.owner) afterKnockout.debris
                 , runUntil (afterKnockout.frame + TetrominoSim.debrisFrames) [] afterKnockout |> .debris |> List.length
                 )
-                    |> Expect.equal ( [ userA ], 0 )
+                    |> Expect.equal ( [ Just userA ], 0 )
         , test "NPCs turn up near a player, however big the map is" <|
             \_ ->
                 let
@@ -525,6 +536,118 @@ tests =
                 , after Jumper |> knockedOut
                 )
                     |> Expect.equal ( Just False, [ True ], Just True )
+        , test "A match starts with pieces lying around, with room to stand in the middle" <|
+            \_ ->
+                let
+                    pieces : List TetrominoSim.Piece
+                    pieces =
+                        SeqDict.values (TetrominoSim.init 1 0).pieces
+                in
+                ( List.length pieces > 20
+                , List.all (\piece -> piece.owner == Nothing && piece.z == 0 && TetrominoSim.isSettled piece.status) pieces
+                , List.any
+                    (\piece ->
+                        List.any
+                            (\( x, y, _ ) -> abs (piece.x + x - center) <= 4 && abs (piece.y + y - center) <= 4)
+                            piece.cells
+                    )
+                    pieces
+                )
+                    |> Expect.equal ( True, True, False )
+        , test "A player has 10 pieces and has to wait a second between drops" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+
+                    after : MatchState
+                    after =
+                        runUntil
+                            (firstRound + 200)
+                            (dropAt (firstRound + 10) userA 3 3
+                                ++ dropAt (firstRound + 40) userA 10 3
+                                ++ dropAt (firstRound + 71) userA 17 3
+                            )
+                            start
+                in
+                ( SeqDict.get userA start.players |> Maybe.map .piecesLeft
+                , SeqDict.get userA after.players |> Maybe.map .piecesLeft
+                , SeqDict.size after.pieces
+                )
+                    |> Expect.equal ( Just 10, Just 8, 2 )
+        , test "With no pieces left, dropping does nothing" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                in
+                { start | players = SeqDict.map (\_ player -> { player | piecesLeft = 0 }) start.players }
+                    |> runUntil (firstRound + 100) (dropAt (firstRound + 10) userA 3 3)
+                    |> .pieces
+                    |> SeqDict.size
+                    |> Expect.equal 0
+        , test "Dropping takes the piece at the front of the queue and moves the rest up" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+
+                    after : MatchState
+                    after =
+                        runUntil (firstRound + 20) (dropAt (firstRound + 10) userA 3 3) start
+                in
+                case ( SeqDict.get userA start.players, SeqDict.get userA after.players ) of
+                    ( Just before, Just player ) ->
+                        ( SeqDict.values after.pieces |> List.map .shape
+                        , [ player.queue.current, player.queue.next ]
+                        )
+                            |> Expect.equal ( [ before.queue.current ], [ before.queue.next, before.queue.afterNext ] )
+
+                    _ ->
+                        Expect.fail "Expected the player to be in the round"
+        , test "Touching a pickup gives every player two more pieces, up to 15" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA, userB ]
+
+                    withPickup : MatchState
+                    withPickup =
+                        case SeqDict.get userA start.players of
+                            Just player ->
+                                { start
+                                    | pickups = [ { id = 1000, x = floor player.position.x, y = floor player.position.y, z = 0 } ]
+                                    , players = SeqDict.updateIfExists userB (\playerB -> { playerB | piecesLeft = 14 }) start.players
+                                }
+
+                            Nothing ->
+                                start
+
+                    after : MatchState
+                    after =
+                        runUntil (start.frame + 1) [] withPickup
+                in
+                ( SeqDict.values after.players |> List.map .piecesLeft
+                , List.length after.pickups
+                )
+                    |> Expect.equal ( [ 12, 15 ], 0 )
+        , test "Pickups turn up during a round" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                in
+                { start | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) start.players }
+                    |> runUntil (firstRound + 30 * TetrominoSim.framesPerSecond) []
+                    |> .pickups
+                    |> List.length
+                    |> (\count -> count > 0 && count <= 3)
+                    |> Expect.equal True
         , test "The same inputs always give the same state" <|
             \_ ->
                 let

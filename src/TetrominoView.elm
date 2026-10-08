@@ -18,7 +18,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import SeqDict
 import Tetromino exposing (Orientation, Shape)
-import TetrominoSim exposing (Debris, MatchState, Npc, Piece, PieceStatus(..), Player, Point)
+import TetrominoSim exposing (Debris, MatchState, Npc, Pickup, Piece, PieceStatus(..), Player, Point)
 
 
 {-| The column the pointer is over, and the height of the surface there.
@@ -273,6 +273,7 @@ worldEntities config state =
                     (\snowball -> sphereEntity vp snowball.position TetrominoSim.snowballRadius snowWhite)
                     state.snowballs
                 ++ List.concatMap (debrisEntities vp config.userColor state.frame) state.debris
+                ++ List.concatMap (pickupEntities vp state.frame) state.pickups
 
         shadows : List Entity
         shadows =
@@ -285,6 +286,15 @@ worldEntities config state =
                 ++ List.map
                     (\snowball -> discShadow vp columns snowball.position (TetrominoSim.snowballRadius * 2))
                     state.snowballs
+                ++ List.map
+                    (\pickup ->
+                        discShadow
+                            vp
+                            columns
+                            { x = toFloat pickup.x + 0.5, y = toFloat pickup.y + 0.5, z = toFloat pickup.z }
+                            0.6
+                    )
+                    state.pickups
 
         overlays : List Entity
         overlays =
@@ -417,7 +427,7 @@ pieceEntities vp userColor piece =
     let
         color : Color
         color =
-            userColor piece.owner
+            pieceColor userColor piece
     in
     List.map
         (\( x, y, z ) ->
@@ -434,6 +444,18 @@ pieceEntities vp userColor piece =
 lighterHigherUp : Float -> Color -> Color
 lighterHigherUp z color =
     mix color (Color.rgb 1 1 1) (clamp 0 0.75 (z * 0.08))
+
+
+{-| The pieces a match starts with lying around belong to nobody, so they're a neutral grey.
+-}
+pieceColor : (Id UserId -> Color) -> Piece -> Color
+pieceColor userColor piece =
+    case piece.owner of
+        Just owner ->
+            userColor owner
+
+        Nothing ->
+            Color.rgb 0.6 0.64 0.72
 
 
 {-| A destroyed piece flying apart into its cubes, each shrinking away to nothing.
@@ -471,7 +493,7 @@ debrisEntities vp userColor frame debris =
 
         color : Color
         color =
-            userColor piece.owner
+            pieceColor userColor piece
     in
     List.map
         (\( x, y, z ) ->
@@ -629,6 +651,39 @@ playerEntities vp frame userColor player =
 npcEntities : Mat4 -> Npc -> List Entity
 npcEntities vp npc =
     List.map (\( part, color ) -> partEntity vp color part) (npcParts npc)
+
+
+{-| A little gold T-piece bobbing over its column.
+-}
+pickupEntities : Mat4 -> Int -> Pickup -> List Entity
+pickupEntities vp frame pickup =
+    let
+        size : Float
+        size =
+            0.2
+
+        bob : Float
+        bob =
+            0.08 * sin (toFloat (frame + pickup.id * 17) * 0.1)
+
+        corner : Vec3
+        corner =
+            Vec3.vec3
+                (toFloat pickup.x + 0.5 - size * 1.5)
+                (toFloat pickup.y + 0.5 - size)
+                (toFloat pickup.z + 0.3 + bob)
+    in
+    List.map
+        (\( x, y ) ->
+            partEntity
+                vp
+                (Color.rgb 1 0.8 0.2)
+                { mesh = cubeMesh
+                , offset = Vec3.add corner (Vec3.vec3 (toFloat x * size) (toFloat y * size) 0)
+                , scale = Vec3.vec3 size size size
+                }
+        )
+        [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 1, 1 ) ]
 
 
 {-| One shape of a model, placed in the world.
