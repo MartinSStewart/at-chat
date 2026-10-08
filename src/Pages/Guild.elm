@@ -5350,11 +5350,11 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
                     4
 
                 IsReactionLongPressed reactionIndex ->
-                    if reactionIndex < 123 then
-                        5 + reactionIndex
+                    if reactionIndex > Message.maxReactionEmojis then
+                        0
 
                     else
-                        0
+                        5 + reactionIndex
             )
         + (Time.posixToMillis time // msInMinute * timePackingOffset)
 

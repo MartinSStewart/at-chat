@@ -372,7 +372,7 @@ messageViewFuzzer =
                 , IsHoveredReactionsOnly
                 , IsHoveredWhileSelectingAnchor
                 ]
-            , Fuzz.map IsReactionLongPressed (Fuzz.intRange 0 122)
+            , Fuzz.map IsReactionLongPressed (Fuzz.intRange 0 Message.maxReactionEmojis)
             ]
         )
         -- Only whole minutes survive the round trip, which is all the timestamps in a
