@@ -1,4 +1,4 @@
-module TetrominoTimeline exposing (Timeline, addInput, advance, init, latest, removeInput, stateAt)
+module TetrominoTimeline exposing (Timeline, addInput, advance, init, latest, recent, removeInput, stateAt)
 
 {-| Keeps the last couple of seconds of a match, one state per frame, so that an input arriving
 late (stamped with a frame this client has already simulated) only costs re-simulating from just
@@ -34,6 +34,13 @@ recentFrames =
 latest : Timeline -> MatchState
 latest timeline =
     timeline.latest
+
+
+{-| Every state kept, newest first.
+-}
+recent : Timeline -> List MatchState
+recent timeline =
+    timeline.latest :: timeline.previous
 
 
 {-| The match as it was at the start of a frame, before that frame's inputs, if it's recent

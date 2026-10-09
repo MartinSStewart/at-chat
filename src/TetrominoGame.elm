@@ -528,7 +528,7 @@ updateGame :
 updateGame time setup windowSize devicePixelRatio currentUserId msg model =
     case model.connection of
         Connected timeline ->
-            case updateConnected windowSize devicePixelRatio currentUserId msg (TetrominoTimeline.latest timeline) model of
+            case updateConnected windowSize devicePixelRatio currentUserId msg timeline model of
                 ( model2, Just input ) ->
                     playOwnInput time setup currentUserId input timeline model2 |> Tuple.mapSecond Just
 
@@ -570,10 +570,15 @@ updateConnected :
     -> Float
     -> Id UserId
     -> GameMsg
-    -> TetrominoSim.MatchState
+    -> Timeline
     -> GameModel
     -> ( GameModel, Maybe TetrominoSim.Input )
-updateConnected windowSize devicePixelRatio currentUserId msg state model =
+updateConnected windowSize devicePixelRatio currentUserId msg timeline model =
+    let
+        state : TetrominoSim.MatchState
+        state =
+            TetrominoTimeline.latest timeline
+    in
     case msg of
         PointerMoved position ->
             ( { model | pointer = Just position }, Nothing )
@@ -593,7 +598,7 @@ updateConnected windowSize devicePixelRatio currentUserId msg state model =
                     TetrominoView.screenToCell
                         canvas.width
                         canvas.height
-                        (TetrominoView.cameraFocus currentUserId state)
+                        (TetrominoView.camera currentUserId (TetrominoTimeline.recent timeline))
                         position
                         state
             in
@@ -796,7 +801,7 @@ gameView : Coord CssPixels -> LocalUser -> GameModel -> Element GameMsg
 gameView windowSize localUser model =
     case model.connection of
         Connected timeline ->
-            connectedView windowSize localUser model (TetrominoTimeline.latest timeline)
+            connectedView windowSize localUser model timeline
 
         WaitingForState _ ->
             Ui.el
@@ -809,12 +814,20 @@ gameView windowSize localUser model =
                 (Ui.text "This match is over, everyone left it.")
 
 
-connectedView : Coord CssPixels -> LocalUser -> GameModel -> TetrominoSim.MatchState -> Element GameMsg
-connectedView windowSize localUser model state =
+connectedView : Coord CssPixels -> LocalUser -> GameModel -> Timeline -> Element GameMsg
+connectedView windowSize localUser model timeline =
     let
+        state : TetrominoSim.MatchState
+        state =
+            TetrominoTimeline.latest timeline
+
         currentUserId : Id UserId
         currentUserId =
             localUser.session.userId
+
+        camera : TetrominoView.Camera
+        camera =
+            TetrominoView.camera currentUserId (TetrominoTimeline.recent timeline)
 
         canvas : CanvasSize
         canvas =
@@ -883,6 +896,7 @@ connectedView windowSize localUser model state =
                         (TetrominoView.worldEntities
                             { width = canvas.width
                             , height = canvas.height
+                            , camera = camera
                             , currentUserId = currentUserId
                             , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
                             , cursor =
@@ -891,7 +905,7 @@ connectedView windowSize localUser model state =
                                         TetrominoView.screenToCell
                                             canvas.width
                                             canvas.height
-                                            (TetrominoView.cameraFocus currentUserId state)
+                                            camera
                                             pointer
                                             state
                                     )
@@ -1012,40 +1026,56 @@ statusView currentUserId state =
                 Nothing ->
                     "The next round starts once someone joins"
 
+        crystal : String
+        crystal =
+            "Crystal " ++ String.fromInt state.crystal.health ++ "/" ++ String.fromInt TetrominoSim.crystalHealth ++ "."
+
         roundInfo : String
         roundInfo =
             if state.round.number == 0 then
-                nextRound
+                crystal ++ " " ++ nextRound
 
             else
-                "Round " ++ String.fromInt state.round.number ++ ". " ++ nextRound
+                "Round " ++ String.fromInt state.round.number ++ ". " ++ crystal ++ " " ++ nextRound
     in
     Ui.row
         [ Ui.spacing 12, Ui.Font.size 14, Ui.contentCenterX ]
-        (case SeqDict.get currentUserId state.players of
-            Just player ->
-                case player.knockedOutAt of
-                    Just _ ->
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out")
-                        , Ui.text roundInfo
-                        ]
+        (if TetrominoSim.isGameOver state then
+            [ Ui.el
+                [ Ui.Font.bold, Ui.width Ui.shrink, Ui.id "tetrominoGame_crystalDestroyed" ]
+                (Ui.text ("The crystal was destroyed in round " ++ String.fromInt state.round.number ++ ". Game over!"))
+            ]
 
-                    Nothing ->
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
-                        , Ui.text "Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down. Grab the gold pickups for more pieces."
-                        ]
-
-            Nothing ->
-                if SeqSet.member currentUserId state.waitingPlayers then
-                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You're in the next round")
-                    , Ui.text roundInfo
-                    ]
-
-                else
-                    [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
-                    , Ui.text roundInfo
-                    ]
+         else
+            statusParts currentUserId roundInfo state
         )
+
+
+statusParts : Id UserId -> String -> TetrominoSim.MatchState -> List (Element GameMsg)
+statusParts currentUserId roundInfo state =
+    case SeqDict.get currentUserId state.players of
+        Just player ->
+            case player.knockedOutAt of
+                Just _ ->
+                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out")
+                    , Ui.text roundInfo
+                    ]
+
+                Nothing ->
+                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
+                    , Ui.text "Keep the snowmen away from the crystal. Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down. Grab the gold pickups for more pieces."
+                    ]
+
+        Nothing ->
+            if SeqSet.member currentUserId state.waitingPlayers then
+                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You're in the next round")
+                , Ui.text roundInfo
+                ]
+
+            else
+                [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
+                , Ui.text roundInfo
+                ]
 
 
 secondsUntil : Int -> Int -> String
@@ -1059,6 +1089,6 @@ setupView windowSize _ =
         [ Ui.spacing 16, Ui.padding 16 ]
         [ Ui.Prose.paragraph
             [ Ui.Font.size 14 ]
-            [ Ui.text "Drop tetrominoes to build walls that keep the snowball throwing snowmen away from you. One hit knocks you out until the next round. Anyone in the channel can join, and the match lasts until everyone has left it." ]
+            [ Ui.text "Drop tetrominoes to build walls that keep the snowmen away from the crystal in the middle, and away from you. Three snowmen reaching the crystal destroy it, and so does one giant. One hit knocks you out until the next round. Anyone in the channel can join." ]
         , Go.startOrCancel "tetrominoGame" (MyUi.isMobileAlt windowSize) PressedCancel PressedStartGame
         ]

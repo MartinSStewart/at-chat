@@ -1,5 +1,7 @@
 module TetrominoSim exposing
-    ( Debris
+    ( Crystal
+    , Debris
+    , Giant
     , Input(..)
     , InputEvent
     , MatchState
@@ -15,12 +17,18 @@ module TetrominoSim exposing
     , Snowball
     , Tower
     , canDrop
+    , crystalCenter
+    , crystalHealth
+    , crystalHeight
     , debrisFrames
     , entityHeight
     , entityRadius
     , framesPerSecond
+    , giantHeight
+    , giantRadius
     , gridSize
     , init
+    , isGameOver
     , isProtected
     , isSettled
     , keepInsideGrid
@@ -66,6 +74,8 @@ type alias MatchState =
     , players : SeqDict (Id UserId) Player
     , waitingPlayers : SeqSet (Id UserId)
     , towers : List Tower
+    , giants : List Giant
+    , crystal : Crystal
     , pieces : SeqDict Int Piece
     , occupied : Dict ( Int, Int, Int ) Int
     , snowballs : List Snowball
@@ -74,7 +84,26 @@ type alias MatchState =
     , nextId : Int
     , seed : Random.Seed
     , nextNpcSpawn : Maybe Int
+    , nextGiantSpawn : Maybe Int
     , nextPickupSpawn : Maybe Int
+    }
+
+
+{-| What the NPCs are after. It stands in the middle of the map, two blocks wide and three high, and
+the match is over once it has taken `crystalHealth` damage.
+-}
+type alias Crystal =
+    { health : Int, lastHitAt : Maybe Int }
+
+
+{-| Two blocks tall and very slow. It pays no attention to players and walks straight for the
+crystal, breaking any block in its way after standing against it for a moment.
+-}
+type alias Giant =
+    { id : Int
+    , position : Point
+    , velocityZ : Float
+    , blockedSince : Maybe Int
     }
 
 
@@ -118,14 +147,15 @@ type alias Pickup =
     { id : Int, x : Int, y : Int, z : Int }
 
 
+{-| Every kind heads for the crystal, unless a player is nearer than it is.
+-}
 type NpcKind
-    = -- Heads straight for the nearest player as fast as a player walks, but can't hop, so a wall
-      -- one block high stops it. Knocks out a player it reaches.
+    = -- Heads straight for its target slower than a player walks, but can't hop on its own, so a
+      -- wall one block high stops it. Knocks out a player it reaches.
       Chaser
-      -- Keeps a few cells away from the nearest player and throws snowballs.
+      -- Keeps a few cells away from a player and throws snowballs.
     | Thrower
-      -- Heads straight for the nearest player a little faster than a player walks, hopping onto
-      -- anything one block high. Knocks out a player it reaches.
+      -- Like a chaser, a little faster and hopping onto anything one block high.
     | Jumper
 
 
@@ -218,6 +248,13 @@ npcDelay =
     10 * framesPerSecond
 
 
+{-| The first round gives a whole minute to build before anything turns up.
+-}
+firstRoundNpcDelay : Int
+firstRoundNpcDelay =
+    60 * framesPerSecond
+
+
 spawnProtection : Int
 spawnProtection =
     3 * framesPerSecond
@@ -250,17 +287,100 @@ playerSpeed =
 
 throwerSpeed : Float
 throwerSpeed =
-    1
+    0.8
 
 
 chaserSpeed : Float
 chaserSpeed =
-    playerSpeed
+    1.6
 
 
 jumperSpeed : Float
 jumperSpeed =
-    playerSpeed * 1.15
+    1.9
+
+
+giantSpeed : Float
+giantSpeed =
+    0.35
+
+
+giantRadius : Float
+giantRadius =
+    0.45
+
+
+giantHeight : Float
+giantHeight =
+    2
+
+
+{-| How long a giant stands against blocks before breaking them.
+-}
+giantBreakTime : Int
+giantBreakTime =
+    framesPerSecond
+
+
+{-| A giant turns up this long into every round after the first.
+-}
+giantDelay : Int
+giantDelay =
+    15 * framesPerSecond
+
+
+{-| How far from the crystal a giant turns up, in cells along each axis.
+-}
+giantSpawnDistance : Int
+giantSpawnDistance =
+    28
+
+
+crystalHealth : Int
+crystalHealth =
+    3
+
+
+{-| How much damage a giant reaching the crystal does.
+-}
+giantDamage : Int
+giantDamage =
+    3
+
+
+{-| The crystal's blocks are in `occupied` like a piece's, under an id no piece has.
+-}
+crystalId : Int
+crystalId =
+    -1
+
+
+crystalHeight : Int
+crystalHeight =
+    3
+
+
+crystalCells : List ( Int, Int, Int )
+crystalCells =
+    List.concatMap
+        (\x ->
+            List.concatMap
+                (\y -> List.map (\z -> ( x, y, z )) (List.range 0 (crystalHeight - 1)))
+                [ gridSize // 2 - 1, gridSize // 2 ]
+        )
+        [ gridSize // 2 - 1, gridSize // 2 ]
+
+
+crystalCenter : { x : Float, y : Float }
+crystalCenter =
+    { x = toFloat (gridSize // 2), y = toFloat (gridSize // 2) }
+
+
+{-| How close to the crystal's surface counts as touching it.
+-}
+crystalReach : Float
+crystalReach =
+    0.1
 
 
 entityRadius : Float
@@ -313,11 +433,11 @@ throwLead =
     0.6
 
 
-{-| How far from a player an NPC turns up, in cells along each axis.
+{-| How far from the crystal an NPC turns up, in cells along each axis.
 -}
 npcSpawnDistance : Int
 npcSpawnDistance =
-    12
+    20
 
 
 startingPieces : Int
@@ -381,14 +501,17 @@ init seed frame =
     , players = SeqDict.empty
     , waitingPlayers = SeqSet.empty
     , towers = []
+    , giants = []
+    , crystal = { health = crystalHealth, lastHitAt = Nothing }
     , pieces = SeqDict.empty
-    , occupied = Dict.empty
+    , occupied = List.foldl (\cell occupied -> Dict.insert cell crystalId occupied) Dict.empty crystalCells
     , snowballs = []
     , debris = []
     , pickups = []
     , nextId = 0
     , seed = Random.initialSeed seed
     , nextNpcSpawn = Nothing
+    , nextGiantSpawn = Nothing
     , nextPickupSpawn = Nothing
     }
         |> scatterPieces sceneryPieces
@@ -484,10 +607,28 @@ scatterPieces count state =
         scatterPieces (count - 1) state2
 
 
-{-| Advance by one frame, applying the inputs stamped with this frame first.
+{-| Advance by one frame, applying the inputs stamped with this frame first. Once the crystal is
+destroyed everything stands still.
 -}
 step : List InputEvent -> MatchState -> MatchState
 step inputs state =
+    if isGameOver state then
+        { state
+            | frame = state.frame + 1
+            , debris = List.filter (\debris -> state.frame - debris.destroyedAt < debrisFrames) state.debris
+        }
+
+    else
+        stepPlaying inputs state
+
+
+isGameOver : MatchState -> Bool
+isGameOver state =
+    state.crystal.health <= 0
+
+
+stepPlaying : List InputEvent -> MatchState -> MatchState
+stepPlaying inputs state =
     let
         state2 : MatchState
         state2 =
@@ -500,8 +641,11 @@ step inputs state =
                 |> updatePlayers
                 |> collectPickups
                 |> updateTowers
+                |> hitCrystal
                 |> catchPlayers
+                |> updateGiants
                 |> spawnNpcs
+                |> spawnGiants
                 |> spawnPickups
                 |> updateSnowballs
 
@@ -791,17 +935,29 @@ startRound state =
         , players = players
         , waitingPlayers = SeqSet.empty
         , seed = seed
-        , nextNpcSpawn = Just (state.frame + npcDelay)
+        , nextNpcSpawn =
+            if state.round.number == 0 then
+                Just (state.frame + firstRoundNpcDelay)
+
+            else
+                Just (state.frame + npcDelay)
+        , nextGiantSpawn =
+            if state.round.number == 0 then
+                Nothing
+
+            else
+                Just (state.frame + giantDelay)
         , nextPickupSpawn = Just (state.frame + firstPickupDelay)
     }
 
 
-{-| Where around the middle of the grid each player brought into a round appears, so that they
-don't all start on top of each other.
+{-| Where around the crystal in the middle of the grid each player brought into a round appears,
+so that they don't all start on top of each other. The crystal covers the two columns either side
+of the middle line, so these leave a one cell gap around it.
 -}
 spawnOffset : Int -> ( Int, Int )
 spawnOffset index =
-    case List.drop (modBy 9 index) [ ( 0, 0 ), ( 1, 0 ), ( 0, 1 ), ( -1, 0 ), ( 0, -1 ), ( 1, 1 ), ( -1, -1 ), ( 1, -1 ), ( -1, 1 ) ] of
+    case List.drop (modBy 8 index) [ ( 2, 0 ), ( -3, -1 ), ( -1, 2 ), ( 0, -3 ), ( 2, 2 ), ( -3, -3 ), ( 2, -3 ), ( -3, 2 ) ] of
         offset :: _ ->
             offset
 
@@ -886,16 +1042,21 @@ updateTowers state =
     { state | towers = mergeTowers state.occupied thrown, snowballs = snowballs, seed = seed4 }
 
 
-{-| A tower walks the way its bottom NPC would on its own. It can come out of this as two towers,
-if it walked into a wall the NPCs at the top could step onto.
+{-| A tower walks the way its bottom NPC would on its own, except that a tower of two or more can
+always hop. It can come out of this as two towers, if it walked into a wall the NPCs at the top
+could step onto.
 -}
 moveTower : Int -> List Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
 moveTower frame alivePlayers occupied seed tower =
     case tower.bottom.kind of
         Chaser ->
-            ( walkTowerWithoutHopping frame chaserSpeed (nearestPlayerPosition tower.position alivePlayers) occupied tower
-            , seed
-            )
+            if List.isEmpty tower.above then
+                ( walkTowerWithoutHopping frame chaserSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower
+                , seed
+                )
+
+            else
+                ( walkTower frame chaserSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower, seed )
 
         Thrower ->
             let
@@ -917,26 +1078,43 @@ moveTower frame alivePlayers occupied seed tower =
                 target =
                     case nearestPlayer tower2.position alivePlayers of
                         Just ( player, distance ) ->
-                            if distance > npcKeepDistance then
+                            if distance >= distanceToCrystal tower2.position then
+                                Just crystalCenter
+
+                            else if distance > npcKeepDistance then
                                 Just { x = player.position.x + tower2.wanderOffset.x, y = player.position.y + tower2.wanderOffset.y }
 
                             else
                                 Nothing
 
                         Nothing ->
-                            Nothing
+                            Just crystalCenter
             in
             ( walkTower frame throwerSpeed target occupied tower2, seed2 )
 
         Jumper ->
-            ( walkTower frame jumperSpeed (nearestPlayerPosition tower.position alivePlayers) occupied tower, seed )
+            ( walkTower frame jumperSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower, seed )
 
 
-nearestPlayerPosition : Point -> List Player -> Maybe { x : Float, y : Float }
-nearestPlayerPosition position alivePlayers =
-    Maybe.map
-        (\( player, _ ) -> { x = player.position.x, y = player.position.y })
-        (nearestPlayer position alivePlayers)
+{-| Chasers and jumpers go for the nearest player, unless the crystal is nearer.
+-}
+chaseTarget : Point -> List Player -> { x : Float, y : Float }
+chaseTarget position alivePlayers =
+    case nearestPlayer position alivePlayers of
+        Just ( player, distance ) ->
+            if distance < distanceToCrystal position then
+                { x = player.position.x, y = player.position.y }
+
+            else
+                crystalCenter
+
+        Nothing ->
+            crystalCenter
+
+
+distanceToCrystal : Point -> Float
+distanceToCrystal position =
+    horizontalDistance position { x = crystalCenter.x, y = crystalCenter.y, z = 0 }
 
 
 {-| Walk a tower towards a target, hopping onto anything one block high if the whole tower has
@@ -1171,7 +1349,7 @@ npcThrow frame alivePlayers position npc seed =
                                 Random.step
                                     (Random.map3
                                         (\a b c -> ( a, b, c ))
-                                        (Random.int 100 200)
+                                        (Random.int (3 * framesPerSecond) (5 * framesPerSecond))
                                         (Random.float -throwSpread throwSpread)
                                         (Random.float -throwSpread throwSpread)
                                     )
@@ -1303,6 +1481,65 @@ throwSnowball frame from to =
     }
 
 
+{-| Every NPC touching the crystal is gone, and does it a point of damage.
+-}
+hitCrystal : MatchState -> MatchState
+hitCrystal state =
+    let
+        hits : Int
+        hits =
+            List.foldl
+                (\tower count ->
+                    count
+                        + List.length
+                            (List.filter
+                                (\( _, position ) -> touchesCrystal entityRadius entityHeight position)
+                                (npcPositions tower)
+                            )
+                )
+                0
+                state.towers
+    in
+    if hits > 0 then
+        damageCrystal
+            hits
+            { state | towers = List.filterMap (removeNpcs (touchesCrystal entityRadius entityHeight)) state.towers }
+
+    else
+        state
+
+
+damageCrystal : Int -> MatchState -> MatchState
+damageCrystal damage state =
+    { state | crystal = { health = max 0 (state.crystal.health - damage), lastHitAt = Just state.frame } }
+
+
+{-| Whether something this wide and tall standing here touches the crystal, from the side or from
+on top of it.
+-}
+touchesCrystal : Float -> Float -> Point -> Bool
+touchesCrystal radius height position =
+    let
+        low : Float
+        low =
+            toFloat (gridSize // 2 - 1)
+
+        high : Float
+        high =
+            toFloat (gridSize // 2 + 1)
+
+        reach : Float
+        reach =
+            radius + crystalReach
+    in
+    (position.x + reach > low)
+        && (position.x - reach < high)
+        && (position.y + reach > low)
+        && (position.y - reach < high)
+        && (position.z < toFloat crystalHeight + crystalReach)
+        && (position.z + height > 0)
+
+
 {-| Chasers and jumpers knock out any player they reach, from anywhere in a tower, unless that
 player has only just come into the round.
 -}
@@ -1363,8 +1600,8 @@ entitiesTouch a b =
         && (abs (a.z - b.z) < entityHeight)
 
 
-{-| NPCs turn up a little way off from one of the players still standing, so that how soon they
-arrive doesn't depend on where on the map everyone is.
+{-| While anyone is standing in the round, NPCs turn up on a ring around the crystal and make for
+it.
 -}
 spawnNpcs : MatchState -> MatchState
 spawnNpcs state =
@@ -1372,15 +1609,14 @@ spawnNpcs state =
         Just spawnFrame ->
             if state.frame >= spawnFrame then
                 let
-                    alivePlayers : List Player
-                    alivePlayers =
-                        SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
+                    anyoneStanding : Bool
+                    anyoneStanding =
+                        List.any (\player -> player.knockedOutAt == Nothing) (SeqDict.values state.players)
 
                     ( roll, seed ) =
                         Random.step
-                            (Random.map4
-                                (\playerIndex side along kindRoll -> { playerIndex = playerIndex, side = side, along = along, kindRoll = kindRoll })
-                                (Random.int 0 (max 0 (List.length alivePlayers - 1)))
+                            (Random.map3
+                                (\side along kindRoll -> { side = side, along = along, kindRoll = kindRoll })
                                 (Random.int 0 3)
                                 (Random.int -npcSpawnDistance npcSpawnDistance)
                                 (Random.int 0 3)
@@ -1419,33 +1655,28 @@ spawnNpcs state =
 
                     towers : List Tower
                     towers =
-                        case List.drop roll.playerIndex alivePlayers of
-                            player :: _ ->
-                                if npcCount state.towers < npcLimit then
-                                    let
-                                        x : Int
-                                        x =
-                                            clamp 0 (gridSize - 1) (floor player.position.x + offsetX)
+                        if anyoneStanding && npcCount state.towers < npcLimit then
+                            let
+                                x : Int
+                                x =
+                                    clamp 0 (gridSize - 1) (gridSize // 2 + offsetX)
 
-                                        y : Int
-                                        y =
-                                            clamp 0 (gridSize - 1) (floor player.position.y + offsetY)
-                                    in
-                                    state.towers
-                                        ++ [ { position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
-                                             , velocityZ = 0
-                                             , wanderOffset = { x = 0, y = 0 }
-                                             , nextWanderFrame = state.frame
-                                             , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 2 * framesPerSecond }
-                                             , above = []
-                                             }
-                                           ]
+                                y : Int
+                                y =
+                                    clamp 0 (gridSize - 1) (gridSize // 2 + offsetY)
+                            in
+                            state.towers
+                                ++ [ { position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
+                                     , velocityZ = 0
+                                     , wanderOffset = { x = 0, y = 0 }
+                                     , nextWanderFrame = state.frame
+                                     , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 3 * framesPerSecond }
+                                     , above = []
+                                     }
+                                   ]
 
-                                else
-                                    state.towers
-
-                            [] ->
-                                state.towers
+                        else
+                            state.towers
                 in
                 { state
                     | towers = towers
@@ -1463,7 +1694,222 @@ spawnNpcs state =
 
 npcSpawnInterval : Int -> Int
 npcSpawnInterval framesIntoRound =
-    max (3 * framesPerSecond) (8 * framesPerSecond - framesIntoRound // 30)
+    max (6 * framesPerSecond) (12 * framesPerSecond - framesIntoRound // 15)
+
+
+
+-- Giants
+
+
+{-| A giant turns up on a ring far out from the crystal, once in every round after the first.
+-}
+spawnGiants : MatchState -> MatchState
+spawnGiants state =
+    case state.nextGiantSpawn of
+        Just spawnFrame ->
+            if state.frame >= spawnFrame then
+                let
+                    ( ( side, along ), seed ) =
+                        Random.step
+                            (Random.pair (Random.int 0 3) (Random.int -giantSpawnDistance giantSpawnDistance))
+                            state.seed
+
+                    ( offsetX, offsetY ) =
+                        case side of
+                            0 ->
+                                ( along, -giantSpawnDistance )
+
+                            1 ->
+                                ( along, giantSpawnDistance )
+
+                            2 ->
+                                ( -giantSpawnDistance, along )
+
+                            _ ->
+                                ( giantSpawnDistance, along )
+
+                    x : Int
+                    x =
+                        clamp 0 (gridSize - 1) (gridSize // 2 + offsetX)
+
+                    y : Int
+                    y =
+                        clamp 0 (gridSize - 1) (gridSize // 2 + offsetY)
+                in
+                { state
+                    | giants =
+                        state.giants
+                            ++ [ { id = state.nextId
+                                 , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
+                                 , velocityZ = 0
+                                 , blockedSince = Nothing
+                                 }
+                               ]
+                    , nextId = state.nextId + 1
+                    , seed = seed
+                    , nextGiantSpawn = Nothing
+                }
+
+            else
+                state
+
+        Nothing ->
+            state
+
+
+updateGiants : MatchState -> MatchState
+updateGiants state =
+    let
+        state2 : MatchState
+        state2 =
+            List.foldl updateGiant { state | giants = [] } state.giants
+    in
+    { state2 | giants = List.reverse state2.giants }
+
+
+{-| A giant that reaches the crystal does it a lot of damage and is gone. Otherwise it walks
+straight for the crystal, and when blocks are in the way it stands against them for a moment and
+then breaks them. Giants collected so far are in `state.giants`, newest first.
+-}
+updateGiant : Giant -> MatchState -> MatchState
+updateGiant giant state =
+    if touchesCrystal giantRadius giantHeight giant.position then
+        damageCrystal giantDamage state
+
+    else
+        case stepTowards giantSpeed crystalCenter giant.position of
+            Just next ->
+                case giantBlockedBy state.occupied next of
+                    [] ->
+                        { state | giants = fallGiant state.occupied { giant | position = next, blockedSince = Nothing } :: state.giants }
+
+                    blocks ->
+                        case giant.blockedSince of
+                            Just since ->
+                                if state.frame - since >= giantBreakTime then
+                                    let
+                                        state2 : MatchState
+                                        state2 =
+                                            breakBlocks blocks state
+                                    in
+                                    { state2 | giants = { giant | blockedSince = Nothing } :: state2.giants }
+
+                                else
+                                    { state | giants = fallGiant state.occupied giant :: state.giants }
+
+                            Nothing ->
+                                { state | giants = fallGiant state.occupied { giant | blockedSince = Just state.frame } :: state.giants }
+
+            Nothing ->
+                { state | giants = fallGiant state.occupied giant :: state.giants }
+
+
+{-| The blocks a giant standing here would be inside of, apart from the crystal's.
+-}
+giantBlockedBy : Dict ( Int, Int, Int ) Int -> Point -> List ( Int, Int, Int )
+giantBlockedBy occupied position =
+    List.concatMap
+        (\cellX ->
+            List.concatMap
+                (\cellY ->
+                    List.filterMap
+                        (\cellZ ->
+                            case Dict.get ( cellX, cellY, cellZ ) occupied of
+                                Just pieceId ->
+                                    if pieceId == crystalId then
+                                        Nothing
+
+                                    else
+                                        Just ( cellX, cellY, cellZ )
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        (List.range (floor position.z) (floor (position.z + giantHeight - epsilon)))
+                )
+                (List.range (floor (position.y - giantRadius)) (floor (position.y + giantRadius - epsilon)))
+        )
+        (List.range (floor (position.x - giantRadius)) (floor (position.x + giantRadius - epsilon)))
+
+
+giantCollides : Dict ( Int, Int, Int ) Int -> Point -> Bool
+giantCollides occupied position =
+    (position.z < 0)
+        || boxCollides
+            occupied
+            (floor (position.x - giantRadius))
+            (floor (position.x + giantRadius - epsilon))
+            (floor (position.y - giantRadius))
+            (floor (position.y + giantRadius - epsilon))
+            (floor position.z)
+            (floor (position.z + giantHeight - epsilon))
+
+
+fallGiant : Dict ( Int, Int, Int ) Int -> Giant -> Giant
+fallGiant occupied giant =
+    let
+        velocityZ : Float
+        velocityZ =
+            fallingVelocity giant
+
+        position : Point
+        position =
+            giant.position
+
+        newZ : Float
+        newZ =
+            position.z + velocityZ * frameSeconds
+    in
+    if giantCollides occupied { position | z = newZ } then
+        { giant | position = { position | z = max 0 (toFloat (floor newZ + 1)) }, velocityZ = 0 }
+
+    else
+        { giant | position = { position | z = newZ }, velocityZ = velocityZ }
+
+
+{-| Knock individual blocks out of whatever pieces they belong to, leaving the rest of each piece,
+and let go of anything left without support.
+-}
+breakBlocks : List ( Int, Int, Int ) -> MatchState -> MatchState
+breakBlocks cells state =
+    List.foldl breakBlock state cells |> dropUnsupportedPieces
+
+
+breakBlock : ( Int, Int, Int ) -> MatchState -> MatchState
+breakBlock (( x, y, z ) as cell) state =
+    case Dict.get cell state.occupied of
+        Just pieceId ->
+            let
+                state2 : MatchState
+                state2 =
+                    { state | occupied = Dict.remove cell state.occupied }
+            in
+            case SeqDict.get pieceId state2.pieces of
+                Just piece ->
+                    let
+                        offset : ( Int, Int, Int )
+                        offset =
+                            ( x - piece.x, y - piece.y, z - floor piece.z )
+
+                        remaining : List ( Int, Int, Int )
+                        remaining =
+                            List.filter (\other -> other /= offset) piece.cells
+                    in
+                    { state2
+                        | pieces =
+                            if List.isEmpty remaining then
+                                SeqDict.remove pieceId state2.pieces
+
+                            else
+                                SeqDict.insert pieceId { piece | cells = remaining } state2.pieces
+                        , debris = { piece = { piece | cells = [ offset ] }, destroyedAt = state2.frame } :: state2.debris
+                    }
+
+                Nothing ->
+                    state2
+
+        Nothing ->
+            state
 
 
 
@@ -1520,7 +1966,7 @@ spawnPickups state =
                     pickups =
                         case List.drop roll.playerIndex alivePlayers of
                             player :: _ ->
-                                if List.length state.pickups < maxPickups then
+                                if List.length state.pickups < maxPickups && not (onCrystal (floor player.position.x + offsetX) (floor player.position.y + offsetY)) then
                                     let
                                         x : Int
                                         x =
@@ -1550,6 +1996,11 @@ spawnPickups state =
 
         Nothing ->
             state
+
+
+onCrystal : Int -> Int -> Bool
+onCrystal column row =
+    List.member ( column, row, 0 ) crystalCells
 
 
 {-| A player standing in the round who touches a pickup takes it, and everyone gets more pieces.
@@ -1912,6 +2363,16 @@ firstFreeLevel level triesLeft piece occupied =
 
 pieceOverlapsEntity : Piece -> Float -> Point -> Bool
 pieceOverlapsEntity piece level entity =
+    pieceOverlapsBox piece level entityRadius entityHeight entity
+
+
+pieceOverlapsGiant : Piece -> Float -> Point -> Bool
+pieceOverlapsGiant piece level giant =
+    pieceOverlapsBox piece level giantRadius giantHeight giant
+
+
+pieceOverlapsBox : Piece -> Float -> Float -> Float -> Point -> Bool
+pieceOverlapsBox piece level radius height entity =
     List.any
         (\( offsetX, offsetY, offsetZ ) ->
             let
@@ -1927,18 +2388,18 @@ pieceOverlapsEntity piece level entity =
                 cellZ =
                     level + toFloat offsetZ
             in
-            (entity.x + entityRadius > cellX)
-                && (entity.x - entityRadius < cellX + 1)
-                && (entity.y + entityRadius > cellY)
-                && (entity.y - entityRadius < cellY + 1)
-                && (entity.z + entityHeight > cellZ)
+            (entity.x + radius > cellX)
+                && (entity.x - radius < cellX + 1)
+                && (entity.y + radius > cellY)
+                && (entity.y - radius < cellY + 1)
+                && (entity.z + height > cellZ)
                 && (entity.z < cellZ + 1)
         )
         piece.cells
 
 
-{-| Move every falling piece down. A piece that comes down on an NPC takes the NPC with it, and
-one that comes down on a player is lost.
+{-| Move every falling piece down. A piece that comes down on an NPC or a giant takes it with it,
+and one that comes down on a player is lost.
 -}
 updatePieces : MatchState -> MatchState
 updatePieces state =
@@ -1978,10 +2439,13 @@ updatePieces state =
                                 (\player -> player.knockedOutAt == Nothing && pieceOverlapsEntity piece finalZ player.position)
                                 (SeqDict.values state2.players)
 
-                        -- NPCs it falls on are squashed, and the piece carries on down.
+                        -- NPCs and giants it falls on are squashed, and the piece carries on down.
                         state3 : MatchState
                         state3 =
-                            { state2 | towers = List.filterMap (squash piece finalZ) state2.towers }
+                            { state2
+                                | towers = List.filterMap (squash piece finalZ) state2.towers
+                                , giants = List.filter (\giant -> not (pieceOverlapsGiant piece finalZ giant.position)) state2.giants
+                            }
                     in
                     if hitPlayer then
                         { state3
@@ -2022,12 +2486,19 @@ updatePieces state =
         state.pieces
 
 
-{-| Take out the NPCs in a tower that a piece at this level overlaps. Whoever is left stays
-standing where they were, and falls if there's nothing under them any more.
+{-| Take out the NPCs in a tower that a piece at this level overlaps.
 -}
 squash : Piece -> Float -> Tower -> Maybe Tower
 squash piece level tower =
-    case List.filter (\( _, position ) -> not (pieceOverlapsEntity piece level position)) (npcPositions tower) of
+    removeNpcs (pieceOverlapsEntity piece level) tower
+
+
+{-| Take out the NPCs in a tower standing where `isGone` says. Whoever is left stays standing where
+they were, and falls if there's nothing under them any more.
+-}
+removeNpcs : (Point -> Bool) -> Tower -> Maybe Tower
+removeNpcs isGone tower =
+    case List.filter (\( _, position ) -> not (isGone position)) (npcPositions tower) of
         ( lowest, position ) :: higher ->
             Just { tower | position = position, bottom = lowest, above = List.map Tuple.first higher }
 

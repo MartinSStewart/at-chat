@@ -1,6 +1,7 @@
 module TetrominoView exposing
-    ( Cursor
-    , cameraFocus
+    ( Camera
+    , Cursor
+    , camera
     , previewEntities
     , screenToCell
     , worldEntities
@@ -18,7 +19,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import SeqDict
 import Tetromino exposing (Orientation, Shape)
-import TetrominoSim exposing (Debris, MatchState, NpcKind, Pickup, Piece, PieceStatus(..), Player, Point)
+import TetrominoSim exposing (Crystal, Debris, Giant, MatchState, NpcKind, Pickup, Piece, PieceStatus(..), Player, Point)
 
 
 {-| The column the pointer is over, and the height of the surface there.
@@ -45,36 +46,66 @@ type alias Varyings =
     { vNormal : Vec3, vUv : Vec2 }
 
 
-{-| The point on the ground the camera looks at: this client's player, or the middle of the map
-while they aren't in a round.
+{-| What the camera looks at, and how far it's zoomed out from its closest.
 -}
-cameraFocus : Id UserId -> MatchState -> { x : Float, y : Float }
-cameraFocus currentUserId state =
-    case SeqDict.get currentUserId state.players of
-        Just player ->
-            { x = player.position.x, y = player.position.y }
+type alias Camera =
+    { focus : Vec3, zoom : Float }
 
-        Nothing ->
-            { x = toFloat TetrominoSim.gridSize / 2, y = toFloat TetrominoSim.gridSize / 2 }
+
+{-| Follows this client's player, or looks at the middle of the map while they aren't in a round.
+The higher up they stand the further it zooms out, going by their height averaged over the last
+second (`recent`, newest first) so that hopping doesn't make it bob.
+-}
+camera : Id UserId -> List MatchState -> Camera
+camera currentUserId recent =
+    case recent of
+        latest :: _ ->
+            case SeqDict.get currentUserId latest.players of
+                Just player ->
+                    let
+                        heights : List Float
+                        heights =
+                            List.take TetrominoSim.framesPerSecond recent
+                                |> List.filterMap (\state -> SeqDict.get currentUserId state.players)
+                                |> List.map (\earlier -> earlier.position.z)
+
+                        height : Float
+                        height =
+                            List.sum heights / toFloat (max 1 (List.length heights))
+                    in
+                    { focus = Vec3.vec3 player.position.x player.position.y (height + 1)
+                    , zoom = 1 + 0.1 * height
+                    }
+
+                Nothing ->
+                    middleOfTheMap
+
+        [] ->
+            middleOfTheMap
+
+
+middleOfTheMap : Camera
+middleOfTheMap =
+    { focus = Vec3.vec3 (toFloat TetrominoSim.gridSize / 2) (toFloat TetrominoSim.gridSize / 2) 1, zoom = 1 }
 
 
 {-| Looking down at the focus from the side nearest x = 0, y = 0, a little steeper than the classic
 isometric angle.
 -}
-viewProjection : Int -> Int -> Vec3 -> Mat4
-viewProjection width height focus =
+viewProjection : Int -> Int -> Camera -> Mat4
+viewProjection width height { focus, zoom } =
     let
         aspect : Float
         aspect =
             toFloat (max 1 width) / toFloat (max 1 height)
 
-        halfWidth : Float
-        halfWidth =
-            max 11 (7.5 * aspect)
-
         halfHeight : Float
         halfHeight =
-            halfWidth / aspect
+            5.5 * zoom
+
+        halfWidth : Float
+        halfWidth =
+            halfHeight * aspect
     in
     Mat4.mul
         (Mat4.makeOrtho -halfWidth halfWidth -halfHeight halfHeight -200 200)
@@ -83,9 +114,9 @@ viewProjection width height focus =
 
 {-| Which column is under a point on the canvas, given in CSS pixels from its top left corner.
 -}
-screenToCell : Int -> Int -> { x : Float, y : Float } -> { x : Float, y : Float } -> MatchState -> Maybe Cursor
-screenToCell width height focus screenPosition state =
-    case Mat4.inverse (viewProjection width height (Vec3.vec3 focus.x focus.y 1)) of
+screenToCell : Int -> Int -> Camera -> { x : Float, y : Float } -> MatchState -> Maybe Cursor
+screenToCell width height camera2 screenPosition state =
+    case Mat4.inverse (viewProjection width height camera2) of
         Just inverse ->
             let
                 ndcX : Float
@@ -214,6 +245,7 @@ surfaceBelow columns column row below =
 worldEntities :
     { width : Int
     , height : Int
+    , camera : Camera
     , currentUserId : Id UserId
     , userColor : Id UserId -> Color
     , cursor : Maybe Cursor
@@ -223,13 +255,12 @@ worldEntities :
     -> List Entity
 worldEntities config state =
     let
-        focus : { x : Float, y : Float }
-        focus =
-            cameraFocus config.currentUserId state
-
         vp : Mat4
         vp =
-            viewProjection config.width config.height (Vec3.add (Vec3.vec3 focus.x focus.y 1) (screenShake focus state))
+            viewProjection
+                config.width
+                config.height
+                { focus = Vec3.add config.camera.focus (screenShake config.camera.focus state), zoom = config.camera.zoom }
 
         columns : Columns
         columns =
@@ -268,6 +299,9 @@ worldEntities config state =
                         List.map (\( part, _ ) -> silhouetteEntity vp npcSilhouetteColor part) (npcParts npc.kind position)
                     )
                     npcs
+                ++ List.concatMap
+                    (\giant -> List.map (\( part, _ ) -> silhouetteEntity vp npcSilhouetteColor part) (giantParts giant))
+                    state.giants
 
         everythingElse : List Entity
         everythingElse =
@@ -280,6 +314,8 @@ worldEntities config state =
                     state.snowballs
                 ++ List.concatMap (debrisEntities vp config.userColor state.frame) state.debris
                 ++ List.concatMap (pickupEntities vp state.frame) state.pickups
+                ++ List.concatMap (\giant -> List.map (\( part, color ) -> partEntity vp color part) (giantParts giant)) state.giants
+                ++ [ crystalEntity vp state.frame state.crystal ]
 
         shadows : List Entity
         shadows =
@@ -289,6 +325,7 @@ worldEntities config state =
                     (\( _, player ) -> discShadow vp columns player.position (TetrominoSim.entityRadius * 2))
                     alivePlayers
                 ++ List.map (\tower -> discShadow vp columns tower.position (TetrominoSim.entityRadius * 2)) state.towers
+                ++ List.map (\giant -> discShadow vp columns giant.position (TetrominoSim.giantRadius * 2.2)) state.giants
                 ++ List.map
                     (\snowball -> discShadow vp columns snowball.position (TetrominoSim.snowballRadius * 2))
                     state.snowballs
@@ -351,7 +388,7 @@ shadowAlpha =
 
 {-| A small jolt of the camera for a moment after a piece lands nearby, fading with distance.
 -}
-screenShake : { x : Float, y : Float } -> MatchState -> Vec3
+screenShake : Vec3 -> MatchState -> Vec3
 screenShake focus state =
     let
         shakeFrames : Int
@@ -371,7 +408,7 @@ screenShake focus state =
 
                                 distance : Float
                                 distance =
-                                    sqrt ((toFloat piece.x - focus.x) ^ 2 + (toFloat piece.y - focus.y) ^ 2)
+                                    sqrt ((toFloat piece.x - Vec3.getX focus) ^ 2 + (toFloat piece.y - Vec3.getY focus) ^ 2)
                             in
                             if age < shakeFrames then
                                 total + (1 - toFloat age / toFloat shakeFrames) * max 0 (1 - distance / 24)
@@ -692,6 +729,74 @@ pickupEntities vp frame pickup =
         [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 1, 1 ) ]
 
 
+{-| A gem filling the crystal's blocks. It flashes red for a moment after it's
+hit, and goes dark once destroyed.
+-}
+crystalEntity : Mat4 -> Int -> Crystal -> Entity
+crystalEntity vp frame crystal =
+    let
+        healthy : Color
+        healthy =
+            mix (Color.rgb 0.7 0.35 1) (Color.rgb 0.88 0.7 1) (0.5 + 0.5 * sin (toFloat frame * 0.05))
+
+        color : Color
+        color =
+            if crystal.health <= 0 then
+                Color.rgb 0.25 0.27 0.32
+
+            else
+                case crystal.lastHitAt of
+                    Just hitAt ->
+                        if frame - hitAt < 40 then
+                            mix (Color.rgb 1 0.2 0.15) healthy (toFloat (frame - hitAt) / 40)
+
+                        else
+                            healthy
+
+                    Nothing ->
+                        healthy
+    in
+    partEntity
+        vp
+        color
+        { mesh = crystalMesh
+        , offset = Vec3.vec3 (TetrominoSim.crystalCenter.x - 1) (TetrominoSim.crystalCenter.y - 1) 0
+        , scale = Vec3.vec3 2 2 (toFloat TetrominoSim.crystalHeight)
+        }
+
+
+{-| A hulking block of ice with a smaller one for a head, as tall as two blocks.
+-}
+giantParts : Giant -> List ( Part, Color )
+giantParts giant =
+    let
+        position : Point
+        position =
+            giant.position
+
+        width : Float
+        width =
+            TetrominoSim.giantRadius * 2
+
+        bodyHeight : Float
+        bodyHeight =
+            TetrominoSim.giantHeight - 0.55
+    in
+    [ ( { mesh = cubeMesh
+        , offset = Vec3.vec3 (position.x - width / 2) (position.y - width / 2) position.z
+        , scale = Vec3.vec3 width width bodyHeight
+        }
+      , Color.rgb 0.5 0.62 0.8
+      )
+    , ( { mesh = cubeMesh
+        , offset = Vec3.vec3 (position.x - 0.28) (position.y - 0.28) (position.z + bodyHeight)
+        , scale = Vec3.vec3 0.56 0.56 0.55
+        }
+      , Color.rgb 0.62 0.74 0.9
+      )
+    ]
+
+
 {-| One shape of a model, placed in the world.
 -}
 type alias Part =
@@ -957,6 +1062,64 @@ cubeMesh =
         ++ face (Vec3.vec3 1 0 0) (Vec3.vec3 1 0 0) (Vec3.vec3 0 1 0) (Vec3.vec3 0 0 1)
         ++ face (Vec3.vec3 0 -1 0) (Vec3.vec3 0 0 0) (Vec3.vec3 1 0 0) (Vec3.vec3 0 0 1)
         ++ face (Vec3.vec3 0 1 0) (Vec3.vec3 0 1 0) (Vec3.vec3 0 0 1) (Vec3.vec3 1 0 0)
+        |> WebGL.triangles
+
+
+{-| A gem standing in the unit cube: narrow at the bottom, widest a third of the way up, and coming
+to a point at the top, with a flat normal for each face.
+-}
+crystalMesh : Mesh Vertex
+crystalMesh =
+    let
+        top : Vec3
+        top =
+            Vec3.vec3 0.5 0.5 1
+
+        corners : List ( Float, Float )
+        corners =
+            [ ( 0.15, 0.15 ), ( 0.85, 0.15 ), ( 0.85, 0.85 ), ( 0.15, 0.85 ) ]
+
+        face : Vec3 -> Vec3 -> Vec3 -> ( Vertex, Vertex, Vertex )
+        face a b c =
+            let
+                normal : Vec3
+                normal =
+                    Vec3.cross (Vec3.sub b a) (Vec3.sub c a) |> Vec3.normalize
+
+                vertex : Vec3 -> Vertex
+                vertex position =
+                    { position = position, normal = normal, uv = Vec2.vec2 0.5 0.5 }
+            in
+            ( vertex a, vertex b, vertex c )
+
+        inset : Float -> Float
+        inset a =
+            0.5 + (a - 0.5) * 0.4
+    in
+    List.map2
+        (\( x, y ) ( nextX, nextY ) ->
+            let
+                bottom : Vec3
+                bottom =
+                    Vec3.vec3 (inset x) (inset y) 0
+
+                nextBottom : Vec3
+                nextBottom =
+                    Vec3.vec3 (inset nextX) (inset nextY) 0
+
+                middle : Vec3
+                middle =
+                    Vec3.vec3 x y 0.35
+
+                nextMiddle : Vec3
+                nextMiddle =
+                    Vec3.vec3 nextX nextY 0.35
+            in
+            [ face bottom nextBottom nextMiddle, face bottom nextMiddle middle, face middle nextMiddle top ]
+        )
+        corners
+        (List.drop 1 corners ++ List.take 1 corners)
+        |> List.concat
         |> WebGL.triangles
 
 

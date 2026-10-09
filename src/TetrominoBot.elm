@@ -186,6 +186,15 @@ encodeState userId state =
                 )
                 state.towers
           )
+        , ( "crystal"
+          , Json.Encode.object
+                [ ( "x", Json.Encode.float TetrominoSim.crystalCenter.x )
+                , ( "y", Json.Encode.float TetrominoSim.crystalCenter.y )
+                , ( "health", Json.Encode.int state.crystal.health )
+                , ( "gameOver", Json.Encode.bool (TetrominoSim.isGameOver state) )
+                ]
+          )
+        , ( "giants", Json.Encode.list (\giant -> point giant.position) state.giants )
         , ( "snowballs"
           , Json.Encode.list
                 (\snowball ->
