@@ -78,7 +78,7 @@ emptyMatch seed frame =
     { state
         | towers = []
         , pieces = SeqDict.empty
-        , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId state.pieces)) state.occupied
+        , blocks = TetrominoSim.blocksOf (Dict.filter (\_ pieceId -> not (SeqDict.member pieceId state.pieces)) state.blocks.occupied)
     }
 
 
@@ -101,7 +101,7 @@ playerRow =
 
 occupiedCells : MatchState -> List ( Int, Int, Int )
 occupiedCells state =
-    Dict.keys state.occupied
+    Dict.keys state.blocks.occupied
 
 
 {-| Puts a block wherever a cell is listed, owned by nobody who is playing, without dropping
@@ -110,7 +110,7 @@ anything.
 withBlocks : List ( Int, Int, Int ) -> MatchState -> MatchState
 withBlocks cells state =
     { state
-        | occupied = List.foldl (\cell occupied -> Dict.insert cell 1000000 occupied) state.occupied cells
+        | blocks = List.foldl (\cell blocks -> TetrominoSim.insertBlock cell 1000000 blocks) state.blocks cells
     }
 
 
@@ -932,10 +932,10 @@ tests =
                                     [ ( 500, wallPiece (center - 6) (center - 2) 0 )
                                     , ( 501, wallPiece (center - 6) (center - 2) 1 )
                                     ]
-                            , occupied =
+                            , blocks =
                                 List.foldl
-                                    (\y occupied -> Dict.insert ( center - 6, y, 0 ) 500 occupied |> Dict.insert ( center - 6, y, 1 ) 501)
-                                    start.occupied
+                                    (\y blocks -> TetrominoSim.insertBlock ( center - 6, y, 0 ) 500 blocks |> TetrominoSim.insertBlock ( center - 6, y, 1 ) 501)
+                                    start.blocks
                                     (List.range (center - 2) (center + 1))
                         }
 

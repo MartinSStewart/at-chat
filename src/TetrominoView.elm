@@ -165,7 +165,7 @@ screenToCell width height camera2 screenPosition state =
                     else
                         near
             in
-            castRay state.occupied (Vec3.scale 0.02 direction) start 4000
+            castRay state.blocks.occupied (Vec3.scale 0.02 direction) start 4000
 
         Nothing ->
             Nothing
@@ -282,7 +282,7 @@ worldEntities config state =
 
         columns : Columns
         columns =
-            toColumns state.occupied
+            toColumns state.blocks.occupied
 
         alivePlayers : List ( Id UserId, Player )
         alivePlayers =
@@ -338,7 +338,7 @@ worldEntities config state =
         shadows : List Entity
         shadows =
             List.concatMap (fallingPieceShadows vp columns) (SeqDict.values state.pieces)
-                ++ overhangShadows vp columns state.occupied
+                ++ overhangShadows vp columns state.blocks.occupied
                 ++ List.map
                     (\( _, player ) -> discShadow vp columns player.position (TetrominoSim.entityRadius * 2))
                     alivePlayers

@@ -1,5 +1,6 @@
 module TetrominoSim exposing
     ( Behaviour(..)
+    , Blocks
     , Crystal
     , Debris
     , Giant
@@ -19,6 +20,7 @@ module TetrominoSim exposing
     , Walk
     , WallFollow
     , WallSide(..)
+    , blocksOf
     , canDrop
     , coversCrystal
     , crystalCenter
@@ -32,6 +34,7 @@ module TetrominoSim exposing
     , giantRadius
     , gridSize
     , init
+    , insertBlock
     , isGameOver
     , isProtected
     , isSettled
@@ -50,6 +53,8 @@ same state, so it sticks to arithmetic and `sqrt` (which every browser rounds th
 stays away from trig, and all randomness comes from the seed in the state.
 -}
 
+import Array exposing (Array)
+import Bitwise
 import Dict exposing (Dict)
 import Id exposing (Id, UserId)
 import Random
@@ -79,7 +84,7 @@ type alias MatchState =
     , giants : List Giant
     , crystal : Crystal
     , pieces : SeqDict Int Piece
-    , occupied : Dict ( Int, Int, Int ) Int
+    , blocks : Blocks
     , snowballs : List Snowball
     , debris : List Debris
     , pickups : List Pickup
@@ -340,7 +345,7 @@ giantDamage =
     3
 
 
-{-| The crystal's blocks are in `occupied` like a piece's, under an id no piece has.
+{-| The crystal's blocks are in `blocks` like a piece's, under an id no piece has.
 -}
 crystalId : Int
 crystalId =
@@ -553,7 +558,7 @@ init seed frame =
     , giants = []
     , crystal = { health = crystalHealth, lastHitAt = Nothing }
     , pieces = SeqDict.empty
-    , occupied = List.foldl (\cell occupied -> Dict.insert cell crystalId occupied) Dict.empty crystalCells
+    , blocks = List.foldl (\cell blocks -> insertBlock cell crystalId blocks) noBlocks crystalCells
     , snowballs = []
     , debris = []
     , pickups = []
@@ -679,7 +684,7 @@ scatterPieces count state =
                 List.any
                     (\( cellX, cellY, _ ) ->
                         List.any
-                            (\( dx, dy ) -> Dict.member ( x + cellX + dx, y + cellY + dy, 0 ) state.occupied)
+                            (\( dx, dy ) -> Dict.member ( x + cellX + dx, y + cellY + dy, 0 ) state.blocks.occupied)
                             [ ( 0, 0 ), ( 1, 0 ), ( -1, 0 ), ( 0, 1 ), ( 0, -1 ) ]
                     )
                     cells
@@ -703,10 +708,10 @@ scatterPieces count state =
                                 , status = Settled state.frame
                                 }
                                 state.pieces
-                        , occupied =
+                        , blocks =
                             List.foldl
-                                (\( cellX, cellY, cellZ ) occupied -> Dict.insert ( x + cellX, y + cellY, cellZ ) state.nextId occupied)
-                                state.occupied
+                                (\( cellX, cellY, cellZ ) blocks -> insertBlock ( x + cellX, y + cellY, cellZ ) state.nextId blocks)
+                                state.blocks
                                 cells
                         , nextId = state.nextId + 1
                         , seed = seed
@@ -1051,13 +1056,16 @@ updatePlayers state =
                                     (\( x, y ) -> { x = toFloat x + 0.5, y = toFloat y + 0.5 })
                                     player.target
                                 )
-                                state.occupied
+                                state.blocks
                                 player
                 )
                 state.players
     }
 
 
+{-| Every tower moves and then every tower throws, both times starting from the last tower in the
+list, which decides which random numbers each one gets.
+-}
 updateTowers : MatchState -> MatchState
 updateTowers state =
     let
@@ -1066,57 +1074,75 @@ updateTowers state =
             SeqDict.filter (\_ player -> player.knockedOutAt == Nothing) state.players
 
         ( moved, seed ) =
-            List.foldr
-                (\tower ( towerList, seed2 ) ->
-                    let
-                        ( towers, seed3 ) =
-                            moveTower state.frame alivePlayers state.occupied seed2 tower
-                    in
-                    ( towers ++ towerList, seed3 )
-                )
-                ( [], state.seed )
-                state.towers
+            moveTowers state.frame alivePlayers (SeqDict.toList alivePlayers) state.blocks (List.reverse state.towers) [] state.seed
 
-        ( thrown, snowballs, seed4 ) =
-            List.foldr
-                (\tower ( towerList, snowballList, seed2 ) ->
-                    let
-                        ( tower2, newSnowballs, seed3 ) =
-                            throwFromTower state.frame (SeqDict.values alivePlayers) seed2 tower
-                    in
-                    ( tower2 :: towerList, newSnowballs ++ snowballList, seed3 )
-                )
-                ( [], state.snowballs, seed )
-                moved
+        ( thrown, snowballs, seed2 ) =
+            throwFromTowers state.frame (SeqDict.values alivePlayers) (List.reverse moved) [] state.snowballs seed
     in
-    { state | towers = mergeTowers state.occupied thrown, snowballs = snowballs, seed = seed4 }
+    { state | towers = mergeTowers state.blocks thrown, snowballs = snowballs, seed = seed2 }
+
+
+moveTowers :
+    Int
+    -> SeqDict (Id UserId) Player
+    -> List ( Id UserId, Player )
+    -> Blocks
+    -> List Tower
+    -> List Tower
+    -> Random.Seed
+    -> ( List Tower, Random.Seed )
+moveTowers frame alivePlayers alivePlayerList blocks towersLastFirst moved seed =
+    case towersLastFirst of
+        tower :: rest ->
+            let
+                ( towers, seed2 ) =
+                    moveTower frame alivePlayers alivePlayerList blocks seed tower
+            in
+            moveTowers frame alivePlayers alivePlayerList blocks rest (towers ++ moved) seed2
+
+        [] ->
+            ( moved, seed )
+
+
+throwFromTowers : Int -> List Player -> List Tower -> List Tower -> List Snowball -> Random.Seed -> ( List Tower, List Snowball, Random.Seed )
+throwFromTowers frame alivePlayers towersLastFirst thrown snowballs seed =
+    case towersLastFirst of
+        tower :: rest ->
+            let
+                ( tower2, newSnowballs, seed2 ) =
+                    throwFromTower frame alivePlayers seed tower
+            in
+            throwFromTowers frame alivePlayers rest (tower2 :: thrown) (newSnowballs ++ snowballs) seed2
+
+        [] ->
+            ( thrown, snowballs, seed )
 
 
 {-| A tower walks wherever its behaviour takes it. It can come out of this as two towers, if it
 walked into a wall the NPCs at the top could step onto.
 -}
-moveTower : Int -> SeqDict (Id UserId) Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
-moveTower frame alivePlayers occupied seed tower =
+moveTower : Int -> SeqDict (Id UserId) Player -> List ( Id UserId, Player ) -> Blocks -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+moveTower frame alivePlayers alivePlayerList blocks seed tower =
     let
         ( tower2, seed2 ) =
-            updateBehaviour frame alivePlayers seed tower
+            updateBehaviour frame alivePlayers alivePlayerList seed tower
     in
     case tower2.behaviour of
         Wandering walking ->
-            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) occupied seed2 tower2
+            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) blocks seed2 tower2
 
         Resting _ ->
-            walkTower frame 0 Nothing occupied seed2 tower2
+            walkTower frame 0 Nothing blocks seed2 tower2
 
         Chasing chasing ->
-            walkTower frame (npcSpeed tower2.bottom.kind) (chasingTarget alivePlayers chasing.userId tower2) occupied seed2 tower2
+            walkTower frame (npcSpeed tower2.bottom.kind) (chasingTarget alivePlayers chasing.userId tower2) blocks seed2 tower2
 
         GivingUp walking ->
-            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) occupied seed2 tower2
+            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) blocks seed2 tower2
 
 
-updateBehaviour : Int -> SeqDict (Id UserId) Player -> Random.Seed -> Tower -> ( Tower, Random.Seed )
-updateBehaviour frame alivePlayers seed tower =
+updateBehaviour : Int -> SeqDict (Id UserId) Player -> List ( Id UserId, Player ) -> Random.Seed -> Tower -> ( Tower, Random.Seed )
+updateBehaviour frame alivePlayers alivePlayerList seed tower =
     let
         rest : ( Tower, Random.Seed )
         rest =
@@ -1124,7 +1150,7 @@ updateBehaviour frame alivePlayers seed tower =
     in
     case tower.behaviour of
         Wandering walking ->
-            case nearbyPlayer frame tower.position alivePlayers of
+            case nearbyPlayer frame tower.position alivePlayerList Nothing of
                 Just chasing ->
                     ( { tower | behaviour = Chasing chasing, wallFollow = Nothing }, seed )
 
@@ -1136,7 +1162,7 @@ updateBehaviour frame alivePlayers seed tower =
                         ( tower, seed )
 
         Resting until ->
-            case nearbyPlayer frame tower.position alivePlayers of
+            case nearbyPlayer frame tower.position alivePlayerList Nothing of
                 Just chasing ->
                     ( { tower | behaviour = Chasing chasing, wallFollow = Nothing }, seed )
 
@@ -1182,10 +1208,15 @@ updateBehaviour frame alivePlayers seed tower =
 
 {-| The nearest standing player within `aggroRange`, if there is one, for an NPC to go after.
 -}
-nearbyPlayer : Int -> Point -> SeqDict (Id UserId) Player -> Maybe { userId : Id UserId, closest : Float, closestSince : Int }
-nearbyPlayer frame position alivePlayers =
-    SeqDict.foldl
-        (\userId player nearest ->
+nearbyPlayer :
+    Int
+    -> Point
+    -> List ( Id UserId, Player )
+    -> Maybe { userId : Id UserId, closest : Float, closestSince : Int }
+    -> Maybe { userId : Id UserId, closest : Float, closestSince : Int }
+nearbyPlayer frame position alivePlayers nearest =
+    case alivePlayers of
+        ( userId, player ) :: rest ->
             let
                 distance : Float
                 distance =
@@ -1201,13 +1232,13 @@ nearbyPlayer frame position alivePlayers =
                             True
             in
             if distance <= aggroRange && isNearer then
-                Just { userId = userId, closest = distance, closestSince = frame }
+                nearbyPlayer frame position rest (Just { userId = userId, closest = distance, closestSince = frame })
 
             else
-                nearest
-        )
-        Nothing
-        alivePlayers
+                nearbyPlayer frame position rest nearest
+
+        [] ->
+            nearest
 
 
 {-| Somewhere random on the map to walk to, for between `shortest` and `longest` frames.
@@ -1223,7 +1254,7 @@ randomWalk frame shortest longest =
 
 isAt : { x : Float, y : Float } -> Point -> Bool
 isAt point position =
-    horizontalDistance position { x = point.x, y = point.y, z = 0 } < 0.5
+    sqrt ((position.x - point.x) * (position.x - point.x) + (position.y - point.y) * (position.y - point.y)) < 0.5
 
 
 {-| Throwers stop a few cells short of the player they're after, to throw from there.
@@ -1266,40 +1297,36 @@ npcSpeed kind =
 {-| Walk a tower towards a target without hopping. Against a wall, the NPCs high enough to clear
 it step onto it, and the rest follow the wall for a while in case that gets them around.
 -}
-walkTower : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
-walkTower frame speed maybeTarget occupied seed tower =
+walkTower : Int -> Float -> Maybe { x : Float, y : Float } -> Blocks -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+walkTower frame speed maybeTarget blocks seed tower =
     case maybeTarget of
         Just target ->
-            let
-                split : Maybe ( Tower, Tower )
-                split =
-                    case stepTowards speed target tower.position of
-                        Just next ->
-                            if entityCollides occupied (towerHeight tower) next then
-                                splitAtWall occupied next tower
+            case stepTowards speed target tower.position of
+                Just next ->
+                    if entityCollides blocks (towerHeight tower) next then
+                        case splitAtWall blocks next tower of
+                            Just ( lower, upper ) ->
+                                ( [ moveEntityWithoutHopping speed (towerHeight lower) maybeTarget blocks lower, upper ], seed )
 
-                            else
-                                Nothing
+                            Nothing ->
+                                walkAlongWalls frame speed target True blocks seed tower
 
-                        Nothing ->
-                            Nothing
-            in
-            case split of
-                Just ( lower, upper ) ->
-                    ( [ moveEntityWithoutHopping speed (towerHeight lower) maybeTarget occupied lower, upper ], seed )
+                    else
+                        walkAlongWalls frame speed target False blocks seed tower
 
                 Nothing ->
-                    walkAlongWalls frame speed target occupied seed tower
+                    walkAlongWalls frame speed target False blocks seed tower
 
         Nothing ->
-            ( [ moveEntityWithoutHopping speed (towerHeight tower) Nothing occupied tower ], seed )
+            ( [ moveEntityWithoutHopping speed (towerHeight tower) Nothing blocks tower ], seed )
 
 
 {-| Head straight for the target until a wall stops the tower, and then follow the wall for a
-while, keeping it on whichever side it picked.
+while, keeping it on whichever side it picked. `blockedAhead` is whether the next step straight for
+the target would take the tower into a block.
 -}
-walkAlongWalls : Int -> Float -> { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
-walkAlongWalls frame speed target occupied seed tower =
+walkAlongWalls : Int -> Float -> { x : Float, y : Float } -> Bool -> Blocks -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+walkAlongWalls frame speed target blockedAhead blocks seed tower =
     let
         height : Float
         height =
@@ -1311,23 +1338,23 @@ walkAlongWalls frame speed target occupied seed tower =
                 isAround : Bool
                 isAround =
                     (horizontalDistance tower.position { x = target.x, y = target.y, z = 0 } < wallFollow.stuckDistance - 0.5)
-                        && not (wayIsBlocked occupied speed height target tower.position)
+                        && not blockedAhead
             in
             if frame >= wallFollow.until || isAround then
-                walkAlongWalls frame speed target occupied seed { tower | wallFollow = Nothing }
+                walkAlongWalls frame speed target blockedAhead blocks seed { tower | wallFollow = Nothing }
 
             else
-                ( [ followWall occupied speed height wallFollow tower ], seed )
+                ( [ followWall blocks speed height wallFollow tower ], seed )
 
         Nothing ->
             let
                 moved : Tower
                 moved =
-                    moveEntityWithoutHopping speed height (Just target) occupied tower
+                    moveEntityWithoutHopping speed height (Just target) blocks tower
 
                 stopped : Bool
                 stopped =
-                    wayIsBlocked occupied speed height target tower.position
+                    blockedAhead
                         && (horizontalDistance moved.position tower.position < speed * frameSeconds / 2)
             in
             if stopped then
@@ -1377,18 +1404,6 @@ startFollowingWall frame target position side duration =
     }
 
 
-{-| Whether the next step straight for the target would take something this tall into a block.
--}
-wayIsBlocked : Dict ( Int, Int, Int ) Int -> Float -> Float -> { x : Float, y : Float } -> Point -> Bool
-wayIsBlocked occupied speed height target position =
-    case stepTowards speed target position of
-        Just next ->
-            entityCollides occupied height next
-
-        Nothing ->
-            False
-
-
 sign : Float -> Int
 sign value =
     if value < 0 then
@@ -1402,8 +1417,8 @@ sign value =
 keeping a hand on the wall would: round the corner if the wall stops, straight on if it doesn't,
 turning away from it or going back the way it came only when it has to.
 -}
-followWall : Dict ( Int, Int, Int ) Int -> Float -> Float -> WallFollow -> Tower -> Tower
-followWall occupied speed height wallFollow tower =
+followWall : Blocks -> Float -> Float -> WallFollow -> Tower -> Tower
+followWall blocks speed height wallFollow tower =
     let
         ( goalX, goalY ) =
             wallFollow.goal
@@ -1412,7 +1427,7 @@ followWall occupied speed height wallFollow tower =
         isFree ( dx, dy ) =
             not
                 (entityCollides
-                    occupied
+                    blocks
                     height
                     { x = toFloat (goalX + dx) + 0.5, y = toFloat (goalY + dy) + 0.5, z = tower.position.z }
                 )
@@ -1446,7 +1461,7 @@ followWall occupied speed height wallFollow tower =
         speed
         height
         (Just { x = goal.x, y = goal.y })
-        occupied
+        blocks
         { tower | wallFollow = Just wallFollow2 }
 
 
@@ -1486,13 +1501,13 @@ turnAround ( dx, dy ) =
 there, as a tower of their own. Whatever is in the way is under them, so they come down on top
 of it.
 -}
-splitAtWall : Dict ( Int, Int, Int ) Int -> Point -> Tower -> Maybe ( Tower, Tower )
-splitAtWall occupied next tower =
-    splitAtWallHelper occupied next tower [] tower.above
+splitAtWall : Blocks -> Point -> Tower -> Maybe ( Tower, Tower )
+splitAtWall blocks next tower =
+    splitAtWallHelper blocks next tower [] tower.above
 
 
-splitAtWallHelper : Dict ( Int, Int, Int ) Int -> Point -> Tower -> List Npc -> List Npc -> Maybe ( Tower, Tower )
-splitAtWallHelper occupied next tower stayingTopFirst rest =
+splitAtWallHelper : Blocks -> Point -> Tower -> List Npc -> List Npc -> Maybe ( Tower, Tower )
+splitAtWallHelper blocks next tower stayingTopFirst rest =
     case rest of
         npc :: higher ->
             let
@@ -1506,8 +1521,8 @@ splitAtWallHelper occupied next tower stayingTopFirst rest =
                     , above = higher
                     }
             in
-            if entityCollides occupied (towerHeight upper) upper.position then
-                splitAtWallHelper occupied next tower (npc :: stayingTopFirst) higher
+            if entityCollides blocks (towerHeight upper) upper.position then
+                splitAtWallHelper blocks next tower (npc :: stayingTopFirst) higher
 
             else
                 Just ( { tower | above = List.reverse stayingTopFirst }, upper )
@@ -1516,45 +1531,102 @@ splitAtWallHelper occupied next tower stayingTopFirst rest =
             Nothing
 
 
-{-| Towers that walk into each other become one, unless it wouldn't fit there.
+{-| Towers that walk into each other become one, unless it wouldn't fit there. Only some kinds of
+NPC stack, and most frames none of those towers meet, which is quick to rule out.
 -}
-mergeTowers : Dict ( Int, Int, Int ) Int -> List Tower -> List Tower
-mergeTowers occupied towers =
+mergeTowers : Blocks -> List Tower -> List Tower
+mergeTowers blocks towers =
+    if anyMeet (stackable towers []) then
+        mergeMeetingTowers blocks [] towers
+
+    else
+        towers
+
+
+{-| The towers that can stack, in any order.
+-}
+stackable : List Tower -> List Tower -> List Tower
+stackable towers found =
     case towers of
         tower :: rest ->
             if canStack tower then
-                case mergeWithFirstMet occupied tower [] rest of
-                    Just ( merged, rest2 ) ->
-                        mergeTowers occupied (merged :: rest2)
-
-                    Nothing ->
-                        tower :: mergeTowers occupied rest
+                stackable rest (tower :: found)
 
             else
-                tower :: mergeTowers occupied rest
+                stackable rest found
 
         [] ->
-            []
+            found
 
 
-mergeWithFirstMet : Dict ( Int, Int, Int ) Int -> Tower -> List Tower -> List Tower -> Maybe ( Tower, List Tower )
-mergeWithFirstMet occupied tower skipped rest =
-    case rest of
-        other :: rest2 ->
+anyMeet : List Tower -> Bool
+anyMeet towers =
+    case towers of
+        tower :: rest ->
+            if meetsAny tower rest then
+                True
+
+            else
+                anyMeet rest
+
+        [] ->
+            False
+
+
+meetsAny : Tower -> List Tower -> Bool
+meetsAny tower others =
+    case others of
+        other :: rest ->
+            if towersMeet tower other then
+                True
+
+            else
+                meetsAny tower rest
+
+        [] ->
+            False
+
+
+mergeMeetingTowers : Blocks -> List Tower -> List Tower -> List Tower
+mergeMeetingTowers blocks doneLastFirst towers =
+    case towers of
+        tower :: rest ->
+            if canStack tower then
+                case mergeWithFirstMet blocks tower 0 rest of
+                    Just ( merged, index ) ->
+                        mergeMeetingTowers blocks doneLastFirst (merged :: List.take index rest ++ List.drop (index + 1) rest)
+
+                    Nothing ->
+                        mergeMeetingTowers blocks (tower :: doneLastFirst) rest
+
+            else
+                mergeMeetingTowers blocks (tower :: doneLastFirst) rest
+
+        [] ->
+            List.reverse doneLastFirst
+
+
+{-| The first of `others` that `tower` meets and fits on top of or under, the two stacked, and
+where that one is in `others`.
+-}
+mergeWithFirstMet : Blocks -> Tower -> Int -> List Tower -> Maybe ( Tower, Int )
+mergeWithFirstMet blocks tower index others =
+    case others of
+        other :: rest ->
             if canStack other && towersMeet tower other then
                 let
                     merged : Tower
                     merged =
                         stack tower other
                 in
-                if entityCollides occupied (towerHeight merged) merged.position then
-                    mergeWithFirstMet occupied tower (other :: skipped) rest2
+                if entityCollides blocks (towerHeight merged) merged.position then
+                    mergeWithFirstMet blocks tower (index + 1) rest
 
                 else
-                    Just ( merged, List.reverse skipped ++ rest2 )
+                    Just ( merged, index )
 
             else
-                mergeWithFirstMet occupied tower (other :: skipped) rest2
+                mergeWithFirstMet blocks tower (index + 1) rest
 
         [] ->
             Nothing
@@ -1635,23 +1707,57 @@ throwFromTower frame alivePlayers seed tower =
     let
         ( bottom, bottomSnowball, seed2 ) =
             npcThrow frame alivePlayers tower.position tower.bottom seed
-
-        ( aboveTopFirst, snowballs, seed3 ) =
-            List.foldl
-                (\( index, npc ) ( npcList, snowballList, seed4 ) ->
-                    let
-                        ( npc2, snowball, seed5 ) =
-                            npcThrow frame alivePlayers (heightInTower index tower.position) npc seed4
-                    in
-                    ( npc2 :: npcList, snowball :: snowballList, seed5 )
-                )
-                ( [], [ bottomSnowball ], seed2 )
-                (List.indexedMap (\index npc -> ( index + 1, npc )) tower.above)
     in
-    ( { tower | bottom = bottom, above = List.reverse aboveTopFirst }
-    , List.filterMap identity snowballs
-    , seed3
-    )
+    case tower.above of
+        [] ->
+            case bottomSnowball of
+                Just snowball ->
+                    ( { tower | bottom = bottom }, [ snowball ], seed2 )
+
+                Nothing ->
+                    ( tower, [], seed2 )
+
+        _ :: _ ->
+            let
+                bottomSnowballs : List Snowball
+                bottomSnowballs =
+                    case bottomSnowball of
+                        Just snowball ->
+                            [ snowball ]
+
+                        Nothing ->
+                            []
+
+                ( above, snowballs, seed3 ) =
+                    throwFromAbove frame alivePlayers tower.position 1 tower.above [] bottomSnowballs seed2
+            in
+            ( { tower | bottom = bottom, above = above }, snowballs, seed3 )
+
+
+{-| The NPCs higher up a tower throw in turn, lowest first, the snowballs of the higher ones
+ahead of the lower ones'.
+-}
+throwFromAbove : Int -> List Player -> Point -> Int -> List Npc -> List Npc -> List Snowball -> Random.Seed -> ( List Npc, List Snowball, Random.Seed )
+throwFromAbove frame alivePlayers position index above thrownTopFirst snowballs seed =
+    case above of
+        npc :: higher ->
+            let
+                ( npc2, snowball, seed2 ) =
+                    npcThrow frame alivePlayers (heightInTower index position) npc seed
+
+                snowballs2 : List Snowball
+                snowballs2 =
+                    case snowball of
+                        Just thrown ->
+                            thrown :: snowballs
+
+                        Nothing ->
+                            snowballs
+            in
+            throwFromAbove frame alivePlayers position (index + 1) higher (npc2 :: thrownTopFirst) snowballs2 seed2
+
+        [] ->
+            ( List.reverse thrownTopFirst, snowballs, seed )
 
 
 npcThrow : Int -> List Player -> Point -> Npc -> Random.Seed -> ( Npc, Maybe Snowball, Random.Seed )
@@ -1661,41 +1767,45 @@ npcThrow frame alivePlayers position npc seed =
             ( npc, Nothing, seed )
 
         Thrower ->
-            case nearestPlayer position alivePlayers of
-                Just ( player, distance ) ->
-                    if distance <= npcThrowRange && frame >= npc.nextThrowFrame then
-                        let
-                            ( ( delay, missX, missY ), seed2 ) =
-                                Random.step
-                                    (Random.map3
-                                        (\a b c -> ( a, b, c ))
-                                        (Random.int (3 * framesPerSecond) (5 * framesPerSecond))
-                                        (Random.float -throwSpread throwSpread)
-                                        (Random.float -throwSpread throwSpread)
-                                    )
-                                    seed
+            if frame < npc.nextThrowFrame then
+                ( npc, Nothing, seed )
 
-                            lead : { x : Float, y : Float }
-                            lead =
-                                walkingLead (snowballFlightTime distance * throwLead) player
+            else
+                case nearestPlayer position alivePlayers of
+                    Just ( player, distance ) ->
+                        if distance <= npcThrowRange then
+                            let
+                                ( ( delay, missX, missY ), seed2 ) =
+                                    Random.step
+                                        (Random.map3
+                                            (\a b c -> ( a, b, c ))
+                                            (Random.int (3 * framesPerSecond) (5 * framesPerSecond))
+                                            (Random.float -throwSpread throwSpread)
+                                            (Random.float -throwSpread throwSpread)
+                                        )
+                                        seed
 
-                            aim : Point
-                            aim =
-                                { x = player.position.x + lead.x + missX
-                                , y = player.position.y + lead.y + missY
-                                , z = player.position.z
-                                }
-                        in
-                        ( { npc | nextThrowFrame = frame + delay }
-                        , Just (throwSnowball frame position aim)
-                        , seed2
-                        )
+                                lead : { x : Float, y : Float }
+                                lead =
+                                    walkingLead (snowballFlightTime distance * throwLead) player
 
-                    else
+                                aim : Point
+                                aim =
+                                    { x = player.position.x + lead.x + missX
+                                    , y = player.position.y + lead.y + missY
+                                    , z = player.position.z
+                                    }
+                            in
+                            ( { npc | nextThrowFrame = frame + delay }
+                            , Just (throwSnowball frame position aim)
+                            , seed2
+                            )
+
+                        else
+                            ( npc, Nothing, seed )
+
+                    Nothing ->
                         ( npc, Nothing, seed )
-
-                Nothing ->
-                    ( npc, Nothing, seed )
 
         Jumper ->
             ( npc, Nothing, seed )
@@ -1837,23 +1947,6 @@ player has only just come into the match.
 -}
 catchPlayers : MatchState -> MatchState
 catchPlayers state =
-    let
-        catchers : List Point
-        catchers =
-            List.concatMap
-                (\tower ->
-                    List.filterMap
-                        (\( npc, position ) ->
-                            if catchesPlayers npc.kind then
-                                Just position
-
-                            else
-                                Nothing
-                        )
-                        (npcPositions tower)
-                )
-                state.towers
-    in
     { state
         | players =
             SeqDict.map
@@ -1861,7 +1954,7 @@ catchPlayers state =
                     if
                         (player.knockedOutAt == Nothing)
                             && not (isProtected state.frame player)
-                            && List.any (\position -> entitiesTouch position player.position) catchers
+                            && towersCatch player.position state.towers
                     then
                         { player | knockedOutAt = Just state.frame, target = Nothing }
 
@@ -1870,6 +1963,41 @@ catchPlayers state =
                 )
                 state.players
     }
+
+
+towersCatch : Point -> List Tower -> Bool
+towersCatch position towers =
+    case towers of
+        tower :: rest ->
+            if
+                (abs (tower.position.x - position.x) < 2 * entityRadius)
+                    && (abs (tower.position.y - position.y) < 2 * entityRadius)
+                    && npcsCatch position tower.position 0 (tower.bottom :: tower.above)
+            then
+                True
+
+            else
+                towersCatch position rest
+
+        [] ->
+            False
+
+
+{-| Whether one of the NPCs in a tower, from `index` places up it, catches someone standing at
+`position`.
+-}
+npcsCatch : Point -> Point -> Int -> List Npc -> Bool
+npcsCatch position towerPosition index npcs =
+    case npcs of
+        npc :: higher ->
+            if catchesPlayers npc.kind && entitiesTouch (heightInTower index towerPosition) position then
+                True
+
+            else
+                npcsCatch position towerPosition (index + 1) higher
+
+        [] ->
+            False
 
 
 catchesPlayers : NpcKind -> Bool
@@ -1918,9 +2046,9 @@ updateGiant giant state =
     else
         case stepTowards giantSpeed crystalCenter giant.position of
             Just next ->
-                case giantBlockedBy state.occupied next of
+                case giantBlockedBy state.blocks.occupied next of
                     [] ->
-                        { state | giants = fallGiant state.occupied { giant | position = next, blockedSince = Nothing } :: state.giants }
+                        { state | giants = fallGiant state.blocks { giant | position = next, blockedSince = Nothing } :: state.giants }
 
                     blocks ->
                         case giant.blockedSince of
@@ -1934,13 +2062,13 @@ updateGiant giant state =
                                     { state2 | giants = { giant | blockedSince = Nothing } :: state2.giants }
 
                                 else
-                                    { state | giants = fallGiant state.occupied giant :: state.giants }
+                                    { state | giants = fallGiant state.blocks giant :: state.giants }
 
                             Nothing ->
-                                { state | giants = fallGiant state.occupied { giant | blockedSince = Just state.frame } :: state.giants }
+                                { state | giants = fallGiant state.blocks { giant | blockedSince = Just state.frame } :: state.giants }
 
             Nothing ->
-                { state | giants = fallGiant state.occupied giant :: state.giants }
+                { state | giants = fallGiant state.blocks giant :: state.giants }
 
 
 {-| The blocks a giant standing here would be inside of, apart from the crystal's.
@@ -1971,11 +2099,11 @@ giantBlockedBy occupied position =
         (List.range (floor (position.x - giantRadius)) (floor (position.x + giantRadius - epsilon)))
 
 
-giantCollides : Dict ( Int, Int, Int ) Int -> Point -> Bool
-giantCollides occupied position =
+giantCollides : Blocks -> Point -> Bool
+giantCollides blocks position =
     (position.z < 0)
         || boxCollides
-            occupied
+            blocks
             (floor (position.x - giantRadius))
             (floor (position.x + giantRadius - epsilon))
             (floor (position.y - giantRadius))
@@ -1984,8 +2112,8 @@ giantCollides occupied position =
             (floor (position.z + giantHeight - epsilon))
 
 
-fallGiant : Dict ( Int, Int, Int ) Int -> Giant -> Giant
-fallGiant occupied giant =
+fallGiant : Blocks -> Giant -> Giant
+fallGiant blocks giant =
     let
         velocityZ : Float
         velocityZ =
@@ -1999,7 +2127,7 @@ fallGiant occupied giant =
         newZ =
             position.z + velocityZ * frameSeconds
     in
-    if giantCollides occupied { position | z = newZ } then
+    if giantCollides blocks { position | z = newZ } then
         { giant | position = { position | z = max 0 (toFloat (floor newZ + 1)) }, velocityZ = 0 }
 
     else
@@ -2016,12 +2144,12 @@ breakBlocks cells state =
 
 breakBlock : ( Int, Int, Int ) -> MatchState -> MatchState
 breakBlock (( x, y, z ) as cell) state =
-    case Dict.get cell state.occupied of
+    case Dict.get cell state.blocks.occupied of
         Just pieceId ->
             let
                 state2 : MatchState
                 state2 =
-                    { state | occupied = Dict.remove cell state.occupied }
+                    { state | blocks = blocksOf (Dict.remove cell state.blocks.occupied) }
             in
             case SeqDict.get pieceId state2.pieces of
                 Just piece ->
@@ -2180,46 +2308,93 @@ collectPickups state =
 
 {-| Walk towards a target, hopping onto anything one cell high, and fall under gravity.
 -}
-moveEntity : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveEntity speed height maybeTarget occupied entity =
+moveEntity : Float -> Float -> Maybe { x : Float, y : Float } -> Blocks -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
+moveEntity speed height maybeTarget blocks entity =
     let
         position : Point
         position =
-            unstuck occupied entity.position
+            unstuck blocks entity.position
 
         walked : { position : Point, couldHop : Bool }
         walked =
-            walk speed height maybeTarget occupied position
+            walk speed height maybeTarget blocks position
 
         velocityZ : Float
         velocityZ =
-            if walked.couldHop && entityCollides occupied height { position | z = position.z - 0.01 } then
+            if walked.couldHop && entityCollides blocks height { position | z = position.z - 0.01 } then
                 jumpVelocity
 
             else
                 fallingVelocity entity
+
+        ( position2, velocityZ2 ) =
+            moveVertically blocks height velocityZ walked.position
     in
-    moveVertically occupied height velocityZ walked.position entity
+    { entity | position = position2, velocityZ = velocityZ2 }
 
 
-{-| Like `moveEntity`, except it never hops, so anything in the way stops it.
+{-| How a tower walks: like `moveEntity`, except it never hops, so anything in the way stops it.
 -}
-moveEntityWithoutHopping : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveEntityWithoutHopping speed height maybeTarget occupied entity =
+moveEntityWithoutHopping : Float -> Float -> Maybe { x : Float, y : Float } -> Blocks -> Tower -> Tower
+moveEntityWithoutHopping speed height maybeTarget blocks tower =
     let
-        walked : { position : Point, couldHop : Bool }
+        position : Point
+        position =
+            unstuck blocks tower.position
+
+        walked : Point
         walked =
-            walk speed height maybeTarget occupied (unstuck occupied entity.position)
+            case maybeTarget of
+                Just target ->
+                    case stepTowards speed target position of
+                        Just next ->
+                            let
+                                alongX : Point
+                                alongX =
+                                    { x = next.x, y = position.y, z = position.z }
+
+                                afterX : Point
+                                afterX =
+                                    if entityCollides blocks height alongX then
+                                        position
+
+                                    else
+                                        alongX
+
+                                alongY : Point
+                                alongY =
+                                    { x = afterX.x, y = next.y, z = afterX.z }
+                            in
+                            if entityCollides blocks height alongY then
+                                afterX
+
+                            else
+                                alongY
+
+                        Nothing ->
+                            position
+
+                Nothing ->
+                    position
+
+        ( position2, velocityZ ) =
+            moveVertically blocks height (fallingVelocity tower) walked
     in
-    moveVertically occupied height (fallingVelocity entity) walked.position entity
+    { position = position2
+    , velocityZ = velocityZ
+    , behaviour = tower.behaviour
+    , wallFollow = tower.wallFollow
+    , bottom = tower.bottom
+    , above = tower.above
+    }
 
 
 {-| Something that ends up inside a block, like a player a piece landed next to, is lifted on top
 of it.
 -}
-unstuck : Dict ( Int, Int, Int ) Int -> Point -> Point
-unstuck occupied position =
-    if entityCollides occupied entityHeight position then
+unstuck : Blocks -> Point -> Point
+unstuck blocks position =
+    if entityCollides blocks entityHeight position then
         { position | z = toFloat (floor position.z + 1) }
 
     else
@@ -2229,22 +2404,27 @@ unstuck occupied position =
 {-| A step towards the target that doesn't go into any block, sliding along a wall if it can, and
 whether there was something in the way it could have hopped onto.
 -}
-walk : Float -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Point -> { position : Point, couldHop : Bool }
-walk speed height maybeTarget occupied position =
-    case Maybe.andThen (\target -> stepTowards speed target position) maybeTarget of
-        Just next ->
-            let
-                ( afterX, blockedX ) =
-                    tryMove occupied height { position | x = next.x } position
+walk : Float -> Float -> Maybe { x : Float, y : Float } -> Blocks -> Point -> { position : Point, couldHop : Bool }
+walk speed height maybeTarget blocks position =
+    case maybeTarget of
+        Just target ->
+            case stepTowards speed target position of
+                Just next ->
+                    let
+                        ( afterX, blockedX ) =
+                            tryMove blocks height { x = next.x, y = position.y, z = position.z } position
 
-                ( afterY, blockedY ) =
-                    tryMove occupied height { afterX | y = next.y } afterX
-            in
-            { position = afterY
-            , couldHop =
-                (blockedX && canHop occupied height position { position | x = next.x })
-                    || (blockedY && canHop occupied height afterX { afterX | y = next.y })
-            }
+                        ( afterY, blockedY ) =
+                            tryMove blocks height { x = afterX.x, y = next.y, z = afterX.z } afterX
+                    in
+                    { position = afterY
+                    , couldHop =
+                        (blockedX && canHop blocks height position { x = next.x, y = position.y, z = position.z })
+                            || (blockedY && canHop blocks height afterX { x = afterX.x, y = next.y, z = afterX.z })
+                    }
+
+                Nothing ->
+                    { position = position, couldHop = False }
 
         Nothing ->
             { position = position, couldHop = False }
@@ -2272,13 +2452,13 @@ stepTowards speed target position =
         Nothing
 
     else if distance <= speed * frameSeconds then
-        Just { position | x = target.x, y = target.y }
+        Just { x = target.x, y = target.y, z = position.z }
 
     else
         Just
-            { position
-                | x = position.x + dx / distance * speed * frameSeconds
-                , y = position.y + dy / distance * speed * frameSeconds
+            { x = position.x + dx / distance * speed * frameSeconds
+            , y = position.y + dy / distance * speed * frameSeconds
+            , z = position.z
             }
 
 
@@ -2287,46 +2467,48 @@ fallingVelocity entity =
     max -maxFallSpeed (entity.velocityZ - gravity * frameSeconds)
 
 
-moveVertically : Dict ( Int, Int, Int ) Int -> Float -> Float -> Point -> { a | position : Point, velocityZ : Float } -> { a | position : Point, velocityZ : Float }
-moveVertically occupied height velocityZ afterWalk entity =
+{-| Where something falling or jumping at `velocityZ` ends up, and how fast it's going after.
+-}
+moveVertically : Blocks -> Float -> Float -> Point -> ( Point, Float )
+moveVertically blocks height velocityZ afterWalk =
     let
-        newZ : Float
-        newZ =
-            afterWalk.z + velocityZ * frameSeconds
+        moved : Point
+        moved =
+            { x = afterWalk.x, y = afterWalk.y, z = afterWalk.z + velocityZ * frameSeconds }
     in
     if velocityZ <= 0 then
-        if entityCollides occupied height { afterWalk | z = newZ } then
-            { entity | position = { afterWalk | z = max 0 (toFloat (floor newZ + 1)) }, velocityZ = 0 }
+        if entityCollides blocks height moved then
+            ( { x = afterWalk.x, y = afterWalk.y, z = max 0 (toFloat (floor moved.z + 1)) }, 0 )
 
         else
-            { entity | position = { afterWalk | z = newZ }, velocityZ = velocityZ }
+            ( moved, velocityZ )
 
-    else if entityCollides occupied height { afterWalk | z = newZ } then
-        { entity | position = afterWalk, velocityZ = 0 }
+    else if entityCollides blocks height moved then
+        ( afterWalk, 0 )
 
     else
-        { entity | position = { afterWalk | z = newZ }, velocityZ = velocityZ }
+        ( moved, velocityZ )
 
 
-tryMove : Dict ( Int, Int, Int ) Int -> Float -> Point -> Point -> ( Point, Bool )
-tryMove occupied height candidate current =
-    if entityCollides occupied height candidate then
+tryMove : Blocks -> Float -> Point -> Point -> ( Point, Bool )
+tryMove blocks height candidate current =
+    if entityCollides blocks height candidate then
         ( current, True )
 
     else
         ( candidate, False )
 
 
-canHop : Dict ( Int, Int, Int ) Int -> Float -> Point -> Point -> Bool
-canHop occupied height current candidate =
-    not (entityCollides occupied height { current | z = current.z + 1.05 })
-        && not (entityCollides occupied height { candidate | z = candidate.z + 1.05 })
+canHop : Blocks -> Float -> Point -> Point -> Bool
+canHop blocks height current candidate =
+    not (entityCollides blocks height { current | z = current.z + 1.05 })
+        && not (entityCollides blocks height { candidate | z = candidate.z + 1.05 })
 
 
 {-| Whether something this tall standing here would be inside a block or off the map.
 -}
-entityCollides : Dict ( Int, Int, Int ) Int -> Float -> Point -> Bool
-entityCollides occupied height position =
+entityCollides : Blocks -> Float -> Point -> Bool
+entityCollides blocks height position =
     if
         (position.z < 0)
             || (position.x - entityRadius < 0)
@@ -2338,7 +2520,7 @@ entityCollides occupied height position =
 
     else
         boxCollides
-            occupied
+            blocks
             (floor (position.x - entityRadius))
             (floor (position.x + entityRadius - epsilon))
             (floor (position.y - entityRadius))
@@ -2347,15 +2529,141 @@ entityCollides occupied height position =
             (floor (position.z + height - epsilon))
 
 
-boxCollides : Dict ( Int, Int, Int ) Int -> Int -> Int -> Int -> Int -> Int -> Int -> Bool
-boxCollides occupied minX maxX minY maxY minZ maxZ =
-    List.any
-        (\cellX ->
-            List.any
-                (\cellY -> List.any (\cellZ -> Dict.member ( cellX, cellY, cellZ ) occupied) (List.range minZ maxZ))
-                (List.range minY maxY)
-        )
-        (List.range minX maxX)
+boxCollides : Blocks -> Int -> Int -> Int -> Int -> Int -> Int -> Bool
+boxCollides blocks minX maxX minY maxY minZ maxZ =
+    if minZ >= 0 && maxZ < lowLevels then
+        columnsCollide
+            blocks.columns
+            (Bitwise.shiftLeftBy minZ (Bitwise.shiftLeftBy (maxZ - minZ + 1) 1 - 1))
+            minX
+            maxX
+            minY
+            minY
+            maxY
+
+    else
+        List.any
+            (\cellX ->
+                List.any
+                    (\cellY -> List.any (\cellZ -> Dict.member ( cellX, cellY, cellZ ) blocks.occupied) (List.range minZ maxZ))
+                    (List.range minY maxY)
+            )
+            (List.range minX maxX)
+
+
+columnsCollide : Array Int -> Int -> Int -> Int -> Int -> Int -> Int -> Bool
+columnsCollide columns levels x maxX y minY maxY =
+    if x > maxX then
+        False
+
+    else if y > maxY then
+        columnsCollide columns levels (x + 1) maxX minY minY maxY
+
+    else if
+        (x >= 0)
+            && (x < gridSize)
+            && (y >= 0)
+            && (y < gridSize)
+            && (Bitwise.and levels (Array.get (x * gridSize + y) columns |> Maybe.withDefault 0) /= 0)
+    then
+        True
+
+    else
+        columnsCollide columns levels x maxX (y + 1) minY maxY
+
+
+{-| Every block, with the id of the piece it's part of (`occupied`), and the same again in a form
+that's much quicker to check a box against. Every NPC looks for walls several times a frame, which
+with a couple of hundred of them was most of the time a frame took. `columns` has a bit for each of
+the bottom `lowLevels` levels of each column of the grid (column x, y at x \* gridSize + y), set if
+there's a block there. Anything higher up is only looked up in `occupied`. `insertBlock` and
+`blocksOf` keep the two the same.
+-}
+type alias Blocks =
+    { columns : Array Int, occupied : Dict ( Int, Int, Int ) Int }
+
+
+noBlocks : Blocks
+noBlocks =
+    { columns = Array.repeat (gridSize * gridSize) 0, occupied = Dict.empty }
+
+
+insertBlock : ( Int, Int, Int ) -> Int -> Blocks -> Blocks
+insertBlock (( x, y, z ) as cell) pieceId blocks =
+    { columns =
+        if z >= 0 && z < lowLevels && x >= 0 && x < gridSize && y >= 0 && y < gridSize then
+            let
+                index : Int
+                index =
+                    x * gridSize + y
+            in
+            Array.set
+                index
+                (Bitwise.or (Bitwise.shiftLeftBy z 1) (Array.get index blocks.columns |> Maybe.withDefault 0))
+                blocks.columns
+
+        else
+            blocks.columns
+    , occupied = Dict.insert cell pieceId blocks.occupied
+    }
+
+
+lowLevels : Int
+lowLevels =
+    30
+
+
+blocksOf : Dict ( Int, Int, Int ) Int -> Blocks
+blocksOf occupied =
+    { columns =
+        Dict.foldl
+            (\( x, y, z ) _ columns ->
+                if z >= 0 && z < lowLevels && x >= 0 && x < gridSize && y >= 0 && y < gridSize then
+                    let
+                        index : Int
+                        index =
+                            x * gridSize + y
+                    in
+                    case columns of
+                        ( previousIndex, levels ) :: rest ->
+                            if previousIndex == index then
+                                ( index, Bitwise.or levels (Bitwise.shiftLeftBy z 1) ) :: rest
+
+                            else
+                                ( index, Bitwise.shiftLeftBy z 1 ) :: columns
+
+                        [] ->
+                            [ ( index, Bitwise.shiftLeftBy z 1 ) ]
+
+                else
+                    columns
+            )
+            []
+            occupied
+            |> fillColumns (gridSize * gridSize - 1) []
+            |> Array.fromList
+    , occupied = occupied
+    }
+
+
+{-| Every column from `index` down to 0, given the ones with blocks in them, highest index first.
+-}
+fillColumns : Int -> List Int -> List ( Int, Int ) -> List Int
+fillColumns index filled withBlocks =
+    if index < 0 then
+        filled
+
+    else
+        case withBlocks of
+            ( columnIndex, levels ) :: rest ->
+                if columnIndex == index then
+                    fillColumns (index - 1) (levels :: filled) rest
+
+                else
+                    fillColumns (index - 1) (0 :: filled) withBlocks
+
+            [] ->
+                fillColumns (index - 1) (0 :: filled) []
 
 
 {-| The height of the first free cell in a column, counting up from the top block.
@@ -2371,7 +2679,7 @@ topOfColumn column row state =
                 top
         )
         0
-        state.occupied
+        state.blocks.occupied
 
 
 
@@ -2437,7 +2745,7 @@ updateSnowballs state =
                             if
                                 (position.z <= 0)
                                     || (state.frame - snowball.thrownAt > 6 * framesPerSecond)
-                                    || Dict.member ( floor position.x, floor position.y, floor position.z ) state.occupied
+                                    || Dict.member ( floor position.x, floor position.y, floor position.z ) state.blocks.occupied
                             then
                                 ( kept, players2 )
 
@@ -2557,11 +2865,11 @@ updatePieces state =
 
                         landing : Maybe (Maybe Int)
                         landing =
-                            if fitsAt (floor newZ) piece state2.occupied then
+                            if fitsAt (floor newZ) piece state2.blocks.occupied then
                                 Nothing
 
                             else
-                                Just (firstFreeLevel (floor newZ + 1) 40 piece state2.occupied)
+                                Just (firstFreeLevel (floor newZ + 1) 40 piece state2.blocks.occupied)
 
                         finalZ : Float
                         finalZ =
@@ -2582,7 +2890,7 @@ updatePieces state =
                         state3 : MatchState
                         state3 =
                             { state2
-                                | towers = List.filterMap (squash piece finalZ) state2.towers
+                                | towers = squashTowers piece finalZ state2.towers
                                 , giants = List.filter (\giant -> not (pieceOverlapsGiant piece finalZ giant.position)) state2.giants
                             }
                     in
@@ -2602,10 +2910,10 @@ updatePieces state =
                                 in
                                 { state3
                                     | pieces = SeqDict.insert pieceId piece2 state3.pieces
-                                    , occupied =
+                                    , blocks =
                                         List.foldl
-                                            (\cell occupied -> Dict.insert cell pieceId occupied)
-                                            state3.occupied
+                                            (\cell blocks -> insertBlock cell pieceId blocks)
+                                            state3.blocks
                                             (pieceCells piece2)
                                 }
 
@@ -2627,9 +2935,45 @@ updatePieces state =
 
 {-| Take out the NPCs in a tower that a piece at this level overlaps.
 -}
+squashTowers : Piece -> Float -> List Tower -> List Tower
+squashTowers piece level towers =
+    if List.any (\tower -> pieceOverColumn piece entityRadius tower.position) towers then
+        List.filterMap (squash piece level) towers
+
+    else
+        towers
+
+
 squash : Piece -> Float -> Tower -> Maybe Tower
 squash piece level tower =
-    removeNpcs (pieceOverlapsEntity piece level) tower
+    if pieceOverColumn piece entityRadius tower.position then
+        removeNpcs (pieceOverlapsEntity piece level) tower
+
+    else
+        Just tower
+
+
+{-| Whether a piece is over or under any part of something standing at `position`, at any height.
+-}
+pieceOverColumn : Piece -> Float -> Point -> Bool
+pieceOverColumn piece radius position =
+    List.any
+        (\( offsetX, offsetY, _ ) ->
+            let
+                cellX : Float
+                cellX =
+                    toFloat (piece.x + offsetX)
+
+                cellY : Float
+                cellY =
+                    toFloat (piece.y + offsetY)
+            in
+            (position.x + radius > cellX)
+                && (position.x - radius < cellX + 1)
+                && (position.y + radius > cellY)
+                && (position.y - radius < cellY + 1)
+        )
+        piece.cells
 
 
 {-| Take out the NPCs in a tower standing where `isGone` says. Whoever is left stays standing where
@@ -2689,7 +3033,7 @@ removePiecesOf owners state =
     in
     ( { state
         | pieces = kept
-        , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId removed)) state.occupied
+        , blocks = blocksOf (Dict.filter (\_ pieceId -> not (SeqDict.member pieceId removed)) state.blocks.occupied)
         , debris =
             SeqDict.foldl (\_ piece debris -> { piece = piece, destroyedAt = state.frame } :: debris) state.debris removed
       }
@@ -2707,7 +3051,7 @@ dropUnsupportedPieces state =
         unsupported =
             SeqDict.foldr
                 (\pieceId piece list ->
-                    if isSettled piece.status && not (isSupported pieceId piece state.occupied) then
+                    if isSettled piece.status && not (isSupported pieceId piece state.blocks.occupied) then
                         pieceId :: list
 
                     else
@@ -2733,7 +3077,7 @@ dropUnsupportedPieces state =
                                     piece
                             )
                             state.pieces
-                    , occupied = Dict.filter (\_ pieceId -> not (List.member pieceId unsupported)) state.occupied
+                    , blocks = blocksOf (Dict.filter (\_ pieceId -> not (List.member pieceId unsupported)) state.blocks.occupied)
                 }
 
 

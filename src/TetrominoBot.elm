@@ -204,7 +204,7 @@ encodeState userId state =
           , Dict.foldl
                 (\( x, y, z ) _ tops -> Dict.update ( x, y ) (\top -> Just (max (z + 1) (Maybe.withDefault 0 top))) tops)
                 Dict.empty
-                state.occupied
+                state.blocks.occupied
                 |> Dict.toList
                 |> Json.Encode.list (\( ( x, y ), top ) -> Json.Encode.list Json.Encode.int [ x, y, top ])
           )
