@@ -1,14 +1,12 @@
-port module TetrominoBot exposing (Request(..), encodeState, fromJs, noMatch, requestFailed, toJs)
+module TetrominoBot exposing (Request, decodeRequest, encodeState, noMatch, waitingForState)
 
-{-| Lets a script in the browser play Tetromino Fort, for playtesting: it asks for the match as
-JSON and sends inputs back. elm-pkg-js/tetromino-bot.js only listens when the page's URL has
-`bot` in its query string, and the match is only sent when it asks.
+{-| The JSON the dev-only `tetromino-bot` RPC endpoint speaks, so a script can play Tetromino Fort
+for playtesting without a browser.
 -}
 
 import Dict
-import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.Subscription as Subscription exposing (Subscription)
-import Id exposing (Id, UserId)
+import DmChannelId exposing (GuildOrFullDmId(..))
+import Id exposing (ChannelMessageId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import SeqDict
@@ -17,66 +15,80 @@ import Tetromino exposing (Shape)
 import TetrominoSim exposing (MatchState, NpcKind(..), Point)
 
 
-port tetromino_bot_to_js : Json.Encode.Value -> Cmd msg
-
-
-port tetromino_bot_from_js : (Json.Decode.Value -> msg) -> Sub msg
-
-
-type Request
-    = GetState Int
-    | SendInput TetrominoSim.Input
-
-
-fromJs : (Result String Request -> msg) -> Subscription FrontendOnly msg
-fromJs msg =
-    Subscription.fromJs
-        "tetromino_bot_from_js"
-        tetromino_bot_from_js
-        (\json -> Json.Decode.decodeValue decodeRequest json |> Result.mapError Json.Decode.errorToString |> msg)
-
-
-toJs : Json.Encode.Value -> Command FrontendOnly toMsg msg
-toJs value =
-    Command.sendToJs "tetromino_bot_to_js" tetromino_bot_to_js value
+{-| The player `userId` sends `inputs` to a match, and gets the latest state back.
+-}
+type alias Request =
+    { userId : Id UserId
+    , match : ( GuildOrFullDmId, Id ChannelMessageId )
+    , inputs : List TetrominoSim.Input
+    }
 
 
 decodeRequest : Decoder Request
 decodeRequest =
+    Json.Decode.map3 Request
+        (Json.Decode.field "userId" decodeId)
+        (Json.Decode.map2 Tuple.pair
+            (Json.Decode.oneOf
+                [ Json.Decode.map2 GuildOrFullDmId_Guild
+                    (Json.Decode.field "guildId" decodeId)
+                    (Json.Decode.field "channelId" decodeId)
+                , Json.Decode.field "dmChannelId" Json.Decode.string
+                    |> Json.Decode.andThen
+                        (\text ->
+                            case DmChannelId.fromString text of
+                                Ok dmChannelId ->
+                                    Json.Decode.succeed (GuildOrFullDmId_Dm dmChannelId)
+
+                                Err _ ->
+                                    Json.Decode.fail ("Invalid DM channel " ++ text)
+                        )
+                ]
+            )
+            (Json.Decode.field "matchId" decodeId)
+        )
+        (Json.Decode.field "inputs" (Json.Decode.list decodeInput))
+
+
+decodeId : Decoder (Id a)
+decodeId =
+    Json.Decode.map Id.fromInt Json.Decode.int
+
+
+decodeInput : Decoder TetrominoSim.Input
+decodeInput =
     Json.Decode.field "type" Json.Decode.string
         |> Json.Decode.andThen
             (\kind ->
                 case kind of
-                    "getState" ->
-                        Json.Decode.map GetState (Json.Decode.field "id" Json.Decode.int)
-
                     "join" ->
-                        Json.Decode.succeed (SendInput TetrominoSim.Join)
+                        Json.Decode.succeed TetrominoSim.Join
+
+                    "leave" ->
+                        Json.Decode.succeed TetrominoSim.Leave
 
                     "move" ->
                         Json.Decode.map2
-                            (\x y -> SendInput (TetrominoSim.MoveTo x y))
+                            TetrominoSim.MoveTo
                             (Json.Decode.field "x" Json.Decode.int)
                             (Json.Decode.field "y" Json.Decode.int)
 
                     "drop" ->
                         Json.Decode.map4
                             (\x y quarterTurns upright ->
-                                SendInput
-                                    (TetrominoSim.Drop
-                                        { x = x
-                                        , y = y
-                                        , orientation =
-                                            Tetromino.orientation
-                                                (if upright then
-                                                    Tetromino.Upright
+                                TetrominoSim.Drop
+                                    { x = x
+                                    , y = y
+                                    , orientation =
+                                        Tetromino.orientation
+                                            (if upright then
+                                                Tetromino.Upright
 
-                                                 else
-                                                    Tetromino.Flat
-                                                )
-                                                quarterTurns
-                                        }
-                                    )
+                                             else
+                                                Tetromino.Flat
+                                            )
+                                            quarterTurns
+                                    }
                             )
                             (Json.Decode.field "x" Json.Decode.int)
                             (Json.Decode.field "y" Json.Decode.int)
@@ -84,28 +96,31 @@ decodeRequest =
                             (Json.Decode.field "upright" Json.Decode.bool)
 
                     _ ->
-                        Json.Decode.fail ("Unknown request type " ++ kind)
+                        Json.Decode.fail ("Unknown input type " ++ kind)
             )
 
 
-requestFailed : String -> Json.Encode.Value
-requestFailed error =
-    Json.Encode.object [ ( "type", Json.Encode.string "error" ), ( "message", Json.Encode.string error ) ]
+{-| Nobody has the match open, so there is nothing to play.
+-}
+noMatch : Json.Encode.Value
+noMatch =
+    Json.Encode.object [ ( "type", Json.Encode.string "noMatch" ) ]
 
 
-noMatch : Int -> Json.Encode.Value
-noMatch id =
-    Json.Encode.object [ ( "type", Json.Encode.string "noMatch" ), ( "id", Json.Encode.int id ) ]
+{-| Someone has the match open, but hasn't sent its state yet.
+-}
+waitingForState : Json.Encode.Value
+waitingForState =
+    Json.Encode.object [ ( "type", Json.Encode.string "waitingForState" ) ]
 
 
 {-| The match as `userId` sees it. Positions are in cells, z is height, and a player or NPC stands
 at the middle of its cell at x + 0.5.
 -}
-encodeState : Int -> Id UserId -> MatchState -> Json.Encode.Value
-encodeState id userId state =
+encodeState : Id UserId -> MatchState -> Json.Encode.Value
+encodeState userId state =
     Json.Encode.object
         [ ( "type", Json.Encode.string "state" )
-        , ( "id", Json.Encode.int id )
         , ( "frame", Json.Encode.int state.frame )
         , ( "framesPerSecond", Json.Encode.int TetrominoSim.framesPerSecond )
         , ( "gridSize", Json.Encode.int TetrominoSim.gridSize )

@@ -81,6 +81,7 @@ type BackendMsgLog
     | BackendMsgLog_GotEnglishWordList
     | BackendMsgLog_GotSwedishWordList
     | BackendMsgLog_Rpc_UserJoinedCall
+    | BackendMsgLog_Rpc_TetrominoBotPolled
     | BackendMsgLog_GotTimeForBackendMsg
     | BackendMsgLog_BackendMsgCompleted
 
@@ -291,6 +292,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_Rpc_UserJoinedCall ->
             "Rpc_UserJoinedCall"
+
+        BackendMsgLog_Rpc_TetrominoBotPolled ->
+            "Rpc_TetrominoBotPolled"
 
         BackendMsgLog_GotTimeForBackendMsg ->
             "GotTimeForBackendMsg"

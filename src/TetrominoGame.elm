@@ -108,6 +108,8 @@ type ToBackend
       -- The state of the match at the start of a frame the backend asked for, for someone who
       -- has just opened it.
     | CurrentState Int Bytes
+      -- The latest state this client has, for the dev-only bot endpoint.
+    | BotState Bytes
 
 
 type ToFrontend
@@ -122,6 +124,8 @@ type ToFrontend
       -- One of this client's own inputs, with the time the backend settled on for it.
     | InputAccepted Int ActionWithTime
     | MatchOver
+      -- A bot is playing through the dev-only RPC endpoint and needs to see the match.
+    | BotStateRequest
 
 
 type StartingState
@@ -135,6 +139,8 @@ type alias LiveMatch =
     { watchers : SeqDict ClientId Watcher
     , -- Oldest first. Kept for as long as someone joining might still need them.
       recentInputs : List ActionWithTime
+    , -- What the dev-only bot endpoint answers with, as recently as someone sent it.
+      botState : Maybe Bytes
     }
 
 
@@ -191,7 +197,6 @@ type GameMsg
     | PressedStandUpOrLieDown
     | PressedJoin
     | PressedNothing
-    | BotSentInput TetrominoSim.Input
 
 
 initSetup : SetupModel
@@ -229,7 +234,7 @@ dropMatchState model =
 
 initLiveMatch : LiveMatch
 initLiveMatch =
-    { watchers = SeqDict.empty, recentInputs = [] }
+    { watchers = SeqDict.empty, recentInputs = [], botState = Nothing }
 
 
 updateSetup : Id UserId -> Time.Posix -> SetupMsg -> ( SetupOrGame, Maybe ValidatedSetup )
@@ -492,6 +497,24 @@ updateFromBackend time setup msg model =
         MatchOver ->
             ( { model | connection = MatchIsOver }, Nothing )
 
+        BotStateRequest ->
+            case model.connection of
+                Connected timeline ->
+                    let
+                        timeline2 : Timeline
+                        timeline2 =
+                            TetrominoTimeline.advance (currentFrame time setup model) timeline
+                    in
+                    ( { model | connection = Connected timeline2 }
+                    , BotState (TetrominoWire.encodeMatchState (TetrominoTimeline.latest timeline2)) |> Just
+                    )
+
+                WaitingForState _ ->
+                    ( model, Nothing )
+
+                MatchIsOver ->
+                    ( model, Nothing )
+
 
 updateGame :
     Time.Posix
@@ -625,9 +648,6 @@ updateConnected windowSize devicePixelRatio currentUserId msg state model =
 
         PressedNothing ->
             ( model, Nothing )
-
-        BotSentInput input ->
-            ( model, Just input )
 
 
 rightMouseButton : Int

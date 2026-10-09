@@ -7,15 +7,19 @@ import Coord
 import Dict
 import DmChannelId
 import Effect.Lamdera exposing (ClientId)
+import Env
 import FileStatus
 import Http
 import Id exposing (Id, UserId)
+import Json.Decode
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SecretId
 import SeqDict
 import Task
+import TetrominoBot
+import TetrominoWire
 import Time
 import Toop exposing (T4(..))
 import Types exposing (BackendModel, BackendMsg(..))
@@ -193,6 +197,41 @@ checkCall _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+{-| Lets a script play Tetromino Fort for playtesting. It plays as whoever it says it is, so this
+only exists in development.
+-}
+tetrominoBot : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+tetrominoBot _ model _ text =
+    if Env.isProduction then
+        ( Err (Http.BadBody "Endpoint not found"), model, Cmd.none )
+
+    else
+        case Json.Decode.decodeString TetrominoBot.decodeRequest text of
+            Ok request ->
+                ( (case SeqDict.get request.match model.tetrominoMatches of
+                    Just liveMatch ->
+                        case Maybe.andThen TetrominoWire.decodeMatchState liveMatch.botState of
+                            Just state ->
+                                TetrominoBot.encodeState request.userId state
+
+                            Nothing ->
+                                TetrominoBot.waitingForState
+
+                    Nothing ->
+                        TetrominoBot.noMatch
+                  )
+                    |> Json.encode 0
+                    |> Ok
+                , model
+                , Task.perform
+                    (\time -> Rpc_TetrominoBotPolled time request.match request.userId request.inputs)
+                    Time.now
+                )
+
+            Err error ->
+                ( Err (Http.BadBody (Json.Decode.errorToString error)), model, Cmd.none )
+
+
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
 lamdera_handleEndpoints _ req model =
     case req.endpoint of
@@ -201,6 +240,9 @@ lamdera_handleEndpoints _ req model =
 
         "is-call-allowed" ->
             LamderaRPC.handleEndpointString checkCall req model
+
+        "tetromino-bot" ->
+            LamderaRPC.handleEndpointString tetrominoBot req model
 
         _ ->
             ( ResultString "Endpoint not found", model, Cmd.none )

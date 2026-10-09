@@ -140,8 +140,8 @@ import SheepGame
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
-import TetrominoBot
 import TetrominoGame
+import TetrominoSim
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Drag, Touch)
@@ -722,7 +722,6 @@ type FrontendMsg_
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
-    | GotTetrominoBotRequest (Result String TetrominoBot.Request)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab ChannelHeaderTab
     | FileDragEnter Duration
@@ -944,6 +943,7 @@ type BackendMsg
     | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
+    | Rpc_TetrominoBotPolled Time.Posix ( GuildOrFullDmId, Id ChannelMessageId ) (Id UserId) (List TetrominoSim.Input)
 
 
 type MessageFromGuildOrDm

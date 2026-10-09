@@ -2777,9 +2777,6 @@ isPressMsg msg =
         GotVoiceChatSignalFromJs _ ->
             False
 
-        GotTetrominoBotRequest _ ->
-            False
-
         VoiceChatMsg voiceChatMsg ->
             Call.isPressMsg voiceChatMsg
 

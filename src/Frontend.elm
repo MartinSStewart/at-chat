@@ -90,7 +90,6 @@ import SheepGame
 import Sticker
 import String.Extra
 import String.Nonempty exposing (NonemptyString)
-import TetrominoBot
 import TetrominoGame
 import TextEditor
 import Thread
@@ -321,7 +320,6 @@ subscriptions _ model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
-        , TetrominoBot.fromJs GotTetrominoBotRequest
         , Encryption.fromJs Message.contentAndEmbedsCodec EncryptionFromJs
         , case model of
             Loading _ ->
@@ -5044,43 +5042,6 @@ updateLoaded msg model =
 
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
-
-        GotTetrominoBotRequest result ->
-            case result of
-                Ok (TetrominoBot.GetState id) ->
-                    ( model
-                    , (case model.loginStatus of
-                        LoggedIn loggedIn ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
-                            case
-                                FrontendExtra.currentGame local model
-                                    |> Maybe.andThen
-                                        (\{ guildOrDmId, matchId } ->
-                                            SeqDict.get guildOrDmId loggedIn.games
-                                                |> Maybe.andThen (Game.tetrominoMatchState matchId)
-                                        )
-                            of
-                                Just state ->
-                                    TetrominoBot.encodeState id local.localUser.session.userId state
-
-                                Nothing ->
-                                    TetrominoBot.noMatch id
-
-                        NotLoggedIn _ ->
-                            TetrominoBot.noMatch id
-                      )
-                        |> TetrominoBot.toJs
-                    )
-
-                Ok (TetrominoBot.SendInput input) ->
-                    updateLoaded (GameMsg (Game.TetrominoGameMsg (TetrominoGame.BotSentInput input))) model
-
-                Err error ->
-                    ( model, TetrominoBot.toJs (TetrominoBot.requestFailed error) )
 
         GotVoiceChatSignalFromJs result ->
             FrontendExtra.updateLoggedIn

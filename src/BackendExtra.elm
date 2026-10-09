@@ -2793,6 +2793,9 @@ backendMsgLog msg =
         Rpc_UserJoinedCall _ _ _ _ _ ->
             BackendMsgLog_Rpc_UserJoinedCall
 
+        Rpc_TetrominoBotPolled _ _ _ _ ->
+            BackendMsgLog_Rpc_TetrominoBotPolled
+
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg
 

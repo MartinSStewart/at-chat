@@ -2219,6 +2219,9 @@ updateHelper msg model =
             , Command.none
             )
 
+        Rpc_TetrominoBotPolled time key userId inputs ->
+            tetrominoBotPolled time key userId inputs model
+
         Rpc_UserJoinedCall time sessionId clientId userId callId ->
             case callId of
                 Call.DmRoomId id ->
@@ -8167,7 +8170,74 @@ handleTetrominoToBackend time userId clientId key msg model =
                         Nothing ->
                             ( model, Command.none )
 
+                TetrominoGame.BotState bytes ->
+                    case SeqDict.get clientId liveMatch.watchers of
+                        Just sender ->
+                            if sender.waitingForFrame == Nothing && not Env.isProduction then
+                                ( { model
+                                    | tetrominoMatches =
+                                        SeqDict.insert key { liveMatch | botState = Just bytes } model.tetrominoMatches
+                                  }
+                                , Command.none
+                                )
+
+                            else
+                                ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
         Nothing ->
+            ( model, Command.none )
+
+
+{-| A bot polled the dev-only `tetromino-bot` RPC endpoint. Its inputs go out like any player's,
+and someone with the match open is asked for the state to answer its next poll with.
+-}
+tetrominoBotPolled :
+    Time.Posix
+    -> ( GuildOrFullDmId, Id ChannelMessageId )
+    -> Id UserId
+    -> List TetrominoSim.Input
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+tetrominoBotPolled time key userId inputs model =
+    case ( SeqDict.get key model.tetrominoMatches, tetrominoSetup key model ) of
+        ( Just liveMatch, Just ( setup, TetrominoGame.MatchInProgress ) ) ->
+            let
+                actions : List TetrominoGame.ActionWithTime
+                actions =
+                    List.map (TetrominoGame.stampInput time userId time) inputs
+
+                watchers : List ( ClientId, TetrominoGame.Watcher )
+                watchers =
+                    SeqDict.toList liveMatch.watchers
+            in
+            ( { model
+                | tetrominoMatches =
+                    SeqDict.insert
+                        key
+                        (TetrominoGame.pruneInputs
+                            time
+                            setup
+                            { liveMatch | recentInputs = liveMatch.recentInputs ++ actions }
+                        )
+                        model.tetrominoMatches
+              }
+            , List.concatMap
+                (\action -> List.map (sendToTetrominoWatcher key (TetrominoGame.InputBroadcast action)) watchers)
+                actions
+                ++ (case List.filter (\( _, watcher ) -> watcher.waitingForFrame == Nothing) watchers of
+                        holder :: _ ->
+                            [ sendToTetrominoWatcher key TetrominoGame.BotStateRequest holder ]
+
+                        [] ->
+                            []
+                   )
+                |> Command.batch
+            )
+
+        _ ->
             ( model, Command.none )
 
 
@@ -8215,7 +8285,10 @@ openTetrominoMatch time userId clientId key setup model =
             in
             ( { model
                 | tetrominoMatches =
-                    SeqDict.insert key { watchers = watchers, recentInputs = [] } model.tetrominoMatches
+                    SeqDict.insert
+                        key
+                        { watchers = watchers, recentInputs = [], botState = Nothing }
+                        model.tetrominoMatches
               }
             , SeqDict.toList watchers |> List.map (sendToTetrominoWatcher key joined) |> Command.batch
             )
@@ -8287,8 +8360,9 @@ tetrominoWatcherLeft time clientId key model =
                                         (TetrominoGame.pruneInputs
                                             time
                                             setup
-                                            { watchers = SeqDict.remove clientId liveMatch.watchers
-                                            , recentInputs = liveMatch.recentInputs ++ [ leave ]
+                                            { liveMatch
+                                                | watchers = SeqDict.remove clientId liveMatch.watchers
+                                                , recentInputs = liveMatch.recentInputs ++ [ leave ]
                                             }
                                         )
                                         model.tetrominoMatches
