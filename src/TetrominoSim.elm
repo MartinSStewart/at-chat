@@ -13,6 +13,7 @@ module TetrominoSim exposing
     , PieceStatus(..)
     , Player
     , Point
+    , Roam
     , Round
     , Snowball
     , Tower
@@ -159,13 +160,18 @@ type NpcKind
       Chaser
       -- Keeps a few cells away from a player and throws snowballs.
     | Thrower
-      -- Like a chaser, a little faster and hopping onto anything one block high.
+      -- Slower than a chaser, but hops onto anything one block high.
     | Jumper
 
 
-{-| NPCs that walk into each other stand on each other's heads. A tower goes wherever its bottom
-NPC would, `position` is where that one stands, and each NPC in `above` stands on the one before
-it. A lone NPC is a tower of one.
+{-| NPCs that walk into each other stand on each other's heads, except chasers, which always go
+alone. A tower goes wherever its bottom NPC would, `position` is where that one stands, and each
+NPC in `above` stands on the one before it. A lone NPC is a tower of one.
+
+A tower that hasn't got any nearer where it's going for `cantReachTime` gives up and heads for a
+random spot on the map for a while (`roamTo`). `closestToTarget` is the nearest it has got, and
+`closestSince` when it got there.
+
 -}
 type alias Tower =
     { position : Point
@@ -173,9 +179,18 @@ type alias Tower =
     , wanderOffset : { x : Float, y : Float }
     , nextWanderFrame : Int
     , wallFollow : Maybe WallFollow
+    , closestToTarget : Float
+    , closestSince : Int
+    , roamTo : Maybe Roam
     , bottom : Npc
     , above : List Npc
     }
+
+
+{-| Somewhere an NPC that couldn't reach its target goes instead, until it gets there or `until`.
+-}
+type alias Roam =
+    { point : { x : Float, y : Float }, until : Int }
 
 
 {-| A lone chaser that runs into a wall picks a side to keep the wall on and walks along it, cell
@@ -441,6 +456,29 @@ entityHeight =
 snowballRadius : Float
 snowballRadius =
     0.15
+
+
+{-| How fast a dropped piece speeds up as it falls, slower than anything else so that it takes about
+two seconds to come down.
+-}
+pieceGravity : Float
+pieceGravity =
+    9
+
+
+{-| How long an NPC goes without getting any nearer its target before it gives up for a while.
+-}
+cantReachTime : Int
+cantReachTime =
+    10 * framesPerSecond
+
+
+{-| Further than anything on the map is from anything else, for a tower that hasn't been anywhere
+yet.
+-}
+farAway : Float
+farAway =
+    toFloat (2 * gridSize)
 
 
 dropHeight : Float
@@ -825,7 +863,7 @@ dropPiece userId drop player state =
                 , x = x
                 , y = y
                 , z = dropHeight
-                , status = Falling -4
+                , status = Falling 0
                 }
                 state.pieces
         , nextId = state.nextId + 1
@@ -1099,56 +1137,129 @@ updateTowers state =
     { state | towers = mergeTowers state.occupied thrown, snowballs = snowballs, seed = seed4 }
 
 
-{-| A tower walks the way its bottom NPC would on its own, except that a tower of two or more can
-always hop. It can come out of this as two towers, if it walked into a wall the NPCs at the top
-could step onto.
+{-| A tower heads for its target, or for somewhere random while it's given up on that. It can come
+out of this as two towers, if it walked into a wall the NPCs at the top could step onto.
 -}
 moveTower : Int -> List Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
 moveTower frame alivePlayers occupied seed tower =
-    case tower.bottom.kind of
-        Chaser ->
-            if List.isEmpty tower.above then
-                moveLoneChaser frame (chaseTarget tower.position alivePlayers) occupied seed tower
+    case tower.roamTo of
+        Just roam ->
+            if frame < roam.until && horizontalDistance tower.position { x = roam.point.x, y = roam.point.y, z = 0 } > 0.5 then
+                walkTowerTo frame (Just roam.point) occupied seed tower
 
             else
-                ( walkTower frame chaserSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower, seed )
+                moveTower
+                    frame
+                    alivePlayers
+                    occupied
+                    seed
+                    { tower | roamTo = Nothing, wallFollow = Nothing, closestToTarget = farAway, closestSince = frame }
 
-        Thrower ->
+        Nothing ->
             let
                 ( tower2, seed2 ) =
-                    if frame >= tower.nextWanderFrame then
-                        Random.step
-                            (Random.map3
-                                (\x y delay -> { tower | wanderOffset = { x = x, y = y }, nextWanderFrame = frame + delay })
-                                (Random.float -2 2)
-                                (Random.float -2 2)
-                                (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
-                            )
-                            seed
+                    case tower.bottom.kind of
+                        Chaser ->
+                            ( tower, seed )
 
-                    else
-                        ( tower, seed )
+                        Thrower ->
+                            if frame >= tower.nextWanderFrame then
+                                Random.step
+                                    (Random.map3
+                                        (\x y delay -> { tower | wanderOffset = { x = x, y = y }, nextWanderFrame = frame + delay })
+                                        (Random.float -2 2)
+                                        (Random.float -2 2)
+                                        (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
+                                    )
+                                    seed
+
+                            else
+                                ( tower, seed )
+
+                        Jumper ->
+                            ( tower, seed )
 
                 target : Maybe { x : Float, y : Float }
                 target =
-                    case nearestPlayer tower2.position alivePlayers of
-                        Just ( player, distance ) ->
-                            if distance >= distanceToCrystal tower2.position then
-                                Just crystalCenter
+                    case tower2.bottom.kind of
+                        Chaser ->
+                            Just (chaseTarget tower2.position alivePlayers)
 
-                            else if distance > npcKeepDistance then
-                                Just { x = player.position.x + tower2.wanderOffset.x, y = player.position.y + tower2.wanderOffset.y }
+                        Thrower ->
+                            throwerTarget tower2 alivePlayers
 
-                            else
-                                Nothing
-
-                        Nothing ->
-                            Just crystalCenter
+                        Jumper ->
+                            Just (chaseTarget tower2.position alivePlayers)
             in
-            ( walkTower frame throwerSpeed target occupied tower2, seed2 )
+            case target of
+                Just point ->
+                    let
+                        distance : Float
+                        distance =
+                            horizontalDistance tower2.position { x = point.x, y = point.y, z = 0 }
+                    in
+                    if distance < tower2.closestToTarget - 1 then
+                        walkTowerTo frame target occupied seed2 { tower2 | closestToTarget = distance, closestSince = frame }
+
+                    else if frame - tower2.closestSince >= cantReachTime then
+                        let
+                            ( roam, seed3 ) =
+                                Random.step
+                                    (Random.map3
+                                        (\x y duration -> { point = { x = toFloat x + 0.5, y = toFloat y + 0.5 }, until = frame + duration })
+                                        (Random.int 0 (gridSize - 1))
+                                        (Random.int 0 (gridSize - 1))
+                                        (Random.int (4 * framesPerSecond) (8 * framesPerSecond))
+                                    )
+                                    seed2
+                        in
+                        walkTowerTo frame (Just roam.point) occupied seed3 { tower2 | roamTo = Just roam, wallFollow = Nothing }
+
+                    else
+                        walkTowerTo frame target occupied seed2 tower2
+
+                Nothing ->
+                    walkTowerTo frame Nothing occupied seed2 { tower2 | closestToTarget = farAway, closestSince = frame }
+
+
+{-| Throwers go for the crystal unless a player is nearer, and then keep a few cells from them,
+wandering about a little. Nothing means it's where it wants to be.
+-}
+throwerTarget : Tower -> List Player -> Maybe { x : Float, y : Float }
+throwerTarget tower alivePlayers =
+    case nearestPlayer tower.position alivePlayers of
+        Just ( player, distance ) ->
+            if distance >= distanceToCrystal tower.position then
+                Just crystalCenter
+
+            else if distance > npcKeepDistance then
+                Just { x = player.position.x + tower.wanderOffset.x, y = player.position.y + tower.wanderOffset.y }
+
+            else
+                Nothing
+
+        Nothing ->
+            Just crystalCenter
+
+
+{-| Walk the way the tower's bottom NPC walks.
+-}
+walkTowerTo : Int -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+walkTowerTo frame target occupied seed tower =
+    case tower.bottom.kind of
+        Chaser ->
+            case target of
+                Just point ->
+                    moveLoneChaser frame point occupied seed tower
+
+                Nothing ->
+                    ( [ moveEntityWithoutHopping chaserSpeed entityHeight Nothing occupied tower ], seed )
+
+        Thrower ->
+            ( walkTower frame throwerSpeed target occupied tower, seed )
 
         Jumper ->
-            ( walkTower frame jumperSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower, seed )
+            ( walkTower frame jumperSpeed target occupied tower, seed )
 
 
 {-| Chasers and jumpers go for the nearest player, unless the crystal is nearer.
@@ -1406,6 +1517,9 @@ splitAtWallHelper frame occupied next tower stayingTopFirst rest =
                     , wanderOffset = { x = 0, y = 0 }
                     , nextWanderFrame = frame
                     , wallFollow = Nothing
+                    , closestToTarget = farAway
+                    , closestSince = frame
+                    , roamTo = Nothing
                     , bottom = npc
                     , above = higher
                     }
@@ -1441,7 +1555,7 @@ mergeWithFirstMet : Dict ( Int, Int, Int ) Int -> Tower -> List Tower -> List To
 mergeWithFirstMet occupied tower skipped rest =
     case rest of
         other :: rest2 ->
-            if towersMeet tower other then
+            if towersMeet tower other && canStack tower && canStack other then
                 let
                     merged : Tower
                     merged =
@@ -1458,6 +1572,19 @@ mergeWithFirstMet occupied tower skipped rest =
 
         [] ->
             Nothing
+
+
+canStack : Tower -> Bool
+canStack tower =
+    case tower.bottom.kind of
+        Chaser ->
+            False
+
+        Thrower ->
+            True
+
+        Jumper ->
+            True
 
 
 {-| Only towers standing at about the same level meet, so that NPCs who have just stepped off a
@@ -1485,10 +1612,10 @@ stack a b =
             List.length b.above
     in
     if sizeA < sizeB || (sizeA == sizeB && a.bottom.id < b.bottom.id) then
-        { a | above = a.above ++ b.bottom :: b.above, wallFollow = Nothing }
+        { a | above = a.above ++ b.bottom :: b.above }
 
     else
-        { b | above = b.above ++ a.bottom :: a.above, wallFollow = Nothing }
+        { b | above = b.above ++ a.bottom :: a.above }
 
 
 towerHeight : Tower -> Float
@@ -1878,6 +2005,9 @@ spawnNpcs state =
                                      , wanderOffset = { x = 0, y = 0 }
                                      , nextWanderFrame = state.frame
                                      , wallFollow = Nothing
+                                     , closestToTarget = farAway
+                                     , closestSince = state.frame
+                                     , roamTo = Nothing
                                      , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 3 * framesPerSecond }
                                      , above = []
                                      }
@@ -2618,7 +2748,7 @@ updatePieces state =
                     let
                         velocity2 : Float
                         velocity2 =
-                            max -maxFallSpeed (velocity - gravity * frameSeconds)
+                            max -maxFallSpeed (velocity - pieceGravity * frameSeconds)
 
                         newZ : Float
                         newZ =

@@ -71,7 +71,7 @@ twoPlayerMatchTest normalConfig =
                         , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 300, 300 ))
                         , admin.custom 400 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 800, 150 ))
                         , T.checkState
-                            1500
+                            2500
                             (matchStatesAgree
                                 admin
                                 user

@@ -1096,6 +1096,10 @@ flatSquare vp x y z size color alpha =
 
 {-| See-through things draw every other pixel and write depth like anything solid, so it doesn't
 matter what order they're drawn in, and two shadows on the same spot don't darken it twice.
+
+The shaders that pick the pixels use highp. Phones run mediump as 16-bit floats, which can't tell
+odd pixel coordinates from even ones past 2048, so on much of a big canvas every pixel was drawn.
+
 -}
 ditheredSettings : List Effect.WebGL.Settings.Setting
 ditheredSettings =
@@ -1306,7 +1310,7 @@ void main () {
 ditheredFragmentShader : Shader {} Uniforms Varyings
 ditheredFragmentShader =
     [glsl|
-precision mediump float;
+precision highp float;
 uniform vec3 color;
 uniform float alpha;
 uniform float edge;
@@ -1329,7 +1333,7 @@ void main () {
 ditheredDiscFragmentShader : Shader {} Uniforms Varyings
 ditheredDiscFragmentShader =
     [glsl|
-precision mediump float;
+precision highp float;
 uniform vec3 color;
 uniform float alpha;
 varying vec3 vNormal;
@@ -1372,7 +1376,7 @@ shadow or the ghost piece still shows.
 silhouetteFragmentShader : Shader {} Uniforms Varyings
 silhouetteFragmentShader =
     [glsl|
-precision mediump float;
+precision highp float;
 uniform vec3 color;
 varying vec3 vNormal;
 varying vec2 vUv;
