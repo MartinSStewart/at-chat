@@ -16,7 +16,10 @@ module TetrominoSim exposing
     , Round
     , Snowball
     , Tower
+    , WallFollow
+    , WallSide(..)
     , canDrop
+    , coversCrystal
     , crystalCenter
     , crystalHealth
     , crystalHeight
@@ -150,8 +153,9 @@ type alias Pickup =
 {-| Every kind heads for the crystal, unless a player is nearer than it is.
 -}
 type NpcKind
-    = -- Heads straight for its target slower than a player walks, but can't hop on its own, so a
-      -- wall one block high stops it. Knocks out a player it reaches.
+    = -- Heads straight for its target twice as fast as a player walks, but can't hop on its own,
+      -- so a wall one block high makes it go along the wall for a while. Knocks out a player it
+      -- reaches.
       Chaser
       -- Keeps a few cells away from a player and throws snowballs.
     | Thrower
@@ -168,9 +172,29 @@ type alias Tower =
     , velocityZ : Float
     , wanderOffset : { x : Float, y : Float }
     , nextWanderFrame : Int
+    , wallFollow : Maybe WallFollow
     , bottom : Npc
     , above : List Npc
     }
+
+
+{-| A lone chaser that runs into a wall picks a side to keep the wall on and walks along it, cell
+by cell, in case that gets it around. It gives up at `until`, or sooner once it's nearer its target
+than `stuckDistance` (where it got stuck) with nothing in the way. `goal` is the cell it's walking
+to the middle of, and `heading` the way it went to get there.
+-}
+type alias WallFollow =
+    { side : WallSide
+    , heading : ( Int, Int )
+    , goal : ( Int, Int )
+    , stuckDistance : Float
+    , until : Int
+    }
+
+
+type WallSide
+    = WallOnLeft
+    | WallOnRight
 
 
 type alias Npc =
@@ -292,7 +316,7 @@ throwerSpeed =
 
 chaserSpeed : Float
 chaserSpeed =
-    1.6
+    2 * playerSpeed
 
 
 jumperSpeed : Float
@@ -369,6 +393,27 @@ crystalCells =
                 [ gridSize // 2 - 1, gridSize // 2 ]
         )
         [ gridSize // 2 - 1, gridSize // 2 ]
+
+
+{-| Whether a piece with these cells, dropped on this column and row, would have any of it over
+the crystal. Nothing can be put on top of it.
+-}
+coversCrystal : List ( Int, Int, Int ) -> Int -> Int -> Bool
+coversCrystal cells column row =
+    List.any
+        (\( offsetX, offsetY, _ ) ->
+            let
+                x : Int
+                x =
+                    column + offsetX
+
+                y : Int
+                y =
+                    row + offsetY
+            in
+            (x >= gridSize // 2 - 1) && (x <= gridSize // 2) && (y >= gridSize // 2 - 1) && (y <= gridSize // 2)
+        )
+        cells
 
 
 crystalCenter : { x : Float, y : Float }
@@ -706,7 +751,19 @@ applyInput event state =
         Drop drop ->
             case SeqDict.get event.userId state.players of
                 Just player ->
-                    if canDrop state.frame player && Tetromino.isValidOrientation drop.orientation then
+                    let
+                        cells : List ( Int, Int, Int )
+                        cells =
+                            Tetromino.cells drop.orientation player.queue.current
+
+                        ( x, y ) =
+                            keepInsideGrid cells drop.x drop.y
+                    in
+                    if
+                        canDrop state.frame player
+                            && Tetromino.isValidOrientation drop.orientation
+                            && not (coversCrystal cells x y)
+                    then
                         dropPiece event.userId drop player state
 
                     else
@@ -1051,9 +1108,7 @@ moveTower frame alivePlayers occupied seed tower =
     case tower.bottom.kind of
         Chaser ->
             if List.isEmpty tower.above then
-                ( walkTowerWithoutHopping frame chaserSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower
-                , seed
-                )
+                moveLoneChaser frame (chaseTarget tower.position alivePlayers) occupied seed tower
 
             else
                 ( walkTower frame chaserSpeed (Just (chaseTarget tower.position alivePlayers)) occupied tower, seed )
@@ -1148,35 +1203,186 @@ walkTower frame speed maybeTarget occupied tower =
             [ moveEntity speed height maybeTarget occupied tower ]
 
 
-{-| Like `walkTower`, except the tower never hops, so the NPCs high enough to clear anything in
-the way step onto it.
+{-| A chaser on its own can't hop, so it heads straight for its target until a wall stops it, and
+then follows the wall for a while, keeping it on whichever side it picked.
 -}
-walkTowerWithoutHopping : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Tower -> List Tower
-walkTowerWithoutHopping frame speed maybeTarget occupied tower =
-    let
-        height : Float
-        height =
-            towerHeight tower
+moveLoneChaser : Int -> { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+moveLoneChaser frame target occupied seed tower =
+    case tower.wallFollow of
+        Just wallFollow ->
+            let
+                isAround : Bool
+                isAround =
+                    (horizontalDistance tower.position { x = target.x, y = target.y, z = 0 } < wallFollow.stuckDistance - 0.5)
+                        && not (wayIsBlocked occupied target tower.position)
+            in
+            if frame >= wallFollow.until || isAround then
+                moveLoneChaser frame target occupied seed { tower | wallFollow = Nothing }
 
-        blockedStep : Maybe Point
-        blockedStep =
-            case Maybe.andThen (\target -> stepTowards speed target tower.position) maybeTarget of
-                Just next ->
-                    if entityCollides occupied height next then
-                        Just next
-
-                    else
-                        Nothing
-
-                Nothing ->
-                    Nothing
-    in
-    case Maybe.andThen (\next -> splitAtWall frame occupied next tower) blockedStep of
-        Just ( lower, upper ) ->
-            [ moveEntityWithoutHopping speed (towerHeight lower) maybeTarget occupied lower, upper ]
+            else
+                ( [ followWall occupied wallFollow tower ], seed )
 
         Nothing ->
-            [ moveEntityWithoutHopping speed height maybeTarget occupied tower ]
+            let
+                moved : Tower
+                moved =
+                    moveEntityWithoutHopping chaserSpeed entityHeight (Just target) occupied tower
+
+                stopped : Bool
+                stopped =
+                    wayIsBlocked occupied target tower.position
+                        && (horizontalDistance moved.position tower.position < chaserSpeed * frameSeconds / 2)
+            in
+            if stopped then
+                let
+                    ( wallFollow, seed2 ) =
+                        Random.step
+                            (Random.map2
+                                (startFollowingWall frame target tower.position)
+                                (Random.uniform WallOnLeft [ WallOnRight ])
+                                (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
+                            )
+                            seed
+                in
+                ( [ { moved | wallFollow = Just wallFollow } ], seed2 )
+
+            else
+                ( [ moved ], seed )
+
+
+{-| Turn from facing the wall, the way that puts it on the chosen side, and start by going to the
+middle of the cell the chaser is in.
+-}
+startFollowingWall : Int -> { x : Float, y : Float } -> Point -> WallSide -> Int -> WallFollow
+startFollowingWall frame target position side duration =
+    let
+        dx : Float
+        dx =
+            target.x - position.x
+
+        dy : Float
+        dy =
+            target.y - position.y
+
+        towardsWall : ( Int, Int )
+        towardsWall =
+            if abs dx >= abs dy then
+                ( sign dx, 0 )
+
+            else
+                ( 0, sign dy )
+    in
+    { side = side
+    , heading = turnAwayFrom side towardsWall
+    , goal = ( floor position.x, floor position.y )
+    , stuckDistance = sqrt (dx * dx + dy * dy)
+    , until = frame + duration
+    }
+
+
+{-| Whether a chaser's next step straight for its target would take it into a block.
+-}
+wayIsBlocked : Dict ( Int, Int, Int ) Int -> { x : Float, y : Float } -> Point -> Bool
+wayIsBlocked occupied target position =
+    case stepTowards chaserSpeed target position of
+        Just next ->
+            entityCollides occupied entityHeight next
+
+        Nothing ->
+            False
+
+
+sign : Float -> Int
+sign value =
+    if value < 0 then
+        -1
+
+    else
+        1
+
+
+{-| Walk to the middle of the goal cell. Close enough to it, pick the next cell the way someone
+keeping a hand on the wall would: round the corner if the wall stops, straight on if it doesn't,
+turning away from it or going back the way it came only when it has to.
+-}
+followWall : Dict ( Int, Int, Int ) Int -> WallFollow -> Tower -> Tower
+followWall occupied wallFollow tower =
+    let
+        ( goalX, goalY ) =
+            wallFollow.goal
+
+        isFree : ( Int, Int ) -> Bool
+        isFree ( dx, dy ) =
+            not
+                (entityCollides
+                    occupied
+                    entityHeight
+                    { x = toFloat (goalX + dx) + 0.5, y = toFloat (goalY + dy) + 0.5, z = tower.position.z }
+                )
+
+        wallFollow2 : WallFollow
+        wallFollow2 =
+            if horizontalDistance tower.position (cellMiddle wallFollow.goal tower.position.z) <= chaserSpeed * frameSeconds then
+                case
+                    List.filter
+                        isFree
+                        [ turnTowards wallFollow.side wallFollow.heading
+                        , wallFollow.heading
+                        , turnAwayFrom wallFollow.side wallFollow.heading
+                        , turnAround wallFollow.heading
+                        ]
+                of
+                    ( dx, dy ) :: _ ->
+                        { wallFollow | heading = ( dx, dy ), goal = ( goalX + dx, goalY + dy ) }
+
+                    [] ->
+                        wallFollow
+
+            else
+                wallFollow
+
+        goal : Point
+        goal =
+            cellMiddle wallFollow2.goal tower.position.z
+    in
+    moveEntityWithoutHopping
+        chaserSpeed
+        entityHeight
+        (Just { x = goal.x, y = goal.y })
+        occupied
+        { tower | wallFollow = Just wallFollow2 }
+
+
+cellMiddle : ( Int, Int ) -> Float -> Point
+cellMiddle ( x, y ) z =
+    { x = toFloat x + 0.5, y = toFloat y + 0.5, z = z }
+
+
+{-| A quarter turn towards the side the wall is on.
+-}
+turnTowards : WallSide -> ( Int, Int ) -> ( Int, Int )
+turnTowards side ( dx, dy ) =
+    case side of
+        WallOnLeft ->
+            ( -dy, dx )
+
+        WallOnRight ->
+            ( dy, -dx )
+
+
+turnAwayFrom : WallSide -> ( Int, Int ) -> ( Int, Int )
+turnAwayFrom side ( dx, dy ) =
+    case side of
+        WallOnLeft ->
+            ( dy, -dx )
+
+        WallOnRight ->
+            ( -dy, dx )
+
+
+turnAround : ( Int, Int ) -> ( Int, Int )
+turnAround ( dx, dy ) =
+    ( -dx, -dy )
 
 
 {-| The lowest NPC in a tower that fits at `next` along with everyone above it takes them all
@@ -1199,6 +1405,7 @@ splitAtWallHelper frame occupied next tower stayingTopFirst rest =
                     , velocityZ = 0
                     , wanderOffset = { x = 0, y = 0 }
                     , nextWanderFrame = frame
+                    , wallFollow = Nothing
                     , bottom = npc
                     , above = higher
                     }
@@ -1278,10 +1485,10 @@ stack a b =
             List.length b.above
     in
     if sizeA < sizeB || (sizeA == sizeB && a.bottom.id < b.bottom.id) then
-        { a | above = a.above ++ b.bottom :: b.above }
+        { a | above = a.above ++ b.bottom :: b.above, wallFollow = Nothing }
 
     else
-        { b | above = b.above ++ a.bottom :: a.above }
+        { b | above = b.above ++ a.bottom :: a.above, wallFollow = Nothing }
 
 
 towerHeight : Tower -> Float
@@ -1670,6 +1877,7 @@ spawnNpcs state =
                                      , velocityZ = 0
                                      , wanderOffset = { x = 0, y = 0 }
                                      , nextWanderFrame = state.frame
+                                     , wallFollow = Nothing
                                      , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 3 * framesPerSecond }
                                      , above = []
                                      }

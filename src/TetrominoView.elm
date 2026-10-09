@@ -90,7 +90,8 @@ middleOfTheMap =
 
 
 {-| Looking down at the focus from the side nearest x = 0, y = 0, a little steeper than the classic
-isometric angle.
+isometric angle. It's a perspective view from far enough away, through a narrow enough lens, that
+it still looks nearly isometric. Zooming out moves the camera further back.
 -}
 viewProjection : Int -> Int -> Camera -> Mat4
 viewProjection width height { focus, zoom } =
@@ -99,17 +100,29 @@ viewProjection width height { focus, zoom } =
         aspect =
             toFloat (max 1 width) / toFloat (max 1 height)
 
+        distance : Float
+        distance =
+            cameraDistance * zoom
+
+        -- Half the height of what's in view at the focus.
         halfHeight : Float
         halfHeight =
             5.5 * zoom
-
-        halfWidth : Float
-        halfWidth =
-            halfHeight * aspect
     in
     Mat4.mul
-        (Mat4.makeOrtho -halfWidth halfWidth -halfHeight halfHeight -200 200)
-        (Mat4.makeLookAt (Vec3.add focus (Vec3.vec3 -40 -40 70)) focus (Vec3.vec3 0 0 1))
+        (Mat4.makePerspective (2 * atan (halfHeight / distance) * 180 / pi) aspect 1 1000)
+        (Mat4.makeLookAt
+            (Vec3.add focus (Vec3.scale distance (Vec3.normalize (Vec3.vec3 -40 -40 70))))
+            focus
+            (Vec3.vec3 0 0 1)
+        )
+
+
+{-| How far the camera is from what it's looking at, when it's zoomed in all the way.
+-}
+cameraDistance : Float
+cameraDistance =
+    45
 
 
 {-| Which column is under a point on the canvas, given in CSS pixels from its top left corner.
@@ -143,9 +156,14 @@ screenToCell width height camera2 screenPosition state =
                 top =
                     40
 
+                -- Nothing is ever higher than `top`, so the ray needn't start any higher.
                 start : Vec3
                 start =
-                    Vec3.add near (Vec3.scale ((top - Vec3.getZ near) / Vec3.getZ direction) direction)
+                    if Vec3.getZ near > top then
+                        Vec3.add near (Vec3.scale ((top - Vec3.getZ near) / Vec3.getZ direction) direction)
+
+                    else
+                        near
             in
             castRay state.occupied (Vec3.scale 0.02 direction) start 4000
 
@@ -339,6 +357,29 @@ worldEntities config state =
                     )
                     state.pickups
 
+        walkTarget : List Entity
+        walkTarget =
+            case SeqDict.get config.currentUserId state.players of
+                Just player ->
+                    case ( player.knockedOutAt, player.target ) of
+                        ( Nothing, Just ( x, y ) ) ->
+                            if
+                                horizontalDistance
+                                    player.position
+                                    { x = toFloat x + 0.5, y = toFloat y + 0.5, z = player.position.z }
+                                    < 0.05
+                            then
+                                []
+
+                            else
+                                [ walkTargetEntity vp (toFloat x) (toFloat y) (toFloat (surfaceBelow columns x y 1000)) ]
+
+                        _ ->
+                            []
+
+                Nothing ->
+                    []
+
         overlays : List Entity
         overlays =
             case config.cursor of
@@ -359,7 +400,11 @@ worldEntities config state =
 
                                 color : Color
                                 color =
-                                    config.userColor config.currentUserId
+                                    if TetrominoSim.coversCrystal cells x0 y0 then
+                                        Color.rgb 1 0.2 0.15
+
+                                    else
+                                        config.userColor config.currentUserId
                             in
                             List.map
                                 (\( x, y, z ) ->
@@ -376,7 +421,29 @@ worldEntities config state =
                 Nothing ->
                     []
     in
-    groundAndPieces ++ silhouettes ++ everythingElse ++ shadows ++ overlays
+    groundAndPieces ++ silhouettes ++ everythingElse ++ shadows ++ walkTarget ++ overlays
+
+
+horizontalDistance : Point -> Point -> Float
+horizontalDistance a b =
+    sqrt ((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
+
+
+{-| A green ring lying on top of the column the player is walking to.
+-}
+walkTargetEntity : Mat4 -> Float -> Float -> Float -> Entity
+walkTargetEntity vp x y z =
+    WebGL.entity
+        vertexShader
+        ringFragmentShader
+        squareMesh
+        { viewProjection = vp
+        , offset = Vec3.vec3 (x + 0.05) (y + 0.05) (z + 0.02)
+        , scale = Vec3.vec3 0.9 0.9 1
+        , color = Vec3.vec3 0.2 0.85 0.3
+        , alpha = 1
+        , edge = 0
+        }
 
 
 {-| Only every other pixel of a shadow is drawn, so this is twice as dark as the shadow looks.
@@ -1277,6 +1344,24 @@ void main () {
         discard;
     }
     gl_FragColor = vec4(color, alpha);
+}
+|]
+
+
+ringFragmentShader : Shader {} Uniforms Varyings
+ringFragmentShader =
+    [glsl|
+precision mediump float;
+uniform vec3 color;
+varying vec3 vNormal;
+varying vec2 vUv;
+
+void main () {
+    float distanceFromCenter = length(vUv - vec2(0.5, 0.5));
+    if (distanceFromCenter > 0.5 || distanceFromCenter < 0.36) {
+        discard;
+    }
+    gl_FragColor = vec4(color, 1.0);
 }
 |]
 

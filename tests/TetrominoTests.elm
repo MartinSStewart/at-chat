@@ -159,6 +159,7 @@ towerAt x y bottom above state =
     , velocityZ = 0
     , wanderOffset = { x = 0, y = 0 }
     , nextWanderFrame = state.frame + 1000
+    , wallFollow = Nothing
     , bottom = bottom
     , above = above
     }
@@ -167,6 +168,43 @@ towerAt x y bottom above state =
 npc : Int -> NpcKind -> MatchState -> TetrominoSim.Npc
 npc id kind state =
     { id = id, kind = kind, nextThrowFrame = state.frame + 1000 }
+
+
+{-| userA moved well away from the crystal, so NPCs go for them rather than for it.
+-}
+awayFromCrystal : MatchState -> MatchState
+awayFromCrystal state =
+    { state
+        | players =
+            SeqDict.updateIfExists
+                userA
+                (\player -> { player | position = { x = toFloat awayColumn + 0.5, y = toFloat playerRow + 0.5, z = 0 }, target = Nothing })
+                state.players
+    }
+
+
+awayColumn : Int
+awayColumn =
+    center + 18
+
+
+{-| A ring of blocks one high, this many cells out from userA once they're `awayFromCrystal`.
+-}
+ringAroundPlayer : Int -> List ( Int, Int, Int )
+ringAroundPlayer distance =
+    List.concatMap
+        (\dx ->
+            List.filterMap
+                (\dy ->
+                    if max (abs dx) (abs dy) == distance then
+                        Just ( awayColumn + dx, playerRow + dy, 0 )
+
+                    else
+                        Nothing
+                )
+                (List.range -distance distance)
+        )
+        (List.range -distance distance)
 
 
 {-| A giant standing on the ground that hasn't been stopped by anything yet.
@@ -528,9 +566,12 @@ tests =
         , test "An NPC that walks into a tower goes underneath it" <|
             \_ ->
                 let
+                    -- userA can't be caught, so the tower stays with them instead of going for the
+                    -- crystal.
                     start : MatchState
                     start =
                         inFirstRound [ userA ]
+                            |> (\state -> { state | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) state.players })
                 in
                 { start
                     | towers =
@@ -596,23 +637,62 @@ tests =
                     after.towers
                 )
                     |> Expect.equal ( Just False, [ ( [ 1, 2, 3 ], True ), ( [ 4 ], False ) ] )
-        , test "A wall one block high stops a lone chaser, but a tower of two chasers hops it" <|
+        , test "A ring of blocks one high keeps a lone chaser out, but a tower of two chasers hops it" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
-                            |> withBlocks (List.map (\y -> ( playerColumn + 2, y, 0 )) (List.range (playerRow - 12) (playerRow + 12)))
+                        inFirstRound [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
 
                     after : List TetrominoSim.Npc -> MatchState
                     after above =
-                        { start | towers = [ towerAt (toFloat playerColumn + 6) (toFloat playerRow + 0.5) (npc 1 Chaser start) above start ] }
+                        { start | towers = [ towerAt (toFloat awayColumn + 6.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) above start ] }
                             |> runUntil (start.frame + 6 * TetrominoSim.framesPerSecond) []
                 in
                 ( after [] |> knockedOut
                 , after [ npc 2 Chaser start ] |> knockedOut
                 )
                     |> Expect.equal ( Just False, Just True )
+        , test "A lone chaser that runs into a wall goes along it and round to the player" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                            |> awayFromCrystal
+                            |> withBlocks (List.map (\y -> ( awayColumn + 3, y, 0 )) (List.range (playerRow - 3) (playerRow + 3)))
+
+                    after : MatchState
+                    after =
+                        { start | towers = [ towerAt (toFloat awayColumn + 8.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
+                            |> runUntil (start.frame + 4 * TetrominoSim.framesPerSecond) []
+                in
+                knockedOut after |> Expect.equal (Just True)
+        , test "A chaser walks twice as fast as a player" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inFirstRound [ userA ]
+                            |> awayFromCrystal
+                            |> (\state -> { state | players = SeqDict.map (\_ player -> { player | target = Just ( awayColumn - 10, playerRow ) }) state.players })
+
+                    after : MatchState
+                    after =
+                        { start | towers = [ towerAt (toFloat awayColumn + 10.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
+                            |> runUntil (start.frame + TetrominoSim.framesPerSecond) []
+
+                    playerWalked : Float
+                    playerWalked =
+                        SeqDict.get userA after.players
+                            |> Maybe.map (\player -> toFloat awayColumn + 0.5 - player.position.x)
+                            |> Maybe.withDefault 0
+
+                    chaserWalked : Float
+                    chaserWalked =
+                        List.map (\tower -> toFloat awayColumn + 10.5 - tower.position.x) after.towers |> List.sum
+                in
+                Expect.within (Expect.Absolute 0.01) (2 * playerWalked) chaserWalked
         , test "NPCs make for the crystal unless a player is nearer" <|
             \_ ->
                 let
@@ -634,8 +714,8 @@ tests =
                 in
                 List.map (\tower -> ( tower.bottom.id, round (tower.position.x * 10) )) after.towers
                     |> Expect.equal
-                        [ ( 1, (playerColumn + 8) * 10 - 16 )
-                        , ( 2, (center - 8) * 10 + 16 )
+                        [ ( 1, (playerColumn + 8) * 10 - 60 )
+                        , ( 2, (center - 8) * 10 + 60 )
                         ]
         , test "An NPC that touches the crystal is gone, and three of them destroy it and stop the match" <|
             \_ ->
@@ -826,21 +906,22 @@ tests =
                     |> runUntil (start.frame + 2 * TetrominoSim.framesPerSecond) []
                     |> knockedOut
                     |> Expect.equal (Just True)
-        , test "A wall one block high stops a chaser, but a jumper hops it" <|
+        , test "A ring of blocks one high keeps a chaser out, but a jumper hops it" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
-                            |> withBlocks (List.map (\y -> ( playerColumn + 2, y, 0 )) (List.range (playerRow - 12) (playerRow + 12)))
+                        inFirstRound [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
 
                     after : NpcKind -> MatchState
                     after kind =
-                        { start | towers = [ towerAt (toFloat playerColumn + 6) (toFloat playerRow + 0.5) (npc 1000 kind start) [] start ] }
+                        { start | towers = [ towerAt (toFloat awayColumn + 6.5) (toFloat playerRow + 0.5) (npc 1000 kind start) [] start ] }
                             |> runUntil (start.frame + 5 * TetrominoSim.framesPerSecond) []
                 in
                 ( after Chaser |> knockedOut
-                , List.map (\tower -> tower.position.x > toFloat playerColumn + 3) (after Chaser).towers
+                , List.map
+                    (\tower -> max (abs (tower.position.x - toFloat awayColumn - 0.5)) (abs (tower.position.y - toFloat playerRow - 0.5)) > 2)
+                    (after Chaser).towers
                 , after Jumper |> knockedOut
                 )
                     |> Expect.equal ( Just False, [ True ], Just True )
@@ -884,6 +965,16 @@ tests =
                 , SeqDict.size after.pieces
                 )
                     |> Expect.equal ( Just 10, Just 8, 2 )
+        , test "Nothing can be dropped on top of the crystal" <|
+            \_ ->
+                let
+                    after : MatchState
+                    after =
+                        inFirstRound [ userA ]
+                            |> runUntil (firstRound + 100) (dropAt (firstRound + 10) userA (center - 1) (center - 1))
+                in
+                ( SeqDict.size after.pieces, SeqDict.get userA after.players |> Maybe.map .piecesLeft )
+                    |> Expect.equal ( 0, Just 10 )
         , test "With no pieces left, dropping does nothing" <|
             \_ ->
                 let
