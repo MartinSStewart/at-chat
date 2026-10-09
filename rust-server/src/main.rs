@@ -14,7 +14,7 @@ use axum::{
 use chrono;
 use http::HeaderMap;
 use image::metadata::Orientation;
-use image::{self, GenericImageView, ImageFormat, ImageReader};
+use image::{self, ImageFormat, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
@@ -1512,30 +1512,41 @@ fn image_metadata(
     }
 }
 
-enum DecodedUpload {
-    Image(image::DynamicImage, ImageMetadata),
+/// What an upload is, as far as can be told without decoding it. Decoding waits until
+/// Lamdera has said the upload is allowed, because a png of a few kilobytes can decode
+/// into hundreds of megabytes, and the caller hasn't been checked for anything yet beyond
+/// sending some `sid` cookie.
+enum ProbedUpload {
+    Image(ImageFormat, ImageMetadata),
     // Not something the image crate can read. It might still be a video, in
     // which case the container header has plenty to say about it.
     NotImage(Option<video::VideoMetadata>),
 }
 
-fn decode_upload(bytes: &Bytes) -> DecodedUpload {
+fn probe_upload(bytes: &Bytes) -> ProbedUpload {
     let reader = ImageReader::new(std::io::Cursor::new(bytes));
 
     match reader
         .with_guessed_format()
-        .map(|a| (a.format(), a.decode()))
+        .map(|a| (a.format(), a.into_dimensions()))
     {
-        Ok((Some(format), Ok(image))) => {
-            let (width, height) = image.dimensions();
-            let metadata = image_metadata(width, height, format, bytes.to_vec());
-            DecodedUpload::Image(image, metadata)
-        }
-        _ => DecodedUpload::NotImage(video::video_metadata(bytes)),
+        Ok((Some(format), Ok((width, height)))) => ProbedUpload::Image(
+            format,
+            image_metadata(width, height, format, bytes.to_vec()),
+        ),
+        _ => ProbedUpload::NotImage(video::video_metadata(bytes)),
     }
 }
 
-fn encode_thumbnail(image: &image::DynamicImage, orientation: Orientation) -> Option<Vec<u8>> {
+fn encode_thumbnail(
+    bytes: &Bytes,
+    format: ImageFormat,
+    orientation: Orientation,
+) -> Option<Vec<u8>> {
+    let image = ImageReader::with_format(std::io::Cursor::new(bytes), format)
+        .decode()
+        .ok()?;
+
     let mut resized_image = image.resize(
         MAX_THUMBNAIL_HEIGHT * 3,
         MAX_THUMBNAIL_HEIGHT,
@@ -1553,8 +1564,8 @@ fn encode_thumbnail(image: &image::DynamicImage, orientation: Orientation) -> Op
     Some(thumbnail)
 }
 
-// Decoding and resizing a large image is slow enough to hold up a worker thread, and
-// every other request with it, so that runs on the blocking pool.
+// Hashing a large file and decoding and resizing a large image are slow enough to hold
+// up a worker thread, and every other request with it, so those run on the blocking pool.
 async fn file_upload_helper(
     secret_key: &[u8],
     uploader: &Uploader,
@@ -1563,8 +1574,8 @@ async fn file_upload_helper(
     let size = bytes.len();
 
     let bytes2 = bytes.clone();
-    let (hash, decoded) =
-        match tokio::task::spawn_blocking(move || (hash_bytes(&bytes2), decode_upload(&bytes2)))
+    let (hash, probed) =
+        match tokio::task::spawn_blocking(move || (hash_bytes(&bytes2), probe_upload(&bytes2)))
             .await
         {
             Ok(ok) => ok,
@@ -1576,98 +1587,69 @@ async fn file_upload_helper(
             }
         };
 
-    match decoded {
-        DecodedUpload::Image(image, metadata) => {
-            let orientation: Orientation = match metadata.orientation {
-                Some(orientation2) => {
-                    Orientation::from_exif(orientation2).unwrap_or(Orientation::NoTransforms)
-                }
-                None => Orientation::NoTransforms,
-            };
+    let display_size: (u32, u32) = match &probed {
+        ProbedUpload::Image(_, metadata) => metadata.image_size,
+        ProbedUpload::NotImage(Some(metadata)) => metadata.video_size,
+        ProbedUpload::NotImage(None) => (0, 0),
+    };
 
-            let image_size = metadata.image_size;
+    if is_file_upload_allowed(secret_key, hash.clone(), size, uploader, display_size)
+        .await
+        .is_err()
+    {
+        return response_with_headers(
+            StatusCode::UNAUTHORIZED,
+            String::from("Invalid permissions"),
+        );
+    }
 
-            match is_file_upload_allowed(secret_key, hash.clone(), size, uploader, image_size).await
-            {
-                Ok(()) => {
-                    let path = filepath(&hash);
-                    let response: String = serde_json::to_string(&UploadResponse {
-                        image_metadata: Some(metadata),
-                        video_metadata: None,
-                        hash: hash.clone(),
-                    })
-                    .unwrap();
+    let path = filepath(&hash);
 
-                    match tokio::fs::try_exists(&path).await {
-                        Ok(true) => json_response_with_headers(StatusCode::OK, response),
-                        _ => match tokio::fs::write(path, bytes).await {
-                            Ok(()) => {
-                                let (width2, height2) = image_size;
-                                if (height2 > MAX_THUMBNAIL_HEIGHT
-                                    || width2 > MAX_THUMBNAIL_HEIGHT * 3)
-                                    && let Ok(Some(thumbnail)) =
-                                        tokio::task::spawn_blocking(move || {
-                                            encode_thumbnail(&image, orientation)
-                                        })
-                                        .await
-                                {
-                                    let _ = tokio::fs::write(thumbnail_filepath(&hash), thumbnail)
-                                        .await;
-                                }
+    if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+        return json_response_with_headers(StatusCode::OK, upload_response(probed, hash));
+    }
 
-                                json_response_with_headers(StatusCode::OK, response)
-                            }
-                            Err(_) => response_with_headers(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                String::from("Internal error"),
-                            ),
-                        },
-                    }
-                }
+    if tokio::fs::write(path, &bytes).await.is_err() {
+        return response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("Internal error"),
+        );
+    }
 
-                Err(()) => response_with_headers(
-                    StatusCode::UNAUTHORIZED,
-                    String::from("Invalid permissions"),
-                ),
+    if let ProbedUpload::Image(format, metadata) = &probed {
+        let format2: ImageFormat = *format;
+        let orientation: Orientation = match metadata.orientation {
+            Some(orientation2) => {
+                Orientation::from_exif(orientation2).unwrap_or(Orientation::NoTransforms)
             }
-        }
-        DecodedUpload::NotImage(metadata) => {
-            let video_size: (u32, u32) = match &metadata {
-                Some(metadata2) => metadata2.video_size,
-                None => (0, 0),
-            };
+            None => Orientation::NoTransforms,
+        };
+        let (width, height) = metadata.image_size;
 
-            match is_file_upload_allowed(secret_key, hash.clone(), size, uploader, video_size).await
-            {
-                Ok(()) => {
-                    let path = filepath(&hash);
-                    let response: String = serde_json::to_string(&UploadResponse {
-                        image_metadata: None,
-                        video_metadata: metadata,
-                        hash: hash.clone(),
-                    })
-                    .unwrap();
-
-                    match tokio::fs::try_exists(&path).await {
-                        Ok(true) => json_response_with_headers(StatusCode::OK, response),
-
-                        _ => match tokio::fs::write(path, bytes).await {
-                            Ok(()) => json_response_with_headers(StatusCode::OK, response),
-                            Err(_) => response_with_headers(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                String::from("Internal error"),
-                            ),
-                        },
-                    }
-                }
-
-                Err(()) => response_with_headers(
-                    StatusCode::UNAUTHORIZED,
-                    String::from("Invalid permissions"),
-                ),
-            }
+        if (height > MAX_THUMBNAIL_HEIGHT || width > MAX_THUMBNAIL_HEIGHT * 3)
+            && let Ok(Some(thumbnail)) =
+                tokio::task::spawn_blocking(move || encode_thumbnail(&bytes, format2, orientation))
+                    .await
+        {
+            let _ = tokio::fs::write(thumbnail_filepath(&hash), thumbnail).await;
         }
     }
+
+    json_response_with_headers(StatusCode::OK, upload_response(probed, hash))
+}
+
+fn upload_response(probed: ProbedUpload, hash: String) -> String {
+    let (image_metadata, video_metadata) = match probed {
+        ProbedUpload::Image(_, metadata) => (Some(metadata), None),
+        ProbedUpload::NotImage(metadata) => (None, metadata),
+    };
+
+    serde_json::to_string(&UploadResponse {
+        image_metadata,
+        video_metadata,
+        hash,
+    })
+    .unwrap()
 }
 
 /// The page these endpoints are called from, and the only origin they answer
@@ -2999,6 +2981,77 @@ mod tests {
             None,
             "a length that cannot fit the body should be refused rather than wrap"
         );
+    }
+
+    fn png_chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut crc: u32 = 0xFFFF_FFFF;
+        for byte in kind.iter().chain(data) {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+
+        let mut chunk: Vec<u8> = Vec::new();
+        chunk.extend_from_slice(&u32::try_from(data.len()).unwrap().to_be_bytes());
+        chunk.extend_from_slice(kind);
+        chunk.extend_from_slice(data);
+        chunk.extend_from_slice(&(!crc).to_be_bytes());
+        chunk
+    }
+
+    // A png this small claims to be 20000 by 20000, which would take 1.6 GB to decode.
+    // It has no pixel data to decode, so being reported as an image at all means
+    // only its header was read, which is all that may happen before Lamdera has
+    // said the upload is allowed.
+    #[test]
+    fn an_upload_is_measured_without_being_decoded() {
+        let mut header: Vec<u8> = Vec::new();
+        header.extend_from_slice(&20000u32.to_be_bytes());
+        header.extend_from_slice(&20000u32.to_be_bytes());
+        header.extend_from_slice(&[8, 6, 0, 0, 0]);
+
+        let mut png: Vec<u8> = b"\x89PNG\r\n\x1a\n".to_vec();
+        png.extend(png_chunk(b"IHDR", &header));
+        png.extend(png_chunk(b"IDAT", b"not pixels"));
+        png.extend(png_chunk(b"IEND", b""));
+
+        match probe_upload(&Bytes::from(png)) {
+            ProbedUpload::Image(ImageFormat::Png, metadata) => {
+                assert_eq!(metadata.image_size, (20000, 20000));
+            }
+            _ => panic!("the png should have been measured from its header"),
+        }
+    }
+
+    #[test]
+    fn a_large_upload_is_decoded_into_a_thumbnail() {
+        let mut png: Vec<u8> = Vec::new();
+        image::DynamicImage::new_rgba8(2000, 700)
+            .write_to(&mut std::io::Cursor::new(&mut png), ImageFormat::Png)
+            .unwrap();
+        let png2 = Bytes::from(png);
+
+        match probe_upload(&png2) {
+            ProbedUpload::Image(format, metadata) => {
+                assert_eq!(metadata.image_size, (2000, 700));
+                let thumbnail = encode_thumbnail(&png2, format, Orientation::NoTransforms)
+                    .expect("a thumbnail should have been made");
+                assert_eq!(
+                    ImageReader::new(std::io::Cursor::new(thumbnail))
+                        .with_guessed_format()
+                        .unwrap()
+                        .into_dimensions()
+                        .unwrap(),
+                    (1714, 600)
+                );
+            }
+            ProbedUpload::NotImage(_) => panic!("the png should have been read as an image"),
+        }
     }
 
     // Storing writes to the same directory the file endpoints read from, so each
