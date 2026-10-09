@@ -8,7 +8,6 @@ const cropImage = require('./elm-pkg-js/crop-image.js');
 const voiceChat = require('./elm-pkg-js/voice-chat.js');
 const audio = require('./elm-pkg-js/audio.js');
 const callPreview = require('./elm-pkg-js/call-preview.js');
-const pixelSnap = require('./elm-pkg-js/pixel-snap.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -20,5 +19,4 @@ exports.init = async function init(app) {
   voiceChat.init(app);
   audio.init(app);
   callPreview.init(app);
-  pixelSnap.init(app);
 }

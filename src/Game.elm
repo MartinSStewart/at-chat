@@ -19,6 +19,7 @@ module Game exposing
     , dragEnd
     , dragStart
     , dropTetrominoMatchState
+    , fullPageView
     , gameChangeFromServer
     , gameToString
     , initMatchData
@@ -1467,6 +1468,41 @@ dragEnd time windowSize currentUserId touches matchId matchData model =
             ( model, Nothing )
 
 
+{-| A tetromino match takes over the whole page rather than sitting in the games tab. Every other
+game is drawn by `view`.
+-}
+fullPageView :
+    Coord CssPixels
+    -> LocalUser
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) MatchData
+    -> Model
+    -> Maybe (Element Msg)
+fullPageView windowSize localUser maybeMatchId matches model =
+    case maybeMatchId of
+        Just matchId ->
+            case ( SeqDict.get matchId matches, SeqDict.get matchId model.startedGames ) of
+                ( Just (MatchData match), Just (TetrominoGame_Game game) ) ->
+                    case match.data of
+                        FrontendGameData_TetrominoGame _ _ ->
+                            TetrominoGame.fullPageView windowSize localUser game |> Ui.map TetrominoGameMsg |> Just
+
+                        FrontendGameData_Go _ _ _ ->
+                            Nothing
+
+                        FrontendGameData_WordSpellingGame _ _ _ ->
+                            Nothing
+
+                        FrontendGameData_SheepGame _ _ _ ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
 view :
     Time.Posix
     -> Coord CssPixels
@@ -1580,16 +1616,9 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
 
                         FrontendGameData_TetrominoGame _ _ ->
                             case game of
-                                TetrominoGame_Game game2 ->
-                                    Ui.column
-                                        [ Ui.height (Ui.px (Go.viewHeight windowSize))
-                                        , Ui.scrollable
-                                        , Ui.background MyUi.tabBackground
-                                        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-                                        , Ui.borderColor MyUi.border2
-                                        , MyUi.noShrinking
-                                        ]
-                                        [ TetrominoGame.gameView windowSize localUser game2 |> Ui.map TetrominoGameMsg ]
+                                TetrominoGame_Game _ ->
+                                    -- `fullPageView` draws this over the whole page instead.
+                                    Ui.none
 
                                 _ ->
                                     matchNotFound

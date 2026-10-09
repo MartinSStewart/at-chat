@@ -9220,85 +9220,101 @@ view _ model =
                                     local =
                                         Local.model loggedIn.localState
                                 in
-                                FrontendExtra.layout
-                                    loaded
-                                    [ case ( Route.toOverlay loaded.route, loggedIn.userOptions ) of
-                                        ( Just Route.UserOptionsOverlay, Just userOptions ) ->
-                                            UserOptions.view
-                                                loaded.windowSize
-                                                loggedIn.textInputFocus
-                                                loaded.time
-                                                local
-                                                loggedIn
-                                                loaded
-                                                userOptions
+                                case fullPageGame loaded loggedIn local of
+                                    Just game ->
+                                        FrontendExtra.layout
+                                            loaded
+                                            [ -- Kept in the page but hidden, so that a call's videos are still there
+                                              -- once the match is closed.
+                                              Html.div
+                                                [ Html.Attributes.style "display" "none" ]
+                                                [ Call.videoNodes local.localUser loaded loggedIn local.calls ]
+                                                |> Html.map VoiceChatMsg
+                                                |> Ui.html
                                                 |> Ui.inFront
+                                            ]
+                                            game
 
-                                        _ ->
-                                            Ui.noAttr
-                                    , case ( local.localUser.user.deleteAccountAt, Route.toOverlay loaded.route ) of
-                                        ( Just _, Just Route.UserOptionsOverlay ) ->
-                                            Ui.noAttr
+                                    Nothing ->
+                                        FrontendExtra.layout
+                                            loaded
+                                            [ case ( Route.toOverlay loaded.route, loggedIn.userOptions ) of
+                                                ( Just Route.UserOptionsOverlay, Just userOptions ) ->
+                                                    UserOptions.view
+                                                        loaded.windowSize
+                                                        loggedIn.textInputFocus
+                                                        loaded.time
+                                                        local
+                                                        loggedIn
+                                                        loaded
+                                                        userOptions
+                                                        |> Ui.inFront
 
-                                        ( Just deleteAt, _ ) ->
-                                            if loggedIn.accountDeletionBannerClosed then
-                                                Ui.noAttr
+                                                _ ->
+                                                    Ui.noAttr
+                                            , case ( local.localUser.user.deleteAccountAt, Route.toOverlay loaded.route ) of
+                                                ( Just _, Just Route.UserOptionsOverlay ) ->
+                                                    Ui.noAttr
 
-                                            else
-                                                FrontendExtra.accountDeletionBanner
-                                                    local.localUser.safeAreaInsetTop
-                                                    loaded.time
-                                                    deleteAt
+                                                ( Just deleteAt, _ ) ->
+                                                    if loggedIn.accountDeletionBannerClosed then
+                                                        Ui.noAttr
+
+                                                    else
+                                                        FrontendExtra.accountDeletionBanner
+                                                            local.localUser.safeAreaInsetTop
+                                                            loaded.time
+                                                            deleteAt
+                                                            |> Ui.inFront
+
+                                                ( Nothing, _ ) ->
+                                                    Ui.noAttr
+                                            , case loggedIn.externalLinkWarning of
+                                                Just url ->
+                                                    FrontendExtra.externalLinkWarning
+                                                        local.localUser.user.domainWhitelist
+                                                        isMobile
+                                                        url
+                                                        |> Ui.inFront
+
+                                                Nothing ->
+                                                    Ui.noAttr
+                                            , case loggedIn.showNewPrivateKey of
+                                                Just privateKey ->
+                                                    FrontendExtra.newPrivateKeyWarning
+                                                        isMobile
+                                                        loaded
+                                                        local.localUser.user.email
+                                                        privateKey
+                                                        |> Ui.inFront
+
+                                                Nothing ->
+                                                    Ui.noAttr
+                                            , if loggedIn.isReloading then
+                                                Ui.el
+                                                    [ Ui.background MyUi.background1
+                                                    , Ui.padding 8
+                                                    , Ui.width Ui.shrink
+                                                    , Ui.border 1
+                                                    , Ui.borderColor MyUi.border1
+                                                    , Ui.alignBottom
+                                                    , Ui.centerX
+                                                    ]
+                                                    (Ui.text "Reloading...")
                                                     |> Ui.inFront
 
-                                        ( Nothing, _ ) ->
-                                            Ui.noAttr
-                                    , case loggedIn.externalLinkWarning of
-                                        Just url ->
-                                            FrontendExtra.externalLinkWarning
-                                                local.localUser.user.domainWhitelist
-                                                isMobile
-                                                url
-                                                |> Ui.inFront
-
-                                        Nothing ->
-                                            Ui.noAttr
-                                    , case loggedIn.showNewPrivateKey of
-                                        Just privateKey ->
-                                            FrontendExtra.newPrivateKeyWarning
-                                                isMobile
+                                              else
+                                                Ui.noAttr
+                                            , Call.videoNodes
+                                                local.localUser
                                                 loaded
-                                                local.localUser.user.email
-                                                privateKey
+                                                loggedIn
+                                                local.calls
+                                                |> Html.map VoiceChatMsg
+                                                |> Ui.html
                                                 |> Ui.inFront
-
-                                        Nothing ->
-                                            Ui.noAttr
-                                    , if loggedIn.isReloading then
-                                        Ui.el
-                                            [ Ui.background MyUi.background1
-                                            , Ui.padding 8
-                                            , Ui.width Ui.shrink
-                                            , Ui.border 1
-                                            , Ui.borderColor MyUi.border1
-                                            , Ui.alignBottom
-                                            , Ui.centerX
                                             ]
-                                            (Ui.text "Reloading...")
-                                            |> Ui.inFront
-
-                                      else
-                                        Ui.noAttr
-                                    , Call.videoNodes
-                                        local.localUser
-                                        loaded
-                                        loggedIn
-                                        local.calls
-                                        |> Html.map VoiceChatMsg
-                                        |> Ui.html
-                                        |> Ui.inFront
-                                    ]
-                                    (page loggedIn local)
+                                            (page loggedIn local)
 
                             NotLoggedIn notLoggedIn ->
                                 LoginForm.view
@@ -9556,6 +9572,39 @@ view _ model =
                             )
         ]
     }
+
+
+{-| A tetromino match the user has open takes over the whole page.
+-}
+fullPageGame : LoadedFrontend -> LoggedIn2 -> LocalState -> Maybe (Element FrontendMsg_)
+fullPageGame loaded loggedIn local =
+    case FrontendExtra.currentGamesTab local loaded.route of
+        Just gamesTab ->
+            Game.fullPageView
+                loaded.windowSize
+                local.localUser
+                gamesTab.maybeMatchId
+                gamesTab.channelGames
+                (SeqDict.get gamesTab.guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
+                |> Maybe.map
+                    (\game ->
+                        Ui.el
+                            [ Ui.height Ui.fill
+                            , Ui.el
+                                [ Ui.width Ui.shrink, Ui.move { x = 8, y = 8 + local.localUser.safeAreaInsetTop, z = 0 } ]
+                                -- Pressing the games tab while it's open closes it.
+                                (MyUi.simpleButton
+                                    (Dom.id "tetrominoGame_leave")
+                                    (PressedChannelHeaderTab (ChannelHeaderTab_Games Nothing Nothing))
+                                    (Ui.text "Leave")
+                                )
+                                |> Ui.inFront
+                            ]
+                            (Ui.map GameMsg game)
+                    )
+
+        Nothing ->
+            Nothing
 
 
 privacyPage : Bool -> LoadedFrontend -> Html FrontendMsg_

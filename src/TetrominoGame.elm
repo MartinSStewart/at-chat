@@ -19,7 +19,7 @@ module TetrominoGame exposing
     , canvasId
     , canvasSize
     , dropMatchState
-    , gameView
+    , fullPageView
     , initGame
     , initLiveMatch
     , initSetup
@@ -746,22 +746,18 @@ type alias CanvasSize =
     { width : Int, height : Int, deviceWidth : Int, deviceHeight : Int }
 
 
-{-| The canvas is a fixed shape, as wide as the tab allows. It's drawn at the screen's own
-resolution, so that each pixel of the dithering lands on exactly one pixel of the screen instead
-of being stretched and shimmering as things move.
+{-| The canvas covers the whole page. It's drawn at the screen's own resolution, so that each pixel
+of the dithering lands on exactly one pixel of the screen instead of being stretched and
+shimmering as things move.
 -}
 canvasSize : Coord CssPixels -> Float -> CanvasSize
 canvasSize windowSize devicePixelRatio =
     let
-        width : Int
-        width =
-            clamp 320 1100 (Coord.xRaw windowSize - 32)
-
         ( cssWidth, deviceWidth ) =
-            wholeDevicePixels devicePixelRatio width
+            wholeDevicePixels devicePixelRatio (Coord.xRaw windowSize)
 
         ( cssHeight, deviceHeight ) =
-            wholeDevicePixels devicePixelRatio (round (toFloat width * 0.62))
+            wholeDevicePixels devicePixelRatio (Coord.yRaw windowSize)
     in
     { width = cssWidth, height = cssHeight, deviceWidth = deviceWidth, deviceHeight = deviceHeight }
 
@@ -796,21 +792,38 @@ previewSize =
     128
 
 
-gameView : Coord CssPixels -> LocalUser -> GameModel -> Element GameMsg
-gameView windowSize localUser model =
+{-| The match covers the whole page, with nothing else of the app around it, so the canvas starts
+right at the top left corner of the screen.
+-}
+fullPageView : Coord CssPixels -> LocalUser -> GameModel -> Element GameMsg
+fullPageView windowSize localUser model =
     case model.connection of
         Connected timeline ->
             connectedView windowSize localUser model timeline
 
         WaitingForState _ ->
             Ui.el
-                [ Ui.padding 16, Ui.Font.size 14, Ui.contentCenterX ]
+                [ Ui.height Ui.fill, Ui.background pageBackground, Ui.Font.size 14, Ui.contentCenterX, Ui.contentCenterY ]
                 (Ui.text "Getting the match from the players who have it open…")
 
         MatchIsOver ->
             Ui.el
-                [ Ui.padding 16, Ui.Font.size 14, Ui.contentCenterX, Ui.id "tetrominoGame_over" ]
+                [ Ui.height Ui.fill
+                , Ui.background pageBackground
+                , Ui.Font.size 14
+                , Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.id "tetrominoGame_over"
+                ]
                 (Ui.text "This match is over, everyone left it.")
+
+
+{-| The colour WebGL clears the canvas to, which also fills the few pixels `wholeDevicePixels` can
+leave uncovered at the right and bottom.
+-}
+pageBackground : Ui.Color
+pageBackground =
+    Ui.rgb 41 46 56
 
 
 connectedView : Coord CssPixels -> LocalUser -> GameModel -> Timeline -> Element GameMsg
@@ -853,82 +866,73 @@ connectedView windowSize localUser model timeline =
                 Nothing ->
                     Nothing
     in
-    Ui.column
-        [ Ui.spacing 8, Ui.padding 8, Ui.background MyUi.background1 ]
-        [ Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.centerX
-            , Ui.inFront
-                (case standingPlayer of
-                    Just player ->
-                        previewView (User.userColor localUser currentUserId) orientation state.frame player
+    Ui.el
+        [ Ui.height Ui.fill
+        , Ui.background pageBackground
+        , Ui.inFront
+            (case standingPlayer of
+                Just player ->
+                    previewView localUser.safeAreaInsetTop (User.userColor localUser currentUserId) orientation state.frame player
 
-                    Nothing ->
-                        Ui.none
+                Nothing ->
+                    Ui.none
+            )
+        , Ui.inFront (statusView localUser.safeAreaInsetBottom currentUserId state)
+        ]
+        (Html.div
+            [ Dom.idToAttribute canvasId
+            , Html.Attributes.style "line-height" "0"
+            , Html.Events.on "mousemove" (Json.Decode.map PointerMoved decodeOffset)
+            , Html.Events.on "mousedown"
+                (Json.Decode.map2
+                    PointerPressed
+                    (Json.Decode.field "button" Json.Decode.int)
+                    decodeOffset
+                )
+            , Html.Events.preventDefaultOn "contextmenu" (Json.Decode.succeed ( PressedNothing, True ))
+            ]
+            [ WebGL.toHtmlWith
+                [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
+                [ Html.Attributes.width canvas.deviceWidth
+                , Html.Attributes.height canvas.deviceHeight
+                , Html.Attributes.style "width" (String.fromInt canvas.width ++ "px")
+                , Html.Attributes.style "height" (String.fromInt canvas.height ++ "px")
+                , Html.Attributes.style "display" "block"
+                ]
+                (TetrominoView.worldEntities
+                    { width = canvas.width
+                    , height = canvas.height
+                    , camera = camera
+                    , currentUserId = currentUserId
+                    , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
+                    , cursor =
+                        Maybe.andThen
+                            (\pointer ->
+                                TetrominoView.screenToCell
+                                    canvas.width
+                                    canvas.height
+                                    camera
+                                    pointer
+                                    state
+                            )
+                            model.pointer
+                    , ghost =
+                        case standingPlayer of
+                            Just player ->
+                                if player.piecesLeft > 0 then
+                                    Just { shape = player.queue.current, orientation = orientation }
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                Nothing
+                    }
+                    state
                 )
             ]
-            (Html.div
-                [ Dom.idToAttribute canvasId
-                , Html.Attributes.style "line-height" "0"
-                , Html.Events.on "mousemove" (Json.Decode.map PointerMoved decodeOffset)
-                , Html.Events.on "mousedown"
-                    (Json.Decode.map2
-                        PointerPressed
-                        (Json.Decode.field "button" Json.Decode.int)
-                        decodeOffset
-                    )
-                , Html.Events.preventDefaultOn "contextmenu" (Json.Decode.succeed ( PressedNothing, True ))
-                ]
-                [ -- See elm-pkg-js/pixel-snap.js
-                  Html.node
-                    "pixel-snapped"
-                    [ Html.Attributes.style "display" "block" ]
-                    [ WebGL.toHtmlWith
-                        [ WebGL.alpha False, WebGL.depth 1, WebGL.antialias, WebGL.clearColor 0.16 0.18 0.22 1 ]
-                        [ Html.Attributes.width canvas.deviceWidth
-                        , Html.Attributes.height canvas.deviceHeight
-                        , Html.Attributes.style "width" (String.fromInt canvas.width ++ "px")
-                        , Html.Attributes.style "height" (String.fromInt canvas.height ++ "px")
-                        , Html.Attributes.style "display" "block"
-                        , Html.Attributes.style "border-radius" "8px"
-                        ]
-                        (TetrominoView.worldEntities
-                            { width = canvas.width
-                            , height = canvas.height
-                            , camera = camera
-                            , currentUserId = currentUserId
-                            , userColor = \userId -> User.userColor localUser userId |> UserColor.toColor
-                            , cursor =
-                                Maybe.andThen
-                                    (\pointer ->
-                                        TetrominoView.screenToCell
-                                            canvas.width
-                                            canvas.height
-                                            camera
-                                            pointer
-                                            state
-                                    )
-                                    model.pointer
-                            , ghost =
-                                case standingPlayer of
-                                    Just player ->
-                                        if player.piecesLeft > 0 then
-                                            Just { shape = player.queue.current, orientation = orientation }
-
-                                        else
-                                            Nothing
-
-                                    Nothing ->
-                                        Nothing
-                            }
-                            state
-                        )
-                    ]
-                ]
-                |> Ui.html
-            )
-        , statusView currentUserId state
-        ]
+            |> Ui.html
+        )
 
 
 decodeOffset : Json.Decode.Decoder { x : Float, y : Float }
@@ -942,12 +946,12 @@ decodeOffset =
 {-| The piece the player drops next, with the two after it underneath. The border lights up when
 they're able to drop it.
 -}
-previewView : UserColor -> Orientation -> Int -> TetrominoSim.Player -> Element msg
-previewView userColor orientation frame player =
+previewView : Int -> UserColor -> Orientation -> Int -> TetrominoSim.Player -> Element msg
+previewView safeAreaInsetTop userColor orientation frame player =
     Ui.column
         [ Ui.alignRight
         , Ui.alignTop
-        , Ui.move { x = -8, y = 8, z = 0 }
+        , Ui.move { x = -8, y = 8 + safeAreaInsetTop, z = 0 }
         , Ui.width Ui.shrink
         , Ui.spacing 6
         ]
@@ -1013,15 +1017,25 @@ pieceCanvas size userColor orientation shape =
         |> Ui.html
 
 
-statusView : Id UserId -> TetrominoSim.MatchState -> Element GameMsg
-statusView currentUserId state =
+statusView : Int -> Id UserId -> TetrominoSim.MatchState -> Element GameMsg
+statusView safeAreaInsetBottom currentUserId state =
     let
         snowmenLeft : String
         snowmenLeft =
             String.fromInt (TetrominoSim.npcCount state.towers) ++ " snowmen left."
     in
-    Ui.row
-        [ Ui.spacing 12, Ui.Font.size 14, Ui.contentCenterX ]
+    Ui.column
+        [ Ui.alignBottom
+        , Ui.centerX
+        , Ui.width Ui.shrink
+        , Ui.widthMax 760
+        , Ui.move { x = 0, y = -8 - safeAreaInsetBottom, z = 0 }
+        , Ui.spacing 6
+        , Ui.padding 10
+        , Ui.rounded 8
+        , Ui.background (Ui.rgba 0 0 0 0.45)
+        , Ui.Font.size 14
+        ]
         (if TetrominoSim.isGameOver state then
             [ Ui.el
                 [ Ui.Font.bold, Ui.width Ui.shrink, Ui.id "tetrominoGame_crystalDestroyed" ]

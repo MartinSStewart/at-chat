@@ -91,8 +91,9 @@ twoPlayerMatchTest normalConfig =
                                 )
                             )
 
-                        -- Closing the match takes the user's player out of it.
-                        , user.click 100 (Dom.id "guild_openGamesTab")
+                        -- The match covers the whole page, and leaving it takes the user's player out of it.
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openGamesTab" ])
+                        , user.click 100 (Dom.id "tetrominoGame_leave")
                         , T.checkState
                             1000
                             (\data ->
@@ -109,7 +110,7 @@ twoPlayerMatchTest normalConfig =
                             )
 
                         -- With the admin gone too nobody has the match any more, so it's over.
-                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "tetrominoGame_leave")
                         , user.click 1000 (Dom.id "guild_gameStartedCard_0")
                         , user.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "tetrominoGame_over" ])
                         ]
