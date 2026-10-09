@@ -314,7 +314,7 @@ subscriptions _ model =
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
-        , Ports.visualViewportResized VisualViewportResized
+        , Ports.visualViewportChanged VisualViewportChanged
         , Ports.safeAreaInsetsChanged SafeAreaInsetsChanged
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
@@ -530,6 +530,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
             , visualViewportHeight = Coord.yRaw loading.windowSize
+            , visualViewportTop = 0
             , loginStatus = loginStatus
             , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
@@ -3850,8 +3851,14 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized height ->
-            ( { model | visualViewportHeight = round height }, stayAtBottomOfConversation model )
+        VisualViewportChanged visualViewport ->
+            ( { model | visualViewportHeight = round visualViewport.height, visualViewportTop = round visualViewport.top }
+            , if round visualViewport.height == model.visualViewportHeight then
+                Command.none
+
+              else
+                stayAtBottomOfConversation model
+            )
 
         SafeAreaInsetsChanged insets ->
             ( setSafeAreaInsets insets model, Command.none )

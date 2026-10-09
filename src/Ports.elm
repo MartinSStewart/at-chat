@@ -46,7 +46,7 @@ port module Ports exposing
     , subscribeDataCodec
     , textInputSelectAll
     , unregisterServiceWorker
-    , visualViewportResized
+    , visualViewportChanged
     )
 
 import Codec exposing (Codec)
@@ -434,7 +434,7 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 port set_app_badge_to_js : Json.Encode.Value -> Cmd msg
 
 
-port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
+port visual_viewport_changed_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port safe_area_insets_from_js : (Json.Decode.Value -> msg) -> Sub msg
@@ -492,12 +492,22 @@ setCursorPosition htmlId range =
         )
 
 
-visualViewportResized : (Float -> msg) -> Subscription FrontendOnly msg
-visualViewportResized msg =
+visualViewportChanged : ({ height : Float, top : Float } -> msg) -> Subscription FrontendOnly msg
+visualViewportChanged msg =
     Subscription.fromJs
-        "visual_viewport_resized_from_js"
-        visual_viewport_resized_from_js
-        (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
+        "visual_viewport_changed_from_js"
+        visual_viewport_changed_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2
+                    (\height top -> { height = height, top = top })
+                    (Json.Decode.field "height" Json.Decode.float)
+                    (Json.Decode.field "top" Json.Decode.float)
+                )
+                json
+                |> Result.withDefault { height = 0, top = 0 }
+                |> msg
+        )
 
 
 safeAreaInsetsChanged : ({ top : Int, bottom : Int } -> msg) -> Subscription FrontendOnly msg

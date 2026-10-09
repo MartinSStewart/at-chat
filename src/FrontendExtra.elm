@@ -2674,7 +2674,7 @@ isPressMsg msg =
         GotServiceWorkerMessage _ ->
             False
 
-        VisualViewportResized _ ->
+        VisualViewportChanged _ ->
             False
 
         SafeAreaInsetsChanged _ ->

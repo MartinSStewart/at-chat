@@ -5507,40 +5507,16 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             Ui.noAttr
 
         EmojiSelectorForReaction _ _ ->
-            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForSheepGameReaction _ _ _ ->
-            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForWordSpellingGameReaction _ _ _ ->
-            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForMessage _ ->
-            Ui.inFront
-                (Emoji.selector
-                    isMobile
-                    availableHeight
-                    model.startupData.scrollbarWidth
-                    (emojiSelectorX isMobile model)
-                    loggedIn.emojiSelector
-                    emojiConfig
-                    model.emojiData
-                    availableCustomEmojis
-                    local.localUser.customEmojis
-                    availableStickers
-                    local.localUser.stickers
-                    |> Ui.el
-                        [ Ui.alignBottom
-                        , Ui.paddingXY emojiSelectorPaddingX 0
-                        , if isMobile then
-                            Ui.width Ui.fill
-
-                          else
-                            Ui.width Ui.shrink
-                        , emojiSelectorZIndex
-                        ]
-                    |> Ui.map EmojiSelectorMsg
-                )
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForEditMessage position _ ->
             let
@@ -5550,7 +5526,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             Ui.inFront
                 (Emoji.selector
                     isMobile
-                    availableHeight
                     model.startupData.scrollbarWidth
                     (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
@@ -5562,6 +5537,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY emojiSelectorPaddingX 0
+                        , Ui.height (Ui.px (Emoji.selectorHeight availableHeight))
                         , Ui.move
                             { x = 0
                             , y =
@@ -5589,7 +5565,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             Ui.inFront
                 (Emoji.selector
                     isMobile
-                    availableHeight
                     model.startupData.scrollbarWidth
                     (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
@@ -5601,6 +5576,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY emojiSelectorPaddingX 0
+                        , Ui.height (Ui.px (Emoji.selectorHeight availableHeight))
                         , Ui.move { x = 0, y = y, z = 0 }
                         , emojiSelectorZIndex
                         ]
@@ -5608,20 +5584,28 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 )
 
 
+{-| Fills the conversation, so the selector can grow up to the top of it, minus whatever part of
+it is scrolled out of the visual viewport. When the virtual keyboard opens the browser pans the
+page to keep the text input in view, and how far depends on the browser, so the selector is kept
+within what's actually on screen rather than guessing.
+
+On phones the conversation starts a channel header's height below the safe area inset. That inset
+also covers the top of whatever is on screen, so it cancels out and only the header is left to
+subtract. On desktop the visual viewport doesn't move, so there's nothing to leave room for.
+
+-}
 emojiSelectorAtBottomOfTheConversation :
     Bool
-    -> Int
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
     -> Ui.Attribute FrontendMsg_
-emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model =
+emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model =
     Ui.inFront
         (Emoji.selector
             isMobile
-            availableHeight
             model.startupData.scrollbarWidth
             (emojiSelectorX isMobile model)
             loggedIn.emojiSelector
@@ -5632,13 +5616,27 @@ emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomE
             availableStickers
             local.localUser.stickers
             |> Ui.el
-                [ Ui.alignBottom
-                , Ui.paddingXY emojiSelectorPaddingX 0
+                [ Ui.height Ui.fill
+                , Ui.heightMin 0
+                , Ui.heightMax Emoji.maxSelectorHeight
+                , MyUi.htmlStyle "pointer-events" "auto"
+                ]
+            |> Ui.el
+                [ Ui.height Ui.fill
+                , Ui.heightMin 0
+                , Ui.contentBottom
+                , Ui.paddingWith
+                    { left = emojiSelectorPaddingX
+                    , right = emojiSelectorPaddingX
+                    , top = max 0 (model.visualViewportTop + emojiSelectorPaddingX - MyUi.channelHeaderHeight - 1)
+                    , bottom = 0
+                    }
                 , if isMobile then
                     Ui.width Ui.fill
 
                   else
                     Ui.width Ui.shrink
+                , MyUi.noPointerEvents
                 , emojiSelectorZIndex
                 ]
             |> Ui.map EmojiSelectorMsg

@@ -200,6 +200,7 @@ type alias LoadedFrontend =
     , timezone : Time.Zone
     , windowSize : Coord CssPixels
     , visualViewportHeight : Int
+    , visualViewportTop : Int
     , loginStatus : LoginStatus
     , loginType : LoginType
     , elmUiState : Ui.Anim.State
@@ -685,7 +686,7 @@ type FrontendMsg_
     | PageHasFocusChanged Bool
     | PageFocusSettled
     | GotServiceWorkerMessage String
-    | VisualViewportResized Float
+    | VisualViewportChanged { height : Float, top : Float }
     | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
