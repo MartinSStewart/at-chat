@@ -79,6 +79,7 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
+import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
 import Game
@@ -1510,6 +1511,10 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
                         |> SeqSet.member local.localUser.session.userId
+
+                threadRouteWithFriends : ThreadRouteWithFriends
+                threadRouteWithFriends =
+                    Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
@@ -1521,7 +1526,29 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     User.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users (LocalState.channelMentions guildOrDmId local) content)
+                            Ports.showNotification
+                                (User.toString senderId users)
+                                (RichText.toString local.localUser.timezone True users (LocalState.channelMentions guildOrDmId local) content)
+                                (Env.domain
+                                    ++ Route.encode
+                                        (case guildOrDmId of
+                                            GuildOrDmId_Guild { guildId, channelId } ->
+                                                GuildRoute
+                                                    guildId
+                                                    (ChannelRoute channelId threadRouteWithFriends Nothing)
+                                                    ChannelsHiddenOnMobile
+                                                    Nothing
+
+                                            GuildOrDmId_Dm { otherUserId } ->
+                                                DmRoute
+                                                    { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                                    , threadRoute = threadRouteWithFriends
+                                                    , tab = Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+                                        )
+                                )
 
                         _ ->
                             Command.none
@@ -1575,6 +1602,10 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
 
                 allUsers =
                     LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+
+                threadRouteWithFriends : ThreadRouteWithFriends
+                threadRouteWithFriends =
+                    Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
@@ -1584,6 +1615,30 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                             Ports.showNotification
                                 (User.toString senderId allUsers)
                                 (RichText.toString local.localUser.timezone True allUsers (LocalState.discordChannelMentions guildOrDmId local) content)
+                                (Env.domain
+                                    ++ Route.encode
+                                        (case guildOrDmId of
+                                            DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
+                                                DiscordGuildRoute
+                                                    { currentDiscordUserId = currentUserId
+                                                    , guildId = guildId
+                                                    , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+
+                                            DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
+                                                DiscordDmRoute
+                                                    { currentDiscordUserId = currentUserId
+                                                    , channelId = channelId
+                                                    , viewingMessage = Nothing
+                                                    , showMembersTab = HideChannelSettings
+                                                    , tab = Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+                                        )
+                                )
 
                         _ ->
                             Command.none
@@ -2672,6 +2727,9 @@ isPressMsg msg =
             False
 
         GotServiceWorkerMessage _ ->
+            False
+
+        PressedNotification _ ->
             False
 
         VisualViewportChanged _ ->

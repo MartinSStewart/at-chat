@@ -421,6 +421,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
+    , E2EMisc.notificationClickOpensConversationTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig

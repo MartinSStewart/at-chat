@@ -313,6 +313,7 @@ subscriptions _ model =
         , Ports.gotDevicePixelRatio GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
+        , Ports.notificationClicked PressedNotification
         , Ports.serviceWorkerData GotServiceWorkerData
         , Ports.visualViewportChanged VisualViewportChanged
         , Ports.safeAreaInsetsChanged SafeAreaInsetsChanged
@@ -3851,6 +3852,14 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
+        PressedNotification url ->
+            case Url.fromString url of
+                Just url2 ->
+                    FrontendExtra.routePush model (Route.decode url2)
+
+                Nothing ->
+                    ( model, Command.none )
+
         VisualViewportChanged visualViewport ->
             ( { model | visualViewportHeight = round visualViewport.height, visualViewportTop = round visualViewport.top }
             , if round visualViewport.height == model.visualViewportHeight then
@@ -6177,7 +6186,7 @@ handlePressedChannelMention guildOrDmId channelId threadRoute model =
                 model
                 (GuildRoute
                     guildId
-                    (ChannelRoute channelId (threadRouteWithFriends threadRoute) Nothing)
+                    (ChannelRoute channelId (Route.threadRouteWithFriends threadRoute) Nothing)
                     ChannelsHiddenOnMobile
                     Nothing
                 )
@@ -6200,7 +6209,7 @@ handlePressedDiscordChannelMention guildOrDmId channelId threadRoute model =
                 (DiscordGuildRoute
                     { currentDiscordUserId = currentUserId
                     , guildId = guildId
-                    , channelRoute = DiscordChannel_ChannelRoute channelId (threadRouteWithFriends threadRoute) Nothing
+                    , channelRoute = DiscordChannel_ChannelRoute channelId (Route.threadRouteWithFriends threadRoute) Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
                     , overlay = Nothing
                     }
@@ -6208,16 +6217,6 @@ handlePressedDiscordChannelMention guildOrDmId channelId threadRoute model =
 
         _ ->
             ( model, Command.none )
-
-
-threadRouteWithFriends : ThreadRoute -> ThreadRouteWithFriends
-threadRouteWithFriends threadRoute =
-    case threadRoute of
-        NoThread ->
-            NoThreadWithFriends Nothing HideChannelSettings
-
-        ViewThread threadId ->
-            ViewThreadWithFriends threadId Nothing HideChannelSettings
 
 
 handlePressedDiscordUserIconButton : Discord.Id Discord.UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )

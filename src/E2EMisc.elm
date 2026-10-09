@@ -26,6 +26,7 @@ module E2EMisc exposing
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
+    , notificationClickOpensConversationTest
     , openLastViewedGuildOnStartupTest
     , orphanedFilesTest
     , profileImageOpensDm
@@ -1591,6 +1592,77 @@ checkGuild0Route model =
 
         Types.Loading _ ->
             Err "Expected the frontend to have finished loading"
+
+
+{-| Desktop notifications shown while the app is running are made by the page itself
+rather than the service worker, so pressing one has to route the page there too.
+-}
+notificationClickOpensConversationTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+notificationClickOpensConversationTest config =
+    E2EHelper.startTest
+        "Pressing a notification shown while the app is running opens its conversation"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                -- `user` starts out with push notifications, one option below this one.
+                [ user.click 100 (Dom.id "guild_showUserOptions")
+                , user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowUp" []
+                , user.click 100 (Dom.id "userOptions_closeUserOptions")
+                , user.portEvent 100 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , user.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool False)
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Are you there?"
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.filterMap
+                                (\request ->
+                                    if request.clientId == user.clientId && request.portName == "show_notification" then
+                                        Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) request.value
+                                            |> Result.toMaybe
+
+                                    else
+                                        Nothing
+                                )
+                                data.portRequests
+                        of
+                            [ url ] ->
+                                [ user.portEvent 100 "notification_clicked_from_js" (Json.Encode.string url)
+                                , user.checkModel
+                                    100
+                                    (\model ->
+                                        case Audio.userModel model of
+                                            Types.Loaded loaded ->
+                                                case loaded.route of
+                                                    Route.DmRoute { channelId } ->
+                                                        if channelId == DmChannelId.fromUserIds E2EHelper.defaultAdminId (Id.fromInt 2) then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Opened the wrong DM"
+
+                                                    _ ->
+                                                        Err "Expected pressing the notification to open the DM"
+
+                                            Types.Loading _ ->
+                                                Err "Expected the frontend to have finished loading"
+                                    )
+                                ]
+
+                            urls ->
+                                [ T.checkState
+                                    0
+                                    (\_ -> Err ("Expected one notification but found " ++ String.fromInt (List.length urls)))
+                                ]
+                    )
+                ]
+            )
+        ]
 
 
 {-| DM threads carry their own route, are listed underneath the DM in the friends

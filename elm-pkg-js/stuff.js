@@ -1526,6 +1526,11 @@ exports.init = async function init(app)
     app.ports.show_notification.subscribe((a) => {
         if ("Notification" in window) {
             const notification = new Notification(a.title, { body: a.body });
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+                app.ports.notification_clicked_from_js.send(a.url);
+            };
             activeNotifications.push(notification);
         }
     });

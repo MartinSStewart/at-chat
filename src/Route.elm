@@ -23,6 +23,7 @@ module Route exposing
     , setChannelsVisible
     , setOverlay
     , setShowMembers
+    , threadRouteWithFriends
     , toChannelHeaderTab
     , toGuildOrDmId
     , toOverlay
@@ -801,6 +802,16 @@ setShowMembers showMembers route =
 
         _ ->
             route
+
+
+threadRouteWithFriends : ThreadRoute -> ThreadRouteWithFriends
+threadRouteWithFriends threadRoute =
+    case threadRoute of
+        NoThread ->
+            NoThreadWithFriends Nothing HideChannelSettings
+
+        ViewThread threadId ->
+            ViewThreadWithFriends threadId Nothing HideChannelSettings
 
 
 threadRouteWithShowMembers : ShowChannelSettings -> ThreadRouteWithFriends -> ThreadRouteWithFriends

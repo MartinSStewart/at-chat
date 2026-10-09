@@ -686,6 +686,7 @@ type FrontendMsg_
     | PageHasFocusChanged Bool
     | PageFocusSettled
     | GotServiceWorkerMessage String
+    | PressedNotification String
     | VisualViewportChanged { height : Float, top : Float }
     | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
