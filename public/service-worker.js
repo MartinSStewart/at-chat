@@ -268,6 +268,21 @@ function thumbnailContentType(plainText) {
 }
 
 
+// A decrypted file is answered as at-chat.app itself, with whatever content type its address
+// names, so opening an html or svg one in a tab would run its script with the app's cookie,
+// storage and keys. These are the headers the Rust server puts on the files it serves, for
+// the same reason: `sandbox` gives the document an opaque origin, and `nosniff` stops the
+// browser treating the bytes as something other than the type the sandbox was chosen for.
+// Pdfs need `allow-scripts` for Safari's viewer; never add `allow-same-origin` alongside it.
+function decryptedFileHeaders(contentType) {
+    return {
+        "Content-Type": contentType,
+        "Content-Disposition": "inline",
+        "Content-Security-Policy": contentType === "application/pdf" ? "sandbox allow-scripts" : "sandbox",
+        "X-Content-Type-Options": "nosniff"
+    };
+}
+
 // Safari only plays a video it can ask for a piece at a time, starting with the first two
 // bytes, and gives up on one that comes back whole in answer to that. A range this doesn't
 // understand, such as several at once, is answered with the whole file, which is allowed.
@@ -279,7 +294,7 @@ function decryptedFileResponseFor(range, plainText, contentType) {
         return new Response(plainText, {
             status: 200,
             statusText: "OK",
-            headers: { "Content-Type": contentType, "Accept-Ranges": "bytes" }
+            headers: { ...decryptedFileHeaders(contentType), "Accept-Ranges": "bytes" }
         });
     }
 
@@ -298,7 +313,7 @@ function decryptedFileResponseFor(range, plainText, contentType) {
         status: 206,
         statusText: "Partial Content",
         headers: {
-            "Content-Type": contentType,
+            ...decryptedFileHeaders(contentType),
             "Accept-Ranges": "bytes",
             "Content-Range": "bytes " + start + "-" + end + "/" + size
         }
