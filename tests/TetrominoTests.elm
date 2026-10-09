@@ -6,7 +6,6 @@ import Effect.Time as Time
 import Expect
 import Id exposing (Id, UserId)
 import SeqDict
-import SeqSet
 import Set
 import Test exposing (Test, describe, test)
 import Tetromino
@@ -51,22 +50,23 @@ dropAt frame userId x y =
     [ { frame = frame, userId = userId, input = Drop { x = x, y = y, orientation = Tetromino.identity } } ]
 
 
-{-| The first frame of the first round, for players who joined on frame 0.
+{-| The first frame players who joined on frame 0 are in the match.
 -}
-firstRound : Int
-firstRound =
-    TetrominoSim.roundBreak + 1
+started : Int
+started =
+    1
 
 
-{-| A match where the given players joined at the start and the first round has begun.
+{-| A match where the given players joined at the start, with no NPCs and none of the pieces a
+match starts with lying around.
 -}
-inFirstRound : List (Id UserId) -> MatchState
-inFirstRound userIds =
-    runUntil firstRound (List.map (join 0) userIds) (emptyMatch 1 0)
+inMatch : List (Id UserId) -> MatchState
+inMatch userIds =
+    runUntil started (List.map (join 0) userIds) (emptyMatch 1 0)
 
 
-{-| A new match without the pieces a match starts with lying around, so a test only sees the
-pieces it drops.
+{-| A new match without the NPCs and pieces a match starts with, so a test only sees the NPCs it
+puts in and the pieces it drops.
 -}
 emptyMatch : Int -> Int -> MatchState
 emptyMatch seed frame =
@@ -76,7 +76,8 @@ emptyMatch seed frame =
             TetrominoSim.init seed frame
     in
     { state
-        | pieces = SeqDict.empty
+        | towers = []
+        , pieces = SeqDict.empty
         , occupied = Dict.filter (\_ pieceId -> not (SeqDict.member pieceId state.pieces)) state.occupied
     }
 
@@ -86,7 +87,7 @@ center =
     TetrominoSim.gridSize // 2
 
 
-{-| The cell the first player brought into a round starts in, next to the crystal.
+{-| The cell the first player to join starts in, next to the crystal.
 -}
 playerColumn : Int
 playerColumn =
@@ -137,32 +138,28 @@ pressJoin model =
     TetrominoGame.updateGame (Time.millisToPosix 1000) setup (Coord.xy 1000 800) 1 userA TetrominoGame.PressedJoin model
 
 
-waitingAt : Int -> TetrominoGame.GameModel -> Maybe (List (Id UserId))
-waitingAt frame model =
-    TetrominoGame.matchStateAt frame model |> Maybe.map (\state -> SeqSet.toList state.waitingPlayers)
+playersAt : Int -> TetrominoGame.GameModel -> Maybe (List (Id UserId))
+playersAt frame model =
+    TetrominoGame.matchStateAt frame model |> Maybe.map (\state -> SeqDict.keys state.players)
 
 
-{-| A thrower on its own, standing still, that won't wander off or throw anything for a good
-while.
+{-| A thrower on its own that won't throw anything for a good while, or move unless a player comes
+within `TetrominoSim.aggroRange`.
 -}
 npcAt : Float -> Float -> MatchState -> TetrominoSim.Tower
 npcAt x y state =
     towerAt x y (npc 1000 Thrower state) [] state
 
 
-{-| A tower whose NPCs won't throw anything for a good while, and that won't wander off if it's a
-thrower at the bottom.
+{-| A tower whose NPCs won't throw anything for a good while, and that won't wander off. It only
+moves to go after a player within `TetrominoSim.aggroRange`.
 -}
 towerAt : Float -> Float -> TetrominoSim.Npc -> List TetrominoSim.Npc -> MatchState -> TetrominoSim.Tower
 towerAt x y bottom above state =
     { position = { x = x, y = y, z = 0 }
     , velocityZ = 0
-    , wanderOffset = { x = 0, y = 0 }
-    , nextWanderFrame = state.frame + 1000
+    , behaviour = TetrominoSim.Resting (state.frame + 1000)
     , wallFollow = Nothing
-    , closestToTarget = 1000
-    , closestSince = state.frame
-    , roamTo = Nothing
     , bottom = bottom
     , above = above
     }
@@ -173,7 +170,7 @@ npc id kind state =
     { id = id, kind = kind, nextThrowFrame = state.frame + 1000 }
 
 
-{-| userA moved well away from the crystal, so NPCs go for them rather than for it.
+{-| userA moved well away from the crystal, so there's room to build around them.
 -}
 awayFromCrystal : MatchState -> MatchState
 awayFromCrystal state =
@@ -231,30 +228,6 @@ wallPiece x y z =
     }
 
 
-{-| Every kind of NPC there was on any frame until `endFrame`.
--}
-kindsSeenUntil : Int -> List NpcKind -> MatchState -> List NpcKind
-kindsSeenUntil endFrame seen state =
-    if state.frame >= endFrame then
-        seen
-
-    else
-        kindsSeenUntil
-            endFrame
-            (List.foldl
-                (\( npc2, _ ) seen2 ->
-                    if List.member npc2.kind seen2 then
-                        seen2
-
-                    else
-                        npc2.kind :: seen2
-                )
-                seen
-                (List.concatMap TetrominoSim.npcPositions state.towers)
-            )
-            (TetrominoSim.step [] state)
-
-
 {-| The frames until `endFrame` on which `isTrue` held, latest first.
 -}
 framesWhere : Int -> (MatchState -> Bool) -> List Int -> MatchState -> List Int
@@ -273,6 +246,89 @@ framesWhere endFrame isTrue found state =
                 found
             )
             (TetrominoSim.step [] state)
+
+
+{-| What the only tower was doing on each frame until `endFrame`, latest first.
+-}
+behavioursUntil : Int -> List TetrominoSim.Behaviour -> MatchState -> List TetrominoSim.Behaviour
+behavioursUntil endFrame found state =
+    if state.frame >= endFrame then
+        found
+
+    else
+        behavioursUntil
+            endFrame
+            (List.map .behaviour state.towers ++ found)
+            (TetrominoSim.step [] state)
+
+
+{-| How many times in a row each value comes up.
+-}
+runLengths : List a -> List ( a, Int )
+runLengths list =
+    List.foldr
+        (\item runs ->
+            case runs of
+                ( previous, length ) :: rest ->
+                    if previous == item then
+                        ( previous, length + 1 ) :: rest
+
+                    else
+                        ( item, 1 ) :: runs
+
+                [] ->
+                    [ ( item, 1 ) ]
+        )
+        []
+        list
+
+
+isResting : TetrominoSim.Behaviour -> Bool
+isResting behaviour =
+    case behaviour of
+        TetrominoSim.Wandering _ ->
+            False
+
+        TetrominoSim.Resting _ ->
+            True
+
+        TetrominoSim.Chasing _ ->
+            False
+
+        TetrominoSim.GivingUp _ ->
+            False
+
+
+isChasing : TetrominoSim.Behaviour -> Bool
+isChasing behaviour =
+    case behaviour of
+        TetrominoSim.Wandering _ ->
+            False
+
+        TetrominoSim.Resting _ ->
+            False
+
+        TetrominoSim.Chasing _ ->
+            True
+
+        TetrominoSim.GivingUp _ ->
+            False
+
+
+isGivingUp : TetrominoSim.Behaviour -> Bool
+isGivingUp behaviour =
+    case behaviour of
+        TetrominoSim.Wandering _ ->
+            False
+
+        TetrominoSim.Resting _ ->
+            False
+
+        TetrominoSim.Chasing _ ->
+            False
+
+        TetrominoSim.GivingUp _ ->
+            True
 
 
 {-| The ids of the NPCs in each tower, bottom first.
@@ -361,40 +417,36 @@ tests =
                     )
                     [ 0, 1, 2, 3 ]
                     |> Expect.equal (List.repeat 4 [ ( 0, 0, 0 ), ( 0, 0, 1 ), ( 0, 0, 2 ), ( 0, 0, 3 ) ])
-        , test "Players who join wait for the round to start" <|
+        , test "Players come straight in when they join, next to whoever is already there" <|
+            \_ ->
+                runUntil (started + 61) [ join 0 userA, join (started + 60) userB ] (emptyMatch 1 0)
+                    |> .players
+                    |> SeqDict.values
+                    |> List.map (\player -> ( floor player.position.x, floor player.position.y ))
+                    |> Expect.equal [ ( playerColumn, playerRow ), ( center - 3, center - 1 ) ]
+        , test "A knocked out player comes back a few seconds later with a full set of pieces" <|
             \_ ->
                 let
-                    beforeRound =
-                        runUntil (firstRound - 2) [ join 0 userA ] (TetrominoSim.init 1 0)
-                in
-                ( ( SeqDict.keys beforeRound.players, SeqSet.toList beforeRound.waitingPlayers )
-                , runUntil firstRound [] beforeRound |> (\state -> ( SeqDict.keys state.players, state.round.number ))
-                )
-                    |> Expect.equal ( ( [], [ userA ] ), ( [ userA ], 1 ) )
-        , test "A player who joins during a round waits for the next one" <|
-            \_ ->
-                let
-                    state =
-                        runUntil (firstRound + 60) [ join (firstRound + 30) userB ] (inFirstRound [ userA ])
-                in
-                ( SeqDict.keys state.players, SeqSet.toList state.waitingPlayers )
-                    |> Expect.equal ( [ userA ], [ userB ] )
-        , test "Once everyone is knocked out the next round brings them back" <|
-            \_ ->
-                let
-                    everyoneOut =
-                        inFirstRound [ userA ] |> knockOut userA
+                    out : MatchState
+                    out =
+                        inMatch [ userA ]
+                            |> (\state -> { state | players = SeqDict.map (\_ player -> { player | piecesLeft = 3 }) state.players })
+                            |> knockOut userA
 
-                    nextRound =
-                        runUntil (everyoneOut.frame + TetrominoSim.roundBreak + 2) [] everyoneOut
+                    backAt : Int
+                    backAt =
+                        out.frame + TetrominoSim.respawnDelay
                 in
-                ( nextRound.round.number
-                , SeqDict.get userA nextRound.players |> Maybe.map .knockedOutAt
+                ( runUntil backAt [] out |> knockedOut
+                , runUntil (backAt + 1) [] out
+                    |> .players
+                    |> SeqDict.get userA
+                    |> Maybe.map (\player -> ( player.knockedOutAt, player.piecesLeft ))
                 )
-                    |> Expect.equal ( 2, Just Nothing )
+                    |> Expect.equal ( Just True, Just ( Nothing, 10 ) )
         , test "A dropped piece lands on the ground" <|
             \_ ->
-                runUntil (firstRound + 200) (dropAt (firstRound + 10) userA 3 3) (inFirstRound [ userA ])
+                runUntil (started + 200) (dropAt (started + 10) userA 3 3) (inMatch [ userA ])
                     |> occupiedCells
                     |> List.filter (\( x, _, _ ) -> x < 10)
                     |> List.map (\( _, _, z ) -> z)
@@ -405,9 +457,9 @@ tests =
                     statusAfter : Float -> List Bool
                     statusAfter seconds =
                         runUntil
-                            (firstRound + 10 + round (seconds * TetrominoSim.framesPerSecond))
-                            (dropAt (firstRound + 10) userA 3 3)
-                            (inFirstRound [ userA ])
+                            (started + 10 + round (seconds * TetrominoSim.framesPerSecond))
+                            (dropAt (started + 10) userA 3 3)
+                            (inMatch [ userA ])
                             |> .pieces
                             |> SeqDict.values
                             |> List.map (\piece -> TetrominoSim.isSettled piece.status)
@@ -418,9 +470,9 @@ tests =
                 let
                     state =
                         runUntil
-                            (firstRound + 400)
-                            (dropAt (firstRound + 10) userA 3 3 ++ dropAt (firstRound + 200) userA 3 3)
-                            (inFirstRound [ userA ])
+                            (started + 400)
+                            (dropAt (started + 10) userA 3 3 ++ dropAt (started + 200) userA 3 3)
+                            (inMatch [ userA ])
 
                     shapes =
                         SeqDict.values state.pieces |> List.map .shape
@@ -452,9 +504,9 @@ tests =
                 let
                     built =
                         runUntil
-                            (firstRound + 200)
-                            (dropAt (firstRound + 10) userA 3 3 ++ dropAt (firstRound + 100) userB 3 3)
-                            (inFirstRound [ userA, userB ])
+                            (started + 200)
+                            (dropAt (started + 10) userA 3 3 ++ dropAt (started + 100) userB 3 3)
+                            (inMatch [ userA, userB ])
 
                     afterKnockout =
                         knockOut userA built |> runUntil (built.frame + 100) []
@@ -467,7 +519,7 @@ tests =
             \_ ->
                 let
                     built =
-                        runUntil (firstRound + 200) (dropAt (firstRound + 10) userA 3 3) (inFirstRound [ userA, userB ])
+                        runUntil (started + 200) (dropAt (started + 10) userA 3 3) (inMatch [ userA, userB ])
 
                     afterLeaving =
                         runUntil (built.frame + 1) [ { frame = built.frame, userId = userA, input = Leave } ] built
@@ -478,9 +530,9 @@ tests =
             \_ ->
                 let
                     state =
-                        inFirstRound [ userA ] |> withBlocks [ ( playerColumn + 2, playerRow, 0 ) ]
+                        inMatch [ userA ] |> withBlocks [ ( playerColumn + 2, playerRow, 0 ) ]
                 in
-                runUntil (firstRound + 120) [ { frame = firstRound, userId = userA, input = MoveTo (playerColumn + 2) playerRow } ] state
+                runUntil (started + 120) [ { frame = started, userId = userA, input = MoveTo (playerColumn + 2) playerRow } ] state
                     |> .players
                     |> SeqDict.get userA
                     |> Maybe.map (\player -> ( abs (player.position.x - toFloat playerColumn - 2.5) < 0.01, player.position.z ))
@@ -489,42 +541,43 @@ tests =
             \_ ->
                 let
                     state =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> withBlocks
                                 (List.concatMap
                                     (\y -> [ ( playerColumn + 2, y, 0 ), ( playerColumn + 2, y, 1 ) ])
                                     (List.range 0 (TetrominoSim.gridSize - 1))
                                 )
                 in
-                runUntil (firstRound + 200) [ { frame = firstRound, userId = userA, input = MoveTo (playerColumn + 4) playerRow } ] state
+                runUntil (started + 200) [ { frame = started, userId = userA, input = MoveTo (playerColumn + 4) playerRow } ] state
                     |> .players
                     |> SeqDict.get userA
                     |> Maybe.map (\player -> player.position.x < toFloat (playerColumn + 2) && player.position.z == 0)
                     |> Expect.equal (Just True)
-        , test "A player brought into a round near an NPC shrugs off snowballs for a moment" <|
+        , test "A player who joins near an NPC shrugs off snowballs for a moment" <|
             \_ ->
                 let
                     withNpcNearby : MatchState
                     withNpcNearby =
-                        runUntil (firstRound - 1) [ join 0 userA ] (TetrominoSim.init 1 0)
+                        emptyMatch 1 0
                             |> (\state -> { state | towers = [ npcAt (toFloat playerColumn + 5) (toFloat playerRow) state ] })
+                            |> runUntil started [ join 0 userA ]
                 in
-                ( runUntil firstRound [] withNpcNearby |> hitBySnowball |> knockedOut
-                , runUntil (firstRound + 4 * TetrominoSim.framesPerSecond) [] withNpcNearby |> hitBySnowball |> knockedOut
+                ( withNpcNearby |> hitBySnowball |> knockedOut
+                , runUntil (started + 4 * TetrominoSim.framesPerSecond) [] withNpcNearby |> hitBySnowball |> knockedOut
                 )
                     |> Expect.equal ( Just False, Just True )
-        , test "With no NPCs about, as in the first round, a player is brought in unprotected" <|
+        , test "With no NPCs about, a player who joins is unprotected" <|
             \_ ->
-                inFirstRound [ userA ] |> hitBySnowball |> knockedOut |> Expect.equal (Just True)
+                inMatch [ userA ] |> hitBySnowball |> knockedOut |> Expect.equal (Just True)
         , test "An NPC aims ahead of a player who is walking" <|
             \_ ->
                 let
                     walking : MatchState
                     walking =
                         runUntil
-                            (firstRound + 30)
-                            [ { frame = firstRound, userId = userA, input = MoveTo playerColumn (playerRow + 20) } ]
-                            (inFirstRound [ userA ])
+                            (started + 30)
+                            [ { frame = started, userId = userA, input = MoveTo playerColumn (playerRow + 20) } ]
+                            (inMatch [ userA ])
 
                     throwing : MatchState
                     throwing =
@@ -546,13 +599,14 @@ tests =
                             Nothing ->
                                 walking
                 in
-                List.map (\snowball -> snowball.velocity.y > 1) throwing.snowballs
+                -- Aimed straight at them, the spread alone could make this at most about 0.55.
+                List.map (\snowball -> snowball.velocity.y > 0.6) throwing.snowballs
                     |> Expect.equal [ True ]
         , test "A destroyed piece leaves its cubes behind for a moment" <|
             \_ ->
                 let
                     built =
-                        runUntil (firstRound + 200) (dropAt (firstRound + 10) userA 3 3) (inFirstRound [ userA ])
+                        runUntil (started + 200) (dropAt (started + 10) userA 3 3) (inMatch [ userA ])
 
                     afterKnockout =
                         knockOut userA built |> runUntil (built.frame + 1) []
@@ -561,35 +615,118 @@ tests =
                 , runUntil (afterKnockout.frame + TetrominoSim.debrisFrames) [] afterKnockout |> .debris |> List.length
                 )
                     |> Expect.equal ( [ Just userA ], 0 )
-        , test "Nothing turns up in the first minute, and then NPCs come from all around the crystal" <|
+        , test "A match starts with 200 chasers and throwers spread around the edge of the map" <|
+            \_ ->
+                let
+                    towers : List TetrominoSim.Tower
+                    towers =
+                        (TetrominoSim.init 1 0).towers
+
+                    kinds : List NpcKind
+                    kinds =
+                        List.map (\tower -> tower.bottom.kind) towers
+                in
+                ( ( List.length towers
+                  , List.map (\tower -> ( floor tower.position.x, floor tower.position.y )) towers |> Set.fromList |> Set.size
+                  )
+                , List.all
+                    (\tower ->
+                        List.member (floor tower.position.x) [ 0, TetrominoSim.gridSize - 1 ]
+                            || List.member (floor tower.position.y) [ 0, TetrominoSim.gridSize - 1 ]
+                    )
+                    towers
+                , List.map (\kind -> List.member kind kinds) [ Chaser, Thrower, Jumper ]
+                )
+                    |> Expect.equal ( ( 200, 200 ), True, [ True, True, False ] )
+        , test "An NPC on its own walks somewhere for a few seconds, rests for a second, and goes somewhere else" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch []
 
-                    justBefore : MatchState
-                    justBefore =
-                        runUntil (firstRound + 60 * TetrominoSim.framesPerSecond - 1) [] start
+                    resting : List Bool
+                    resting =
+                        { start
+                            | towers =
+                                [ towerAt 10.5 10.5 (npc 1 Chaser start) [] start
+                                    |> (\tower -> { tower | behaviour = TetrominoSim.Resting start.frame })
+                                ]
+                        }
+                            |> behavioursUntil (start.frame + 20 * TetrominoSim.framesPerSecond) []
+                            |> List.map isResting
 
-                    justAfter : MatchState
-                    justAfter =
-                        runUntil (firstRound + 60 * TetrominoSim.framesPerSecond + 1) [] justBefore
+                    -- The first and last stretches are cut short by the start and end of the test.
+                    stretches : List ( Bool, Int )
+                    stretches =
+                        runLengths resting |> List.drop 1 |> List.reverse |> List.drop 1
                 in
-                ( List.length justBefore.towers
-                , List.map
-                    (\tower ->
-                        max (abs (tower.position.x - toFloat center)) (abs (tower.position.y - toFloat center)) > 19
+                ( List.filterMap
+                    (\( isResting2, length ) ->
+                        if isResting2 then
+                            Just length
+
+                        else
+                            Nothing
                     )
-                    justAfter.towers
+                    stretches
+                    |> List.all (\length -> length == TetrominoSim.framesPerSecond)
+                , List.filterMap
+                    (\( isResting2, length ) ->
+                        if isResting2 then
+                            Nothing
+
+                        else
+                            Just length
+                    )
+                    stretches
+                    |> (\lengths ->
+                            List.length lengths
+                                >= 3
+                                && List.all (\length -> length >= 2 * TetrominoSim.framesPerSecond && length <= 4 * TetrominoSim.framesPerSecond + 1) lengths
+                       )
                 )
-                    |> Expect.equal ( 0, [ True ] )
+                    |> Expect.equal ( True, True )
+        , test "An NPC goes after a player who comes within 10 cells" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inMatch [ userA ] |> awayFromCrystal
+
+                    chasingWhenAt : Float -> List Bool
+                    chasingWhenAt distance =
+                        { start | towers = [ towerAt (toFloat awayColumn + 0.5 + distance) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
+                            |> runUntil (start.frame + 1) []
+                            |> .towers
+                            |> List.map (\tower -> isChasing tower.behaviour)
+                in
+                ( chasingWhenAt 9.9, chasingWhenAt 10.1 ) |> Expect.equal ( [ True ], [ False ] )
+        , test "An NPC stops going after a player who gets more than 15 cells away" <|
+            \_ ->
+                let
+                    start : MatchState
+                    start =
+                        inMatch [ userA ]
+                            |> awayFromCrystal
+                            |> (\state -> { state | players = SeqDict.map (\_ player -> { player | target = Just ( TetrominoSim.gridSize - 1, playerRow ) }) state.players })
+
+                    chasing : List Int
+                    chasing =
+                        { start | towers = [ towerAt (toFloat awayColumn - 8.5) (toFloat playerRow + 0.5) (npc 1 Thrower start) [] start ] }
+                            |> framesWhere
+                                (start.frame + 10 * TetrominoSim.framesPerSecond)
+                                (\state -> List.any (\tower -> isChasing tower.behaviour) state.towers)
+                                []
+                in
+                ( List.minimum chasing, List.maximum chasing |> Maybe.map (\frame -> frame < start.frame + 8 * TetrominoSim.framesPerSecond) )
+                    |> Expect.equal ( Just (start.frame + 1), Just True )
         , test "Two NPCs that walk into each other become a tower" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start
                     | towers =
@@ -603,11 +740,10 @@ tests =
         , test "An NPC that walks into a tower goes underneath it" <|
             \_ ->
                 let
-                    -- userA can't be caught, so the tower stays with them instead of going for the
-                    -- crystal.
+                    -- userA can't be caught, so the tower stays with them.
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> (\state -> { state | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) state.players })
                 in
                 { start
@@ -624,7 +760,7 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start
                     | towers =
@@ -646,7 +782,7 @@ tests =
                     -- userA can't be caught, so the NPCs that get over stay with them.
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> (\state -> { state | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) state.players })
                             |> withBlocks
                                 (List.concatMap
@@ -680,7 +816,7 @@ tests =
                     -- userA can't be caught, so everyone ends up with them.
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> awayFromCrystal
                             |> (\state -> { state | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) state.players })
                 in
@@ -688,7 +824,7 @@ tests =
                     | towers =
                         [ towerAt (toFloat awayColumn + 6.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start
                         , towerAt (toFloat awayColumn + 9.5) (toFloat playerRow + 0.5) (npc 2 Chaser start) [] start
-                        , towerAt (toFloat awayColumn + 12.5) (toFloat playerRow + 0.5) (npc 3 Jumper start) [] start
+                        , towerAt (toFloat awayColumn + 10) (toFloat playerRow + 0.5) (npc 3 Jumper start) [] start
                         ]
                 }
                     |> runUntil (start.frame + 8 * TetrominoSim.framesPerSecond) []
@@ -700,14 +836,14 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
+                        inMatch [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
 
                     roamingFrames : List Int
                     roamingFrames =
                         { start | towers = [ towerAt (toFloat awayColumn + 6.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
                             |> framesWhere
                                 (start.frame + 30 * TetrominoSim.framesPerSecond)
-                                (\state -> List.any (\tower -> tower.roamTo /= Nothing) state.towers)
+                                (\state -> List.any (\tower -> isGivingUp tower.behaviour) state.towers)
                                 []
                 in
                 ( List.minimum roamingFrames |> Maybe.map (\frame -> frame - start.frame > 10 * TetrominoSim.framesPerSecond)
@@ -719,7 +855,7 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> awayFromCrystal
                             |> withBlocks (List.map (\y -> ( awayColumn + 3, y, 0 )) (List.range (playerRow - 3) (playerRow + 3)))
 
@@ -734,13 +870,13 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                             |> awayFromCrystal
                             |> (\state -> { state | players = SeqDict.map (\_ player -> { player | target = Just ( awayColumn - 10, playerRow ) }) state.players })
 
                     after : MatchState
                     after =
-                        { start | towers = [ towerAt (toFloat awayColumn + 10.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
+                        { start | towers = [ towerAt (toFloat awayColumn + 9.5) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start ] }
                             |> runUntil (start.frame + TetrominoSim.framesPerSecond) []
 
                     playerWalked : Float
@@ -751,68 +887,40 @@ tests =
 
                     chaserWalked : Float
                     chaserWalked =
-                        List.map (\tower -> toFloat awayColumn + 10.5 - tower.position.x) after.towers |> List.sum
+                        List.map (\tower -> toFloat awayColumn + 9.5 - tower.position.x) after.towers |> List.sum
                 in
                 Expect.within (Expect.Absolute 0.01) (2 * playerWalked) chaserWalked
-        , test "NPCs make for the crystal unless a player is nearer" <|
+        , test "NPCs pay no attention to the crystal" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch []
 
-                    -- userA is just to the right of the crystal, so this one is nearer the player
-                    -- and this one nearer the crystal.
                     after : MatchState
                     after =
                         { start
                             | towers =
-                                [ towerAt (toFloat playerColumn + 8) (toFloat playerRow + 0.5) (npc 1 Chaser start) [] start
-                                , towerAt (toFloat center - 8) (toFloat center + 0.5) (npc 2 Chaser start) [] start
+                                [ towerAt (toFloat center - 8) (toFloat center + 0.5) (npc 1 Chaser start) [] start
+                                    |> (\tower ->
+                                            { tower
+                                                | behaviour =
+                                                    TetrominoSim.Wandering
+                                                        { point = TetrominoSim.crystalCenter, until = start.frame + 10 * TetrominoSim.framesPerSecond }
+                                            }
+                                       )
                                 ]
                         }
-                            |> runUntil (start.frame + TetrominoSim.framesPerSecond) []
+                            |> runUntil (start.frame + 10 * TetrominoSim.framesPerSecond) []
                 in
-                List.map (\tower -> ( tower.bottom.id, round (tower.position.x * 10) )) after.towers
-                    |> Expect.equal
-                        [ ( 1, (playerColumn + 8) * 10 - 40 )
-                        , ( 2, (center - 8) * 10 + 40 )
-                        ]
-        , test "An NPC that touches the crystal is gone, and three of them destroy it and stop the match" <|
-            \_ ->
-                let
-                    start : MatchState
-                    start =
-                        inFirstRound [ userA ]
-                            |> (\state -> { state | players = SeqDict.empty })
-
-                    oneHit : MatchState
-                    oneHit =
-                        { start | towers = [ towerAt (toFloat center - 3) (toFloat center) (npc 1 Chaser start) [] start ] }
-                            |> runUntil (start.frame + 3 * TetrominoSim.framesPerSecond) []
-
-                    threeHits : MatchState
-                    threeHits =
-                        { start
-                            | towers =
-                                [ towerAt (toFloat center - 3) (toFloat center) (npc 1 Chaser start) [] start
-                                , towerAt (toFloat center + 3) (toFloat center) (npc 2 Chaser start) [] start
-                                , towerAt (toFloat center) (toFloat center - 3) (npc 3 Chaser start) [] start
-                                ]
-                        }
-                            |> runUntil (start.frame + 3 * TetrominoSim.framesPerSecond) []
-                in
-                ( ( List.length oneHit.towers, oneHit.crystal.health, TetrominoSim.isGameOver oneHit )
-                , ( threeHits.crystal.health, TetrominoSim.isGameOver threeHits )
-                , runUntil (threeHits.frame + 60) [] threeHits |> (\later -> ( later.frame, later.round ) == ( threeHits.frame + 60, threeHits.round ))
-                )
-                    |> Expect.equal ( ( 0, 2, False ), ( 0, True ), True )
+                ( List.length after.towers, after.crystal )
+                    |> Expect.equal ( 1, { health = TetrominoSim.crystalHealth, lastHitAt = Nothing } )
         , test "A giant breaks the blocks in its way one at a time, leaving the rest of the piece" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
 
                     -- An I piece lying across the giant's path, two blocks high, four cells from it.
                     blocked : MatchState
@@ -844,7 +952,7 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start | giants = [ giantAt (toFloat center - 4) (toFloat center) ] }
                     |> runUntil (start.frame + 10 * TetrominoSim.framesPerSecond) []
@@ -855,36 +963,18 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start | giants = [ giantAt (toFloat center - 12.5) (toFloat center + 0.5) ] }
                     |> runUntil (start.frame + 3 * TetrominoSim.framesPerSecond) (dropAt start.frame userA (center - 13) center)
                     |> .giants
                     |> Expect.equal []
-        , test "From the second round on, a giant turns up far from the crystal" <|
-            \_ ->
-                let
-                    secondRound : MatchState
-                    secondRound =
-                        inFirstRound [ userA ] |> knockOut userA |> runUntil (firstRound + 2 * TetrominoSim.roundBreak) []
-                in
-                ( ( List.length (inFirstRound [ userA ] |> runUntil (firstRound + 80 * TetrominoSim.framesPerSecond) []).giants
-                  , secondRound.round.number
-                  )
-                , runUntil (secondRound.frame + 16 * TetrominoSim.framesPerSecond) [] secondRound
-                    |> .giants
-                    |> List.map
-                        (\giant ->
-                            max (abs (giant.position.x - toFloat center)) (abs (giant.position.y - toFloat center)) > 20
-                        )
-                )
-                    |> Expect.equal ( ( 0, 2 ), [ True ] )
         , test "A thrower throws from wherever it is in a tower" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
 
                     throwing : MatchState
                     throwing =
@@ -924,68 +1014,39 @@ tests =
                     [ 1, 1.100000023841858, 1.3333333730697632, 0.8999999761581421, 1.25, 1.5, 2, 2.625, 2.75, 3 ]
                     |> List.all (\fits -> fits == ( True, True ))
                     |> Expect.equal True
-        , test "The first round only has chasers, later rounds mix in throwers and jumpers" <|
-            \_ ->
-                let
-                    kindsBy : Int -> MatchState -> List NpcKind
-                    kindsBy seconds start =
-                        kindsSeenUntil
-                            (start.frame + seconds * TetrominoSim.framesPerSecond)
-                            []
-                            { start
-                                | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) start.players
-                                , crystal = { health = 1000000, lastHitAt = Nothing }
-                            }
-
-                    firstRoundKinds : List NpcKind
-                    firstRoundKinds =
-                        kindsBy 85 (inFirstRound [ userA ])
-
-                    laterRoundKinds : List NpcKind
-                    laterRoundKinds =
-                        inFirstRound [ userA ]
-                            |> (\state ->
-                                    { state
-                                        | round = { number = 2, startedAt = state.frame, nextRoundAt = Nothing }
-                                        , nextNpcSpawn = Just state.frame
-                                    }
-                               )
-                            |> kindsBy 90
-                in
-                ( List.all (\kind -> kind == Chaser) firstRoundKinds && not (List.isEmpty firstRoundKinds)
-                , List.map (\kind -> List.member kind laterRoundKinds) [ Chaser, Thrower, Jumper ]
-                )
-                    |> Expect.equal ( True, [ True, True, True ] )
         , test "A chaser that reaches a player knocks them out" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start | towers = [ towerAt (toFloat playerColumn + 3) (toFloat playerRow + 0.5) (npc 1000 Chaser start) [] start ] }
                     |> runUntil (start.frame + 2 * TetrominoSim.framesPerSecond) []
                     |> knockedOut
                     |> Expect.equal (Just True)
-        , test "A ring of blocks one high keeps a chaser out, but a jumper hops it" <|
+        , test "Nothing hops a ring of blocks one high, not even a jumper" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
+                        inMatch [ userA ] |> awayFromCrystal |> withBlocks (ringAroundPlayer 2)
 
                     after : NpcKind -> MatchState
                     after kind =
                         { start | towers = [ towerAt (toFloat awayColumn + 6.5) (toFloat playerRow + 0.5) (npc 1000 kind start) [] start ] }
                             |> runUntil (start.frame + 5 * TetrominoSim.framesPerSecond) []
                 in
-                ( after Chaser |> knockedOut
-                , List.map
-                    (\tower -> max (abs (tower.position.x - toFloat awayColumn - 0.5)) (abs (tower.position.y - toFloat playerRow - 0.5)) > 2)
-                    (after Chaser).towers
-                , after Jumper |> knockedOut
-                )
-                    |> Expect.equal ( Just False, [ True ], Just True )
+                List.map
+                    (\kind ->
+                        ( after kind |> knockedOut
+                        , List.map
+                            (\tower -> max (abs (tower.position.x - toFloat awayColumn - 0.5)) (abs (tower.position.y - toFloat playerRow - 0.5)) > 2)
+                            (after kind).towers
+                        )
+                    )
+                    [ Chaser, Jumper ]
+                    |> Expect.equal [ ( Just False, [ True ] ), ( Just False, [ True ] ) ]
         , test "A match starts with pieces lying around, with room to stand in the middle" <|
             \_ ->
                 let
@@ -1009,15 +1070,15 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
 
                     after : MatchState
                     after =
                         runUntil
-                            (firstRound + 200)
-                            (dropAt (firstRound + 10) userA 3 3
-                                ++ dropAt (firstRound + 40) userA 10 3
-                                ++ dropAt (firstRound + 71) userA 17 3
+                            (started + 200)
+                            (dropAt (started + 10) userA 3 3
+                                ++ dropAt (started + 40) userA 10 3
+                                ++ dropAt (started + 71) userA 17 3
                             )
                             start
                 in
@@ -1031,8 +1092,8 @@ tests =
                 let
                     after : MatchState
                     after =
-                        inFirstRound [ userA ]
-                            |> runUntil (firstRound + 100) (dropAt (firstRound + 10) userA (center - 1) (center - 1))
+                        inMatch [ userA ]
+                            |> runUntil (started + 100) (dropAt (started + 10) userA (center - 1) (center - 1))
                 in
                 ( SeqDict.size after.pieces, SeqDict.get userA after.players |> Maybe.map .piecesLeft )
                     |> Expect.equal ( 0, Just 10 )
@@ -1041,10 +1102,10 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start | players = SeqDict.map (\_ player -> { player | piecesLeft = 0 }) start.players }
-                    |> runUntil (firstRound + 100) (dropAt (firstRound + 10) userA 3 3)
+                    |> runUntil (started + 100) (dropAt (started + 10) userA 3 3)
                     |> .pieces
                     |> SeqDict.size
                     |> Expect.equal 0
@@ -1053,11 +1114,11 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
 
                     after : MatchState
                     after =
-                        runUntil (firstRound + 20) (dropAt (firstRound + 10) userA 3 3) start
+                        runUntil (started + 20) (dropAt (started + 10) userA 3 3) start
                 in
                 case ( SeqDict.get userA start.players, SeqDict.get userA after.players ) of
                     ( Just before, Just player ) ->
@@ -1067,13 +1128,13 @@ tests =
                             |> Expect.equal ( [ before.queue.current ], [ before.queue.next, before.queue.afterNext ] )
 
                     _ ->
-                        Expect.fail "Expected the player to be in the round"
+                        Expect.fail "Expected the player to be in the match"
         , test "Touching a pickup gives every player two more pieces, up to 15" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA, userB ]
+                        inMatch [ userA, userB ]
 
                     withPickup : MatchState
                     withPickup =
@@ -1095,15 +1156,15 @@ tests =
                 , List.length after.pickups
                 )
                     |> Expect.equal ( [ 12, 15 ], 0 )
-        , test "Pickups turn up during a round" <|
+        , test "Pickups turn up" <|
             \_ ->
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
                 in
                 { start | players = SeqDict.map (\_ player -> { player | protectedUntil = 1000000 }) start.players }
-                    |> runUntil (firstRound + 30 * TetrominoSim.framesPerSecond) []
+                    |> runUntil (started + 30 * TetrominoSim.framesPerSecond) []
                     |> .pickups
                     |> List.length
                     |> (\count -> count > 0 && count <= 3)
@@ -1113,7 +1174,7 @@ tests =
                 let
                     start : MatchState
                     start =
-                        inFirstRound [ userA ]
+                        inMatch [ userA ]
 
                     falling : MatchState
                     falling =
@@ -1151,9 +1212,9 @@ tests =
             \_ ->
                 let
                     inputs =
-                        [ join 0 userA, join 5 userB, { frame = firstRound + 30, userId = userA, input = MoveTo 2 20 } ]
-                            ++ dropAt (firstRound + 50) userB 6 6
-                            ++ dropAt (firstRound + 400) userA 2 19
+                        [ join 0 userA, join 5 userB, { frame = started + 30, userId = userA, input = MoveTo 2 20 } ]
+                            ++ dropAt (started + 50) userB 6 6
+                            ++ dropAt (started + 400) userA 2 19
                 in
                 runUntil 1500 inputs (TetrominoSim.init 7 0)
                     |> Expect.equal (runUntil 1500 inputs (TetrominoSim.init 7 0))
@@ -1161,38 +1222,38 @@ tests =
             \_ ->
                 let
                     early =
-                        [ join 0 userA, join 5 userB, { frame = firstRound + 30, userId = userA, input = MoveTo 2 20 } ]
+                        [ join 0 userA, join 5 userB, { frame = started + 30, userId = userA, input = MoveTo 2 20 } ]
 
                     late =
-                        dropAt (firstRound + 380) userB 6 6
+                        dropAt (started + 380) userB 6 6
 
                     timeline =
                         List.foldl TetrominoTimeline.addInput (TetrominoTimeline.init (TetrominoSim.init 7 0)) early
-                            |> TetrominoTimeline.advance (firstRound + 300)
-                            |> TetrominoTimeline.advance (firstRound + 400)
+                            |> TetrominoTimeline.advance (started + 300)
+                            |> TetrominoTimeline.advance (started + 400)
                             |> (\timeline2 -> List.foldl TetrominoTimeline.addInput timeline2 late)
-                            |> TetrominoTimeline.advance (firstRound + 420)
-                            |> TetrominoTimeline.advance (firstRound + 600)
+                            |> TetrominoTimeline.advance (started + 420)
+                            |> TetrominoTimeline.advance (started + 600)
                 in
                 TetrominoTimeline.latest timeline
-                    |> Expect.equal (runUntil (firstRound + 600) (early ++ late) (TetrominoSim.init 7 0))
+                    |> Expect.equal (runUntil (started + 600) (early ++ late) (TetrominoSim.init 7 0))
         , test "Taking back a guessed input gives the same state as if it had never been played" <|
             \_ ->
                 let
                     inputs =
-                        [ join 0 userA, { frame = firstRound + 30, userId = userA, input = MoveTo 2 20 } ]
+                        [ join 0 userA, { frame = started + 30, userId = userA, input = MoveTo 2 20 } ]
 
                     guess =
-                        { frame = firstRound + 50, userId = userA, input = MoveTo 30 30 }
+                        { frame = started + 50, userId = userA, input = MoveTo 30 30 }
 
                     timeline =
                         List.foldl TetrominoTimeline.addInput (TetrominoTimeline.init (TetrominoSim.init 7 0)) (guess :: inputs)
-                            |> TetrominoTimeline.advance (firstRound + 80)
+                            |> TetrominoTimeline.advance (started + 80)
                             |> TetrominoTimeline.removeInput guess
-                            |> TetrominoTimeline.advance (firstRound + 100)
+                            |> TetrominoTimeline.advance (started + 100)
                 in
                 TetrominoTimeline.latest timeline
-                    |> Expect.equal (runUntil (firstRound + 100) inputs (TetrominoSim.init 7 0))
+                    |> Expect.equal (runUntil (started + 100) inputs (TetrominoSim.init 7 0))
         , test "Your own input is played straight away, before the backend answers" <|
             \_ ->
                 let
@@ -1201,7 +1262,7 @@ tests =
                 in
                 ( TetrominoGame.animationFrame (Time.millisToPosix 1100) setup joined
                     |> TetrominoGame.matchState
-                    |> Maybe.map (\state -> SeqSet.toList state.waitingPlayers)
+                    |> Maybe.map (\state -> SeqDict.keys state.players)
                 , toBackend
                 )
                     |> Expect.equal ( Just [ userA ], Just (TetrominoGame.SendInput 0 (Time.millisToPosix 1000) Join) )
@@ -1218,22 +1279,22 @@ tests =
                             |> Tuple.first
                             |> TetrominoGame.animationFrame (Time.millisToPosix 1500) setup
                 in
-                ( waitingAt 70 accepted, waitingAt 80 accepted )
+                ( playersAt 70 accepted, playersAt 80 accepted )
                     |> Expect.equal ( Just [], Just [ userA ] )
         , test "A match carries on the same after being sent to another player" <|
             \_ ->
                 let
                     inputs =
-                        { frame = firstRound + 30, userId = userA, input = MoveTo 2 20 }
-                            :: dropAt (firstRound + 50) userB 6 6
+                        { frame = started + 30, userId = userA, input = MoveTo 2 20 }
+                            :: dropAt (started + 50) userB 6 6
 
                     halfway =
-                        runUntil (firstRound + 300) inputs (inFirstRound [ userA, userB ])
+                        runUntil (started + 300) inputs (inMatch [ userA, userB ])
                 in
                 case TetrominoWire.encodeMatchState halfway |> TetrominoWire.decodeMatchState of
                     Just received ->
-                        runUntil (firstRound + 900) inputs received
-                            |> Expect.equal (runUntil (firstRound + 900) inputs halfway)
+                        runUntil (started + 900) inputs received
+                            |> Expect.equal (runUntil (started + 900) inputs halfway)
 
                     Nothing ->
                         Expect.fail "The state didn't decode"

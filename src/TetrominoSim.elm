@@ -1,5 +1,6 @@
 module TetrominoSim exposing
-    ( Crystal
+    ( Behaviour(..)
+    , Crystal
     , Debris
     , Giant
     , Input(..)
@@ -13,10 +14,9 @@ module TetrominoSim exposing
     , PieceStatus(..)
     , Player
     , Point
-    , Roam
-    , Round
     , Snowball
     , Tower
+    , Walk
     , WallFollow
     , WallSide(..)
     , canDrop
@@ -37,8 +37,9 @@ module TetrominoSim exposing
     , isSettled
     , keepInsideGrid
     , maxPieces
+    , npcCount
     , npcPositions
-    , roundBreak
+    , respawnDelay
     , snowballGravity
     , snowballRadius
     , step
@@ -53,7 +54,6 @@ import Dict exposing (Dict)
 import Id exposing (Id, UserId)
 import Random
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Tetromino exposing (Orientation, Shape)
 
 
@@ -74,9 +74,7 @@ type alias InputEvent =
 
 type alias MatchState =
     { frame : Int
-    , round : Round
     , players : SeqDict (Id UserId) Player
-    , waitingPlayers : SeqSet (Id UserId)
     , towers : List Tower
     , giants : List Giant
     , crystal : Crystal
@@ -87,14 +85,12 @@ type alias MatchState =
     , pickups : List Pickup
     , nextId : Int
     , seed : Random.Seed
-    , nextNpcSpawn : Maybe Int
-    , nextGiantSpawn : Maybe Int
     , nextPickupSpawn : Maybe Int
     }
 
 
-{-| What the NPCs are after. It stands in the middle of the map, two blocks wide and three high, and
-the match is over once it has taken `crystalHealth` damage.
+{-| It stands in the middle of the map, two blocks wide and three high, and the match is over once
+it has taken `crystalHealth` damage. Only giants go for it, and none turn up for now.
 -}
 type alias Crystal =
     { health : Int, lastHitAt : Maybe Int }
@@ -111,18 +107,7 @@ type alias Giant =
     }
 
 
-{-| Before the first round `number` is 0. `nextRoundAt` is Nothing while there's nobody to play
-in one.
--}
-type alias Round =
-    { number : Int
-    , startedAt : Int
-    , nextRoundAt : Maybe Int
-    }
-
-
-{-| Someone who has been in a round. A player who joins while a round is running waits in
-`waitingPlayers` instead, and one knocked out sits the rest of the round out.
+{-| Someone who has joined the match. One who is knocked out comes back `respawnDelay` later.
 -}
 type alias Player =
     { position : Point
@@ -133,7 +118,7 @@ type alias Player =
     , piecesLeft : Int
     , -- Dropping a piece makes the player wait a moment before they can drop another.
       nextDropAt : Int
-    , -- Snowballs do nothing to a player until this frame, so that someone coming into a round
+    , -- Snowballs do nothing to a player until this frame, so that someone coming into the match
       -- isn't knocked straight back out.
       protectedUntil : Int
     }
@@ -151,52 +136,54 @@ type alias Pickup =
     { id : Int, x : Int, y : Int, z : Int }
 
 
-{-| Every kind heads for the crystal, unless a player is nearer than it is.
+{-| See `Behaviour` for where each kind goes.
 -}
 type NpcKind
-    = -- Heads straight for its target twice as fast as a player walks, but can't hop on its own,
-      -- so a wall one block high makes it go along the wall for a while. Knocks out a player it
-      -- reaches.
+    = -- Twice as fast as a player, and knocks out a player it reaches.
       Chaser
-      -- Keeps a few cells away from a player and throws snowballs.
+      -- Keeps a few cells away from the player it's after and throws snowballs.
     | Thrower
-      -- Slower than a chaser, but hops onto anything one block high.
+      -- Like a chaser, only slower. None turn up for now.
     | Jumper
 
 
 {-| NPCs that walk into each other stand on each other's heads, except chasers, which always go
 alone. A tower goes wherever its bottom NPC would, `position` is where that one stands, and each
-NPC in `above` stands on the one before it. A lone NPC is a tower of one.
-
-A tower that hasn't got any nearer where it's going for `cantReachTime` gives up and heads for a
-random spot on the map for a while (`roamTo`). `closestToTarget` is the nearest it has got, and
-`closestSince` when it got there.
-
+NPC in `above` stands on the one before it. A lone NPC is a tower of one. Nothing hops for now.
 -}
 type alias Tower =
     { position : Point
     , velocityZ : Float
-    , wanderOffset : { x : Float, y : Float }
-    , nextWanderFrame : Int
+    , behaviour : Behaviour
     , wallFollow : Maybe WallFollow
-    , closestToTarget : Float
-    , closestSince : Int
-    , roamTo : Maybe Roam
     , bottom : Npc
     , above : List Npc
     }
 
 
-{-| Somewhere an NPC that couldn't reach its target goes instead, until it gets there or `until`.
+{-| An NPC wanders between random spots on the map, resting for a moment at each, until a player
+comes within `aggroRange`. Then it goes after them until they're knocked out or further away than
+`leashRange`. One that has gone `cantReachTime` without getting a cell nearer them (`closest`
+being the nearest it has got, at `closestSince`) gives up and walks off somewhere random for a
+while, paying no attention to players.
 -}
-type alias Roam =
+type Behaviour
+    = Wandering Walk
+    | Resting Int
+    | Chasing { userId : Id UserId, closest : Float, closestSince : Int }
+    | GivingUp Walk
+
+
+{-| Walking to `point` until getting there or `until`.
+-}
+type alias Walk =
     { point : { x : Float, y : Float }, until : Int }
 
 
-{-| A lone chaser that runs into a wall picks a side to keep the wall on and walks along it, cell
-by cell, in case that gets it around. It gives up at `until`, or sooner once it's nearer its target
-than `stuckDistance` (where it got stuck) with nothing in the way. `goal` is the cell it's walking
-to the middle of, and `heading` the way it went to get there.
+{-| A tower that runs into a wall it can't get over picks a side to keep the wall on and walks
+along it, cell by cell, in case that gets it around. It gives up at `until`, or sooner once it's
+nearer its target than `stuckDistance` (where it got stuck) with nothing in the way. `goal` is the
+cell it's walking to the middle of, and `heading` the way it went to get there.
 -}
 type alias WallFollow =
     { side : WallSide
@@ -267,31 +254,11 @@ gridSize =
     64
 
 
-roundLength : Int
-roundLength =
-    90 * framesPerSecond
-
-
-{-| How long after everyone is knocked out (or after the first player joins) the next round
-starts.
+{-| How long a knocked out player waits to come back.
 -}
-roundBreak : Int
-roundBreak =
+respawnDelay : Int
+respawnDelay =
     5 * framesPerSecond
-
-
-{-| NPCs only start turning up a little while into a round, so there is time to build.
--}
-npcDelay : Int
-npcDelay =
-    10 * framesPerSecond
-
-
-{-| The first round gives a whole minute to build before anything turns up.
--}
-firstRoundNpcDelay : Int
-firstRoundNpcDelay =
-    60 * framesPerSecond
 
 
 spawnProtection : Int
@@ -359,20 +326,6 @@ giantHeight =
 giantBreakTime : Int
 giantBreakTime =
     framesPerSecond
-
-
-{-| A giant turns up this long into every round after the first.
--}
-giantDelay : Int
-giantDelay =
-    15 * framesPerSecond
-
-
-{-| How far from the crystal a giant turns up, in cells along each axis.
--}
-giantSpawnDistance : Int
-giantSpawnDistance =
-    28
 
 
 crystalHealth : Int
@@ -466,19 +419,11 @@ pieceGravity =
     9
 
 
-{-| How long an NPC goes without getting any nearer its target before it gives up for a while.
+{-| How long an NPC goes without getting any nearer the player it's after before it gives up.
 -}
 cantReachTime : Int
 cantReachTime =
     10 * framesPerSecond
-
-
-{-| Further than anything on the map is from anything else, for a tower that hasn't been anywhere
-yet.
--}
-farAway : Float
-farAway =
-    toFloat (2 * gridSize)
 
 
 dropHeight : Float
@@ -486,9 +431,39 @@ dropHeight =
     18
 
 
-npcLimit : Int
-npcLimit =
-    30
+{-| How many NPCs a match starts with, spread along the edge of the map.
+-}
+startingNpcs : Int
+startingNpcs =
+    200
+
+
+{-| How close a player has to come for an NPC to go after them.
+-}
+aggroRange : Float
+aggroRange =
+    10
+
+
+{-| How far a player has to get from an NPC going after them to lose it.
+-}
+leashRange : Float
+leashRange =
+    15
+
+
+{-| How long an NPC rests between walks while wandering.
+-}
+restTime : Int
+restTime =
+    framesPerSecond
+
+
+{-| Wandering NPCs, and ones that have given up on a player, walk at this much of their full speed.
+-}
+wanderPace : Float
+wanderPace =
+    0.5
 
 
 npcThrowRange : Float
@@ -514,13 +489,6 @@ gets there.
 throwLead : Float
 throwLead =
     0.6
-
-
-{-| How far from the crystal an NPC turns up, in cells along each axis.
--}
-npcSpawnDistance : Int
-npcSpawnDistance =
-    20
 
 
 startingPieces : Int
@@ -558,7 +526,7 @@ sceneryPieces =
     60
 
 
-{-| No pieces start this close to the middle of the map, where players come into a round.
+{-| No pieces start this close to the middle of the map, where players come into the match.
 -}
 sceneryClearance : Int
 sceneryClearance =
@@ -580,9 +548,7 @@ epsilon =
 init : Int -> Int -> MatchState
 init seed frame =
     { frame = frame
-    , round = { number = 0, startedAt = frame, nextRoundAt = Nothing }
     , players = SeqDict.empty
-    , waitingPlayers = SeqSet.empty
     , towers = []
     , giants = []
     , crystal = { health = crystalHealth, lastHitAt = Nothing }
@@ -593,11 +559,70 @@ init seed frame =
     , pickups = []
     , nextId = 0
     , seed = Random.initialSeed seed
-    , nextNpcSpawn = Nothing
-    , nextGiantSpawn = Nothing
-    , nextPickupSpawn = Nothing
+    , nextPickupSpawn = Just (frame + firstPickupDelay)
     }
         |> scatterPieces sceneryPieces
+        |> placeNpcsAroundEdge
+
+
+{-| Spread `startingNpcs` evenly along the edge of the map, two chasers to every thrower, resting
+for different lengths of time so that they don't all set off at once.
+-}
+placeNpcsAroundEdge : MatchState -> MatchState
+placeNpcsAroundEdge state =
+    let
+        side : Int
+        side =
+            gridSize - 1
+
+        edgeCell : Int -> ( Int, Int )
+        edgeCell index =
+            if index < side then
+                ( index, 0 )
+
+            else if index < 2 * side then
+                ( side, index - side )
+
+            else if index < 3 * side then
+                ( side - (index - 2 * side), side )
+
+            else
+                ( 0, side - (index - 3 * side) )
+
+        ( towers, seed ) =
+            List.foldl
+                (\npcIndex ( towerList, seed2 ) ->
+                    let
+                        ( ( kindRoll, restingFor ), seed3 ) =
+                            Random.step (Random.pair (Random.int 0 2) (Random.int 0 (2 * framesPerSecond))) seed2
+
+                        ( x, y ) =
+                            edgeCell (npcIndex * 4 * side // startingNpcs)
+                    in
+                    ( { position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
+                      , velocityZ = 0
+                      , behaviour = Resting (state.frame + restingFor)
+                      , wallFollow = Nothing
+                      , bottom =
+                            { id = state.nextId + npcIndex
+                            , kind =
+                                if kindRoll == 0 then
+                                    Thrower
+
+                                else
+                                    Chaser
+                            , nextThrowFrame = state.frame
+                            }
+                      , above = []
+                      }
+                        :: towerList
+                    , seed3
+                    )
+                )
+                ( [], state.seed )
+                (List.range 0 (startingNpcs - 1))
+    in
+    { state | towers = List.reverse towers, nextId = state.nextId + startingNpcs, seed = seed }
 
 
 {-| Lay pieces around the map, on the ground and not touching each other.
@@ -720,15 +745,12 @@ stepPlaying inputs state =
 
         state3 : MatchState
         state3 =
-            updateRound state2
+            respawnPlayers state2
                 |> updatePlayers
                 |> collectPickups
                 |> updateTowers
-                |> hitCrystal
                 |> catchPlayers
                 |> updateGiants
-                |> spawnNpcs
-                |> spawnGiants
                 |> spawnPickups
                 |> updateSnowballs
 
@@ -762,17 +784,18 @@ applyInput event state =
                 state
 
             else
-                { state | waitingPlayers = SeqSet.insert event.userId state.waitingPlayers }
+                let
+                    ( queue, seed ) =
+                        Random.step randomQueue state.seed
+                in
+                bringIn event.userId queue { state | seed = seed }
 
         Leave ->
             let
                 ( state2, removedSettled ) =
                     removePiecesOf
                         [ event.userId ]
-                        { state
-                            | players = SeqDict.remove event.userId state.players
-                            , waitingPlayers = SeqSet.remove event.userId state.waitingPlayers
-                        }
+                        { state | players = SeqDict.remove event.userId state.players }
             in
             if removedSettled then
                 dropUnsupportedPieces state2
@@ -902,151 +925,83 @@ keepInsideGrid cells column row =
 
 
 
--- Rounds
+-- Coming into the match
 
 
-{-| Start the next round when it's due, bringing in everyone who was waiting or knocked out. A
-round ends early once nobody in it is left standing.
+{-| Bring back everyone who was knocked out `respawnDelay` ago.
 -}
-updateRound : MatchState -> MatchState
-updateRound state =
+respawnPlayers : MatchState -> MatchState
+respawnPlayers state =
+    SeqDict.foldl
+        (\userId player state2 ->
+            case player.knockedOutAt of
+                Just knockedOutAt ->
+                    if state2.frame >= knockedOutAt + respawnDelay then
+                        bringIn userId player.queue state2
+
+                    else
+                        state2
+
+                Nothing ->
+                    state2
+        )
+        state
+        state.players
+
+
+{-| Put a player by the crystal with a full set of pieces, next to whoever else is standing there.
+-}
+bringIn : Id UserId -> PieceQueue -> MatchState -> MatchState
+bringIn userId queue state =
     let
-        round : Round
-        round =
-            state.round
+        ( offsetX, offsetY ) =
+            spawnOffset (SeqDict.size (SeqDict.filter (\_ player -> player.knockedOutAt == Nothing) state.players))
 
-        nobodyStanding : Bool
-        nobodyStanding =
-            List.all (\player -> player.knockedOutAt /= Nothing) (SeqDict.values state.players)
+        column : Int
+        column =
+            gridSize // 2 + offsetX
 
-        anyoneToBringIn : Bool
-        anyoneToBringIn =
-            not (SeqSet.isEmpty state.waitingPlayers)
-                || List.any (\player -> player.knockedOutAt /= Nothing) (SeqDict.values state.players)
-    in
-    case round.nextRoundAt of
-        Just nextRoundAt ->
-            if state.frame >= nextRoundAt then
-                if anyoneToBringIn || not nobodyStanding then
-                    startRound state
+        row : Int
+        row =
+            gridSize // 2 + offsetY
 
-                else
-                    { state | round = { round | nextRoundAt = Nothing } }
-
-            else if nobodyStanding && nextRoundAt > state.frame + roundBreak then
-                { state | round = { round | nextRoundAt = Just (state.frame + roundBreak) } }
-
-            else
-                state
-
-        Nothing ->
-            if anyoneToBringIn then
-                { state | round = { round | nextRoundAt = Just (state.frame + roundBreak) } }
-
-            else
-                state
-
-
-startRound : MatchState -> MatchState
-startRound state =
-    let
-        broughtIn : List (Id UserId)
-        broughtIn =
-            SeqSet.toList state.waitingPlayers
-                ++ List.filterMap
-                    (\( userId, player ) ->
-                        case player.knockedOutAt of
-                            Just _ ->
-                                Just userId
-
-                            Nothing ->
-                                Nothing
-                    )
-                    (SeqDict.toList state.players)
-                |> List.sortBy Id.toInt
-
-        ( players, seed ) =
-            List.foldl
-                (\( index, userId ) ( players2, seed2 ) ->
-                    let
-                        ( queue, seed3 ) =
-                            Random.step randomQueue seed2
-
-                        ( offsetX, offsetY ) =
-                            spawnOffset index
-
-                        column : Int
-                        column =
-                            gridSize // 2 + offsetX
-
-                        row : Int
-                        row =
-                            gridSize // 2 + offsetY
-
-                        -- Protection only matters with an NPC close enough to throw at the spot,
-                        -- which in the first round there never is.
-                        npcNearby : Bool
-                        npcNearby =
-                            List.any
-                                (\tower ->
-                                    horizontalDistance tower.position { x = toFloat column + 0.5, y = toFloat row + 0.5, z = 0 }
-                                        <= npcThrowRange
-                                )
-                                state.towers
-                    in
-                    ( SeqDict.insert
-                        userId
-                        { position =
-                            { x = toFloat column + 0.5
-                            , y = toFloat row + 0.5
-                            , z = toFloat (topOfColumn column row state)
-                            }
-                        , velocityZ = 0
-                        , target = Nothing
-                        , knockedOutAt = Nothing
-                        , queue = queue
-                        , piecesLeft = startingPieces
-                        , nextDropAt = state.frame
-                        , protectedUntil =
-                            if npcNearby then
-                                state.frame + spawnProtection
-
-                            else
-                                state.frame
-                        }
-                        players2
-                    , seed3
-                    )
+        -- Protection only matters with an NPC close enough to throw at the spot.
+        npcNearby : Bool
+        npcNearby =
+            List.any
+                (\tower ->
+                    horizontalDistance tower.position { x = toFloat column + 0.5, y = toFloat row + 0.5, z = 0 }
+                        <= npcThrowRange
                 )
-                ( state.players, state.seed )
-                (List.indexedMap Tuple.pair broughtIn)
+                state.towers
     in
     { state
-        | round =
-            { number = state.round.number + 1
-            , startedAt = state.frame
-            , nextRoundAt = Just (state.frame + roundLength)
-            }
-        , players = players
-        , waitingPlayers = SeqSet.empty
-        , seed = seed
-        , nextNpcSpawn =
-            if state.round.number == 0 then
-                Just (state.frame + firstRoundNpcDelay)
+        | players =
+            SeqDict.insert
+                userId
+                { position =
+                    { x = toFloat column + 0.5
+                    , y = toFloat row + 0.5
+                    , z = toFloat (topOfColumn column row state)
+                    }
+                , velocityZ = 0
+                , target = Nothing
+                , knockedOutAt = Nothing
+                , queue = queue
+                , piecesLeft = startingPieces
+                , nextDropAt = state.frame
+                , protectedUntil =
+                    if npcNearby then
+                        state.frame + spawnProtection
 
-            else
-                Just (state.frame + npcDelay)
-        , nextGiantSpawn =
-            if state.round.number == 0 then
-                Nothing
-
-            else
-                Just (state.frame + giantDelay)
-        , nextPickupSpawn = Just (state.frame + firstPickupDelay)
+                    else
+                        state.frame
+                }
+                state.players
     }
 
 
-{-| Where around the crystal in the middle of the grid each player brought into a round appears,
+{-| Where around the crystal in the middle of the grid each player brought into the match appears,
 so that they don't all start on top of each other. The crystal covers the two columns either side
 of the middle line, so these leave a one cell gap around it.
 -}
@@ -1106,9 +1061,9 @@ updatePlayers state =
 updateTowers : MatchState -> MatchState
 updateTowers state =
     let
-        alivePlayers : List Player
+        alivePlayers : SeqDict (Id UserId) Player
         alivePlayers =
-            SeqDict.values state.players |> List.filter (\player -> player.knockedOutAt == Nothing)
+            SeqDict.filter (\_ player -> player.knockedOutAt == Nothing) state.players
 
         ( moved, seed ) =
             List.foldr
@@ -1127,7 +1082,7 @@ updateTowers state =
                 (\tower ( towerList, snowballList, seed2 ) ->
                     let
                         ( tower2, newSnowballs, seed3 ) =
-                            throwFromTower state.frame alivePlayers seed2 tower
+                            throwFromTower state.frame (SeqDict.values alivePlayers) seed2 tower
                     in
                     ( tower2 :: towerList, newSnowballs ++ snowballList, seed3 )
                 )
@@ -1137,212 +1092,243 @@ updateTowers state =
     { state | towers = mergeTowers state.occupied thrown, snowballs = snowballs, seed = seed4 }
 
 
-{-| A tower heads for its target, or for somewhere random while it's given up on that. It can come
-out of this as two towers, if it walked into a wall the NPCs at the top could step onto.
+{-| A tower walks wherever its behaviour takes it. It can come out of this as two towers, if it
+walked into a wall the NPCs at the top could step onto.
 -}
-moveTower : Int -> List Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+moveTower : Int -> SeqDict (Id UserId) Player -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
 moveTower frame alivePlayers occupied seed tower =
-    case tower.roamTo of
-        Just roam ->
-            if frame < roam.until && horizontalDistance tower.position { x = roam.point.x, y = roam.point.y, z = 0 } > 0.5 then
-                walkTowerTo frame (Just roam.point) occupied seed tower
+    let
+        ( tower2, seed2 ) =
+            updateBehaviour frame alivePlayers seed tower
+    in
+    case tower2.behaviour of
+        Wandering walking ->
+            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) occupied seed2 tower2
 
-            else
-                moveTower
-                    frame
-                    alivePlayers
-                    occupied
-                    seed
-                    { tower | roamTo = Nothing, wallFollow = Nothing, closestToTarget = farAway, closestSince = frame }
+        Resting _ ->
+            walkTower frame 0 Nothing occupied seed2 tower2
 
-        Nothing ->
-            let
-                ( tower2, seed2 ) =
-                    case tower.bottom.kind of
-                        Chaser ->
-                            ( tower, seed )
+        Chasing chasing ->
+            walkTower frame (npcSpeed tower2.bottom.kind) (chasingTarget alivePlayers chasing.userId tower2) occupied seed2 tower2
 
-                        Thrower ->
-                            if frame >= tower.nextWanderFrame then
-                                Random.step
-                                    (Random.map3
-                                        (\x y delay -> { tower | wanderOffset = { x = x, y = y }, nextWanderFrame = frame + delay })
-                                        (Random.float -2 2)
-                                        (Random.float -2 2)
-                                        (Random.int (2 * framesPerSecond) (4 * framesPerSecond))
-                                    )
-                                    seed
+        GivingUp walking ->
+            walkTower frame (npcSpeed tower2.bottom.kind * wanderPace) (Just walking.point) occupied seed2 tower2
 
-                            else
-                                ( tower, seed )
 
-                        Jumper ->
-                            ( tower, seed )
+updateBehaviour : Int -> SeqDict (Id UserId) Player -> Random.Seed -> Tower -> ( Tower, Random.Seed )
+updateBehaviour frame alivePlayers seed tower =
+    let
+        rest : ( Tower, Random.Seed )
+        rest =
+            ( { tower | behaviour = Resting (frame + restTime), wallFollow = Nothing }, seed )
+    in
+    case tower.behaviour of
+        Wandering walking ->
+            case nearbyPlayer frame tower.position alivePlayers of
+                Just chasing ->
+                    ( { tower | behaviour = Chasing chasing, wallFollow = Nothing }, seed )
 
-                target : Maybe { x : Float, y : Float }
-                target =
-                    case tower2.bottom.kind of
-                        Chaser ->
-                            Just (chaseTarget tower2.position alivePlayers)
+                Nothing ->
+                    if frame >= walking.until || isAt walking.point tower.position then
+                        rest
 
-                        Thrower ->
-                            throwerTarget tower2 alivePlayers
+                    else
+                        ( tower, seed )
 
-                        Jumper ->
-                            Just (chaseTarget tower2.position alivePlayers)
-            in
-            case target of
-                Just point ->
+        Resting until ->
+            case nearbyPlayer frame tower.position alivePlayers of
+                Just chasing ->
+                    ( { tower | behaviour = Chasing chasing, wallFollow = Nothing }, seed )
+
+                Nothing ->
+                    if frame >= until then
+                        Random.step (randomWalk frame (2 * framesPerSecond) (4 * framesPerSecond)) seed
+                            |> Tuple.mapFirst (\walking -> { tower | behaviour = Wandering walking, wallFollow = Nothing })
+
+                    else
+                        ( tower, seed )
+
+        Chasing chasing ->
+            case SeqDict.get chasing.userId alivePlayers of
+                Just player ->
                     let
                         distance : Float
                         distance =
-                            horizontalDistance tower2.position { x = point.x, y = point.y, z = 0 }
+                            horizontalDistance tower.position player.position
                     in
-                    if distance < tower2.closestToTarget - 1 then
-                        walkTowerTo frame target occupied seed2 { tower2 | closestToTarget = distance, closestSince = frame }
+                    if distance > leashRange then
+                        rest
 
-                    else if frame - tower2.closestSince >= cantReachTime then
-                        let
-                            ( roam, seed3 ) =
-                                Random.step
-                                    (Random.map3
-                                        (\x y duration -> { point = { x = toFloat x + 0.5, y = toFloat y + 0.5 }, until = frame + duration })
-                                        (Random.int 0 (gridSize - 1))
-                                        (Random.int 0 (gridSize - 1))
-                                        (Random.int (4 * framesPerSecond) (8 * framesPerSecond))
-                                    )
-                                    seed2
-                        in
-                        walkTowerTo frame (Just roam.point) occupied seed3 { tower2 | roamTo = Just roam, wallFollow = Nothing }
+                    else if distance < chasing.closest - 1 || chasingTarget alivePlayers chasing.userId tower == Nothing then
+                        ( { tower | behaviour = Chasing { chasing | closest = distance, closestSince = frame } }, seed )
+
+                    else if frame - chasing.closestSince >= cantReachTime then
+                        Random.step (randomWalk frame (4 * framesPerSecond) (8 * framesPerSecond)) seed
+                            |> Tuple.mapFirst (\walking -> { tower | behaviour = GivingUp walking, wallFollow = Nothing })
 
                     else
-                        walkTowerTo frame target occupied seed2 tower2
+                        ( tower, seed )
 
                 Nothing ->
-                    walkTowerTo frame Nothing occupied seed2 { tower2 | closestToTarget = farAway, closestSince = frame }
+                    rest
 
-
-{-| Throwers go for the crystal unless a player is nearer, and then keep a few cells from them,
-wandering about a little. Nothing means it's where it wants to be.
--}
-throwerTarget : Tower -> List Player -> Maybe { x : Float, y : Float }
-throwerTarget tower alivePlayers =
-    case nearestPlayer tower.position alivePlayers of
-        Just ( player, distance ) ->
-            if distance >= distanceToCrystal tower.position then
-                Just crystalCenter
-
-            else if distance > npcKeepDistance then
-                Just { x = player.position.x + tower.wanderOffset.x, y = player.position.y + tower.wanderOffset.y }
+        GivingUp walking ->
+            if frame >= walking.until || isAt walking.point tower.position then
+                rest
 
             else
-                Nothing
+                ( tower, seed )
+
+
+{-| The nearest standing player within `aggroRange`, if there is one, for an NPC to go after.
+-}
+nearbyPlayer : Int -> Point -> SeqDict (Id UserId) Player -> Maybe { userId : Id UserId, closest : Float, closestSince : Int }
+nearbyPlayer frame position alivePlayers =
+    SeqDict.foldl
+        (\userId player nearest ->
+            let
+                distance : Float
+                distance =
+                    horizontalDistance position player.position
+
+                isNearer : Bool
+                isNearer =
+                    case nearest of
+                        Just other ->
+                            distance < other.closest
+
+                        Nothing ->
+                            True
+            in
+            if distance <= aggroRange && isNearer then
+                Just { userId = userId, closest = distance, closestSince = frame }
+
+            else
+                nearest
+        )
+        Nothing
+        alivePlayers
+
+
+{-| Somewhere random on the map to walk to, for between `shortest` and `longest` frames.
+-}
+randomWalk : Int -> Int -> Int -> Random.Generator Walk
+randomWalk frame shortest longest =
+    Random.map3
+        (\x y duration -> { point = { x = toFloat x + 0.5, y = toFloat y + 0.5 }, until = frame + duration })
+        (Random.int 0 (gridSize - 1))
+        (Random.int 0 (gridSize - 1))
+        (Random.int shortest longest)
+
+
+isAt : { x : Float, y : Float } -> Point -> Bool
+isAt point position =
+    horizontalDistance position { x = point.x, y = point.y, z = 0 } < 0.5
+
+
+{-| Throwers stop a few cells short of the player they're after, to throw from there.
+-}
+chasingTarget : SeqDict (Id UserId) Player -> Id UserId -> Tower -> Maybe { x : Float, y : Float }
+chasingTarget alivePlayers userId tower =
+    case SeqDict.get userId alivePlayers of
+        Just player ->
+            case tower.bottom.kind of
+                Chaser ->
+                    Just { x = player.position.x, y = player.position.y }
+
+                Thrower ->
+                    if horizontalDistance tower.position player.position <= npcKeepDistance then
+                        Nothing
+
+                    else
+                        Just { x = player.position.x, y = player.position.y }
+
+                Jumper ->
+                    Just { x = player.position.x, y = player.position.y }
 
         Nothing ->
-            Just crystalCenter
+            Nothing
 
 
-{-| Walk the way the tower's bottom NPC walks.
--}
-walkTowerTo : Int -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
-walkTowerTo frame target occupied seed tower =
-    case tower.bottom.kind of
+npcSpeed : NpcKind -> Float
+npcSpeed kind =
+    case kind of
         Chaser ->
-            case target of
-                Just point ->
-                    moveLoneChaser frame point occupied seed tower
-
-                Nothing ->
-                    ( [ moveEntityWithoutHopping chaserSpeed entityHeight Nothing occupied tower ], seed )
+            chaserSpeed
 
         Thrower ->
-            ( walkTower frame throwerSpeed target occupied tower, seed )
+            throwerSpeed
 
         Jumper ->
-            ( walkTower frame jumperSpeed target occupied tower, seed )
+            jumperSpeed
 
 
-{-| Chasers and jumpers go for the nearest player, unless the crystal is nearer.
+{-| Walk a tower towards a target without hopping. Against a wall, the NPCs high enough to clear
+it step onto it, and the rest follow the wall for a while in case that gets them around.
 -}
-chaseTarget : Point -> List Player -> { x : Float, y : Float }
-chaseTarget position alivePlayers =
-    case nearestPlayer position alivePlayers of
-        Just ( player, distance ) ->
-            if distance < distanceToCrystal position then
-                { x = player.position.x, y = player.position.y }
+walkTower : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+walkTower frame speed maybeTarget occupied seed tower =
+    case maybeTarget of
+        Just target ->
+            let
+                split : Maybe ( Tower, Tower )
+                split =
+                    case stepTowards speed target tower.position of
+                        Just next ->
+                            if entityCollides occupied (towerHeight tower) next then
+                                splitAtWall occupied next tower
 
-            else
-                crystalCenter
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+            in
+            case split of
+                Just ( lower, upper ) ->
+                    ( [ moveEntityWithoutHopping speed (towerHeight lower) maybeTarget occupied lower, upper ], seed )
+
+                Nothing ->
+                    walkAlongWalls frame speed target occupied seed tower
 
         Nothing ->
-            crystalCenter
+            ( [ moveEntityWithoutHopping speed (towerHeight tower) Nothing occupied tower ], seed )
 
 
-distanceToCrystal : Point -> Float
-distanceToCrystal position =
-    horizontalDistance position { x = crystalCenter.x, y = crystalCenter.y, z = 0 }
-
-
-{-| Walk a tower towards a target, hopping onto anything one block high if the whole tower has
-room to. Against a wall it can't hop, the NPCs high enough to clear it step onto it.
+{-| Head straight for the target until a wall stops the tower, and then follow the wall for a
+while, keeping it on whichever side it picked.
 -}
-walkTower : Int -> Float -> Maybe { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Tower -> List Tower
-walkTower frame speed maybeTarget occupied tower =
+walkAlongWalls : Int -> Float -> { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
+walkAlongWalls frame speed target occupied seed tower =
     let
         height : Float
         height =
             towerHeight tower
-
-        blockedStep : Maybe Point
-        blockedStep =
-            case Maybe.andThen (\target -> stepTowards speed target tower.position) maybeTarget of
-                Just next ->
-                    if entityCollides occupied height next && not (canHop occupied height tower.position next) then
-                        Just next
-
-                    else
-                        Nothing
-
-                Nothing ->
-                    Nothing
     in
-    case Maybe.andThen (\next -> splitAtWall frame occupied next tower) blockedStep of
-        Just ( lower, upper ) ->
-            [ moveEntity speed (towerHeight lower) maybeTarget occupied lower, upper ]
-
-        Nothing ->
-            [ moveEntity speed height maybeTarget occupied tower ]
-
-
-{-| A chaser on its own can't hop, so it heads straight for its target until a wall stops it, and
-then follows the wall for a while, keeping it on whichever side it picked.
--}
-moveLoneChaser : Int -> { x : Float, y : Float } -> Dict ( Int, Int, Int ) Int -> Random.Seed -> Tower -> ( List Tower, Random.Seed )
-moveLoneChaser frame target occupied seed tower =
     case tower.wallFollow of
         Just wallFollow ->
             let
                 isAround : Bool
                 isAround =
                     (horizontalDistance tower.position { x = target.x, y = target.y, z = 0 } < wallFollow.stuckDistance - 0.5)
-                        && not (wayIsBlocked occupied target tower.position)
+                        && not (wayIsBlocked occupied speed height target tower.position)
             in
             if frame >= wallFollow.until || isAround then
-                moveLoneChaser frame target occupied seed { tower | wallFollow = Nothing }
+                walkAlongWalls frame speed target occupied seed { tower | wallFollow = Nothing }
 
             else
-                ( [ followWall occupied wallFollow tower ], seed )
+                ( [ followWall occupied speed height wallFollow tower ], seed )
 
         Nothing ->
             let
                 moved : Tower
                 moved =
-                    moveEntityWithoutHopping chaserSpeed entityHeight (Just target) occupied tower
+                    moveEntityWithoutHopping speed height (Just target) occupied tower
 
                 stopped : Bool
                 stopped =
-                    wayIsBlocked occupied target tower.position
-                        && (horizontalDistance moved.position tower.position < chaserSpeed * frameSeconds / 2)
+                    wayIsBlocked occupied speed height target tower.position
+                        && (horizontalDistance moved.position tower.position < speed * frameSeconds / 2)
             in
             if stopped then
                 let
@@ -1362,7 +1348,7 @@ moveLoneChaser frame target occupied seed tower =
 
 
 {-| Turn from facing the wall, the way that puts it on the chosen side, and start by going to the
-middle of the cell the chaser is in.
+middle of the cell the tower is in.
 -}
 startFollowingWall : Int -> { x : Float, y : Float } -> Point -> WallSide -> Int -> WallFollow
 startFollowingWall frame target position side duration =
@@ -1391,13 +1377,13 @@ startFollowingWall frame target position side duration =
     }
 
 
-{-| Whether a chaser's next step straight for its target would take it into a block.
+{-| Whether the next step straight for the target would take something this tall into a block.
 -}
-wayIsBlocked : Dict ( Int, Int, Int ) Int -> { x : Float, y : Float } -> Point -> Bool
-wayIsBlocked occupied target position =
-    case stepTowards chaserSpeed target position of
+wayIsBlocked : Dict ( Int, Int, Int ) Int -> Float -> Float -> { x : Float, y : Float } -> Point -> Bool
+wayIsBlocked occupied speed height target position =
+    case stepTowards speed target position of
         Just next ->
-            entityCollides occupied entityHeight next
+            entityCollides occupied height next
 
         Nothing ->
             False
@@ -1416,8 +1402,8 @@ sign value =
 keeping a hand on the wall would: round the corner if the wall stops, straight on if it doesn't,
 turning away from it or going back the way it came only when it has to.
 -}
-followWall : Dict ( Int, Int, Int ) Int -> WallFollow -> Tower -> Tower
-followWall occupied wallFollow tower =
+followWall : Dict ( Int, Int, Int ) Int -> Float -> Float -> WallFollow -> Tower -> Tower
+followWall occupied speed height wallFollow tower =
     let
         ( goalX, goalY ) =
             wallFollow.goal
@@ -1427,13 +1413,13 @@ followWall occupied wallFollow tower =
             not
                 (entityCollides
                     occupied
-                    entityHeight
+                    height
                     { x = toFloat (goalX + dx) + 0.5, y = toFloat (goalY + dy) + 0.5, z = tower.position.z }
                 )
 
         wallFollow2 : WallFollow
         wallFollow2 =
-            if horizontalDistance tower.position (cellMiddle wallFollow.goal tower.position.z) <= chaserSpeed * frameSeconds then
+            if horizontalDistance tower.position (cellMiddle wallFollow.goal tower.position.z) <= speed * frameSeconds then
                 case
                     List.filter
                         isFree
@@ -1457,8 +1443,8 @@ followWall occupied wallFollow tower =
             cellMiddle wallFollow2.goal tower.position.z
     in
     moveEntityWithoutHopping
-        chaserSpeed
-        entityHeight
+        speed
+        height
         (Just { x = goal.x, y = goal.y })
         occupied
         { tower | wallFollow = Just wallFollow2 }
@@ -1500,13 +1486,13 @@ turnAround ( dx, dy ) =
 there, as a tower of their own. Whatever is in the way is under them, so they come down on top
 of it.
 -}
-splitAtWall : Int -> Dict ( Int, Int, Int ) Int -> Point -> Tower -> Maybe ( Tower, Tower )
-splitAtWall frame occupied next tower =
-    splitAtWallHelper frame occupied next tower [] tower.above
+splitAtWall : Dict ( Int, Int, Int ) Int -> Point -> Tower -> Maybe ( Tower, Tower )
+splitAtWall occupied next tower =
+    splitAtWallHelper occupied next tower [] tower.above
 
 
-splitAtWallHelper : Int -> Dict ( Int, Int, Int ) Int -> Point -> Tower -> List Npc -> List Npc -> Maybe ( Tower, Tower )
-splitAtWallHelper frame occupied next tower stayingTopFirst rest =
+splitAtWallHelper : Dict ( Int, Int, Int ) Int -> Point -> Tower -> List Npc -> List Npc -> Maybe ( Tower, Tower )
+splitAtWallHelper occupied next tower stayingTopFirst rest =
     case rest of
         npc :: higher ->
             let
@@ -1514,18 +1500,14 @@ splitAtWallHelper frame occupied next tower stayingTopFirst rest =
                 upper =
                     { position = heightInTower (List.length stayingTopFirst + 1) { next | z = tower.position.z }
                     , velocityZ = 0
-                    , wanderOffset = { x = 0, y = 0 }
-                    , nextWanderFrame = frame
+                    , behaviour = tower.behaviour
                     , wallFollow = Nothing
-                    , closestToTarget = farAway
-                    , closestSince = frame
-                    , roamTo = Nothing
                     , bottom = npc
                     , above = higher
                     }
             in
             if entityCollides occupied (towerHeight upper) upper.position then
-                splitAtWallHelper frame occupied next tower (npc :: stayingTopFirst) higher
+                splitAtWallHelper occupied next tower (npc :: stayingTopFirst) higher
 
             else
                 Just ( { tower | above = List.reverse stayingTopFirst }, upper )
@@ -1540,12 +1522,16 @@ mergeTowers : Dict ( Int, Int, Int ) Int -> List Tower -> List Tower
 mergeTowers occupied towers =
     case towers of
         tower :: rest ->
-            case mergeWithFirstMet occupied tower [] rest of
-                Just ( merged, rest2 ) ->
-                    mergeTowers occupied (merged :: rest2)
+            if canStack tower then
+                case mergeWithFirstMet occupied tower [] rest of
+                    Just ( merged, rest2 ) ->
+                        mergeTowers occupied (merged :: rest2)
 
-                Nothing ->
-                    tower :: mergeTowers occupied rest
+                    Nothing ->
+                        tower :: mergeTowers occupied rest
+
+            else
+                tower :: mergeTowers occupied rest
 
         [] ->
             []
@@ -1555,7 +1541,7 @@ mergeWithFirstMet : Dict ( Int, Int, Int ) Int -> Tower -> List Tower -> List To
 mergeWithFirstMet occupied tower skipped rest =
     case rest of
         other :: rest2 ->
-            if towersMeet tower other && canStack tower && canStack other then
+            if canStack other && towersMeet tower other then
                 let
                     merged : Tower
                     merged =
@@ -1815,34 +1801,6 @@ throwSnowball frame from to =
     }
 
 
-{-| Every NPC touching the crystal is gone, and does it a point of damage.
--}
-hitCrystal : MatchState -> MatchState
-hitCrystal state =
-    let
-        hits : Int
-        hits =
-            List.foldl
-                (\tower count ->
-                    count
-                        + List.length
-                            (List.filter
-                                (\( _, position ) -> touchesCrystal entityRadius entityHeight position)
-                                (npcPositions tower)
-                            )
-                )
-                0
-                state.towers
-    in
-    if hits > 0 then
-        damageCrystal
-            hits
-            { state | towers = List.filterMap (removeNpcs (touchesCrystal entityRadius entityHeight)) state.towers }
-
-    else
-        state
-
-
 damageCrystal : Int -> MatchState -> MatchState
 damageCrystal damage state =
     { state | crystal = { health = max 0 (state.crystal.health - damage), lastHitAt = Just state.frame } }
@@ -1875,7 +1833,7 @@ touchesCrystal radius height position =
 
 
 {-| Chasers and jumpers knock out any player they reach, from anywhere in a tower, unless that
-player has only just come into the round.
+player has only just come into the match.
 -}
 catchPlayers : MatchState -> MatchState
 catchPlayers state =
@@ -1934,165 +1892,8 @@ entitiesTouch a b =
         && (abs (a.z - b.z) < entityHeight)
 
 
-{-| While anyone is standing in the round, NPCs turn up on a ring around the crystal and make for
-it.
--}
-spawnNpcs : MatchState -> MatchState
-spawnNpcs state =
-    case state.nextNpcSpawn of
-        Just spawnFrame ->
-            if state.frame >= spawnFrame then
-                let
-                    anyoneStanding : Bool
-                    anyoneStanding =
-                        List.any (\player -> player.knockedOutAt == Nothing) (SeqDict.values state.players)
-
-                    ( roll, seed ) =
-                        Random.step
-                            (Random.map3
-                                (\side along kindRoll -> { side = side, along = along, kindRoll = kindRoll })
-                                (Random.int 0 3)
-                                (Random.int -npcSpawnDistance npcSpawnDistance)
-                                (Random.int 0 3)
-                            )
-                            state.seed
-
-                    kind : NpcKind
-                    kind =
-                        if state.round.number <= 1 then
-                            Chaser
-
-                        else
-                            case roll.kindRoll of
-                                0 ->
-                                    Thrower
-
-                                1 ->
-                                    Jumper
-
-                                _ ->
-                                    Chaser
-
-                    ( offsetX, offsetY ) =
-                        case roll.side of
-                            0 ->
-                                ( roll.along, -npcSpawnDistance )
-
-                            1 ->
-                                ( roll.along, npcSpawnDistance )
-
-                            2 ->
-                                ( -npcSpawnDistance, roll.along )
-
-                            _ ->
-                                ( npcSpawnDistance, roll.along )
-
-                    towers : List Tower
-                    towers =
-                        if anyoneStanding && npcCount state.towers < npcLimit then
-                            let
-                                x : Int
-                                x =
-                                    clamp 0 (gridSize - 1) (gridSize // 2 + offsetX)
-
-                                y : Int
-                                y =
-                                    clamp 0 (gridSize - 1) (gridSize // 2 + offsetY)
-                            in
-                            state.towers
-                                ++ [ { position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
-                                     , velocityZ = 0
-                                     , wanderOffset = { x = 0, y = 0 }
-                                     , nextWanderFrame = state.frame
-                                     , wallFollow = Nothing
-                                     , closestToTarget = farAway
-                                     , closestSince = state.frame
-                                     , roamTo = Nothing
-                                     , bottom = { id = state.nextId, kind = kind, nextThrowFrame = state.frame + 3 * framesPerSecond }
-                                     , above = []
-                                     }
-                                   ]
-
-                        else
-                            state.towers
-                in
-                { state
-                    | towers = towers
-                    , nextId = state.nextId + 1
-                    , seed = seed
-                    , nextNpcSpawn = Just (state.frame + npcSpawnInterval (state.frame - state.round.startedAt))
-                }
-
-            else
-                state
-
-        Nothing ->
-            state
-
-
-npcSpawnInterval : Int -> Int
-npcSpawnInterval framesIntoRound =
-    max (6 * framesPerSecond) (12 * framesPerSecond - framesIntoRound // 15)
-
-
 
 -- Giants
-
-
-{-| A giant turns up on a ring far out from the crystal, once in every round after the first.
--}
-spawnGiants : MatchState -> MatchState
-spawnGiants state =
-    case state.nextGiantSpawn of
-        Just spawnFrame ->
-            if state.frame >= spawnFrame then
-                let
-                    ( ( side, along ), seed ) =
-                        Random.step
-                            (Random.pair (Random.int 0 3) (Random.int -giantSpawnDistance giantSpawnDistance))
-                            state.seed
-
-                    ( offsetX, offsetY ) =
-                        case side of
-                            0 ->
-                                ( along, -giantSpawnDistance )
-
-                            1 ->
-                                ( along, giantSpawnDistance )
-
-                            2 ->
-                                ( -giantSpawnDistance, along )
-
-                            _ ->
-                                ( giantSpawnDistance, along )
-
-                    x : Int
-                    x =
-                        clamp 0 (gridSize - 1) (gridSize // 2 + offsetX)
-
-                    y : Int
-                    y =
-                        clamp 0 (gridSize - 1) (gridSize // 2 + offsetY)
-                in
-                { state
-                    | giants =
-                        state.giants
-                            ++ [ { id = state.nextId
-                                 , position = { x = toFloat x + 0.5, y = toFloat y + 0.5, z = toFloat (topOfColumn x y state) }
-                                 , velocityZ = 0
-                                 , blockedSince = Nothing
-                                 }
-                               ]
-                    , nextId = state.nextId + 1
-                    , seed = seed
-                    , nextGiantSpawn = Nothing
-                }
-
-            else
-                state
-
-        Nothing ->
-            state
 
 
 updateGiants : MatchState -> MatchState
@@ -2341,7 +2142,7 @@ onCrystal column row =
     List.member ( column, row, 0 ) crystalCells
 
 
-{-| A player standing in the round who touches a pickup takes it, and everyone gets more pieces.
+{-| A standing player who touches a pickup takes it, and everyone gets more pieces.
 -}
 collectPickups : MatchState -> MatchState
 collectPickups state =

@@ -52,7 +52,7 @@ type alias Camera =
     { focus : Vec3, zoom : Float }
 
 
-{-| Follows this client's player, or looks at the middle of the map while they aren't in a round.
+{-| Follows this client's player, or looks at the middle of the map while they haven't joined.
 The higher up they stand the further it zooms out, going by their height averaged over the last
 second (`recent`, newest first) so that hopping doesn't make it bob.
 -}

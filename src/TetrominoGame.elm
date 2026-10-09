@@ -64,7 +64,6 @@ import List.Extra
 import MyUi
 import Quantity
 import SeqDict exposing (SeqDict)
-import SeqSet
 import Tetromino exposing (Orientation, Shape)
 import TetrominoSim
 import TetrominoTimeline exposing (Timeline)
@@ -644,7 +643,7 @@ updateConnected windowSize devicePixelRatio currentUserId msg timeline model =
 
         PressedJoin ->
             ( model
-            , if SeqDict.member currentUserId state.players || SeqSet.member currentUserId state.waitingPlayers then
+            , if SeqDict.member currentUserId state.players then
                 Nothing
 
               else
@@ -1017,65 +1016,37 @@ pieceCanvas size userColor orientation shape =
 statusView : Id UserId -> TetrominoSim.MatchState -> Element GameMsg
 statusView currentUserId state =
     let
-        nextRound : String
-        nextRound =
-            case state.round.nextRoundAt of
-                Just nextRoundAt ->
-                    "Next round in " ++ secondsUntil state.frame nextRoundAt
-
-                Nothing ->
-                    "The next round starts once someone joins"
-
-        crystal : String
-        crystal =
-            "Crystal " ++ String.fromInt state.crystal.health ++ "/" ++ String.fromInt TetrominoSim.crystalHealth ++ "."
-
-        roundInfo : String
-        roundInfo =
-            if state.round.number == 0 then
-                crystal ++ " " ++ nextRound
-
-            else
-                "Round " ++ String.fromInt state.round.number ++ ". " ++ crystal ++ " " ++ nextRound
+        snowmenLeft : String
+        snowmenLeft =
+            String.fromInt (TetrominoSim.npcCount state.towers) ++ " snowmen left."
     in
     Ui.row
         [ Ui.spacing 12, Ui.Font.size 14, Ui.contentCenterX ]
         (if TetrominoSim.isGameOver state then
             [ Ui.el
                 [ Ui.Font.bold, Ui.width Ui.shrink, Ui.id "tetrominoGame_crystalDestroyed" ]
-                (Ui.text ("The crystal was destroyed in round " ++ String.fromInt state.round.number ++ ". Game over!"))
+                (Ui.text "The crystal was destroyed. Game over!")
             ]
 
          else
-            statusParts currentUserId roundInfo state
-        )
+            case SeqDict.get currentUserId state.players of
+                Just player ->
+                    case player.knockedOutAt of
+                        Just knockedOutAt ->
+                            [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out")
+                            , Ui.text ("Back in " ++ secondsUntil state.frame (knockedOutAt + TetrominoSim.respawnDelay) ++ ". " ++ snowmenLeft)
+                            ]
 
-
-statusParts : Id UserId -> String -> TetrominoSim.MatchState -> List (Element GameMsg)
-statusParts currentUserId roundInfo state =
-    case SeqDict.get currentUserId state.players of
-        Just player ->
-            case player.knockedOutAt of
-                Just _ ->
-                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You were knocked out")
-                    , Ui.text roundInfo
-                    ]
+                        Nothing ->
+                            [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text snowmenLeft)
+                            , Ui.text "Snowmen come after you once you get close. Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down. Grab the gold pickups for more pieces."
+                            ]
 
                 Nothing ->
-                    [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text roundInfo)
-                    , Ui.text "Keep the snowmen away from the crystal. Right click to move, left click to drop, Q turns the piece, E stands it up or lays it down. Grab the gold pickups for more pieces."
+                    [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
+                    , Ui.text snowmenLeft
                     ]
-
-        Nothing ->
-            if SeqSet.member currentUserId state.waitingPlayers then
-                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "You're in the next round")
-                , Ui.text roundInfo
-                ]
-
-            else
-                [ MyUi.simpleButton (Dom.id "tetrominoGame_join") PressedJoin (Ui.text "Join the match")
-                , Ui.text roundInfo
-                ]
+        )
 
 
 secondsUntil : Int -> Int -> String
@@ -1089,6 +1060,6 @@ setupView windowSize _ =
         [ Ui.spacing 16, Ui.padding 16 ]
         [ Ui.Prose.paragraph
             [ Ui.Font.size 14 ]
-            [ Ui.text "Drop tetrominoes to build walls that keep the snowmen away from the crystal in the middle, and away from you. Three snowmen reaching the crystal destroy it, and so does one giant. One hit knocks you out until the next round. Anyone in the channel can join." ]
+            [ Ui.text "Drop tetrominoes to squash the snowmen wandering the map and to wall them off. They come after you once you get close, and one hit knocks you out for a few seconds. Anyone in the channel can join." ]
         , Go.startOrCancel "tetrominoGame" (MyUi.isMobileAlt windowSize) PressedCancel PressedStartGame
         ]

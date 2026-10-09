@@ -66,8 +66,8 @@ twoPlayerMatchTest normalConfig =
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "tetrominoGame_join" ])
 
-                        -- Early in the round, before any NPCs show up, the admin walks somewhere and
-                        -- drops the first piece in their queue.
+                        -- While the NPCs are still out at the edge of the map, the admin walks somewhere
+                        -- and drops the first piece in their queue.
                         , admin.custom 5000 TetrominoGame.canvasId "mousedown" (mouseEvent 2 ( 300, 300 ))
                         , admin.custom 400 TetrominoGame.canvasId "mousedown" (mouseEvent 0 ( 800, 150 ))
                         , T.checkState
@@ -87,7 +87,7 @@ twoPlayerMatchTest normalConfig =
                                         Ok ()
 
                                     else
-                                        Err "Expected both players to be in the round and the admin's piece to have landed"
+                                        Err "Expected both players to be in the match and the admin's piece to have landed"
                                 )
                             )
 

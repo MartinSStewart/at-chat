@@ -10,7 +10,6 @@ import Id exposing (ChannelMessageId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import SeqDict
-import SeqSet
 import Tetromino exposing (Shape)
 import TetrominoSim exposing (MatchState, NpcKind(..), Point)
 
@@ -125,13 +124,6 @@ encodeState userId state =
         , ( "framesPerSecond", Json.Encode.int TetrominoSim.framesPerSecond )
         , ( "gridSize", Json.Encode.int TetrominoSim.gridSize )
         , ( "snowballGravity", Json.Encode.float TetrominoSim.snowballGravity )
-        , ( "round"
-          , Json.Encode.object
-                [ ( "number", Json.Encode.int state.round.number )
-                , ( "startedAt", Json.Encode.int state.round.startedAt )
-                , ( "nextRoundAt", maybe Json.Encode.int state.round.nextRoundAt )
-                ]
-          )
         , ( "me"
           , case SeqDict.get userId state.players of
                 Just player ->
@@ -140,6 +132,7 @@ encodeState userId state =
                         , ( "y", Json.Encode.float player.position.y )
                         , ( "z", Json.Encode.float player.position.z )
                         , ( "knockedOut", Json.Encode.bool (player.knockedOutAt /= Nothing) )
+                        , ( "backAt", maybe (\frame -> Json.Encode.int (frame + TetrominoSim.respawnDelay)) player.knockedOutAt )
                         , ( "target", maybe (\( x, y ) -> Json.Encode.list Json.Encode.int [ x, y ]) player.target )
                         , ( "piecesLeft", Json.Encode.int player.piecesLeft )
                         , ( "canDrop", Json.Encode.bool (TetrominoSim.canDrop state.frame player) )
@@ -156,7 +149,6 @@ encodeState userId state =
                 Nothing ->
                     Json.Encode.null
           )
-        , ( "waiting", Json.Encode.bool (SeqSet.member userId state.waitingPlayers) )
         , ( "players"
           , Json.Encode.list
                 (\( otherId, player ) ->
