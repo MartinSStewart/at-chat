@@ -107,7 +107,7 @@ viewProjection width height { focus, zoom } =
         -- Half the height of what's in view at the focus.
         halfHeight : Float
         halfHeight =
-            5.5 * zoom
+            8.5 * zoom
     in
     Mat4.mul
         (Mat4.makePerspective (2 * atan (halfHeight / distance) * 180 / pi) aspect 1 1000)

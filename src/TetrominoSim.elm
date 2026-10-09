@@ -306,7 +306,7 @@ maxFallSpeed =
 
 playerSpeed : Float
 playerSpeed =
-    3
+    2
 
 
 throwerSpeed : Float
