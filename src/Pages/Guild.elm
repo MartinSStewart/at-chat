@@ -4229,6 +4229,17 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     channels
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
+                                            ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
+                                                Ui.Lazy.lazy6
+                                                    messageViewNotThreadStarterWithReply
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                    revealedSpoilers
+                                                    local.localUser
+                                                    (encodeMessageIndex index replyMessageIndex)
+                                                    message
+                                                    repliedToMessage
+                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
                                             _ ->
                                                 messageView
                                                     model.time
@@ -7375,6 +7386,41 @@ messageViewNotThreadStarterWithChannelMention data revealedSpoilers localUser me
         channels
         localUser
         Nothing
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
+messageViewNotThreadStarterWithReply :
+    Int
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> LocalUser
+    -> Int
+    -> Message ChannelMessageId (Id UserId) (Id ChannelId)
+    -> Message ChannelMessageId (Id UserId) (Id ChannelId)
+    -> Element MessageViewMsg
+messageViewNotThreadStarterWithReply data revealedSpoilers localUser messageIndexAndReplyMessageIndex message replyMessage =
+    let
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+
+        { messageIndex, replyMessageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
+    in
+    messageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        isEditing
+        localUser.session.userId
+        (User.allUsers localUser)
+        SeqDict.empty
+        localUser
+        (Just (RepliedToView_Message (Id.fromInt replyMessageIndex) replyMessage))
         Nothing
         (Id.fromInt messageIndex)
         message
