@@ -40,6 +40,7 @@ import LocalState
 import LoginForm
 import MembersAndOwner
 import Message
+import MessageArray
 import MessageMenu
 import MuteSettings
 import NonemptyDict
@@ -713,6 +714,121 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Scrolling up and down a long channel keeps at most 90 messages loaded"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    message : Int -> String
+                    message index =
+                        "Message " ++ String.fromInt index
+
+                    has : List Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    has indices =
+                        admin.checkView 100 (Test.Html.Query.has (List.map (message >> Test.Html.Selector.exactText) indices))
+
+                    hasNot : List Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    hasNot indices =
+                        List.map
+                            (\index -> admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText (message index) ]))
+                            indices
+                            |> T.group
+
+                    -- Besides the visible messages, the newest message and anything the visible
+                    -- messages reply to stay loaded, and there are no replies here
+                    checkLoadedCount : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    checkLoadedCount =
+                        admin.checkModel
+                            100
+                            (\model ->
+                                case Audio.userModel model of
+                                    Types.Loaded loaded ->
+                                        case loaded.loginStatus of
+                                            Types.LoggedIn loggedIn ->
+                                                case
+                                                    (Local.model loggedIn.localState).guilds
+                                                        |> SeqDict.values
+                                                        |> List.concatMap (\guild -> SeqDict.values guild.channels)
+                                                        |> List.map (\channel -> List.length (MessageArray.toList channel.messages))
+                                                        |> List.maximum
+                                                of
+                                                    Just count ->
+                                                        if count <= VisibleMessages.maxCount + 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err (String.fromInt count ++ " messages are loaded in a channel")
+
+                                                    Nothing ->
+                                                        Err "No channels"
+
+                                            Types.NotLoggedIn _ ->
+                                                Err "Not logged in"
+
+                                    Types.Loading _ ->
+                                        Err "Still loading"
+                            )
+                in
+                [ -- Slow enough to stay under the rate limit
+                  List.range 1 120 |> List.map (\index -> E2EHelper.writeMessage admin 1000 (message index)) |> T.group
+
+                -- Sitting at the bottom while messages arrive pushes the oldest out
+                , has [ 31, 120 ]
+                , hasNot [ 30 ]
+                , checkLoadedCount
+
+                -- Scrolling up loads older messages and unloads the newest
+                , E2EHelper.scrollToTop admin
+                , has [ 1, 90 ]
+                , hasNot [ 91, 120 ]
+                , checkLoadedCount
+
+                -- Scrolling down loads them back and unloads the oldest
+                , E2EHelper.scrollToBottom admin
+                , has [ 31, 120 ]
+                , hasNot [ 30 ]
+                , checkLoadedCount
+
+                -- A message from someone else while scrolled up can't be shown, and pressing
+                -- the warning goes back to the newest messages
+                , E2EHelper.scrollToMiddle admin
+                , E2EHelper.scrollToTop admin
+                , has [ 1 ]
+                , hasNot [ 120 ]
+                , E2EHelper.writeMessage user 100 (message 121)
+                , hasNot [ 121 ]
+                , hasNot [ 121 ]
+                , admin.click 100 Pages.Guild.newMessagesId
+                , has [ 92, 121 ]
+                , hasNot [ 91 ]
+                , checkLoadedCount
+
+                -- Sending a message while scrolled up goes back to the newest messages too. That
+                -- only had the newest page loaded, so it takes three pages to get 121 out of view.
+                , List.repeat 3 (T.group [ E2EHelper.scrollToMiddle admin, E2EHelper.scrollToTop admin ]) |> T.group
+                , has [ 2, 91 ]
+                , hasNot [ 1, 92, 121 ]
+                , E2EHelper.writeMessage admin 100 (message 122)
+                , has [ 93, 122 ]
+                , checkLoadedCount
+
+                -- So does coming back to the channel after leaving it scrolled up
+                , List.repeat 3 (T.group [ E2EHelper.scrollToMiddle admin, E2EHelper.scrollToTop admin ]) |> T.group
+                , hasNot [ 122 ]
+                , E2EHelper.openDm admin 100 "2"
+                , admin.click 100 (Dom.id "guild_openGuild_1")
+
+                -- The newest page carries on from where the conversation was left, so that's
+                -- added on rather than replacing it
+                , has [ 33, 122 ]
+                , hasNot [ 32 ]
+                , checkLoadedCount
                 ]
             )
         ]

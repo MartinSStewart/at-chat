@@ -17,6 +17,7 @@ type Op
     = Set Int Int
     | Update Int
     | Push Int
+    | UnloadOutside Int Int
 
 
 opFuzzer : Fuzzer Op
@@ -25,6 +26,7 @@ opFuzzer =
         [ Fuzz.map2 Set (Fuzz.intRange -2 30) (Fuzz.intRange 0 999)
         , Fuzz.map Update (Fuzz.intRange -2 30)
         , Fuzz.map Push (Fuzz.intRange 0 999)
+        , Fuzz.map2 UnloadOutside (Fuzz.intRange -2 32) (Fuzz.intRange -2 32)
         ]
 
 
@@ -48,6 +50,26 @@ applyToReference op array =
 
         Push value ->
             Array.push (Just value) array
+
+        UnloadOutside start end ->
+            let
+                start2 : Int
+                start2 =
+                    clamp 0 (Array.length array) start
+
+                end2 : Int
+                end2 =
+                    clamp start2 (Array.length array) end
+            in
+            Array.indexedMap
+                (\index maybe ->
+                    if index >= start2 && index < end2 then
+                        maybe
+
+                    else
+                        Nothing
+                )
+                array
 
 
 {-| A `MessageArray` only holds messages, so the Int the reference model works in is
@@ -79,6 +101,9 @@ applyToMessageArray op array =
 
         Push value ->
             MessageArray.push (message value) array
+
+        UnloadOutside start end ->
+            MessageArray.unloadOutside (Id.fromInt start) (Id.fromInt end) array
 
 
 {-| Turns a `MessageArray` back into the naive representation so the two can be

@@ -15,9 +15,9 @@ module DmChannel exposing
     , latestMessageId
     , latestThreadMessageId
     , loadChannelMessages
+    , loadChannelPage
     , loadMessages
-    , loadOlderChannelMessages
-    , loadOlderMessages
+    , loadPage
     , loadRepliedToMatch
     , loadUnreadMessages
     , loadedMessages
@@ -45,7 +45,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
-import VisibleMessages exposing (VisibleMessages)
+import VisibleMessages exposing (PageRequest(..), VisibleMessages)
 
 
 type alias BackendDmChannel =
@@ -317,39 +317,64 @@ loadThreadStarters threads backendMessages messages =
         |> (\threadStarters -> MessageArray.setMany threadStarters messages)
 
 
-loadOlderMessages :
-    Id messageId
+loadPage :
+    List (Id messageId)
+    -> PageRequest messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId channelId))
     -> { a | messages : MessageArray messageId userId channelId, visibleMessages : VisibleMessages messageId }
     -> { a | messages : MessageArray messageId userId channelId, visibleMessages : VisibleMessages messageId }
-loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
+loadPage keep pageRequest messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
-            { channel
-                | messages =
+            let
+                messages : MessageArray messageId userId channelId
+                messages =
                     MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
-                , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
+            in
+            { channel
+                | messages = messages
+                , visibleMessages =
+                    case pageRequest of
+                        PageBefore previousOldestVisibleMessage ->
+                            VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
+
+                        PageFrom firstNewMessage ->
+                            VisibleMessages.loadNewer (MessageArray.length messages) firstNewMessage channel.visibleMessages
             }
+                |> VisibleMessages.unloadHidden keep
 
         EmptyPlaceholder ->
             { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
 
 
-loadOlderChannelMessages :
-    Id ChannelMessageId
+loadChannelPage :
+    PageRequest ChannelMessageId
     -> ToBeFilledInByBackend LoadedMessages
-    -> { a | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
-    -> { a | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
-loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded channel =
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , visibleMessages : VisibleMessages ChannelMessageId
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+            , threads : SeqDict (Id ChannelMessageId) thread
+        }
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , visibleMessages : VisibleMessages ChannelMessageId
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
+            , threads : SeqDict (Id ChannelMessageId) thread
+        }
+loadChannelPage pageRequest messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
-            loadOlderMessages
-                previousOldestVisibleMessage
+            loadPage
+                (SeqDict.keys channel.threads)
+                pageRequest
                 (FilledInByBackend messagesLoaded2.messages)
                 { channel | games = addRepliedToMatches messagesLoaded2.repliedToMatches channel.games }
 
         EmptyPlaceholder ->
-            loadOlderMessages previousOldestVisibleMessage EmptyPlaceholder channel
+            loadPage [] pageRequest EmptyPlaceholder channel
 
 
 addRepliedToMatches :
@@ -391,7 +416,7 @@ loadMessages messagesLoaded channel =
                         VisibleMessages.firstLoad (MessageArray.length channel.messages)
 
                     else
-                        channel.visibleMessages
+                        VisibleMessages.doneLoading channel.visibleMessages
             }
 
         EmptyPlaceholder ->

@@ -19,7 +19,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji
 import Discord
-import DmChannel exposing (FrontendDmChannel)
+import DmChannel
 import DmChannelId
 import Drawing
 import Duration exposing (Duration, Seconds)
@@ -92,7 +92,6 @@ import Sticker
 import String.Extra
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
-import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication
@@ -108,6 +107,7 @@ import UserColor
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..), UserOptionSection(..))
 import Vector2d
+import VisibleMessages exposing (PageRequest(..), VisibleMessages)
 import WordSpellingGame
 import X25519
 
@@ -1967,13 +1967,29 @@ updateLoaded msg model =
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+
+                        loadNewer : ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+                        loadNewer =
+                            case loadNewerMessages guildOrDmId threadRoute local of
+                                Just localChange ->
+                                    -- Not ScrolledToBottom, since the bottom of what's loaded
+                                    -- isn't the bottom of the conversation
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Just localChange)
+                                        { loggedIn | channelScrollPosition = ScrolledCloseToBottom }
+                                        Command.none
+
+                                Nothing ->
+                                    -- Already loading
+                                    ( loggedIn, Command.none )
+                    in
                     case scrollPosition of
                         ScrolledToTop ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (loadOlderMessages guildOrDmId threadRoute local)
@@ -1981,11 +1997,22 @@ updateLoaded msg model =
                                 Command.none
 
                         ScrolledToBottom ->
-                            -- Scrolling to the bottom yourself means you've seen the messages
-                            -- that arrived while the conversation stayed where it was
-                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrolledToBottom = 0 }
-                            , Command.none
-                            )
+                            if FrontendExtra.isShowingNewestMessages guildOrDmId threadRoute local then
+                                -- Scrolling to the bottom yourself means you've seen the messages
+                                -- that arrived while the conversation stayed where it was
+                                ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrolledToBottom = 0 }
+                                , Command.none
+                                )
+
+                            else
+                                loadNewer
+
+                        ScrolledCloseToBottom ->
+                            if FrontendExtra.isShowingNewestMessages guildOrDmId threadRoute local then
+                                ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
+
+                            else
+                                loadNewer
 
                         ScrolledToMiddle ->
                             ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
@@ -4779,7 +4806,7 @@ updateLoaded msg model =
                                         ( loggedIn, Command.none )
 
                                     else
-                                        case FrontendExtra.encryptedDmOtherUser guildOrDmId local loggedIn of
+                                        (case FrontendExtra.encryptedDmOtherUser guildOrDmId local loggedIn of
                                             Just dmId ->
                                                 startEncryptingMessage
                                                     dmId
@@ -4867,6 +4894,16 @@ updateLoaded msg model =
                                                      else
                                                         Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
                                                     )
+                                        )
+                                            |> (\( loggedIn2, cmd ) ->
+                                                    -- The message just sent goes in after the newest message, so
+                                                    -- it's only visible once the newest messages are
+                                                    let
+                                                        ( loggedIn3, jumpCmd ) =
+                                                            FrontendExtra.jumpToNewest model.time guildOrDmId threadRoute loggedIn2
+                                                    in
+                                                    ( loggedIn3, Command.batch [ cmd, jumpCmd ] )
+                                               )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -5702,15 +5739,31 @@ updateLoaded msg model =
         PressedNewMessagesWarning ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | newMessagesWhileNotScrolledToBottom = 0
+                    let
+                        loggedIn2 : LoggedIn2
+                        loggedIn2 =
+                            { loggedIn
+                                | newMessagesWhileNotScrolledToBottom = 0
 
-                        -- The conversation scrolls away from the anchor the user picked
-                        -- so there's nothing left to draw on
-                        , drawingMode = Drawing.NoSelectedAnchor
-                        , channelScrollPosition = ScrolledToBottom
-                      }
-                    , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                -- The conversation scrolls away from the anchor the user picked
+                                -- so there's nothing left to draw on
+                                , drawingMode = Drawing.NoSelectedAnchor
+                                , channelScrollPosition = ScrolledToBottom
+                            }
+
+                        ( loggedIn3, jumpCmd ) =
+                            case Route.toGuildOrDmId (Local.model loggedIn2.localState).localUser.session.userId model.route of
+                                Just ( guildOrDmId, threadRoute ) ->
+                                    FrontendExtra.jumpToNewest model.time guildOrDmId threadRoute loggedIn2
+
+                                Nothing ->
+                                    ( loggedIn2, Command.none )
+                    in
+                    ( loggedIn3
+                    , Command.batch
+                        [ Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                        , jumpCmd
+                        ]
                     )
                 )
                 model
@@ -6701,104 +6754,71 @@ removePartialStickers textInputFocus htmlId text =
 loadOlderMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
 loadOlderMessages guildOrDmId threadRoute local =
     let
-        messagesLeft channel localChange =
-            if Id.toInt channel.visibleMessages.oldest > 0 then
+        messagesLeft : VisibleMessages messageId -> LocalChange -> Maybe LocalChange
+        messagesLeft visibleMessages localChange =
+            if Id.toInt visibleMessages.oldest > 0 then
                 Just localChange
 
             else
                 Nothing
     in
-    case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
-            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        NoThread ->
-                            Local_LoadChannelMessages
-                                (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
-                                channel.visibleMessages.oldest
-                                EmptyPlaceholder
-                                |> messagesLeft channel
+    case FrontendExtra.conversationWindow guildOrDmId threadRoute local of
+        Just (FrontendExtra.ChannelWindow guildOrDmId2 visibleMessages _) ->
+            Local_LoadChannelMessages guildOrDmId2 (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
 
-                        ViewThread threadId ->
-                            let
-                                thread =
-                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
-                            in
-                            Local_LoadThreadMessages
-                                (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
-                                threadId
-                                thread.visibleMessages.oldest
-                                EmptyPlaceholder
-                                |> messagesLeft thread
+        Just (FrontendExtra.ThreadWindow guildOrDmId2 threadId visibleMessages _) ->
+            Local_LoadThreadMessages guildOrDmId2 threadId (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
 
-                Nothing ->
-                    Nothing
+        Just (FrontendExtra.DiscordChannelWindow guildOrDmId2 visibleMessages _) ->
+            Local_Discord_LoadChannelMessages guildOrDmId2 (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
 
-        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
-            let
-                dmChannel : FrontendDmChannel
-                dmChannel =
-                    SeqDict.get otherUserId local.dmChannels
-                        |> Maybe.withDefault DmChannel.frontendInit
-            in
-            case threadRoute of
-                NoThread ->
-                    Local_LoadChannelMessages
-                        (GuildOrDmId_Dm { otherUserId = otherUserId })
-                        dmChannel.visibleMessages.oldest
-                        EmptyPlaceholder
-                        |> messagesLeft dmChannel
+        Just (FrontendExtra.DiscordThreadWindow guildOrDmId2 threadId visibleMessages _) ->
+            Local_Discord_LoadThreadMessages guildOrDmId2 threadId (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
 
-                ViewThread threadId ->
-                    let
-                        thread =
-                            SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
-                    in
-                    Local_LoadThreadMessages
-                        (GuildOrDmId_Dm { otherUserId = otherUserId })
-                        threadId
-                        thread.visibleMessages.oldest
-                        EmptyPlaceholder
-                        |> messagesLeft thread
+        Nothing ->
+            Nothing
 
-        DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild { guildId, channelId }) as guildOrDmId2) ->
-            case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        NoThread ->
-                            Local_Discord_LoadChannelMessages
-                                guildOrDmId2
-                                channel.visibleMessages.oldest
-                                EmptyPlaceholder
-                                |> messagesLeft channel
 
-                        ViewThread threadId ->
-                            let
-                                thread =
-                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordFrontendInit
-                            in
-                            Local_Discord_LoadThreadMessages
-                                guildOrDmId2
-                                threadId
-                                thread.visibleMessages.oldest
-                                EmptyPlaceholder
-                                |> messagesLeft thread
+{-| Loads the page after the newest visible message, when older messages are being looked at.
+-}
+loadNewerMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
+loadNewerMessages guildOrDmId threadRoute local =
+    let
+        messagesLeft : VisibleMessages messageId -> Int -> LocalChange -> Maybe LocalChange
+        messagesLeft visibleMessages messageCount localChange =
+            if VisibleMessages.reachesEnd messageCount visibleMessages || visibleMessages.loadingMessages then
+                Nothing
 
-                Nothing ->
-                    Nothing
+            else
+                Just localChange
 
-        DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm data) as guildOrDmId2) ->
-            case SeqDict.get data.channelId local.discordDmChannels of
-                Just dmChannel ->
-                    Local_Discord_LoadChannelMessages
-                        guildOrDmId2
-                        dmChannel.visibleMessages.oldest
-                        EmptyPlaceholder
-                        |> messagesLeft dmChannel
+        firstNewMessage : VisibleMessages messageId -> PageRequest messageId
+        firstNewMessage visibleMessages =
+            Id.toInt visibleMessages.oldest + visibleMessages.count |> Id.fromInt |> PageFrom
+    in
+    case FrontendExtra.conversationWindow guildOrDmId threadRoute local of
+        Just (FrontendExtra.ChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_LoadChannelMessages guildOrDmId2 (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
 
-                Nothing ->
-                    Nothing
+        Just (FrontendExtra.ThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_LoadThreadMessages guildOrDmId2 threadId (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Just (FrontendExtra.DiscordChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_Discord_LoadChannelMessages guildOrDmId2 (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Just (FrontendExtra.DiscordThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_Discord_LoadThreadMessages guildOrDmId2 threadId (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Nothing ->
+            Nothing
 
 
 pageUpOrDownScroll : Bool -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg FrontendMsg_ )
@@ -8682,41 +8702,33 @@ updateLoadedFromBackend msg model =
                                     ViewOverview _ ->
                                         Command.none
 
-                            Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            Local_LoadChannelMessages _ pageRequest (FilledInByBackend messagesLoaded) ->
                                 if SeqDict.isEmpty messagesLoaded.messages then
                                     Command.none
 
                                 else
-                                    Ports.shiftScrollByElementDelta
-                                        Pages.Guild.conversationContainerId
-                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+                                    pageLoadedScroll Pages.Guild.channelMessageHtmlId pageRequest loggedIn.channelScrollPosition
 
-                            Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            Local_LoadThreadMessages _ _ pageRequest (FilledInByBackend messagesLoaded) ->
                                 if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
                                 else
-                                    Ports.shiftScrollByElementDelta
-                                        Pages.Guild.conversationContainerId
-                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+                                    pageLoadedScroll Pages.Guild.threadMessageHtmlId pageRequest loggedIn.channelScrollPosition
 
-                            Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            Local_Discord_LoadChannelMessages _ pageRequest (FilledInByBackend messagesLoaded) ->
                                 if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
                                 else
-                                    Ports.shiftScrollByElementDelta
-                                        Pages.Guild.conversationContainerId
-                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+                                    pageLoadedScroll Pages.Guild.channelMessageHtmlId pageRequest loggedIn.channelScrollPosition
 
-                            Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            Local_Discord_LoadThreadMessages _ _ pageRequest (FilledInByBackend messagesLoaded) ->
                                 if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
                                 else
-                                    Ports.shiftScrollByElementDelta
-                                        Pages.Guild.conversationContainerId
-                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+                                    pageLoadedScroll Pages.Guild.threadMessageHtmlId pageRequest loggedIn.channelScrollPosition
 
                             _ ->
                                 Command.none
@@ -8875,6 +8887,12 @@ updateLoadedFromBackend msg model =
                                                             else
                                                                 Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
+                                                          else if isViewingConversation then
+                                                            FrontendExtra.holdScrollOnNewMessage
+                                                                (DiscordGuildOrDmId guildOrDmId)
+                                                                (Id.threadRouteWithoutMaybeMessage maybeRepliedTo)
+                                                                local
+
                                                           else
                                                             Command.none
                                                         ]
@@ -8887,6 +8905,9 @@ updateLoadedFromBackend msg model =
                                                         case loggedIn2.channelScrollPosition of
                                                             ScrolledToBottom ->
                                                                 ScrolledToMiddle
+
+                                                            ScrolledCloseToBottom ->
+                                                                loggedIn2.channelScrollPosition
 
                                                             ScrolledToTop ->
                                                                 loggedIn2.channelScrollPosition
@@ -10386,6 +10407,38 @@ encryptConversation ( requestId, conversation ) =
         (List.map Tuple.second conversation.messages)
 
 
+{-| Keeps what the user is looking at in place after a page of messages arrives. Older messages
+go in above it, and newer messages push the oldest ones out from above it. A page that jumped to
+the newest messages has nothing left in place to hold on to, so that scrolls to the bottom.
+-}
+pageLoadedScroll : (Id messageId -> HtmlId) -> PageRequest messageId -> ScrollPosition -> Command FrontendOnly ToBackend FrontendMsg_
+pageLoadedScroll toHtmlId pageRequest scrollPosition =
+    case pageRequest of
+        PageBefore previousOldestVisibleMessage ->
+            Ports.shiftScrollByElementDelta Pages.Guild.conversationContainerId (toHtmlId previousOldestVisibleMessage)
+
+        PageFrom firstNewMessage ->
+            Command.batch
+                [ Ports.shiftScrollByElementDelta
+                    Pages.Guild.conversationContainerId
+                    (Id.toInt firstNewMessage - 1 |> Id.fromInt |> toHtmlId)
+                , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom scrollPosition
+                ]
+
+
+{-| Encrypted messages take up no space until they're decrypted. Older ones go in above what the
+user is looking at so that has to be held in place, while newer ones go in below it.
+-}
+shiftScrollAfterDecrypting : (Id messageId -> HtmlId) -> PageRequest messageId -> Maybe HtmlId
+shiftScrollAfterDecrypting toHtmlId pageRequest =
+    case pageRequest of
+        PageBefore previousOldestVisibleMessage ->
+            Just (toHtmlId previousOldestVisibleMessage)
+
+        PageFrom _ ->
+            Nothing
+
+
 type alias LoadedEncryptedMessages =
     { id : Viewing_DmId
     , messages : List (Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
@@ -10396,16 +10449,16 @@ type alias LoadedEncryptedMessages =
 encryptedMessagesJustLoaded : LocalChange -> Maybe LoadedEncryptedMessages
 encryptedMessagesJustLoaded localChange =
     case localChange of
-        Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+        Local_LoadChannelMessages guildOrDmId pageRequest (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
                 guildOrDmId
-                (Just (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage))
+                (shiftScrollAfterDecrypting Pages.Guild.channelMessageHtmlId pageRequest)
                 (SeqDict.values messagesLoaded.messages)
 
-        Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+        Local_LoadThreadMessages guildOrDmId _ pageRequest (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
                 guildOrDmId
-                (Just (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage))
+                (shiftScrollAfterDecrypting Pages.Guild.threadMessageHtmlId pageRequest)
                 (SeqDict.values messagesLoaded)
 
         Local_CurrentlyViewing _ (ViewDm data (FilledInByBackend messagesLoaded)) ->

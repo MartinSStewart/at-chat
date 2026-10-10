@@ -14,6 +14,7 @@ module MessageArray exposing
     , setMany
     , slice
     , toList
+    , unloadOutside
     , updateIfExists
     )
 
@@ -266,6 +267,18 @@ slice startId endId (MessageArray array) =
                     array.runs
                     |> Array.map (clipRun start end)
             }
+
+
+{-| Unloads every index outside of `[start, end)`. Unlike `slice` the array keeps spanning
+the same indices, so it's the same array with fewer of its messages loaded.
+-}
+unloadOutside : Id k -> Id k -> MessageArray k v c -> MessageArray k v c
+unloadOutside startId endId (MessageArray array) =
+    let
+        (MessageArray sliced) =
+            slice startId endId (MessageArray array)
+    in
+    MessageArray { array | runs = sliced.runs }
 
 
 {-| Folds over every index in the array, starting at the last one. Indices that

@@ -191,6 +191,7 @@ import User
 import UserAgent
 import UserColor
 import UserSession exposing (NotificationMode(..), ToBeFilledInByBackend(..))
+import VisibleMessages exposing (PageRequest(..))
 import WordSpellingGame
 import X25519
 
@@ -3112,10 +3113,10 @@ allAttackerLocalChanges =
     , Local_DeleteGuild legitGuildId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
     , Local_DeleteMessage guildOrDmId_guild threadRouteWithMessage
-    , Local_Discord_LoadChannelMessages discordGuildOrDmId_guild (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId_guild (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Discord_SendEditDmMessage messageTime Time.utc discordDmData (Id.fromInt 0) normalText
     , Local_Discord_SendEditGuildMessage messageTime Time.utc discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
@@ -3126,12 +3127,12 @@ allAttackerLocalChanges =
     , Local_Invalid
     , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
-    , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) EmptyPlaceholder
-    , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
     , Local_MemberTyping messageTime ( guildOrDmId_dm, NoThread )
-    , Local_LoadChannelMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (Id.fromInt 0) EmptyPlaceholder
-    , Local_LoadThreadMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadChannelMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_guild threadRouteWithMessage
     , Local_MemberTyping messageTime ( guildOrDmId_guild, NoThread )
     , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
@@ -3360,9 +3361,9 @@ attackerPrivateDiscordChannelChanges =
             DiscordGuildOrDmId (asUser discordUserId)
     in
     [ -- Read attempts (as the attacker, and impersonating the admin).
-      Local_Discord_LoadChannelMessages (asUser attackerDiscordUserId) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadChannelMessages (asUser adminDiscordUserId) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadThreadMessages (asUser attackerDiscordUserId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+      Local_Discord_LoadChannelMessages (asUser attackerDiscordUserId) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages (asUser adminDiscordUserId) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages (asUser attackerDiscordUserId) (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_SetLastViewed (anyAsUser attackerDiscordUserId) threadRouteWithMessage
 
     -- Write/modify attempts.

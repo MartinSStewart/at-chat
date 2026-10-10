@@ -23,12 +23,18 @@ import Ports
 
 type ScrollPosition
     = ScrolledToBottom
+    | ScrolledCloseToBottom
     | ScrolledToTop
     | ScrolledToMiddle
 
 
 closeToTop : number
 closeToTop =
+    300
+
+
+closeToBottom : number
+closeToBottom =
     300
 
 
@@ -41,6 +47,9 @@ decodeScrollToBottom onScroll currentScrollPosition =
 
             else if scrollTop <= closeToTop then
                 ScrolledToTop
+
+            else if scrollTop + clientHeight >= scrollHeight - closeToBottom then
+                ScrolledCloseToBottom
 
             else
                 ScrolledToMiddle
@@ -195,6 +204,9 @@ toBottomOfChannelIfAtBottom conversationContainerId setScrollToBottom position =
     case position of
         ScrolledToBottom ->
             toBottomOfChannel conversationContainerId setScrollToBottom
+
+        ScrolledCloseToBottom ->
+            Command.none
 
         ScrolledToTop ->
             Command.none
