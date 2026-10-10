@@ -82,6 +82,12 @@ if [ ! -d node_modules/webdriverio ]; then
   npm install
 fi
 
+# Run lamdera's own executable rather than the node_modules/.bin/lamdera shim.
+# pnpm writes that shim while bin/lamdera is still the package's node stub, as
+# `exec node bin/lamdera`, and keeps feeding it to node after the stub has
+# swapped itself for the real executable.
+lamdera_bin="$repo_root/node_modules/lamdera/bin/lamdera"
+
 # render_snapshots <repo-dir> <output-dir>
 # Compiles the harness inside <repo-dir> and renders all snapshots into the
 # absolute <output-dir>.
@@ -91,7 +97,9 @@ render_snapshots() {
   safe_rmrf "$out"
   (
     cd "$repo_dir"
-    if command -v lamdera >/dev/null 2>&1; then
+    if [ -x "$lamdera_bin" ]; then
+      LDEBUG=1 "$lamdera_bin" make visual-testing/src/SnapshotHarness.elm --output=visual-testing/snapshot-harnessed-app.js
+    elif command -v lamdera >/dev/null 2>&1; then
       LDEBUG=1 lamdera make visual-testing/src/SnapshotHarness.elm --output=visual-testing/snapshot-harnessed-app.js
     else
       LDEBUG=1 npx --yes lamdera make visual-testing/src/SnapshotHarness.elm --output=visual-testing/snapshot-harnessed-app.js

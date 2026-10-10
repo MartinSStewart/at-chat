@@ -60,7 +60,11 @@ fi
 echo "🔨 Compiling snapshot viewer..."
 (
   cd "$repo_root"
-  if command -v lamdera >/dev/null 2>&1; then
+  # The executable itself, not the node_modules/.bin shim, which pnpm can leave
+  # running it through node. See run-snapshot-test.sh.
+  if [ -x node_modules/lamdera/bin/lamdera ]; then
+    node_modules/lamdera/bin/lamdera make visual-testing/src/SnapshotViewer.elm --output=visual-testing/dist/snapshot-viewer.js
+  elif command -v lamdera >/dev/null 2>&1; then
     lamdera make visual-testing/src/SnapshotViewer.elm --output=visual-testing/dist/snapshot-viewer.js
   else
     npx --yes lamdera make visual-testing/src/SnapshotViewer.elm --output=visual-testing/dist/snapshot-viewer.js
