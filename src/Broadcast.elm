@@ -1817,6 +1817,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                         , gameType = gameType
                         , timestampDrawings = Drawing.emptyDrawing
                         , cardDrawings = Drawing.emptyDrawing
+                        , userIconDrawings = Drawing.emptyDrawing
                         }
                     )
                     (DmRoute
@@ -1986,6 +1987,7 @@ gameStartedGuildNotification time sender id gameType members model =
                 , gameType = gameType
                 , timestampDrawings = Drawing.emptyDrawing
                 , cardDrawings = Drawing.emptyDrawing
+                , userIconDrawings = Drawing.emptyDrawing
                 }
     in
     SeqSet.fromList members

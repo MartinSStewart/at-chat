@@ -7787,8 +7787,15 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 decrypted
                 isHovered
                 (Ui.row
-                    [ Ui.contentTop, Ui.paddingLeft profileImageColumnWidth ]
-                    [ callStartedCard
+                    [ Ui.contentTop ]
+                    [ User.profileImage (SeqDict.get callStartedData.startedBy allUsers)
+                        |> profileImageView
+                            (User.userColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            callStartedData.userIconDrawings
+                            (MessageView_PressedUserIconButton callStartedData.startedBy)
+                    , callStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7829,8 +7836,15 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 decrypted
                 isHovered
                 (Ui.row
-                    [ Ui.contentTop, Ui.paddingLeft profileImageColumnWidth ]
-                    [ goMatchStartedCard
+                    [ Ui.contentTop ]
+                    [ User.profileImage (SeqDict.get gameStarted.startedBy allUsers)
+                        |> profileImageView
+                            (User.userColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            gameStarted.userIconDrawings
+                            (MessageView_PressedUserIconButton gameStarted.startedBy)
+                    , goMatchStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8033,8 +8047,17 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 SeqDict.empty
                 isHovered
                 (Ui.row
-                    [ Ui.contentTop, Ui.paddingLeft profileImageColumnWidth ]
-                    [ callStartedCard
+                    [ Ui.contentTop ]
+                    [ User.discordProfileImage
+                        callStartedData.startedBy
+                        (SeqDict.get callStartedData.startedBy allUsers |> Maybe.andThen .icon)
+                        |> profileImageView
+                            (User.discordUserColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            callStartedData.userIconDrawings
+                            (MessageView_PressedDiscordUserIconButton callStartedData.startedBy)
+                    , callStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8075,8 +8098,17 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 SeqDict.empty
                 isHovered
                 (Ui.row
-                    [ Ui.contentTop, Ui.paddingLeft profileImageColumnWidth ]
-                    [ goMatchStartedCard
+                    [ Ui.contentTop ]
+                    [ User.discordProfileImage
+                        gameStarted.startedBy
+                        (SeqDict.get gameStarted.startedBy allUsers |> Maybe.andThen .icon)
+                        |> profileImageView
+                            (User.discordUserColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            gameStarted.userIconDrawings
+                            (MessageView_PressedDiscordUserIconButton gameStarted.startedBy)
+                    , goMatchStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8266,8 +8298,15 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
-                    [ callStartedCard
+                    []
+                    [ User.profileImage (SeqDict.get callStartedData.startedBy allUsers)
+                        |> profileImageView
+                            (User.userColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            callStartedData.userIconDrawings
+                            (MessageView_PressedUserIconButton callStartedData.startedBy)
+                    , callStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8301,8 +8340,15 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
-                    [ goMatchStartedCard
+                    []
+                    [ User.profileImage (SeqDict.get gameStarted.startedBy allUsers)
+                        |> profileImageView
+                            (User.userColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            gameStarted.userIconDrawings
+                            (MessageView_PressedUserIconButton gameStarted.startedBy)
+                    , goMatchStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8471,8 +8517,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
-                    [ callStartedCard
+                    []
+                    [ User.discordProfileImage
+                        callStartedData.startedBy
+                        (SeqDict.get callStartedData.startedBy allUsers |> Maybe.andThen .icon)
+                        |> profileImageView
+                            (User.discordUserColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            callStartedData.userIconDrawings
+                            (MessageView_PressedDiscordUserIconButton callStartedData.startedBy)
+                    , callStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8506,8 +8561,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
-                    [ goMatchStartedCard
+                    []
+                    [ User.discordProfileImage
+                        gameStarted.startedBy
+                        (SeqDict.get gameStarted.startedBy allUsers |> Maybe.andThen .icon)
+                        |> profileImageView
+                            (User.discordUserColor localUser)
+                            (isHovered == IsHoveredWhileSelectingAnchor)
+                            messageId
+                            gameStarted.userIconDrawings
+                            (MessageView_PressedDiscordUserIconButton gameStarted.startedBy)
+                    , goMatchStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8579,6 +8643,42 @@ profileImageButtonId messageId =
     Dom.id ("guild_profileImage_" ++ Id.toString messageId)
 
 
+profileImageView :
+    (userId -> UserColor)
+    -> Bool
+    -> Id messageId
+    -> Drawing userId
+    -> MessageViewMsg
+    -> Element MessageViewMsg
+    -> Element MessageViewMsg
+profileImageView userIdToColor isSelectingAnchor messageId drawings onPress profileImage =
+    Ui.el
+        (Drawing.anchorHighlight
+            (Drawing.profileImageAnchorId messageId)
+            userIdToColor
+            MessageView_PressedUserIconAnchor
+            isSelectingAnchor
+            drawings
+            ++ (if isSelectingAnchor then
+                    [ Ui.rounded User.profileImageRounding ]
+
+                else
+                    openDmButton messageId onPress
+               )
+        )
+        profileImage
+        |> Ui.el
+            [ Ui.paddingWith
+                { left = 0
+                , right = MessageView.profileImagePaddingRight
+                , top = 2
+                , bottom = 0
+                }
+            , Ui.width Ui.shrink
+            , Ui.alignTop
+            ]
+
+
 openDmButton : Id messageId -> MessageViewMsg -> List (Ui.Attribute MessageViewMsg)
 openDmButton messageId onPress =
     [ Ui.pointer
@@ -8641,30 +8741,12 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
         , Ui.row
             []
             [ User.profileImage (SeqDict.get message2.createdBy allUsers)
-                |> Ui.el
-                    (Drawing.anchorHighlight
-                        (Drawing.profileImageAnchorId messageId)
-                        drawingColor
-                        MessageView_PressedUserIconAnchor
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        drawings.userIconDrawings
-                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                                [ Ui.rounded User.profileImageRounding ]
-
-                            else
-                                openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
-                           )
-                    )
-                |> Ui.el
-                    [ Ui.paddingWith
-                        { left = 0
-                        , right = MessageView.profileImagePaddingRight
-                        , top = 2
-                        , bottom = 0
-                        }
-                    , Ui.width Ui.shrink
-                    , Ui.alignTop
-                    ]
+                |> profileImageView
+                    drawingColor
+                    (isHovered == IsHoveredWhileSelectingAnchor)
+                    messageId
+                    drawings.userIconDrawings
+                    (MessageView_PressedUserIconButton message2.createdBy)
             , Ui.column
                 []
                 [ Ui.row
@@ -8825,30 +8907,12 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 Nothing ->
                     User.discordProfileImage message2.createdBy Nothing
               )
-                |> Ui.el
-                    (Drawing.anchorHighlight
-                        (Drawing.profileImageAnchorId messageId)
-                        (User.discordUserColor localUser)
-                        MessageView_PressedUserIconAnchor
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        drawings.userIconDrawings
-                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                                [ Ui.rounded User.profileImageRounding ]
-
-                            else
-                                openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
-                           )
-                    )
-                |> Ui.el
-                    [ Ui.paddingWith
-                        { left = 0
-                        , right = MessageView.profileImagePaddingRight
-                        , top = 2
-                        , bottom = 0
-                        }
-                    , Ui.width Ui.shrink
-                    , Ui.alignTop
-                    ]
+                |> profileImageView
+                    (User.discordUserColor localUser)
+                    (isHovered == IsHoveredWhileSelectingAnchor)
+                    messageId
+                    drawings.userIconDrawings
+                    (MessageView_PressedDiscordUserIconButton message2.createdBy)
             , Ui.column
                 []
                 [ Ui.row
@@ -8960,7 +9024,7 @@ messageIdView _ =
 deletedMessageContent : Id messageId -> Bool -> Time.Posix -> Time.Zone -> Element MessageViewMsg
 deletedMessageContent messageId isSelectingAnchor createdAt timezone =
     Ui.row
-        [ Ui.paddingWith { left = 4, right = 0, top = 4, bottom = 0 } ]
+        [ Ui.paddingWith { left = profileImageColumnWidth, right = 0, top = 4, bottom = 0 } ]
         [ Ui.el
             [ Ui.Font.color MyUi.font3
             , Ui.Font.italic

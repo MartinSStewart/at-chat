@@ -1,4 +1,4 @@
-module E2EDrawing exposing (drawOnMessages, drawWithTouch, drawingScalesWithImages, newMessagesWhileDrawing)
+module E2EDrawing exposing (drawOnCardProfileImage, drawOnMessages, drawWithTouch, drawingScalesWithImages, newMessagesWhileDrawing)
 
 import Audio
 import ChannelHeader
@@ -7,6 +7,7 @@ import Date exposing (Date)
 import Drawing
 import Duration
 import E2EHelper
+import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import FileStatus
@@ -605,6 +606,62 @@ drawWithTouch config =
 
                             Nothing ->
                                 [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+drawOnCardProfileImage : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+drawOnCardProfileImage config =
+    E2EHelper.startTest
+        "Draw on the profile image next to a call card"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ admin.click 100 (Dom.id "guild_voiceChat")
+                , E2EVoiceChat.startCall admin
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText ])
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, Message.CallStarted _ ) ->
+                                [ admin.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+                                , admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case E2EHelper.lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected the call card's profile image to contain exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Message not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke on a call card's profile image" }
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "Expected the last message to be a call card") ]
                     )
                 ]
             )
