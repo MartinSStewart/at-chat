@@ -7427,7 +7427,6 @@ handleGuildGoGame time session clientId changeId id matchId goChange guild chann
                             , gameType = GameType_Go
                             , timestampDrawings = Drawing.emptyDrawing
                             , cardDrawings = Drawing.emptyDrawing
-                            , userIconDrawings = Drawing.emptyDrawing
                             }
                         )
                         channel
@@ -7545,7 +7544,6 @@ handleDmGoGame time session clientId changeId id matchId goChange dmChannelId dm
                             , gameType = GameType_Go
                             , timestampDrawings = Drawing.emptyDrawing
                             , cardDrawings = Drawing.emptyDrawing
-                            , userIconDrawings = Drawing.emptyDrawing
                             }
                         )
                         dmChannel
@@ -7685,7 +7683,6 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                             , gameType = GameType_SheepGame
                             , timestampDrawings = Drawing.emptyDrawing
                             , cardDrawings = Drawing.emptyDrawing
-                            , userIconDrawings = Drawing.emptyDrawing
                             }
                         )
                         channel
@@ -7854,7 +7851,6 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                             , gameType = GameType_WordSpellingGame
                             , timestampDrawings = Drawing.emptyDrawing
                             , cardDrawings = Drawing.emptyDrawing
-                            , userIconDrawings = Drawing.emptyDrawing
                             }
                         )
                         channel
@@ -8400,7 +8396,6 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                     , reactions = SeqDict.empty
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , userIconDrawings = Drawing.emptyDrawing
                                     }
                                 )
                                 dmChannel
@@ -8508,7 +8503,6 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                     , reactions = SeqDict.empty
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , userIconDrawings = Drawing.emptyDrawing
                                     }
                                 )
                                 channel

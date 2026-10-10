@@ -5892,7 +5892,6 @@ callStartedMessage time startedBy =
         , reactions = SeqDict.empty
         , timestampDrawings = Drawing.emptyDrawing
         , cardDrawings = Drawing.emptyDrawing
-        , userIconDrawings = Drawing.emptyDrawing
         }
 
 
@@ -6221,7 +6220,6 @@ gameChangeUpdateChannel changeBy gameChange channel =
                                     , gameType = GameType_Go
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , userIconDrawings = Drawing.emptyDrawing
                                     }
                                 )
                                 channel
@@ -6286,7 +6284,6 @@ gameChangeUpdateChannel changeBy gameChange channel =
                                     , gameType = GameType_WordSpellingGame
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , userIconDrawings = Drawing.emptyDrawing
                                     }
                                 )
                                 channel
@@ -6325,7 +6322,6 @@ gameChangeUpdateChannel changeBy gameChange channel =
                                     , gameType = GameType_SheepGame
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , userIconDrawings = Drawing.emptyDrawing
                                     }
                                 )
                                 channel

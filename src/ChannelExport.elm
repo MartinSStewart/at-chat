@@ -539,7 +539,6 @@ callStartedDataCodec userId =
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "timestampDrawings" .timestampDrawings (drawingCodec userId)
         |> Codec.field "cardDrawings" .cardDrawings (drawingCodec userId)
-        |> Codec.field "userIconDrawings" .userIconDrawings (drawingCodec userId)
         |> Codec.buildObject
 
 
@@ -552,7 +551,6 @@ gameStartedDataCodec userId =
         |> Codec.field "gameType" .gameType gameTypeCodec
         |> Codec.field "timestampDrawings" .timestampDrawings (drawingCodec userId)
         |> Codec.field "cardDrawings" .cardDrawings (drawingCodec userId)
-        |> Codec.field "userIconDrawings" .userIconDrawings (drawingCodec userId)
         |> Codec.buildObject
 
 

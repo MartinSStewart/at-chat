@@ -643,7 +643,6 @@ previewGameChannel time =
                     , gameType = GameType_WordSpellingGame
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
-                    , userIconDrawings = Drawing.emptyDrawing
                     }
                 , UserTextMessage
                     { createdAt = previewMinutesAgo time 1
@@ -765,7 +764,6 @@ previewPetPicsChannel time =
                     , reactions = SeqDict.empty
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
-                    , userIconDrawings = Drawing.emptyDrawing
                     }
                 , previewMessage (previewMinutesAgo time 2) (Tuple.first previewCallMutedPeer) (NonemptyString 'C' "an anyone hear me?")
                 , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")

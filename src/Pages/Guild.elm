@@ -1628,7 +1628,7 @@ conversationWidth model =
                 False
         )
         - model.startupData.scrollbarWidth
-        - (profileImageColumnWidth + messagePaddingX * 2)
+        - (User.profileImageSize + (messagePaddingX * 2) + MessageView.profileImagePaddingRight)
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
@@ -7015,7 +7015,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad (containerWidth + profileImageColumnWidth) reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -7187,7 +7187,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
         editingView createdBy reactions =
             let
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad (containerWidth + profileImageColumnWidth) reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -7726,7 +7726,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 decrypted
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
+                    []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
                         (User.userColor localUser)
@@ -7788,14 +7788,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ User.profileImage (SeqDict.get callStartedData.startedBy allUsers)
-                        |> profileImageView
-                            (User.userColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            callStartedData.userIconDrawings
-                            (MessageView_PressedUserIconButton callStartedData.startedBy)
-                    , callStartedCard
+                    [ callStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7837,14 +7830,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ User.profileImage (SeqDict.get gameStarted.startedBy allUsers)
-                        |> profileImageView
-                            (User.userColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            gameStarted.userIconDrawings
-                            (MessageView_PressedUserIconButton gameStarted.startedBy)
-                    , goMatchStartedCard
+                    [ goMatchStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -7986,7 +7972,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 SeqDict.empty
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
+                    []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -8048,16 +8034,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ User.discordProfileImage
-                        callStartedData.startedBy
-                        (SeqDict.get callStartedData.startedBy allUsers |> Maybe.andThen .icon)
-                        |> profileImageView
-                            (User.discordUserColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            callStartedData.userIconDrawings
-                            (MessageView_PressedDiscordUserIconButton callStartedData.startedBy)
-                    , callStartedCard
+                    [ callStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8099,16 +8076,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ User.discordProfileImage
-                        gameStarted.startedBy
-                        (SeqDict.get gameStarted.startedBy allUsers |> Maybe.andThen .icon)
-                        |> profileImageView
-                            (User.discordUserColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            gameStarted.userIconDrawings
-                            (MessageView_PressedDiscordUserIconButton gameStarted.startedBy)
-                    , goMatchStartedCard
+                    [ goMatchStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8250,7 +8218,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
+                    []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
                         (User.userColor localUser)
@@ -8299,14 +8267,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 isHovered
                 (Ui.row
                     []
-                    [ User.profileImage (SeqDict.get callStartedData.startedBy allUsers)
-                        |> profileImageView
-                            (User.userColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            callStartedData.userIconDrawings
-                            (MessageView_PressedUserIconButton callStartedData.startedBy)
-                    , callStartedCard
+                    [ callStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8341,14 +8302,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 isHovered
                 (Ui.row
                     []
-                    [ User.profileImage (SeqDict.get gameStarted.startedBy allUsers)
-                        |> profileImageView
-                            (User.userColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            gameStarted.userIconDrawings
-                            (MessageView_PressedUserIconButton gameStarted.startedBy)
-                    , goMatchStartedCard
+                    [ goMatchStartedCard
                         (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8469,7 +8423,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 allUsers
                 isHovered
                 (Ui.row
-                    [ Ui.paddingLeft profileImageColumnWidth ]
+                    []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -8518,16 +8472,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 isHovered
                 (Ui.row
                     []
-                    [ User.discordProfileImage
-                        callStartedData.startedBy
-                        (SeqDict.get callStartedData.startedBy allUsers |> Maybe.andThen .icon)
-                        |> profileImageView
-                            (User.discordUserColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            callStartedData.userIconDrawings
-                            (MessageView_PressedDiscordUserIconButton callStartedData.startedBy)
-                    , callStartedCard
+                    [ callStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -8562,16 +8507,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 isHovered
                 (Ui.row
                     []
-                    [ User.discordProfileImage
-                        gameStarted.startedBy
-                        (SeqDict.get gameStarted.startedBy allUsers |> Maybe.andThen .icon)
-                        |> profileImageView
-                            (User.discordUserColor localUser)
-                            (isHovered == IsHoveredWhileSelectingAnchor)
-                            messageId
-                            gameStarted.userIconDrawings
-                            (MessageView_PressedDiscordUserIconButton gameStarted.startedBy)
-                    , goMatchStartedCard
+                    [ goMatchStartedCard
                         (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
@@ -8643,42 +8579,6 @@ profileImageButtonId messageId =
     Dom.id ("guild_profileImage_" ++ Id.toString messageId)
 
 
-profileImageView :
-    (userId -> UserColor)
-    -> Bool
-    -> Id messageId
-    -> Drawing userId
-    -> MessageViewMsg
-    -> Element MessageViewMsg
-    -> Element MessageViewMsg
-profileImageView userIdToColor isSelectingAnchor messageId drawings onPress profileImage =
-    Ui.el
-        (Drawing.anchorHighlight
-            (Drawing.profileImageAnchorId messageId)
-            userIdToColor
-            MessageView_PressedUserIconAnchor
-            isSelectingAnchor
-            drawings
-            ++ (if isSelectingAnchor then
-                    [ Ui.rounded User.profileImageRounding ]
-
-                else
-                    openDmButton messageId onPress
-               )
-        )
-        profileImage
-        |> Ui.el
-            [ Ui.paddingWith
-                { left = 0
-                , right = MessageView.profileImagePaddingRight
-                , top = 2
-                , bottom = 0
-                }
-            , Ui.width Ui.shrink
-            , Ui.alignTop
-            ]
-
-
 openDmButton : Id messageId -> MessageViewMsg -> List (Ui.Attribute MessageViewMsg)
 openDmButton messageId onPress =
     [ Ui.pointer
@@ -8741,12 +8641,30 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
         , Ui.row
             []
             [ User.profileImage (SeqDict.get message2.createdBy allUsers)
-                |> profileImageView
-                    drawingColor
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    messageId
-                    drawings.userIconDrawings
-                    (MessageView_PressedUserIconButton message2.createdBy)
+                |> Ui.el
+                    (Drawing.anchorHighlight
+                        (Drawing.profileImageAnchorId messageId)
+                        drawingColor
+                        MessageView_PressedUserIconAnchor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings.userIconDrawings
+                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                                [ Ui.rounded User.profileImageRounding ]
+
+                            else
+                                openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
+                           )
+                    )
+                |> Ui.el
+                    [ Ui.paddingWith
+                        { left = 0
+                        , right = MessageView.profileImagePaddingRight
+                        , top = 2
+                        , bottom = 0
+                        }
+                    , Ui.width Ui.shrink
+                    , Ui.alignTop
+                    ]
             , Ui.column
                 []
                 [ Ui.row
@@ -8907,12 +8825,30 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 Nothing ->
                     User.discordProfileImage message2.createdBy Nothing
               )
-                |> profileImageView
-                    (User.discordUserColor localUser)
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    messageId
-                    drawings.userIconDrawings
-                    (MessageView_PressedDiscordUserIconButton message2.createdBy)
+                |> Ui.el
+                    (Drawing.anchorHighlight
+                        (Drawing.profileImageAnchorId messageId)
+                        (User.discordUserColor localUser)
+                        MessageView_PressedUserIconAnchor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings.userIconDrawings
+                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                                [ Ui.rounded User.profileImageRounding ]
+
+                            else
+                                openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
+                           )
+                    )
+                |> Ui.el
+                    [ Ui.paddingWith
+                        { left = 0
+                        , right = MessageView.profileImagePaddingRight
+                        , top = 2
+                        , bottom = 0
+                        }
+                    , Ui.width Ui.shrink
+                    , Ui.alignTop
+                    ]
             , Ui.column
                 []
                 [ Ui.row
@@ -9024,7 +8960,7 @@ messageIdView _ =
 deletedMessageContent : Id messageId -> Bool -> Time.Posix -> Time.Zone -> Element MessageViewMsg
 deletedMessageContent messageId isSelectingAnchor createdAt timezone =
     Ui.row
-        [ Ui.paddingWith { left = profileImageColumnWidth, right = 0, top = 4, bottom = 0 } ]
+        [ Ui.paddingWith { left = 4, right = 0, top = 4, bottom = 0 } ]
         [ Ui.el
             [ Ui.Font.color MyUi.font3
             , Ui.Font.italic
@@ -9243,7 +9179,7 @@ indentPastProfileImage maybeRepliedTo2 header =
     case maybeRepliedTo2 of
         Just _ ->
             Ui.el
-                [ Ui.paddingLeft profileImageColumnWidth ]
+                [ Ui.paddingLeft (User.profileImageSize + MessageView.profileImagePaddingRight) ]
                 header
 
         Nothing ->
@@ -9433,11 +9369,6 @@ messagePaddingX =
     8
 
 
-profileImageColumnWidth : Int
-profileImageColumnWidth =
-    User.profileImageSize + MessageView.profileImagePaddingRight
-
-
 {-| Decodes a "contextmenu" event into a message that opens the message menu.
 If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
@@ -9545,16 +9476,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            MessageView.reactionEmojiView
-                emojiData
-                (reactionsHover isHovered)
-                currentUserId
-                customEmojis
-                allUsers
-                (isHoveredToAnimationMode isHovered)
-                containerWidth
-                reactions
-                |> Maybe.map (Ui.el [ Ui.paddingLeft profileImageColumnWidth ])
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -9643,16 +9565,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            MessageView.reactionEmojiView
-                emojiData
-                (reactionsHover isHovered)
-                currentUserId
-                customEmojis
-                allUsers
-                (isHoveredToAnimationMode isHovered)
-                containerWidth
-                reactions
-                |> Maybe.map (Ui.el [ Ui.paddingLeft profileImageColumnWidth ])
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1

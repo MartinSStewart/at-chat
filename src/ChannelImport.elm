@@ -244,7 +244,6 @@ importMessage mapUserId mapChannelId messages =
                                 , reactions = mapReactions mapUserId data.reactions
                                 , timestampDrawings = mapDrawing mapUserId data.timestampDrawings
                                 , cardDrawings = mapDrawing mapUserId data.cardDrawings
-                                , userIconDrawings = mapDrawing mapUserId data.userIconDrawings
                                 }
                                 :: list
                             , encrypted
@@ -258,7 +257,6 @@ importMessage mapUserId mapChannelId messages =
                                 , gameType = data.gameType
                                 , timestampDrawings = mapDrawing mapUserId data.timestampDrawings
                                 , cardDrawings = mapDrawing mapUserId data.cardDrawings
-                                , userIconDrawings = mapDrawing mapUserId data.userIconDrawings
                                 }
                                 :: list
                             , encrypted

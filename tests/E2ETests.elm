@@ -639,7 +639,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EDrawing.drawingScalesWithImages wideImageUploadConfig
     , E2EDrawing.drawWithTouch normalConfig
     , E2EDrawing.newMessagesWhileDrawing normalConfig
-    , E2EDrawing.drawOnCardProfileImage normalConfig
     , E2EHelper.startTest
         "New message warning while scrolled up"
         E2EHelper.startTime

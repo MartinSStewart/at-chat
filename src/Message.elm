@@ -84,7 +84,6 @@ type alias CallStartedData userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
-    , userIconDrawings : Drawing userId
     }
 
 
@@ -95,7 +94,6 @@ type alias GameStartedData userId =
     , gameType : GameType
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
-    , userIconDrawings : Drawing userId
     }
 
 
@@ -789,11 +787,7 @@ handleDrawingChange changeBy anchorType change message =
                         }
 
                 Drawing.UserIconAnchor ->
-                    CallStarted
-                        { callStarted
-                            | userIconDrawings =
-                                Drawing.handleLocalChange changeBy change callStarted.userIconDrawings
-                        }
+                    message
 
                 Drawing.ImageAttachmentAnchor _ ->
                     message
@@ -818,11 +812,7 @@ handleDrawingChange changeBy anchorType change message =
                         }
 
                 Drawing.UserIconAnchor ->
-                    GameStarted
-                        { gameStarted
-                            | userIconDrawings =
-                                Drawing.handleLocalChange changeBy change gameStarted.userIconDrawings
-                        }
+                    message
 
                 Drawing.ImageAttachmentAnchor _ ->
                     message
@@ -879,7 +869,7 @@ drawing anchor message =
         CallStarted callStarted ->
             case anchor of
                 Drawing.UserIconAnchor ->
-                    callStarted.userIconDrawings
+                    Drawing.emptyDrawing
 
                 Drawing.TimestampAnchor ->
                     callStarted.timestampDrawings
@@ -896,7 +886,7 @@ drawing anchor message =
         GameStarted gameStarted ->
             case anchor of
                 Drawing.UserIconAnchor ->
-                    gameStarted.userIconDrawings
+                    Drawing.emptyDrawing
 
                 Drawing.TimestampAnchor ->
                     gameStarted.timestampDrawings
