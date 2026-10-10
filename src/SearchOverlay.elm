@@ -85,7 +85,8 @@ maxResults =
 
 
 {-| Results whose name starts with the query come before ones that only contain it, and within
-each of those shorter names come first, then the most recently active.
+each of those shorter names come first, then the most recently active. With nothing typed it's only
+the most recently active first.
 -}
 search : String -> LocalState -> List SearchResult
 search query local =
@@ -100,12 +101,20 @@ search query local =
                 name : String
                 name =
                     String.toLower result.name
+
+                nameLength : Int
+                nameLength =
+                    if query2 == "" then
+                        0
+
+                    else
+                        String.length name
             in
             if String.startsWith query2 name then
-                Just ( ( 0, String.length name, negate result.lastActivity ), result )
+                Just ( ( 0, nameLength, negate result.lastActivity ), result )
 
             else if String.contains query2 name then
-                Just ( ( 1, String.length name, negate result.lastActivity ), result )
+                Just ( ( 1, nameLength, negate result.lastActivity ), result )
 
             else
                 Nothing
