@@ -85,7 +85,7 @@ maxResults =
 
 
 {-| Results whose name starts with the query come before ones that only contain it, and within
-each of those the most recently active come first, so an empty query lists recent conversations.
+each of those shorter names come first, then the most recently active.
 -}
 search : String -> LocalState -> List SearchResult
 search query local =
@@ -102,18 +102,18 @@ search query local =
                     String.toLower result.name
             in
             if String.startsWith query2 name then
-                Just ( 0, negate result.lastActivity, result )
+                Just ( ( 0, String.length name, negate result.lastActivity ), result )
 
             else if String.contains query2 name then
-                Just ( 1, negate result.lastActivity, result )
+                Just ( ( 1, String.length name, negate result.lastActivity ), result )
 
             else
                 Nothing
         )
         (allResults local)
-        |> List.sortBy (\( rank, negatedLastActivity, _ ) -> ( rank, negatedLastActivity ))
+        |> List.sortBy Tuple.first
         |> List.take maxResults
-        |> List.map (\( _, _, result ) -> result)
+        |> List.map Tuple.second
 
 
 allResults : LocalState -> List SearchResult

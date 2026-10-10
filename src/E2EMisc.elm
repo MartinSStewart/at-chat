@@ -685,7 +685,7 @@ inviteUserAndDmChat config =
                         , admin.checkView
                             100
                             (\html ->
-                                Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_1" ] html
+                                Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
                                     |> Test.Html.Query.has [ Test.Html.Selector.exactText "Sven" ]
                             )
                         , admin.snapshotView 100 { name = "Search overlay lists DMs and DM threads" }
