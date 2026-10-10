@@ -30,6 +30,7 @@ import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
 import Html
+import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRouteWithMaybeMessage(..), UserId)
 import IdArray
@@ -1437,6 +1438,7 @@ view loaded =
                       -- for the real pixel grid. transform: scale shrinks the full size layout instead,
                       -- which leaves 1px lines and gaps landing between pixels.
                       MyUi.htmlStyle "zoom" (String.fromFloat previewScale)
+                    , Ui.htmlAttribute (Html.Attributes.class "homepage-preview")
                     ]
                 |> Ui.el
                     [ Ui.width (Ui.px previewWidth)
@@ -1457,6 +1459,14 @@ view loaded =
         , Ui.widthMax widthMax
         , Ui.centerX
         , Ui.spacing headingSpacing
+        , Ui.behindContent
+            (Html.node "style"
+                []
+                [ Html.text
+                    (".homepage-preview { --guild-outline-width: " ++ String.fromFloat (1 / previewScale) ++ "px; }")
+                ]
+                |> Ui.html
+            )
         ]
         [ Ui.el
             [ Ui.Font.size

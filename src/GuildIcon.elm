@@ -412,7 +412,7 @@ columnBorderView safeAreaInsetTop =
             , Svg.Attributes.y1 (String.fromInt topLeftRadius)
             , Svg.Attributes.y2 "100%"
             , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
-            , Svg.Attributes.strokeWidth "1"
+            , Svg.Attributes.strokeWidth "var(--guild-outline-width, 1px)"
             ]
             []
             :: (if topLeftRadius > 0 then
@@ -433,7 +433,7 @@ columnBorderView safeAreaInsetTop =
                         , Svg.Attributes.fill "none"
                         , Svg.Attributes.strokeLinecap "square"
                         , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
-                        , Svg.Attributes.strokeWidth "1"
+                        , Svg.Attributes.strokeWidth "var(--guild-outline-width, 1px)"
                         ]
                         []
                     ]
@@ -459,7 +459,7 @@ columnBorderView safeAreaInsetTop =
                         , Svg.Attributes.y1 "0.5"
                         , Svg.Attributes.y2 "0.5"
                         , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
-                        , Svg.Attributes.strokeWidth "1"
+                        , Svg.Attributes.strokeWidth "var(--guild-outline-width, 1px)"
                         ]
                         []
                     ]
@@ -647,7 +647,7 @@ selectedTile maybeIcon =
             [ Svg.Attributes.d selectedOutline
             , Svg.Attributes.fill "none"
             , Svg.Attributes.stroke ("url(#" ++ gradientId ++ ")")
-            , Svg.Attributes.strokeWidth "1"
+            , Svg.Attributes.strokeWidth "var(--guild-outline-width, 1px)"
             ]
             []
         ]
