@@ -389,20 +389,16 @@ view isMobile query selection results =
                 [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
                 , MyUi.noShrinking
-                , if query == "" then
-                    Ui.el
-                        [ Ui.Font.color MyUi.font3
-                        , Ui.width Ui.shrink
-                        , Ui.height Ui.fill
-                        , Ui.contentCenterY
-                        , Ui.paddingXY 16 0
-                        , MyUi.noPointerEvents
-                        ]
-                        (Ui.html Icons.magnifyingGlass)
-                        |> Ui.inFront
-
-                  else
-                    Ui.noAttr
+                , Ui.el
+                    [ Ui.Font.color MyUi.font3
+                    , Ui.width Ui.shrink
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    , Ui.paddingXY 16 0
+                    , MyUi.noPointerEvents
+                    ]
+                    (Ui.html Icons.magnifyingGlass)
+                    |> Ui.inFront
                 ]
                 (Ui.Input.text
                     [ Ui.id (Dom.idToString inputId)
