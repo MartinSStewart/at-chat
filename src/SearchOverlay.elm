@@ -382,12 +382,11 @@ view isMobile query selection results =
             , Ui.Font.color MyUi.font2
             , Ui.rounded 16
             , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.clip
+            , Ui.borderColor MyUi.buttonBorder
             ]
             [ Ui.el
                 [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-                , Ui.borderColor MyUi.border1
+                , Ui.borderColor MyUi.buttonBorder
                 , MyUi.noShrinking
                 , Ui.el
                     [ Ui.Font.color MyUi.font3
@@ -411,6 +410,7 @@ view isMobile query selection results =
                     , Ui.Font.size 18
                     , Html.Events.preventDefaultOn "keydown" decodeKeyDown |> Ui.htmlAttribute
                     , Html.Attributes.attribute "autocomplete" "off" |> Ui.htmlAttribute
+                    , MyUi.htmlStyle "outline-offset" "-1px"
                     ]
                     { onChange = TypedSearchOverlay
                     , text = query
