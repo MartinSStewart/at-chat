@@ -385,19 +385,32 @@ view isMobile query selection results =
             , Ui.borderColor MyUi.border1
             , Ui.clip
             ]
-            [ Ui.row
+            [ Ui.el
                 [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
-                , Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
-                , Ui.contentCenterY
                 , MyUi.noShrinking
+                , if query == "" then
+                    Ui.el
+                        [ Ui.Font.color MyUi.font3
+                        , Ui.width Ui.shrink
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        , Ui.paddingXY 16 0
+                        , MyUi.noPointerEvents
+                        ]
+                        (Ui.html Icons.magnifyingGlass)
+                        |> Ui.inFront
+
+                  else
+                    Ui.noAttr
                 ]
-                [ Ui.el [ Ui.Font.color MyUi.font3, Ui.width Ui.shrink ] (Ui.html Icons.magnifyingGlass)
-                , Ui.Input.text
+                (Ui.Input.text
                     [ Ui.id (Dom.idToString inputId)
                     , Ui.background (Ui.rgba 0 0 0 0)
                     , Ui.border 0
-                    , Ui.padding 16
+                    , -- The modal's border is 1px wide inside its 16px corners
+                      Ui.roundedWith { topLeft = 15, topRight = 15, bottomLeft = 0, bottomRight = 0 }
+                    , Ui.paddingWith { left = 44, right = 16, top = 16, bottom = 16 }
                     , Ui.Font.color MyUi.font1
                     , Ui.Font.size 18
                     , Html.Events.preventDefaultOn "keydown" decodeKeyDown |> Ui.htmlAttribute
@@ -408,7 +421,7 @@ view isMobile query selection results =
                     , placeholder = Just "Search channels, threads and DMs"
                     , label = Ui.Input.labelHidden (Dom.idToString inputId)
                     }
-                ]
+                )
             , case results of
                 [] ->
                     Ui.el
@@ -464,14 +477,14 @@ resultView isMobile isSelected index result =
             [ Ui.height Ui.fill, Ui.clipWithEllipsis, MyUi.hoverText result.name ]
             [ case result.icon of
                 ChannelIcon ->
-                    Ui.el [ Ui.width Ui.shrink, Ui.centerY, Ui.Font.color MyUi.font3 ] (Ui.html Icons.hashtag)
+                    Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY, Ui.Font.color MyUi.font3 ] (Ui.html Icons.hashtag)
 
                 UserIcon user ->
-                    Ui.el [ Ui.width Ui.shrink, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ] (User.smallProfileImage False user)
+                    Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ] (User.smallProfileImage False user)
 
                 DiscordUserIcon userId icon ->
                     Ui.el
-                        [ Ui.width Ui.shrink, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ]
+                        [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ]
                         (User.smallDiscordProfileImage userId icon)
             , Ui.text result.name
             ]
