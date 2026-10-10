@@ -680,6 +680,15 @@ inviteUserAndDmChat config =
                                         ]
                             )
                         , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
+                        , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "k" }))
+                        , admin.input 100 SearchOverlay.inputId "sven"
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_1" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.exactText "Sven" ]
+                            )
+                        , admin.snapshotView 100 { name = "Search overlay lists DMs and DM threads" }
                         ]
                     )
                 ]
@@ -2816,6 +2825,7 @@ searchOverlayTest config =
                     |> T.group
                 , admin.update 100 (Audio.userMsg ctrlK)
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.snapshotView 100 { name = "Search overlay with nothing typed" }
                 , admin.input 100 SearchOverlay.inputId "alp"
                 , admin.checkView
                     100

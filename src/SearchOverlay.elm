@@ -17,23 +17,22 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import FileStatus exposing (FileHash)
 import GuildColumn
 import GuildName
-import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, UserId)
 import Json.Decode
-import LinkedAndOtherDiscordUsers
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
-import Message exposing (Message)
+import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
 import PersonName
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
-import SeqDict
+import SeqDict exposing (SeqDict)
 import Time
 import Types exposing (FrontendMsg_(..))
 import Ui exposing (Element)
@@ -41,12 +40,13 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User
+import User exposing (FrontendUser)
+import UserSession exposing (DiscordFrontendUser)
 
 
 type alias SearchResult =
     { name : String
-    , location : String
+    , location : Maybe String
     , icon : ResultIcon
     , isDiscord : Bool
     , route : Route
@@ -56,8 +56,8 @@ type alias SearchResult =
 
 type ResultIcon
     = ChannelIcon
-    | ThreadIcon
-    | PersonIcon
+    | UserIcon (Maybe FrontendUser)
+    | DiscordUserIcon (Discord.Id Discord.UserId) (Maybe FileHash)
 
 
 inputId : HtmlId
@@ -70,9 +70,13 @@ resultsContainerId =
     Dom.id "searchOverlay_results"
 
 
-rowHeight : number
-rowHeight =
-    44
+rowHeight : Bool -> number
+rowHeight isMobile =
+    if isMobile then
+        50
+
+    else
+        30
 
 
 maxResults : Int
@@ -140,18 +144,14 @@ lastActivity channel =
             0
 
 
-threadName :
-    Id ChannelMessageId
-    -> (Message ChannelMessageId userId channelId -> String)
-    -> MessageArray ChannelMessageId userId channelId
-    -> String
-threadName threadId messageToString messages =
-    case MessageArray.get threadId messages of
-        Just message ->
-            messageToString message
+mentionName : channelId -> Id ChannelMessageId -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String } -> String
+mentionName channelId threadId channelMentions =
+    case SeqDict.get ( channelId, Just threadId ) channelMentions of
+        Just mention ->
+            mention.name
 
         Nothing ->
-            "Thread not found"
+            "<missing>"
 
 
 guildResults : LocalState -> Id Id.GuildId -> FrontendGuild -> List SearchResult
@@ -161,22 +161,19 @@ guildResults local guildId guild =
         guildName =
             GuildName.toString guild.name
 
+        channelMentions : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channelMentions =
             LocalState.guildChannelMentions local.localUser guild.channels
     in
     SeqDict.foldl
         (\channelId channel list ->
             let
-                channelName : String
-                channelName =
-                    ChannelName.toString channel.name
-
                 route : ThreadRouteWithFriends -> Route
                 route threadRoute =
                     GuildRoute guildId (ChannelRoute channelId threadRoute Nothing) ChannelsHiddenOnMobile Nothing
             in
-            { name = channelName
-            , location = guildName
+            { name = ChannelName.toString channel.name
+            , location = Just guildName
             , icon = ChannelIcon
             , isDiscord = False
             , route = route (NoThreadWithFriends Nothing HideChannelSettings)
@@ -184,18 +181,9 @@ guildResults local guildId guild =
             }
                 :: SeqDict.foldl
                     (\threadId thread list2 ->
-                        { name =
-                            threadName
-                                threadId
-                                (LocalState.messageToString
-                                    local.localUser.timezone
-                                    (User.allUsers local.localUser)
-                                    channelMentions
-                                    local.localUser.decryptedMessages
-                                )
-                                channel.messages
-                        , location = guildName ++ " / #" ++ channelName
-                        , icon = ThreadIcon
+                        { name = mentionName channelId threadId channelMentions
+                        , location = Just guildName
+                        , icon = ChannelIcon
                         , isDiscord = False
                         , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                         , lastActivity = lastActivity thread
@@ -218,16 +206,13 @@ discordGuildResults local guildId guild =
                 guildName =
                     GuildName.toString guild.name
 
+                channelMentions : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
                 channelMentions =
                     LocalState.discordGuildChannelMentions local.localUser guild.channels
             in
             SeqDict.foldl
                 (\channelId channel list ->
                     let
-                        channelName : String
-                        channelName =
-                            ChannelName.toString channel.name
-
                         route : ThreadRouteWithFriends -> Route
                         route threadRoute =
                             DiscordGuildRoute
@@ -238,8 +223,8 @@ discordGuildResults local guildId guild =
                                 , overlay = Nothing
                                 }
                     in
-                    { name = channelName
-                    , location = guildName
+                    { name = ChannelName.toString channel.name
+                    , location = Just guildName
                     , icon = ChannelIcon
                     , isDiscord = True
                     , route = route (NoThreadWithFriends Nothing HideChannelSettings)
@@ -247,18 +232,9 @@ discordGuildResults local guildId guild =
                     }
                         :: SeqDict.foldl
                             (\threadId thread list2 ->
-                                { name =
-                                    threadName
-                                        threadId
-                                        (LocalState.messageToString
-                                            local.localUser.timezone
-                                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                            channelMentions
-                                            SeqDict.empty
-                                        )
-                                        channel.messages
-                                , location = guildName ++ " / #" ++ channelName
-                                , icon = ThreadIcon
+                                { name = mentionName channelId threadId channelMentions
+                                , location = Just guildName
+                                , icon = ChannelIcon
                                 , isDiscord = True
                                 , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                                 , lastActivity = lastActivity thread
@@ -293,8 +269,8 @@ dmResults local otherUserId dmChannel =
                 }
     in
     { name = otherUserName
-    , location = "Direct message"
-    , icon = PersonIcon
+    , location = Nothing
+    , icon = UserIcon (User.getUser otherUserId local.localUser)
     , isDiscord = False
     , route = route (NoThreadWithFriends Nothing HideChannelSettings)
     , lastActivity = lastActivity dmChannel
@@ -302,17 +278,23 @@ dmResults local otherUserId dmChannel =
         :: SeqDict.foldl
             (\threadId thread list ->
                 { name =
-                    threadName
-                        threadId
-                        (LocalState.messageToString
-                            local.localUser.timezone
-                            (User.allUsers local.localUser)
-                            SeqDict.empty
-                            local.localUser.decryptedMessages
-                        )
-                        dmChannel.messages
-                , location = "Direct message / " ++ otherUserName
-                , icon = ThreadIcon
+                    otherUserName
+                        ++ "/"
+                        ++ (case MessageArray.get threadId dmChannel.messages of
+                                Just message ->
+                                    LocalState.messageToString
+                                        local.localUser.timezone
+                                        (User.allUsers local.localUser)
+                                        SeqDict.empty
+                                        local.localUser.decryptedMessages
+                                        message
+                                        |> String.left 50
+
+                                Nothing ->
+                                    "<missing>"
+                           )
+                , location = Nothing
+                , icon = UserIcon (User.getUser otherUserId local.localUser)
                 , isDiscord = False
                 , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                 , lastActivity = lastActivity thread
@@ -335,10 +317,10 @@ discordDmResult local channelId dmChannel =
                 otherMembers =
                     NonemptyDict.remove currentUserId dmChannel.members |> SeqDict.keys
 
-                names : List String
-                names =
+                members : List ( Discord.Id Discord.UserId, DiscordFrontendUser )
+                members =
                     List.filterMap
-                        (\userId -> User.getDiscordUser userId local.localUser |> Maybe.map (\user -> PersonName.toString user.name))
+                        (\userId -> User.getDiscordUser userId local.localUser |> Maybe.map (Tuple.pair userId))
                         (case otherMembers of
                             [] ->
                                 [ currentUserId ]
@@ -347,9 +329,15 @@ discordDmResult local channelId dmChannel =
                                 otherMembers
                         )
             in
-            { name = String.join ", " names
-            , location = "Direct message"
-            , icon = PersonIcon
+            { name = List.map (\( _, user ) -> PersonName.toString user.name) members |> String.join ", "
+            , location = Nothing
+            , icon =
+                case members of
+                    ( userId, user ) :: _ ->
+                        DiscordUserIcon userId user.icon
+
+                    [] ->
+                        DiscordUserIcon currentUserId Nothing
             , isDiscord = True
             , route =
                 DiscordDmRoute
@@ -390,7 +378,8 @@ view isMobile query selection results =
             , Ui.height Ui.fill
             , Ui.heightMax 480
             , Ui.heightMin 0
-            , Ui.background MyUi.background3
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font2
             , Ui.rounded 16
             , Ui.border 1
             , Ui.borderColor MyUi.border1
@@ -432,7 +421,6 @@ view isMobile query selection results =
                         , Ui.scrollable
                         , Ui.heightMin 0
                         , Ui.height Ui.fill
-                        , Ui.paddingXY 8 8
                         ]
                         (List.indexedMap (\index result -> resultView isMobile (index == selection) index result) results)
             ]
@@ -464,24 +452,29 @@ resultView isMobile isSelected index result =
     MyUi.rowButton
         (Dom.id ("searchOverlay_result_" ++ String.fromInt index))
         (PressedSearchOverlayResult result.route)
-        [ Ui.height (Ui.px rowHeight)
+        [ Ui.height (Ui.px (rowHeight isMobile))
         , MyUi.noShrinking
         , Ui.spacing 8
         , Ui.paddingXY 8 0
-        , Ui.rounded 8
         , Ui.contentCenterY
-        , if isSelected then
-            Ui.Font.color MyUi.font1
-
-          else
-            Ui.Font.color MyUi.font2
-        , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
-        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        , Ui.attrIf isSelected (Ui.background MyUi.background3)
         ]
-        [ Ui.el
-            [ Ui.width (Ui.px 20), Ui.Font.color MyUi.font3, MyUi.noShrinking ]
-            (Ui.html (resultIcon result.icon))
-        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText result.name ] (Ui.text result.name)
+        [ Ui.row
+            [ Ui.height Ui.fill, Ui.clipWithEllipsis, MyUi.hoverText result.name ]
+            [ case result.icon of
+                ChannelIcon ->
+                    Ui.el [ Ui.width Ui.shrink, Ui.centerY, Ui.Font.color MyUi.font3 ] (Ui.html Icons.hashtag)
+
+                UserIcon user ->
+                    Ui.el [ Ui.width Ui.shrink, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ] (User.smallProfileImage False user)
+
+                DiscordUserIcon userId icon ->
+                    Ui.el
+                        [ Ui.width Ui.shrink, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ]
+                        (User.smallDiscordProfileImage userId icon)
+            , Ui.text result.name
+            ]
         , Ui.row
             [ Ui.width Ui.shrink
             , Ui.widthMax 240
@@ -491,7 +484,12 @@ resultView isMobile isSelected index result =
             , Ui.Font.color MyUi.font3
             , Ui.contentCenterY
             ]
-            [ Ui.el [ Ui.clipWithEllipsis ] (Ui.text result.location)
+            [ case result.location of
+                Just location ->
+                    Ui.el [ Ui.clipWithEllipsis ] (Ui.text location)
+
+                Nothing ->
+                    Ui.none
             , if result.isDiscord then
                 Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, MyUi.hoverText "Discord" ] (Ui.html Icons.discord)
 
@@ -499,18 +497,3 @@ resultView isMobile isSelected index result =
                 Ui.none
             ]
         ]
-
-
-resultIcon : ResultIcon -> Html.Html msg
-resultIcon icon =
-    case icon of
-        ChannelIcon ->
-            Icons.hashtag
-
-        ThreadIcon ->
-            Html.div
-                [ Html.Attributes.style "height" "20px", Html.Attributes.style "overflow" "hidden" ]
-                [ Icons.threadSingleSegment ]
-
-        PersonIcon ->
-            Html.div [ Html.Attributes.style "width" "20px", Html.Attributes.style "height" "20px" ] [ Icons.person ]

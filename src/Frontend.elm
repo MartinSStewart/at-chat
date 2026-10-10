@@ -5759,23 +5759,23 @@ updateLoaded msg model =
                         selection =
                             clamp 0 (resultCount - 1) (loggedIn.searchOverlaySelection + delta)
 
-                        -- The results column has 8px of padding above the first row
+                        rowHeight : Float
+                        rowHeight =
+                            SearchOverlay.rowHeight (MyUi.isMobile model)
+
                         rowTop : Float
                         rowTop =
-                            8 + toFloat selection * SearchOverlay.rowHeight
+                            toFloat selection * rowHeight
                     in
                     ( { loggedIn | searchOverlaySelection = selection }
                     , Dom.getViewportOf SearchOverlay.resultsContainerId
                         |> Task.andThen
                             (\{ viewport } ->
-                                if rowTop - 8 < viewport.y then
-                                    Dom.setViewportOf SearchOverlay.resultsContainerId 0 (rowTop - 8)
+                                if rowTop < viewport.y then
+                                    Dom.setViewportOf SearchOverlay.resultsContainerId 0 rowTop
 
-                                else if rowTop + SearchOverlay.rowHeight + 8 > viewport.y + viewport.height then
-                                    Dom.setViewportOf
-                                        SearchOverlay.resultsContainerId
-                                        0
-                                        (rowTop + SearchOverlay.rowHeight + 8 - viewport.height)
+                                else if rowTop + rowHeight > viewport.y + viewport.height then
+                                    Dom.setViewportOf SearchOverlay.resultsContainerId 0 (rowTop + rowHeight - viewport.height)
 
                                 else
                                     Task.succeed ()
