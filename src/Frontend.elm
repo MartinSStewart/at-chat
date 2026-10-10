@@ -82,6 +82,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
+import SearchOverlay
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -1390,28 +1391,33 @@ updateLoaded msg model =
                 ( True, _, "y" ) ->
                     FrontendExtra.handleRedo model
 
+                ( True, False, "k" ) ->
+                    toggleSearchOverlay model
+
+                ( True, False, "K" ) ->
+                    toggleSearchOverlay model
+
                 _ ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            case loggedIn.textInputFocus of
-                                Just _ ->
-                                    ( loggedIn, Command.none )
+                            if loggedIn.textInputFocus /= Nothing || Route.toOverlay model.route == Just Route.SearchOverlay then
+                                ( loggedIn, Command.none )
 
-                                Nothing ->
-                                    case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
-                                        Just { guildOrDmId, matchId, match } ->
-                                            ( { loggedIn
-                                                | games =
-                                                    SeqDict.update
-                                                        guildOrDmId
-                                                        (Game.pressedKey matchId key match)
-                                                        loggedIn.games
-                                              }
-                                            , Command.none
-                                            )
+                            else
+                                case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                                    Just { guildOrDmId, matchId, match } ->
+                                        ( { loggedIn
+                                            | games =
+                                                SeqDict.update
+                                                    guildOrDmId
+                                                    (Game.pressedKey matchId key match)
+                                                    loggedIn.games
+                                          }
+                                        , Command.none
+                                        )
 
-                                        Nothing ->
-                                            ( loggedIn, Command.none )
+                                    Nothing ->
+                                        ( loggedIn, Command.none )
                         )
                         model
 
@@ -5732,6 +5738,73 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
                 model
 
+        TypedSearchOverlay text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | searchOverlayQuery = text, searchOverlaySelection = 0 }
+                    , Dom.setViewportOf SearchOverlay.resultsContainerId 0 0 |> Task.attempt (\_ -> FrontendNoOp)
+                    )
+                )
+                model
+
+        PressedSearchOverlayArrowKey delta ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        resultCount : Int
+                        resultCount =
+                            SearchOverlay.search loggedIn.searchOverlayQuery (Local.model loggedIn.localState) |> List.length
+
+                        selection : Int
+                        selection =
+                            clamp 0 (resultCount - 1) (loggedIn.searchOverlaySelection + delta)
+
+                        -- The results column has 8px of padding above the first row
+                        rowTop : Float
+                        rowTop =
+                            8 + toFloat selection * SearchOverlay.rowHeight
+                    in
+                    ( { loggedIn | searchOverlaySelection = selection }
+                    , Dom.getViewportOf SearchOverlay.resultsContainerId
+                        |> Task.andThen
+                            (\{ viewport } ->
+                                if rowTop - 8 < viewport.y then
+                                    Dom.setViewportOf SearchOverlay.resultsContainerId 0 (rowTop - 8)
+
+                                else if rowTop + SearchOverlay.rowHeight + 8 > viewport.y + viewport.height then
+                                    Dom.setViewportOf
+                                        SearchOverlay.resultsContainerId
+                                        0
+                                        (rowTop + SearchOverlay.rowHeight + 8 - viewport.height)
+
+                                else
+                                    Task.succeed ()
+                            )
+                        |> Task.attempt (\_ -> FrontendNoOp)
+                    )
+                )
+                model
+
+        PressedSearchOverlayEnter ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    case
+                        SearchOverlay.search loggedIn.searchOverlayQuery (Local.model loggedIn.localState)
+                            |> List.drop loggedIn.searchOverlaySelection
+                            |> List.head
+                    of
+                        Just result ->
+                            ( model, FrontendExtra.routeReplace model result.route )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        PressedSearchOverlayResult route ->
+            ( model, FrontendExtra.routeReplace model route )
+
         PressedMuteChannel guildId channelId isMuted ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -7607,6 +7680,29 @@ addWordSpellingGameReaction guildOrDmId matchId target emoji model loggedIn =
         Command.none
 
 
+toggleSearchOverlay : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+toggleSearchOverlay model =
+    case model.loginStatus of
+        LoggedIn _ ->
+            if Route.toOverlay model.route == Just Route.SearchOverlay then
+                FrontendExtra.routePush model (Route.setOverlay Nothing model.route)
+
+            else
+                let
+                    route : Route
+                    route =
+                        Route.setOverlay (Just Route.SearchOverlay) model.route
+                in
+                if route == model.route then
+                    ( model, Command.none )
+
+                else
+                    FrontendExtra.routePush model route
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
+
+
 showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
@@ -9163,6 +9259,16 @@ view _ model =
 
                                         _ ->
                                             Ui.noAttr
+                                    , if Route.toOverlay loaded.route == Just Route.SearchOverlay then
+                                        SearchOverlay.view
+                                            isMobile
+                                            loggedIn.searchOverlayQuery
+                                            loggedIn.searchOverlaySelection
+                                            (SearchOverlay.search loggedIn.searchOverlayQuery local)
+                                            |> Ui.inFront
+
+                                      else
+                                        Ui.noAttr
                                     , case ( local.localUser.user.deleteAccountAt, Route.toOverlay loaded.route ) of
                                         ( Just _, Just Route.UserOptionsOverlay ) ->
                                             Ui.noAttr

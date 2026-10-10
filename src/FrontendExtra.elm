@@ -122,6 +122,7 @@ import RecoveryLogin
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
+import SearchOverlay
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -587,6 +588,9 @@ layout model attributes child =
                         Ui.Lazy.lazy e2eeInfoOverlay isMobile |> Ui.inFront
 
                     Just Route.UserOptionsOverlay ->
+                        Ui.noAttr
+
+                    Just Route.SearchOverlay ->
                         Ui.noAttr
 
                     Nothing ->
@@ -1766,6 +1770,12 @@ routeRequest previousRoute newRoute model =
                 Nothing ->
                     False
 
+        openedSearchOverlay : Bool
+        openedSearchOverlay =
+            Route.toOverlay newRoute
+                == Just Route.SearchOverlay
+                && (Maybe.andThen Route.toOverlay previousRoute /= Just Route.SearchOverlay)
+
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
@@ -1800,10 +1810,30 @@ routeRequest previousRoute newRoute model =
                                     Just Route.E2eeInfoOverlay ->
                                         Nothing
 
+                                    Just Route.SearchOverlay ->
+                                        Nothing
+
                                     Nothing ->
                                         Nothing
+                            , searchOverlayQuery =
+                                if openedSearchOverlay then
+                                    ""
+
+                                else
+                                    loggedIn.searchOverlayQuery
+                            , searchOverlaySelection =
+                                if openedSearchOverlay then
+                                    0
+
+                                else
+                                    loggedIn.searchOverlaySelection
                         }
-                        Command.none
+                        (if openedSearchOverlay then
+                            Dom.focus SearchOverlay.inputId |> Task.attempt (\_ -> SetFocus)
+
+                         else
+                            Command.none
+                        )
                 )
                 { model | route = newRoute }
     in
@@ -2896,6 +2926,18 @@ isPressMsg msg =
             False
 
         PressedClearChannelSearch ->
+            True
+
+        TypedSearchOverlay _ ->
+            False
+
+        PressedSearchOverlayArrowKey _ ->
+            False
+
+        PressedSearchOverlayEnter ->
+            False
+
+        PressedSearchOverlayResult _ ->
             True
 
         PressedExpandContainer _ ->
@@ -7358,7 +7400,7 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toOverlay model.route == Just Route.UserOptionsOverlay then
+            if Route.toOverlay model.route == Just Route.UserOptionsOverlay || Route.toOverlay model.route == Just Route.SearchOverlay then
                 routePush model (Route.setOverlay Nothing model.route)
 
             else if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
@@ -8246,6 +8288,8 @@ loadedInitHelper startupData emojiData loginData loading =
             , newMessagesWhileNotScrolledToBottom = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
+            , searchOverlayQuery = ""
+            , searchOverlaySelection = 0
             , channelSearch = ""
             , showNewPrivateKey = Nothing
             , e2eeError = Nothing

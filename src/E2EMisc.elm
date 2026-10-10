@@ -34,6 +34,7 @@ module E2EMisc exposing
     , reactionPopupOnLongPressTest
     , reloadingAConversationLeavesItUnreadTest
     , richTextMessage
+    , searchOverlayTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -82,6 +83,7 @@ import Quantity
 import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
+import SearchOverlay
 import SeqDict
 import SeqSet
 import String.Nonempty
@@ -2777,6 +2779,95 @@ escapeClosesUserOptionsTest config =
                 ]
             )
         ]
+
+
+searchOverlayTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+searchOverlayTest config =
+    let
+        ctrlK : Types.FrontendMsg_
+        ctrlK =
+            Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "k" }
+    in
+    E2EHelper.startTest
+        "Ctrl+K opens a search overlay that jumps to a channel"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , List.map
+                    (\channelName ->
+                        T.group
+                            [ admin.click 100 (Dom.id "guild_newChannel")
+                            , admin.input 100 (Dom.id "newChannelName") channelName
+                            , admin.click 100 (Dom.id "guild_createChannel")
+                            ]
+                    )
+                    [ "alpha", "beta" ]
+                    |> T.group
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.input 100 SearchOverlay.inputId "alp"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "alpha" ]
+                    )
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild!" ]
+                    )
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "searchOverlay_result_1" ])
+                , admin.snapshotView 100 { name = "Search overlay" }
+                , admin.keyDown 100 SearchOverlay.inputId "Enter" []
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.checkModel 100 (checkGuildChannelRoute (Id.fromInt 1))
+
+                -- Pressing it again or escape closes it without going anywhere
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.input 100 SearchOverlay.inputId "does not match anything"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "No results found" ])
+                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = "Escape" }))
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.checkModel 100 (checkGuildChannelRoute (Id.fromInt 1))
+                ]
+            )
+        ]
+
+
+checkGuildChannelRoute : Id.Id Id.ChannelId -> FrontendModel -> Result String ()
+checkGuildChannelRoute expectedChannelId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.GuildRoute _ (Route.ChannelRoute channelId _ _) _ Nothing ->
+                    if channelId == expectedChannelId then
+                        Ok ()
+
+                    else
+                        Err ("Expected channel " ++ Id.toString expectedChannelId ++ " but got " ++ Id.toString channelId)
+
+                _ ->
+                    Err "Expected a guild channel route without an overlay"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 {-| Deleting an account only schedules it, so the same button cancels it again, and until then a

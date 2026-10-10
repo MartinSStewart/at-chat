@@ -904,6 +904,14 @@ exports.init = async function init(app)
         }
     });
 
+    // Ctrl+K/Cmd+K opens the search overlay. Elm's onKeyDown can't stop the browser from also
+    // moving focus to its own search bar.
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+        }
+    });
+
     // Safari keeps a video that has played in the lock screen's media controls for as long
     // as its element stays in the page, so closing the fullscreen player swaps in a fresh copy.
     document.addEventListener('webkitendfullscreen', (event) => {
