@@ -25,6 +25,7 @@ import Html.Events
 import Icons
 import Id exposing (ChannelId, ChannelMessageId, Id, UserId)
 import Json.Decode
+import List.Extra
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
 import Message
 import MessageArray exposing (MessageArray)
@@ -84,37 +85,64 @@ maxResults =
     50
 
 
-{-| Results whose name starts with the query come before ones that only contain it, and within
-each of those shorter names come first, then the most recently active. With nothing typed it's only
-the most recently active first.
+{-| The query is split into words and every word has to appear in the result's name or the name of
+the guild it's in, so "pet gen" finds #general in the pet-pics guild. Results where every word starts
+a word in those names come first, then shorter names, then the most recently active. With nothing
+typed it's only the most recently active first.
 -}
 search : String -> LocalState -> List SearchResult
 search query local =
     let
-        query2 : String
-        query2 =
-            String.trim query |> String.toLower
+        queryWords : List String
+        queryWords =
+            String.replace "#" " " query |> String.toLower |> String.words
     in
     List.filterMap
         (\result ->
             let
-                name : String
-                name =
-                    String.toLower result.name
+                searchText : String
+                searchText =
+                    (case result.location of
+                        Just location ->
+                            result.name ++ " " ++ location
+
+                        Nothing ->
+                            result.name
+                    )
+                        |> String.toLower
+
+                searchTextWords : List String
+                searchTextWords =
+                    String.map
+                        (\char ->
+                            if Char.isAlphaNum char then
+                                char
+
+                            else
+                                ' '
+                        )
+                        searchText
+                        |> String.words
 
                 nameLength : Int
                 nameLength =
-                    if query2 == "" then
-                        0
+                    case queryWords of
+                        [] ->
+                            0
 
-                    else
-                        String.length name
+                        _ ->
+                            String.length result.name
             in
-            if String.startsWith query2 name then
-                Just ( ( 0, nameLength, negate result.lastActivity ), result )
-
-            else if String.contains query2 name then
-                Just ( ( 1, nameLength, negate result.lastActivity ), result )
+            if List.all (\word -> String.contains word searchText) queryWords then
+                Just
+                    ( ( List.Extra.count
+                            (\word -> not (List.any (String.startsWith word) searchTextWords))
+                            queryWords
+                      , nameLength
+                      , negate result.lastActivity
+                      )
+                    , result
+                    )
 
             else
                 Nothing

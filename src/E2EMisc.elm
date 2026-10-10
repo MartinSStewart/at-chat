@@ -2841,6 +2841,24 @@ searchOverlayTest config =
                     )
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "searchOverlay_result_1" ])
                 , admin.snapshotView 100 { name = "Search overlay" }
+
+                -- Each word can match the channel or the guild it's in
+                , admin.input 100 SearchOverlay.inputId "first #wel"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "Welcome", Test.Html.Selector.exactText "First guild" ]
+                    )
+                , admin.input 100 SearchOverlay.inputId "my gen"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "general", Test.Html.Selector.exactText "My new guild!" ]
+                    )
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "searchOverlay_result_1" ])
+                , admin.input 100 SearchOverlay.inputId "alp"
                 , admin.keyDown 100 SearchOverlay.inputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
                 , admin.checkModel 100 (checkGuildChannelRoute (Id.fromInt 1))
