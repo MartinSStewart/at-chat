@@ -24,9 +24,9 @@ module FileStatus exposing
     , aesPrivateKeyToBytes
     , contentType
     , contentTypeFromInt
+    , contentTypeHeader
     , contentTypeToInt
     , contentTypeType
-    , contentTypes
     , discordStickerUrl
     , domain
     , encryptedThumbnailUrl

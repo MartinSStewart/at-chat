@@ -31,6 +31,7 @@ module E2EHelper exposing
     , decodeCustomRequest
     , defaultAdminId
     , desktopWindow
+    , discordAttachmentUploadUrl
     , discordUserAuth
     , domain
     , drawWideZigzagStroke
@@ -2013,6 +2014,14 @@ infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
 
+{-| Where Discord has files for attachments uploaded to, before the message they are attached
+to is posted.
+-}
+discordAttachmentUploadUrl : String
+discordAttachmentUploadUrl =
+    "https://discord-attachments-uploads-prd.storage.googleapis.com"
+
+
 handleCustomRequest : String -> CustomRequest -> HttpResponse
 handleCustomRequest discordStickerPacks { method, url, headers, body } =
     if String.startsWith "https://" url then
@@ -2068,6 +2077,14 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
     "pinned": false,
     "type": 0
 }"""
+                    )
+
+            ( "POST", [ "discord.com", "api", "v9", "channels", _, "attachments" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    ("""{"attachments":[{"id":0,"upload_url":\""""
+                        ++ discordAttachmentUploadUrl
+                        ++ """/1/pasted.txt","upload_filename":"1/pasted.txt"}]}"""
                     )
 
             ( "GET", [ "discord.com", "api", "v9", "channels", channelId, endpoint ] ) ->

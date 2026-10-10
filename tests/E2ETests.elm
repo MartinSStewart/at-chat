@@ -141,6 +141,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     }
                                 )
 
+                        -- The backend reads a file back to forward it to Discord
+                        [ _, "123123123" ] ->
+                            E2EHelper.httpBasic currentRequest.url 200 "åäö"
+
                         [ "upload" ] ->
                             E2EHelper.httpBasic
                                 currentRequest.url
@@ -173,6 +177,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                         _ ->
                             UnhandledHttpRequest
+
+                "https:" :: "" :: "discord-attachments-uploads-prd.storage.googleapis.com" :: _ ->
+                    E2EHelper.httpBasic currentRequest.url 200 ""
 
                 [ "https:", "", "api.postmarkapp.com", "email" ] ->
                     case currentRequest.body of
