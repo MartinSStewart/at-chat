@@ -369,6 +369,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.escapeClosesUserOptionsTest normalConfig
+    , E2EMisc.searchOverlayTest normalConfig
     , E2EMisc.deleteAccountTest normalConfig discordOp0Ready discordOp0ReadySupplemental
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.importChannelTest channelImportConfig
@@ -421,6 +422,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
+    , E2EMisc.notificationClickOpensConversationTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
@@ -683,6 +685,24 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ]
                     )
                 , admin.click 100 Pages.Guild.newMessagesId
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Opening another conversation starts at the bottom even if the last one was scrolled up"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.scrollToMiddle admin
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , E2EHelper.writeMessage user 100 "Hello!"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello!" ])
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])

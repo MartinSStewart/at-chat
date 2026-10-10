@@ -23,6 +23,7 @@ module Emoji exposing
     , heart
     , inputTextView
     , isPressed
+    , maxSelectorHeight
     , requestEmojiData
     , scrollContainerId
     , searchInputId
@@ -720,6 +721,12 @@ skinToneView selectedSkinTone =
 
 {-| Everything in the scrollable part of the selector has a fixed size so that the scroll position
 each category starts at can be worked out with arithmetic instead of `Dom.getElement`.
+
+Those sizes need `Ui.heightMin 0` alongside them, since elm-ui otherwise lets content push an
+element past its height. An emoji's line is taller than 40px in fonts with a large line height
+(Noto Sans among them), and a category drawn taller than its placeholder makes the list jump
+when it scrolls out of the drawn range.
+
 -}
 emojiWidth : number
 emojiWidth =
@@ -761,11 +768,21 @@ selectorHeight availableHeight =
     min availableHeight maxSelectorHeight
 
 
-{-| How much of the emoji list is on screen at once.
+{-| The most of the emoji list that can be on screen at once. The selector is sized by whatever
+it's placed in, so its real height isn't known here, but drawing a little more than can be seen
+costs nothing.
 -}
-scrollViewportHeight : number -> number
-scrollViewportHeight availableHeight =
-    selectorHeight availableHeight - searchInputHeight
+maxScrollViewportHeight : number
+maxScrollViewportHeight =
+    maxSelectorHeight - searchInputHeight
+
+
+{-| Without this, scrolling past either end of the list carries on into the page. While the
+virtual keyboard is open that pans the whole page, selector included.
+-}
+overscrollContain : Ui.Attribute msg
+overscrollContain =
+    MyUi.htmlStyle "overscroll-behavior" "contain"
 
 
 heart : UnicodeEmoji
@@ -971,8 +988,8 @@ filterBySearch query toNames list =
             list
 
 
-visibleRange : Int -> Int -> Maybe Category -> List ( Category, Int ) -> { from : Int, to : Int }
-visibleRange availableHeight contentHeight selectedCategory offsets =
+visibleRange : Int -> Maybe Category -> List ( Category, Int ) -> { from : Int, to : Int }
+visibleRange contentHeight selectedCategory offsets =
     case offsets of
         ( category, offset ) :: rest ->
             if Just category == selectedCategory then
@@ -985,14 +1002,14 @@ visibleRange availableHeight contentHeight selectedCategory offsets =
                         [] ->
                             contentHeight
                     )
-                        + scrollViewportHeight availableHeight
+                        + maxScrollViewportHeight
                 }
 
             else
-                visibleRange availableHeight contentHeight selectedCategory rest
+                visibleRange contentHeight selectedCategory rest
 
         [] ->
-            { from = 0, to = scrollViewportHeight availableHeight }
+            { from = 0, to = maxScrollViewportHeight }
 
 
 {-| The category whose section the top of the scroll container is showing.
@@ -1244,6 +1261,7 @@ emojiButtonHelper index item model content =
         , Ui.contentCenterY
         , Ui.width (Ui.px emojiWidth)
         , Ui.height (Ui.px emojiHeight)
+        , Ui.heightMin 0
         ]
         content
 
@@ -1255,6 +1273,7 @@ emojiCategoryContainer title content =
         [ Ui.el
             [ Ui.Font.size 16
             , Ui.height (Ui.px categoryTitleHeight)
+            , Ui.heightMin 0
             , Ui.contentCenterY
             , Ui.Font.color MyUi.font3
             , Ui.paddingXY 8 0
@@ -1264,8 +1283,8 @@ emojiCategoryContainer title content =
         ]
 
 
-categoryColumn : Int -> Maybe SkinTone -> Maybe Category -> List ( Category, Int ) -> Element Msg
-categoryColumn availableHeight skinTone selectedCategory offsets =
+categoryColumn : Maybe SkinTone -> Maybe Category -> List ( Category, Int ) -> Element Msg
+categoryColumn skinTone selectedCategory offsets =
     List.map
         (\( category, offset ) ->
             MyUi.elButton
@@ -1284,16 +1303,14 @@ categoryColumn availableHeight skinTone selectedCategory offsets =
         offsets
         |> Ui.column
             [ Ui.width (Ui.px categoryColumnWidth)
-            , Ui.alignTop
-            , Ui.heightMin 0
             , Ui.scrollable
-            , Ui.height (Ui.px (scrollViewportHeight availableHeight))
+            , overscrollContain
+            , Ui.height Ui.fill
             ]
 
 
 selector :
     Bool
-    -> Int
     -> Int
     -> Int
     -> Model
@@ -1304,7 +1321,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector isMobile availableHeight scrollbarWidth width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector isMobile scrollbarWidth width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -1458,7 +1475,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
 
                 onScreen : { from : Int, to : Int }
                 onScreen =
-                    visibleRange availableHeight contentHeight selectedCategory offsets
+                    visibleRange contentHeight selectedCategory offsets
 
                 -- Emoji buttons are numbered across every category rather than restarting at 0 in
                 -- each one, so that the id we scroll to on arrow key presses is unique.
@@ -1530,15 +1547,21 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
 
                 emojiContent =
                     Ui.row
-                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                        [ categoryColumn availableHeight userData.skinTone selectedCategory offsets
+                        [ Ui.height Ui.fill
+                        , Ui.heightMin 0
+                        , -- Otherwise the category column's full height counts as the least room
+                          -- this needs, and the selector won't shrink to fit whatever it's put in.
+                          MyUi.htmlStyle "flex-basis" "0"
+                        ]
+                        [ categoryColumn userData.skinTone selectedCategory offsets
                         , Ui.column
                             [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
                             [ Ui.el
                                 [ Ui.background MyUi.background3
                                 , Ui.scrollable
+                                , overscrollContain
                                 , Ui.clipX
-                                , Ui.height (Ui.px (scrollViewportHeight availableHeight))
+                                , Ui.height Ui.fill
                                 , Ui.heightMin 0
                                 , Ui.id (Dom.idToString scrollContainerId)
                                 , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
@@ -1554,7 +1577,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
             in
             Ui.column
                 [ Ui.width (Ui.px selectorWidth)
-                , Ui.height (Ui.px (selectorHeight availableHeight))
+                , Ui.height Ui.fill
                 , Ui.background MyUi.background2
                 , Ui.border 1
                 , Ui.borderColor MyUi.highlightedBorder

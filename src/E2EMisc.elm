@@ -26,6 +26,7 @@ module E2EMisc exposing
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
+    , notificationClickOpensConversationTest
     , openLastViewedGuildOnStartupTest
     , orphanedFilesTest
     , profileImageOpensDm
@@ -33,6 +34,7 @@ module E2EMisc exposing
     , reactionPopupOnLongPressTest
     , reloadingAConversationLeavesItUnreadTest
     , richTextMessage
+    , searchOverlayTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -81,6 +83,7 @@ import Quantity
 import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
+import SearchOverlay
 import SeqDict
 import SeqSet
 import String.Nonempty
@@ -677,6 +680,15 @@ inviteUserAndDmChat config =
                                         ]
                             )
                         , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
+                        , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "k" }))
+                        , admin.input 100 SearchOverlay.inputId "sven"
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_1" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.exactText "Sven" ]
+                            )
+                        , admin.snapshotView 100 { name = "Search overlay lists DMs and DM threads" }
                         ]
                     )
                 ]
@@ -1591,6 +1603,77 @@ checkGuild0Route model =
 
         Types.Loading _ ->
             Err "Expected the frontend to have finished loading"
+
+
+{-| Desktop notifications shown while the app is running are made by the page itself
+rather than the service worker, so pressing one has to route the page there too.
+-}
+notificationClickOpensConversationTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+notificationClickOpensConversationTest config =
+    E2EHelper.startTest
+        "Pressing a notification shown while the app is running opens its conversation"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                -- `user` starts out with push notifications, one option below this one.
+                [ user.click 100 (Dom.id "guild_showUserOptions")
+                , user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowUp" []
+                , user.click 100 (Dom.id "userOptions_closeUserOptions")
+                , user.portEvent 100 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , user.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool False)
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Are you there?"
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.filterMap
+                                (\request ->
+                                    if request.clientId == user.clientId && request.portName == "show_notification" then
+                                        Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) request.value
+                                            |> Result.toMaybe
+
+                                    else
+                                        Nothing
+                                )
+                                data.portRequests
+                        of
+                            [ url ] ->
+                                [ user.portEvent 100 "notification_clicked_from_js" (Json.Encode.string url)
+                                , user.checkModel
+                                    100
+                                    (\model ->
+                                        case Audio.userModel model of
+                                            Types.Loaded loaded ->
+                                                case loaded.route of
+                                                    Route.DmRoute { channelId } ->
+                                                        if channelId == DmChannelId.fromUserIds E2EHelper.defaultAdminId (Id.fromInt 2) then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Opened the wrong DM"
+
+                                                    _ ->
+                                                        Err "Expected pressing the notification to open the DM"
+
+                                            Types.Loading _ ->
+                                                Err "Expected the frontend to have finished loading"
+                                    )
+                                ]
+
+                            urls ->
+                                [ T.checkState
+                                    0
+                                    (\_ -> Err ("Expected one notification but found " ++ String.fromInt (List.length urls)))
+                                ]
+                    )
+                ]
+            )
+        ]
 
 
 {-| DM threads carry their own route, are listed underneath the DM in the friends
@@ -2705,6 +2788,96 @@ escapeClosesUserOptionsTest config =
                 ]
             )
         ]
+
+
+searchOverlayTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+searchOverlayTest config =
+    let
+        ctrlK : Types.FrontendMsg_
+        ctrlK =
+            Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "k" }
+    in
+    E2EHelper.startTest
+        "Ctrl+K opens a search overlay that jumps to a channel"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , List.map
+                    (\channelName ->
+                        T.group
+                            [ admin.click 100 (Dom.id "guild_newChannel")
+                            , admin.input 100 (Dom.id "newChannelName") channelName
+                            , admin.click 100 (Dom.id "guild_createChannel")
+                            ]
+                    )
+                    [ "alpha", "beta" ]
+                    |> T.group
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.snapshotView 100 { name = "Search overlay with nothing typed" }
+                , admin.input 100 SearchOverlay.inputId "alp"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "alpha" ]
+                    )
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "searchOverlay_result_0" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild!" ]
+                    )
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "searchOverlay_result_1" ])
+                , admin.snapshotView 100 { name = "Search overlay" }
+                , admin.keyDown 100 SearchOverlay.inputId "Enter" []
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.checkModel 100 (checkGuildChannelRoute (Id.fromInt 1))
+
+                -- Pressing it again or escape closes it without going anywhere
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.update 100 (Audio.userMsg ctrlK)
+                , admin.input 100 SearchOverlay.inputId "does not match anything"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "No results found" ])
+                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = False, metaKey = False, shiftKey = False, key = "Escape" }))
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString SearchOverlay.inputId) ])
+                , admin.checkModel 100 (checkGuildChannelRoute (Id.fromInt 1))
+                ]
+            )
+        ]
+
+
+checkGuildChannelRoute : Id.Id Id.ChannelId -> FrontendModel -> Result String ()
+checkGuildChannelRoute expectedChannelId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.GuildRoute _ (Route.ChannelRoute channelId _ _) _ Nothing ->
+                    if channelId == expectedChannelId then
+                        Ok ()
+
+                    else
+                        Err ("Expected channel " ++ Id.toString expectedChannelId ++ " but got " ++ Id.toString channelId)
+
+                _ ->
+                    Err "Expected a guild channel route without an overlay"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 {-| Deleting an account only schedules it, so the same button cancels it again, and until then a

@@ -23,6 +23,7 @@ module Route exposing
     , setChannelsVisible
     , setOverlay
     , setShowMembers
+    , threadRouteWithFriends
     , toChannelHeaderTab
     , toGuildOrDmId
     , toOverlay
@@ -71,6 +72,7 @@ the reader back on that page, so the page it covers is part of the route it appe
 type Overlay
     = E2eeInfoOverlay
     | UserOptionsOverlay
+    | SearchOverlay
 
 
 type LinkDiscordError
@@ -162,6 +164,11 @@ userOptionsOverlayValue =
     "user-options"
 
 
+searchOverlayValue : String
+searchOverlayValue =
+    "search"
+
+
 decode : Url -> Route
 decode url =
     let
@@ -195,6 +202,9 @@ decode url =
 
                     else if value == userOptionsOverlayValue then
                         Just UserOptionsOverlay
+
+                    else if value == searchOverlayValue then
+                        Just SearchOverlay
 
                     else
                         Nothing
@@ -803,6 +813,16 @@ setShowMembers showMembers route =
             route
 
 
+threadRouteWithFriends : ThreadRoute -> ThreadRouteWithFriends
+threadRouteWithFriends threadRoute =
+    case threadRoute of
+        NoThread ->
+            NoThreadWithFriends Nothing HideChannelSettings
+
+        ViewThread threadId ->
+            ViewThreadWithFriends threadId Nothing HideChannelSettings
+
+
 threadRouteWithShowMembers : ShowChannelSettings -> ThreadRouteWithFriends -> ThreadRouteWithFriends
 threadRouteWithShowMembers showMembers threadRoute =
     case threadRoute of
@@ -1200,6 +1220,9 @@ encodeOverlay overlay =
 
         Just UserOptionsOverlay ->
             [ Url.Builder.string overlayParam userOptionsOverlayValue ]
+
+        Just SearchOverlay ->
+            [ Url.Builder.string overlayParam searchOverlayValue ]
 
         Nothing ->
             []

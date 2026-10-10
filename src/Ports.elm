@@ -25,6 +25,7 @@ port module Ports exposing
     , hapticFeedback
     , loadServiceWorkerData
     , loadStartupData
+    , notificationClicked
     , pageHasFocus
     , registerPushSubscription
     , registerPushSubscriptionToJs
@@ -46,7 +47,7 @@ port module Ports exposing
     , subscribeDataCodec
     , textInputSelectAll
     , unregisterServiceWorker
-    , visualViewportResized
+    , visualViewportChanged
     )
 
 import Codec exposing (Codec)
@@ -428,13 +429,16 @@ port window_has_focus_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
+port notification_clicked_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
 port set_app_badge_to_js : Json.Encode.Value -> Cmd msg
 
 
-port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
+port visual_viewport_changed_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port safe_area_insets_from_js : (Json.Decode.Value -> msg) -> Sub msg
@@ -492,12 +496,22 @@ setCursorPosition htmlId range =
         )
 
 
-visualViewportResized : (Float -> msg) -> Subscription FrontendOnly msg
-visualViewportResized msg =
+visualViewportChanged : ({ height : Float, top : Float } -> msg) -> Subscription FrontendOnly msg
+visualViewportChanged msg =
     Subscription.fromJs
-        "visual_viewport_resized_from_js"
-        visual_viewport_resized_from_js
-        (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
+        "visual_viewport_changed_from_js"
+        visual_viewport_changed_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2
+                    (\height top -> { height = height, top = top })
+                    (Json.Decode.field "height" Json.Decode.float)
+                    (Json.Decode.field "top" Json.Decode.float)
+                )
+                json
+                |> Result.withDefault { height = 0, top = 0 }
+                |> msg
+        )
 
 
 safeAreaInsetsChanged : ({ top : Int, bottom : Int } -> msg) -> Subscription FrontendOnly msg
@@ -550,6 +564,18 @@ the service worker what to count up from (see public/service-worker.js).
 setAppBadge : Int -> Command FrontendOnly toMsg msg
 setAppBadge count =
     Command.sendToJs "set_app_badge_to_js" set_app_badge_to_js (Json.Encode.int count)
+
+
+notificationClicked : (String -> msg) -> Subscription FrontendOnly msg
+notificationClicked msg =
+    Subscription.fromJs
+        "notification_clicked_from_js"
+        notification_clicked_from_js
+        (\json ->
+            Json.Decode.decodeValue Json.Decode.string json
+                |> Result.withDefault ""
+                |> msg
+        )
 
 
 serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg
@@ -689,14 +715,17 @@ type PwaStatus
     | BrowserView
 
 
-showNotification : String -> String -> Command FrontendOnly toMsg msg
-showNotification title body =
+{-| Pressing the notification sends `url` back through `notificationClicked`.
+-}
+showNotification : String -> String -> String -> Command FrontendOnly toMsg msg
+showNotification title body url =
     Command.sendToJs
         "show_notification"
         show_notification
         (Json.Encode.object
             [ ( "title", Json.Encode.string title )
             , ( "body", Json.Encode.string body )
+            , ( "url", Json.Encode.string url )
             ]
         )
 

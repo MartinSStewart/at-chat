@@ -51,6 +51,7 @@ module User exposing
     , setLastDmViewed
     , setLastViewedMessage
     , setName
+    , smallDiscordProfileImage
     , smallProfileImage
     , smallProfileImageRounding
     , toColoredString
@@ -1150,6 +1151,26 @@ discordProfileImage userId maybeFileHash =
         [ Ui.rounded profileImageRounding
         , Ui.width (Ui.px profileImageSize)
         , Ui.height (Ui.px profileImageSize)
+        , Ui.clip
+        ]
+        { source =
+            case maybeFileHash of
+                Just fileHash ->
+                    FileStatus.fileUrl FileStatus.pngContent fileHash
+
+                Nothing ->
+                    Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+        , description = ""
+        , onLoad = Nothing
+        }
+
+
+smallDiscordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
+smallDiscordProfileImage userId maybeFileHash =
+    Ui.imageLazy
+        [ Ui.rounded smallProfileImageRounding
+        , Ui.width (Ui.px smallProfileImageSize)
+        , Ui.height (Ui.px smallProfileImageSize)
         , Ui.clip
         ]
         { source =

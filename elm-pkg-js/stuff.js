@@ -904,6 +904,14 @@ exports.init = async function init(app)
         }
     });
 
+    // Ctrl+K/Cmd+K opens the search overlay. Elm's onKeyDown can't stop the browser from also
+    // moving focus to its own search bar.
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+        }
+    });
+
     // Safari keeps a video that has played in the lock screen's media controls for as long
     // as its element stays in the page, so closing the fullscreen player swaps in a fresh copy.
     document.addEventListener('webkitendfullscreen', (event) => {
@@ -1482,11 +1490,22 @@ exports.init = async function init(app)
     const isAndroid = window.navigator.userAgent.includes('Android');
     let previousVisualViewportHeight = window.visualViewport.height;
 
+    // pageTop rather than offsetTop, because iOS scrolls the document itself when the keyboard
+    // opens, which offsetTop (measured from the layout viewport) doesn't include. That scroll is
+    // also why the window's scroll event is listened to as well as the visual viewport's.
+    function sendVisualViewport() {
+        app.ports.visual_viewport_changed_from_js.send(
+            { height: window.visualViewport.height, top: window.visualViewport.pageTop });
+    }
+
+    window.visualViewport.addEventListener("scroll", sendVisualViewport);
+    window.addEventListener("scroll", sendVisualViewport);
+
     window.visualViewport.addEventListener(
         "resize",
         () => {
             const height = window.visualViewport.height;
-            app.ports.visual_viewport_resized_from_js.send(height);
+            sendVisualViewport();
             if (isAndroid && height < previousVisualViewportHeight) {
                 // Elm redraws on the next animation frame in response to the message above, so
                 // this waits until after that to measure where the input ended up.
@@ -1515,6 +1534,11 @@ exports.init = async function init(app)
     app.ports.show_notification.subscribe((a) => {
         if ("Notification" in window) {
             const notification = new Notification(a.title, { body: a.body });
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+                app.ports.notification_clicked_from_js.send(a.url);
+            };
             activeNotifications.push(notification);
         }
     });

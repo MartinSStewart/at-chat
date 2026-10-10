@@ -200,6 +200,7 @@ type alias LoadedFrontend =
     , timezone : Time.Zone
     , windowSize : Coord CssPixels
     , visualViewportHeight : Int
+    , visualViewportTop : Int
     , loginStatus : LoginStatus
     , loginType : LoginType
     , elmUiState : Ui.Anim.State
@@ -277,6 +278,8 @@ type alias LoggedIn2 =
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
+    , searchOverlayQuery : String
+    , searchOverlaySelection : Int
     , showNewPrivateKey : Maybe X25519.PrivateKey
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
@@ -685,7 +688,8 @@ type FrontendMsg_
     | PageHasFocusChanged Bool
     | PageFocusSettled
     | GotServiceWorkerMessage String
-    | VisualViewportResized Float
+    | PressedNotification String
+    | VisualViewportChanged { height : Float, top : Float }
     | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
@@ -732,6 +736,10 @@ type FrontendMsg_
     | PressedClearFriendsSearch
     | TypedChannelSearch String
     | PressedClearChannelSearch
+    | TypedSearchOverlay String
+    | PressedSearchOverlayArrowKey Int
+    | PressedSearchOverlayEnter
+    | PressedSearchOverlayResult Route
     | PressedMuteChannel (Id GuildId) (Id ChannelId) IsMuted
     | PressedMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
     | PressedMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted

@@ -419,6 +419,25 @@ async function run() {
         expectEqual(response.headers.get("content-range"), "bytes */2048", "Content-Range");
     });
 
+    // The content type comes from the address, so anyone who can send a link can have an
+    // attachment opened as html. Without the sandbox its script would run as at-chat.app.
+    await check("A decrypted file is sandboxed out of the app's origin", async () => {
+        const cases = [
+            { type: "text/html", csp: "sandbox", range: undefined },
+            { type: "image/svg+xml", csp: "sandbox", range: { Range: "bytes=0-1" } },
+            { type: "application/pdf", csp: "sandbox allow-scripts", range: undefined }
+        ];
+
+        for (const { type, csp, range } of cases) {
+            const response = await requestFile(
+                listeners, domain + "file/e/" + encodeURIComponent(type) + "/" + fileHash, range);
+
+            expectEqual(response.headers.get("content-type"), type, type + " content type");
+            expectEqual(response.headers.get("content-security-policy"), csp, type + " Content-Security-Policy");
+            expectEqual(response.headers.get("x-content-type-options"), "nosniff", type + " X-Content-Type-Options");
+        }
+    });
+
     // The address the ciphertext is read from is all the server learns about an encrypted
     // attachment, so it must not name the kind of file it is holding.
     await check("The server isn't told what kind of file the ciphertext is", async () => {

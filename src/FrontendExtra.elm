@@ -79,6 +79,7 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
+import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
 import Game
@@ -121,6 +122,7 @@ import RecoveryLogin
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
+import SearchOverlay
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -586,6 +588,9 @@ layout model attributes child =
                         Ui.Lazy.lazy e2eeInfoOverlay isMobile |> Ui.inFront
 
                     Just Route.UserOptionsOverlay ->
+                        Ui.noAttr
+
+                    Just Route.SearchOverlay ->
                         Ui.noAttr
 
                     Nothing ->
@@ -1510,6 +1515,10 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
                         |> SeqSet.member local.localUser.session.userId
+
+                threadRouteWithFriends : ThreadRouteWithFriends
+                threadRouteWithFriends =
+                    Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
@@ -1521,7 +1530,29 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     User.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users (LocalState.channelMentions guildOrDmId local) content)
+                            Ports.showNotification
+                                (User.toString senderId users)
+                                (RichText.toString local.localUser.timezone True users (LocalState.channelMentions guildOrDmId local) content)
+                                (Env.domain
+                                    ++ Route.encode
+                                        (case guildOrDmId of
+                                            GuildOrDmId_Guild { guildId, channelId } ->
+                                                GuildRoute
+                                                    guildId
+                                                    (ChannelRoute channelId threadRouteWithFriends Nothing)
+                                                    ChannelsHiddenOnMobile
+                                                    Nothing
+
+                                            GuildOrDmId_Dm { otherUserId } ->
+                                                DmRoute
+                                                    { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                                    , threadRoute = threadRouteWithFriends
+                                                    , tab = Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+                                        )
+                                )
 
                         _ ->
                             Command.none
@@ -1575,6 +1606,10 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
 
                 allUsers =
                     LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+
+                threadRouteWithFriends : ThreadRouteWithFriends
+                threadRouteWithFriends =
+                    Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
@@ -1584,6 +1619,30 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                             Ports.showNotification
                                 (User.toString senderId allUsers)
                                 (RichText.toString local.localUser.timezone True allUsers (LocalState.discordChannelMentions guildOrDmId local) content)
+                                (Env.domain
+                                    ++ Route.encode
+                                        (case guildOrDmId of
+                                            DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
+                                                DiscordGuildRoute
+                                                    { currentDiscordUserId = currentUserId
+                                                    , guildId = guildId
+                                                    , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+
+                                            DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
+                                                DiscordDmRoute
+                                                    { currentDiscordUserId = currentUserId
+                                                    , channelId = channelId
+                                                    , viewingMessage = Nothing
+                                                    , showMembersTab = HideChannelSettings
+                                                    , tab = Nothing
+                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                    , overlay = Nothing
+                                                    }
+                                        )
+                                )
 
                         _ ->
                             Command.none
@@ -1711,6 +1770,12 @@ routeRequest previousRoute newRoute model =
                 Nothing ->
                     False
 
+        openedSearchOverlay : Bool
+        openedSearchOverlay =
+            Route.toOverlay newRoute
+                == Just Route.SearchOverlay
+                && (Maybe.andThen Route.toOverlay previousRoute /= Just Route.SearchOverlay)
+
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
@@ -1745,10 +1810,30 @@ routeRequest previousRoute newRoute model =
                                     Just Route.E2eeInfoOverlay ->
                                         Nothing
 
+                                    Just Route.SearchOverlay ->
+                                        Nothing
+
                                     Nothing ->
                                         Nothing
+                            , searchOverlayQuery =
+                                if openedSearchOverlay then
+                                    ""
+
+                                else
+                                    loggedIn.searchOverlayQuery
+                            , searchOverlaySelection =
+                                if openedSearchOverlay then
+                                    0
+
+                                else
+                                    loggedIn.searchOverlaySelection
                         }
-                        Command.none
+                        (if openedSearchOverlay then
+                            Dom.focus SearchOverlay.inputId |> Task.attempt (\_ -> SetFocus)
+
+                         else
+                            Command.none
+                        )
                 )
                 { model | route = newRoute }
     in
@@ -2178,6 +2263,31 @@ routeRequestChannelHelper :
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
+    let
+        startsAtBottom : Bool
+        startsAtBottom =
+            if sameChannel then
+                False
+
+            else
+                case threadRoute of
+                    ViewThreadWithFriends _ maybeMessageIndex _ ->
+                        maybeMessageIndex == Nothing
+
+                    NoThreadWithFriends maybeMessageIndex _ ->
+                        maybeMessageIndex == Nothing
+
+        loggedIn2 : LoggedIn2
+        loggedIn2 =
+            if startsAtBottom then
+                -- The scroll position belongs to the conversation we just left. Left as is, a
+                -- conversation whose messages are still loading never gets scrolled down once
+                -- they arrive, since it looks like the user had scrolled up.
+                { loggedIn | channelScrollPosition = ScrolledToBottom }
+
+            else
+                loggedIn
+    in
     (case ( guildOrDmId, tab ) of
         ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId) _) ) ->
             let
@@ -2201,7 +2311,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                     Nothing ->
                         Nothing
                 )
-                { loggedIn
+                { loggedIn2
                     | games =
                         Game.routeRequest
                             model3.time
@@ -2209,12 +2319,12 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                             guildOrDmId2
                             messageId
                             games
-                            loggedIn.games
+                            loggedIn2.games
                 }
                 Command.none
 
         _ ->
-            ( loggedIn, Command.none )
+            ( loggedIn2, Command.none )
     )
         |> Tuple.mapSecond
             (\loadCmd ->
@@ -2233,7 +2343,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         |> Task.attempt (\_ -> ScrolledToMessage)
 
                                 ViewThreadWithFriends _ Nothing _ ->
-                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                 NoThreadWithFriends (Just messageIndex) _ ->
                                     Scroll.smoothScrollTo
@@ -2242,7 +2352,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         |> Task.attempt (\_ -> ScrolledToMessage)
 
                                 NoThreadWithFriends Nothing _ ->
-                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                           else
                             let
@@ -2674,7 +2784,10 @@ isPressMsg msg =
         GotServiceWorkerMessage _ ->
             False
 
-        VisualViewportResized _ ->
+        PressedNotification _ ->
+            False
+
+        VisualViewportChanged _ ->
             False
 
         SafeAreaInsetsChanged _ ->
@@ -2838,6 +2951,18 @@ isPressMsg msg =
             False
 
         PressedClearChannelSearch ->
+            True
+
+        TypedSearchOverlay _ ->
+            False
+
+        PressedSearchOverlayArrowKey _ ->
+            False
+
+        PressedSearchOverlayEnter ->
+            False
+
+        PressedSearchOverlayResult _ ->
             True
 
         PressedExpandContainer _ ->
@@ -7296,7 +7421,7 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toOverlay model.route == Just Route.UserOptionsOverlay then
+            if Route.toOverlay model.route == Just Route.UserOptionsOverlay || Route.toOverlay model.route == Just Route.SearchOverlay then
                 routePush model (Route.setOverlay Nothing model.route)
 
             else if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
@@ -8184,6 +8309,8 @@ loadedInitHelper startupData emojiData loginData loading =
             , newMessagesWhileNotScrolledToBottom = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
+            , searchOverlayQuery = ""
+            , searchOverlaySelection = 0
             , channelSearch = ""
             , showNewPrivateKey = Nothing
             , e2eeError = Nothing
