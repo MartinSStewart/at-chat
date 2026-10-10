@@ -2263,6 +2263,31 @@ routeRequestChannelHelper :
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
+    let
+        startsAtBottom : Bool
+        startsAtBottom =
+            if sameChannel then
+                False
+
+            else
+                case threadRoute of
+                    ViewThreadWithFriends _ maybeMessageIndex _ ->
+                        maybeMessageIndex == Nothing
+
+                    NoThreadWithFriends maybeMessageIndex _ ->
+                        maybeMessageIndex == Nothing
+
+        loggedIn2 : LoggedIn2
+        loggedIn2 =
+            if startsAtBottom then
+                -- The scroll position belongs to the conversation we just left. Left as is, a
+                -- conversation whose messages are still loading never gets scrolled down once
+                -- they arrive, since it looks like the user had scrolled up.
+                { loggedIn | channelScrollPosition = ScrolledToBottom }
+
+            else
+                loggedIn
+    in
     (case ( guildOrDmId, tab ) of
         ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId) _) ) ->
             let
@@ -2286,7 +2311,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                     Nothing ->
                         Nothing
                 )
-                { loggedIn
+                { loggedIn2
                     | games =
                         Game.routeRequest
                             model3.time
@@ -2294,12 +2319,12 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                             guildOrDmId2
                             messageId
                             games
-                            loggedIn.games
+                            loggedIn2.games
                 }
                 Command.none
 
         _ ->
-            ( loggedIn, Command.none )
+            ( loggedIn2, Command.none )
     )
         |> Tuple.mapSecond
             (\loadCmd ->
@@ -2318,7 +2343,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         |> Task.attempt (\_ -> ScrolledToMessage)
 
                                 ViewThreadWithFriends _ Nothing _ ->
-                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                 NoThreadWithFriends (Just messageIndex) _ ->
                                     Scroll.smoothScrollTo
@@ -2327,7 +2352,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         |> Task.attempt (\_ -> ScrolledToMessage)
 
                                 NoThreadWithFriends Nothing _ ->
-                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                           else
                             let

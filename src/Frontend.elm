@@ -10219,7 +10219,9 @@ handleManyMessagesDecrypted requestId results loggedIn =
                 Ports.shiftScrollByElementDelta Pages.Guild.conversationContainerId anchor
 
             Nothing ->
-                Command.none
+                -- Messages take up no space until they're decrypted, so the scroll to the bottom
+                -- done when they arrived left the conversation at what is now the top of it
+                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
         , FrontendExtra.storeDecryptedFileKeys (List.map Tuple.second decrypted)
         ]
     )

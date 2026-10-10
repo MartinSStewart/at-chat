@@ -692,6 +692,24 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Opening another conversation starts at the bottom even if the last one was scrolled up"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.scrollToMiddle admin
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , E2EHelper.writeMessage user 100 "Hello!"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello!" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Friend label shows typing indicator"
         E2EHelper.startTime
         normalConfig
