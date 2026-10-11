@@ -4429,10 +4429,6 @@ discordConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
-        channels =
-            LocalState.discordChannelMentions guildOrDmIdNoThread local
-
         discordGuildChannels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
         discordGuildChannels =
             case guildOrDmIdNoThread of
@@ -4554,6 +4550,11 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     , ( String.fromInt index
                       , case isEditing of
                             Just edit ->
+                                let
+                                    channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+                                    channels =
+                                        LocalState.discordChannelMentions guildOrDmIdNoThread local
+                                in
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     discordMessageView
@@ -4662,7 +4663,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     currentDiscordUserId
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                    channels
+                                                    (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
@@ -4694,7 +4695,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     currentDiscordUserId
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                    channels
+                                                    (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
