@@ -718,6 +718,24 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "A new message while scrolled up shows how many messages are new"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "First"
+                , E2EHelper.scrollToMiddle admin
+                , E2EHelper.writeMessage user 100 "Second"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ])
+                , E2EHelper.writeMessage user 100 "Third"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2 new messages. Click here to jump to the bottom." ])
+                , E2EHelper.scrollToBottom admin
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString Pages.Guild.newMessagesId) ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Scrolling up and down a long channel keeps at most 90 messages loaded"
         E2EHelper.startTime
         normalConfig
@@ -728,6 +746,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     message : Int -> String
                     message index =
                         "Message " ++ String.fromInt index
+
+                    returnText : String
+                    returnText =
+                        "Click here to return to most recent messages"
 
                     has : List Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     has indices =
@@ -784,16 +806,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , checkLoadedCount
 
                 -- Scrolling up loads older messages and unloads the newest
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text returnText ])
                 , E2EHelper.scrollToTop admin
                 , has [ 1, 90 ]
                 , hasNot [ 91, 120 ]
                 , checkLoadedCount
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text returnText ])
 
                 -- Scrolling down loads them back and unloads the oldest
                 , E2EHelper.scrollToBottom admin
                 , has [ 31, 120 ]
                 , hasNot [ 30 ]
                 , checkLoadedCount
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text returnText ])
 
                 -- A message from someone else while scrolled up can't be shown, and pressing
                 -- the warning goes back to the newest messages
@@ -803,11 +828,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , hasNot [ 120 ]
                 , E2EHelper.writeMessage user 100 (message 121)
                 , hasNot [ 121 ]
-                , hasNot [ 121 ]
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ])
                 , admin.click 100 Pages.Guild.newMessagesId
                 , has [ 92, 121 ]
                 , hasNot [ 91 ]
                 , checkLoadedCount
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id (Dom.idToString Pages.Guild.newMessagesId) ])
 
                 -- Sending a message while scrolled up goes back to the newest messages too. That
                 -- only had the newest page loaded, so it takes three pages to get 121 out of view.
@@ -829,6 +855,16 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , has [ 33, 122 ]
                 , hasNot [ 32 ]
                 , checkLoadedCount
+
+                -- With nothing new, pressing it goes back to the newest messages too
+                , E2EHelper.scrollToMiddle admin
+                , E2EHelper.scrollToTop admin
+                , hasNot [ 122 ]
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text returnText ])
+                , admin.click 100 Pages.Guild.newMessagesId
+                , has [ 33, 122 ]
+                , hasNot [ 32 ]
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text returnText ])
                 ]
             )
         ]

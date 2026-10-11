@@ -5871,39 +5871,48 @@ newMessagesId =
 {-| Messages that arrived without the conversation scrolling to the bottom, either
 because the user had scrolled up or because the drawing tab held the scroll
 position, are counted in this warning above the message input. Pressing it
-deselects the drawing anchor and scrolls to the bottom.
+deselects the drawing anchor and scrolls to the bottom. With nothing new, it's
+still shown once the user has scrolled so far up that the newest messages have
+been unloaded, and pressing it loads them again.
 -}
-newMessagesView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
-newMessagesView model loggedIn =
-    if loggedIn.newMessagesWhileNotScrolledToBottom > 0 then
-        MyUi.elButton
-            newMessagesId
-            PressedNewMessagesWarning
-            [ Ui.Font.color MyUi.font1
-            , Ui.background MyUi.buttonBackground
-            , Ui.paddingXY 12 8
-            , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-            , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
-            , Ui.borderColor MyUi.buttonBorder
-            , Ui.pointer
-            , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
-            ]
-            (Ui.Prose.paragraph
-                []
-                [ Ui.text
-                    ((if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
-                        "1 new message"
-
-                      else
-                        String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages"
-                     )
-                        ++ ". Click here to jump to the bottom."
-                    )
+newMessagesView :
+    LoadedFrontend
+    -> LoggedIn2
+    -> { a | messages : MessageArray messageId userId channelId, visibleMessages : VisibleMessages messageId }
+    -> Element FrontendMsg_
+newMessagesView model loggedIn channel =
+    let
+        button : String -> Element FrontendMsg_
+        button text =
+            MyUi.elButton
+                newMessagesId
+                PressedNewMessagesWarning
+                [ Ui.Font.color MyUi.font1
+                , Ui.background MyUi.buttonBackground
+                , Ui.paddingXY 12 8
+                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+                , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.pointer
+                , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
                 ]
-            )
+                (Ui.Prose.paragraph [] [ Ui.text text ])
+    in
+    if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
+        button "1 new message. Click here to jump to the bottom."
+
+    else if loggedIn.newMessagesWhileNotScrolledToBottom > 1 then
+        button (String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages. Click here to jump to the bottom.")
+
+    else if
+        VisibleMessages.reachesEnd (MessageArray.length channel.messages) channel.visibleMessages
+            -- Nothing visible means the conversation is still being opened
+            || (channel.visibleMessages.count == 0)
+    then
+        Ui.none
 
     else
-        Ui.none
+        button "Click here to return to most recent messages"
 
 
 {-| Attributes added to the conversation while the drawing tab is open. Until
@@ -6100,7 +6109,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , channelReplyToHeader isMobile ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel.games channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -6286,7 +6295,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case ( LocalState.canSendDiscordMessage local guildOrDmIdNoThread, channel.isForum ) of
                 ( Ok (), False ) ->
@@ -6596,7 +6605,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -6781,7 +6790,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
