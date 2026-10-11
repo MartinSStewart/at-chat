@@ -4433,6 +4433,20 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
 
+        discordGuildChannels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
+        discordGuildChannels =
+            case guildOrDmIdNoThread of
+                DiscordGuildOrDmId_Guild { guildId } ->
+                    case SeqDict.get guildId local.discordGuilds of
+                        Just guild ->
+                            guild.channels
+
+                        Nothing ->
+                            SeqDict.empty
+
+                DiscordGuildOrDmId_Dm _ ->
+                    SeqDict.empty
+
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread )
@@ -4620,7 +4634,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     currentDiscordUserId
                                                     local.localUser
                                                     message
-                                                    channels
+                                                    discordGuildChannels
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
@@ -7623,9 +7637,9 @@ discordMessageViewNotThreadStarterWithChannelMention :
     -> Discord.Id Discord.UserId
     -> LocalUser
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
-    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message channels =
+discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message guildChannels =
     let
         { data, messageIndexAndReplyMessageIndex } =
             decodeDiscordMessageViewWithReply dataAndMessageIndex
@@ -7646,7 +7660,7 @@ discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex reveale
         isHovered
         currentDiscordUserId
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
-        channels
+        (LocalState.discordGuildChannelMentions localUser guildChannels)
         localUser
         Nothing
         Nothing
