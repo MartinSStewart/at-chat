@@ -1318,6 +1318,9 @@ questionRevealed questionsRevealed model =
             ScrolledToBottom ->
                 revealedSectionId questionsRevealed |> Just
 
+            ScrolledCloseToBottom ->
+                Nothing
+
             ScrolledToTop ->
                 Nothing
 

@@ -1,11 +1,13 @@
 module FrontendExtra exposing
-    ( EncryptedBacklog(..)
+    ( ConversationWindow(..)
+    , EncryptedBacklog(..)
     , accountDeletionBanner
     , audio
     , canDropFiles
     , changeUpdate
     , channelGames
     , channelSidebarTarget
+    , conversationWindow
     , currentGame
     , currentGamesTab
     , drawingRedo
@@ -29,7 +31,10 @@ module FrontendExtra exposing
     , handleRedo
     , handleServerSendMessage
     , handleUndo
+    , holdScrollOnNewMessage
     , isPressMsg
+    , isShowingNewestMessages
+    , jumpToNewest
     , layout
     , loadedInitHelper
     , loginDataToLocalState
@@ -131,7 +136,7 @@ import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
-import Thread exposing (FrontendGenericThread, FrontendThread)
+import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..))
@@ -147,7 +152,7 @@ import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, Notification
 import UserAgent
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserOptionSection, UserSession)
-import VisibleMessages
+import VisibleMessages exposing (PageRequest(..), VisibleMessages)
 import WordSpellingGame
 import X25519
 
@@ -2253,6 +2258,140 @@ currentGame local model =
             Nothing
 
 
+{-| The visible messages of a conversation, along with how many messages it has in total.
+-}
+type ConversationWindow
+    = ChannelWindow GuildOrDmId (VisibleMessages ChannelMessageId) Int
+    | ThreadWindow GuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
+    | DiscordChannelWindow DiscordGuildOrDmId (VisibleMessages ChannelMessageId) Int
+    | DiscordThreadWindow DiscordGuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
+
+
+conversationWindow : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe ConversationWindow
+conversationWindow guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId ((GuildOrDmId_Guild { guildId, channelId }) as guildOrDmId2) ->
+            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        NoThread ->
+                            ChannelWindow guildOrDmId2 channel.visibleMessages (MessageArray.length channel.messages) |> Just
+
+                        ViewThread threadId ->
+                            let
+                                thread : FrontendThread
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
+                            in
+                            ThreadWindow guildOrDmId2 threadId thread.visibleMessages (MessageArray.length thread.messages) |> Just
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId ((GuildOrDmId_Dm { otherUserId }) as guildOrDmId2) ->
+            let
+                dmChannel : FrontendDmChannel
+                dmChannel =
+                    SeqDict.get otherUserId local.dmChannels
+                        |> Maybe.withDefault DmChannel.frontendInit
+            in
+            case threadRoute of
+                NoThread ->
+                    ChannelWindow guildOrDmId2 dmChannel.visibleMessages (MessageArray.length dmChannel.messages) |> Just
+
+                ViewThread threadId ->
+                    let
+                        thread : FrontendThread
+                        thread =
+                            SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
+                    in
+                    ThreadWindow guildOrDmId2 threadId thread.visibleMessages (MessageArray.length thread.messages) |> Just
+
+        DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild { guildId, channelId }) as guildOrDmId2) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        NoThread ->
+                            DiscordChannelWindow guildOrDmId2 channel.visibleMessages (MessageArray.length channel.messages) |> Just
+
+                        ViewThread threadId ->
+                            let
+                                thread : DiscordFrontendThread
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordFrontendInit
+                            in
+                            DiscordThreadWindow guildOrDmId2 threadId thread.visibleMessages (MessageArray.length thread.messages) |> Just
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm data) as guildOrDmId2) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just dmChannel ->
+                    DiscordChannelWindow guildOrDmId2 dmChannel.visibleMessages (MessageArray.length dmChannel.messages) |> Just
+
+                Nothing ->
+                    Nothing
+
+
+{-| Like `jumpToNewestMessages`, and since the user is headed for the bottom of the conversation
+once the newest messages arrive, sticks to the bottom of it.
+-}
+jumpToNewest : Time.Posix -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend msg )
+jumpToNewest time guildOrDmId threadRoute loggedIn =
+    case jumpToNewestMessages guildOrDmId threadRoute (Local.model loggedIn.localState) of
+        Just localChange ->
+            handleLocalChange
+                time
+                (Just localChange)
+                { loggedIn | channelScrollPosition = ScrolledToBottom }
+                Command.none
+
+        Nothing ->
+            ( loggedIn, Command.none )
+
+
+{-| Goes back to the newest messages of a conversation if older ones are being looked at. The
+visible messages only change once the page arrives, so there's never a gap in them.
+-}
+jumpToNewestMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
+jumpToNewestMessages guildOrDmId threadRoute local =
+    let
+        newestPage : Int -> PageRequest messageId
+        newestPage messageCount =
+            messageCount - VisibleMessages.pageSize |> max 0 |> Id.fromInt |> PageFrom
+
+        ifNotAtEnd : VisibleMessages messageId -> Int -> LocalChange -> Maybe LocalChange
+        ifNotAtEnd visibleMessages messageCount localChange =
+            if VisibleMessages.reachesEnd messageCount visibleMessages || visibleMessages.count == 0 then
+                -- Nothing visible means the conversation hasn't been opened yet, and opening it
+                -- loads the newest messages anyway
+                Nothing
+
+            else
+                Just localChange
+    in
+    case conversationWindow guildOrDmId threadRoute local of
+        Just (ChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_LoadChannelMessages guildOrDmId2 (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Just (ThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_LoadThreadMessages guildOrDmId2 threadId (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Just (DiscordChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_Discord_LoadChannelMessages guildOrDmId2 (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Just (DiscordThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_Discord_LoadThreadMessages guildOrDmId2 threadId (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Nothing ->
+            Nothing
+
+
 routeRequestChannelHelper :
     Bool
     -> AnyGuildOrDmId
@@ -2277,16 +2416,25 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                     NoThreadWithFriends maybeMessageIndex _ ->
                         maybeMessageIndex == Nothing
 
-        loggedIn2 : LoggedIn2
-        loggedIn2 =
+        ( loggedIn2, jumpCmd ) =
             if startsAtBottom then
                 -- The scroll position belongs to the conversation we just left. Left as is, a
                 -- conversation whose messages are still loading never gets scrolled down once
                 -- they arrive, since it looks like the user had scrolled up.
-                { loggedIn | channelScrollPosition = ScrolledToBottom }
+                jumpToNewest
+                    model3.time
+                    guildOrDmId
+                    (case threadRoute of
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewThread threadId
+
+                        NoThreadWithFriends _ _ ->
+                            NoThread
+                    )
+                    { loggedIn | channelScrollPosition = ScrolledToBottom }
 
             else
-                loggedIn
+                ( loggedIn, Command.none )
     in
     (case ( guildOrDmId, tab ) of
         ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId) _) ) ->
@@ -2330,6 +2478,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
             (\loadCmd ->
                 Command.batch
                     [ loadCmd
+                    , jumpCmd
                     , Command.batch
                         [ if sameChannel then
                             -- Staying in the same channel but pointing at a message means the user followed a
@@ -3303,7 +3452,7 @@ changeUpdate localMsg local =
                                                         dmChannel
 
                                                     NoThreadWithMaybeMessage maybeReplyTo ->
-                                                        LocalState.createChannelMessageFrontend
+                                                        LocalState.createDiscordDmMessageFrontend
                                                             (Message.userTextMessageFrontend
                                                                 createdAt
                                                                 currentUserId
@@ -3935,7 +4084,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setName name localUser.user } }
 
-                Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
+                Local_LoadChannelMessages guildOrDmId pageRequest messagesLoaded ->
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             { local
@@ -3943,7 +4092,7 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (DmChannel.loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded)
+                                            (DmChannel.loadChannelPage pageRequest messagesLoaded)
                                             channelId
                                         )
                                         local.guilds
@@ -3954,11 +4103,11 @@ changeUpdate localMsg local =
                                 | dmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
-                                        (DmChannel.loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded)
+                                        (DmChannel.loadChannelPage pageRequest messagesLoaded)
                                         local.dmChannels
                             }
 
-                Local_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messagesLoaded ->
+                Local_LoadThreadMessages guildOrDmId threadId pageRequest messagesLoaded ->
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             { local
@@ -3971,10 +4120,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (DmChannel.loadOlderMessages
-                                                                previousOldestVisibleMessage
-                                                                messagesLoaded
-                                                            )
+                                                            (DmChannel.loadPage [] pageRequest messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
@@ -3993,17 +4139,14 @@ changeUpdate localMsg local =
                                                 | threads =
                                                     SeqDict.updateIfExists
                                                         threadId
-                                                        (DmChannel.loadOlderMessages
-                                                            previousOldestVisibleMessage
-                                                            messagesLoaded
-                                                        )
+                                                        (DmChannel.loadPage [] pageRequest messagesLoaded)
                                                         dmChannel.threads
                                             }
                                         )
                                         local.dmChannels
                             }
 
-                Local_Discord_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
+                Local_Discord_LoadChannelMessages guildOrDmId pageRequest messagesLoaded ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { guildId, channelId } ->
                             { local
@@ -4011,7 +4154,13 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            (\channel ->
+                                                DmChannel.loadPage
+                                                    (SeqDict.keys channel.threads)
+                                                    pageRequest
+                                                    messagesLoaded
+                                                    channel
+                                            )
                                             channelId
                                         )
                                         local.discordGuilds
@@ -4022,11 +4171,11 @@ changeUpdate localMsg local =
                                 | discordDmChannels =
                                     SeqDict.updateIfExists
                                         data.channelId
-                                        (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        (DmChannel.loadPage [] pageRequest messagesLoaded)
                                         local.discordDmChannels
                             }
 
-                Local_Discord_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messagesLoaded ->
+                Local_Discord_LoadThreadMessages guildOrDmId threadId pageRequest messagesLoaded ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { guildId, channelId } ->
                             { local
@@ -4039,10 +4188,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (DmChannel.loadOlderMessages
-                                                                previousOldestVisibleMessage
-                                                                messagesLoaded
-                                                            )
+                                                            (DmChannel.loadPage [] pageRequest messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
@@ -4684,7 +4830,7 @@ changeUpdate localMsg local =
 
                                         dmChannel2 : DiscordFrontendDmChannel
                                         dmChannel2 =
-                                            LocalState.createChannelMessageFrontend
+                                            LocalState.createDiscordDmMessageFrontend
                                                 (Message.userTextMessageFrontend
                                                     createdAt
                                                     data.currentUserId
@@ -6221,14 +6367,16 @@ gameChangeUpdateChannel :
     ->
         { c
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
-            , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
+            , threads : SeqDict (Id ChannelMessageId) thread
         }
     ->
         { c
             | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
-            , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
+            , threads : SeqDict (Id ChannelMessageId) thread
         }
 gameChangeUpdateChannel changeBy gameChange channel =
     case gameChange of
@@ -7826,6 +7974,56 @@ editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes cont
             local
 
 
+isShowingNewestMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Bool
+isShowingNewestMessages guildOrDmId threadRoute local =
+    case conversationWindow guildOrDmId threadRoute local of
+        Just (ChannelWindow _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
+        Just (ThreadWindow _ _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
+        Just (DiscordChannelWindow _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
+        Just (DiscordThreadWindow _ _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
+        Nothing ->
+            True
+
+
+{-| A new message can push the oldest visible message out (see `VisibleMessages.increment`),
+which moves everything below it up. `local` already has the new message, so the message before
+it is what was the newest one, and that's held in place.
+-}
+holdScrollOnNewMessage : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Command FrontendOnly toMsg msg
+holdScrollOnNewMessage guildOrDmId threadRoute local =
+    case conversationWindow guildOrDmId threadRoute local of
+        Just (ChannelWindow _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.channelMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Just (ThreadWindow _ _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.threadMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Just (DiscordChannelWindow _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.channelMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Just (DiscordThreadWindow _ _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.threadMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Nothing ->
+            Command.none
+
+
 handleServerSendMessage :
     Id UserId
     -> GuildOrDmId
@@ -7869,6 +8067,12 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
                     else
                         Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
+                  else if isViewingConversation then
+                    holdScrollOnNewMessage
+                        (GuildOrDmId guildOrDmId)
+                        (Message.threadRouteWithoutRepliedTo maybeRepliedTo)
+                        local
+
                   else
                     Command.none
                 ]
@@ -7881,6 +8085,9 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
                 case loggedIn2.channelScrollPosition of
                     ScrolledToBottom ->
                         ScrolledToMiddle
+
+                    ScrolledCloseToBottom ->
+                        loggedIn2.channelScrollPosition
 
                     ScrolledToTop ->
                         loggedIn2.channelScrollPosition

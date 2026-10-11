@@ -4557,9 +4557,7 @@ sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordSt
                                                         ( fileId
                                                         , { filename = FileName.toString fileData.fileName
                                                           , uploadedFilename = a.uploadFilename
-                                                          , contentType =
-                                                                OneToOne.second fileData.contentType FileStatus.contentTypes
-                                                                    |> Maybe.withDefault ""
+                                                          , contentType = FileStatus.contentTypeHeader fileData.contentType
                                                           }
                                                         )
                                                     )
@@ -4611,11 +4609,7 @@ uploadAttachments files uploadAttachmentsResponses =
                 , headers = []
                 , url = uploadAttachmentsResponse.uploadUrl
                 , body =
-                    Http.bytesBody
-                        (OneToOne.second fileData.contentType FileStatus.contentTypes
-                            |> Maybe.withDefault "application/octet-stream"
-                        )
-                        bytes
+                    Http.bytesBody (FileStatus.contentTypeHeader fileData.contentType) bytes
                 , resolver =
                     Http.bytesResolver
                         (\response ->

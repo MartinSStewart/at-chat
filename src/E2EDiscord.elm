@@ -16,6 +16,7 @@ import Effect.Test as T
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import FileStatus
 import Frontend
 import GuildName
 import Html.Attributes
@@ -3559,6 +3560,52 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "A text file sent to Discord is marked as UTF-8"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+                , -- Pasting this much text attaches it as a text file
+                  admin.input 100 (Dom.id "channel_textinput") (String.repeat 300 "åäö åäö ")
+                , T.backendUpdate
+                    100
+                    (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 4000 Nothing)
+                , admin.keyDown 1000 (Dom.id "channel_textinput") "Enter" []
+                , -- Without a charset, browsers read the file as Windows-1252 and åäö turn
+                  -- into Ã¥Ã¤Ã¶
+                  T.checkState
+                    1000
+                    (\data ->
+                        case discordAttachmentUploadContentTypes data of
+                            [ "text/plain; charset=UTF-8" ] ->
+                                Ok ()
+
+                            contentTypes ->
+                                Err ("The file was uploaded to Discord as " ++ Debug.toString contentTypes)
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        case discordAttachmentContentTypesPosted data of
+                            [ "text/plain; charset=UTF-8" ] ->
+                                Ok ()
+
+                            contentTypes ->
+                                Err ("Discord was told the file is " ++ Debug.toString contentTypes)
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "A Discord channel waiting on its messages doesn't claim to be at its start"
         E2EHelper.startTime
         normalConfig
@@ -4042,6 +4089,60 @@ discordMessageContentsPosted data =
 
                 _ ->
                     Nothing
+        )
+        data.httpRequests
+
+
+{-| The Content-Type of every file the backend has uploaded for a Discord attachment.
+-}
+discordAttachmentUploadContentTypes : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+discordAttachmentUploadContentTypes data =
+    List.filterMap
+        (\request ->
+            case request.body of
+                T.BytesBody contentType _ ->
+                    if request.method == "PUT" && String.startsWith E2EHelper.discordAttachmentUploadUrl request.url then
+                        Just contentType
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        data.httpRequests
+
+
+{-| The `original_content_type` of every attachment in the messages the backend has posted
+to Discord.
+-}
+discordAttachmentContentTypesPosted : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+discordAttachmentContentTypesPosted data =
+    List.concatMap
+        (\request ->
+            case ( request.url, E2EHelper.decodeCustomRequest request ) of
+                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
+                    if customRequest.method == "POST" && String.endsWith "/messages" customRequest.url then
+                        case customRequest.body of
+                            Just body ->
+                                Json.Decode.decodeValue Json.Decode.string body
+                                    |> Result.andThen
+                                        (Json.Decode.decodeString
+                                            (Json.Decode.field
+                                                "attachments"
+                                                (Json.Decode.list (Json.Decode.field "original_content_type" Json.Decode.string))
+                                            )
+                                        )
+                                    |> Result.withDefault []
+
+                            Nothing ->
+                                []
+
+                    else
+                        []
+
+                _ ->
+                    []
         )
         data.httpRequests
 

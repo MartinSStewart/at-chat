@@ -409,6 +409,34 @@ tests =
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
                     |> Pages.Guild.decodeMessageView
                     |> Expect.equal { input | isHovered = IsNotHovered }
+        , Test.fuzz
+            (Fuzz.map2 Tuple.pair (Fuzz.intRange 0 (2 ^ 26 - 1)) (Fuzz.intRange 0 (2 ^ 26 - 1)))
+            "Round trip message index encoding"
+          <|
+            \( messageIndex, replyMessageIndex ) ->
+                Pages.Guild.encodeMessageIndex messageIndex (Id.fromInt replyMessageIndex)
+                    |> Pages.Guild.decodeMessageIndex
+                    |> Expect.equal { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex }
+        , Test.fuzz
+            (Fuzz.map3
+                (\input messageIndex replyMessageIndex -> ( input, messageIndex, replyMessageIndex ))
+                messageViewFuzzer
+                (Fuzz.intRange 0 (2 ^ 26 - 1))
+                (Fuzz.intRange 0 (2 ^ 26 - 1))
+            )
+            "Round trip Discord reply view encoding"
+          <|
+            \( input, messageIndex, replyMessageIndex ) ->
+                Pages.Guild.encodeDiscordMessageViewWithReply
+                    (Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time)
+                    (Pages.Guild.encodeMessageIndex messageIndex (Id.fromInt replyMessageIndex))
+                    |> Pages.Guild.decodeDiscordMessageViewWithReply
+                    |> (\decoded ->
+                            ( Pages.Guild.decodeMessageView decoded.data
+                            , Pages.Guild.decodeMessageIndex decoded.messageIndexAndReplyMessageIndex
+                            )
+                       )
+                    |> Expect.equal ( input, { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex } )
         , Test.test "Discord thread name is left as is when it's short enough" <|
             \_ ->
                 DiscordSync.threadName "Hello world!"

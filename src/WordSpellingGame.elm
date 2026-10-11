@@ -4681,6 +4681,9 @@ encodeLogState scrollPosition hoveredIndex highlightedMove =
 
         ScrolledToBottom ->
             2
+
+        ScrolledCloseToBottom ->
+            3
     )
         + (case hoveredIndex of
             Just index ->
@@ -4712,6 +4715,9 @@ decodeLogState packed =
 
             1 ->
                 ScrolledToMiddle
+
+            3 ->
+                ScrolledCloseToBottom
 
             _ ->
                 ScrolledToBottom

@@ -150,6 +150,7 @@ import User exposing (BackendUser, EmailNotifications, EmbedVisibility, Frontend
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, ToBeFilledInByBackend, UserOptionSection, UserSession)
+import VisibleMessages exposing (PageRequest)
 import WordSpellingGame exposing (WordList)
 import X25519
 
@@ -1263,10 +1264,10 @@ type LocalChange
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Local_CurrentlyViewing { markMessagesAsViewed : Bool } SetViewing
     | Local_SetName PersonName
-    | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
-    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
-    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
-    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
+    | Local_LoadChannelMessages GuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
+    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
+    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
+    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode

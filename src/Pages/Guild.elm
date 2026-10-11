@@ -11,6 +11,8 @@ module Pages.Guild exposing
     , chatWithText
     , confirmLeaveGuildText
     , conversationContainerId
+    , decodeDiscordMessageViewWithReply
+    , decodeMessageIndex
     , decodeMessageView
     , deleteGuildText
     , directMessagesText
@@ -18,6 +20,8 @@ module Pages.Guild exposing
     , dropdownButtonId
     , e2eeSectionIsExpanded
     , editingText
+    , encodeDiscordMessageViewWithReply
+    , encodeMessageIndex
     , encodeMessageView
     , friendLabel
     , friendsSearchInputId
@@ -4207,7 +4211,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
                                     Nothing ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || repliedToMentionsChannel maybeRepliedTo2 ) of
                                             ( Nothing, False ) ->
                                                 Ui.Lazy.lazy5
                                                     messageViewNotThreadStarter
@@ -4227,6 +4231,17 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     index
                                                     message
                                                     channels
+                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                            ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
+                                                Ui.Lazy.lazy6
+                                                    messageViewNotThreadStarterWithReply
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                    revealedSpoilers
+                                                    local.localUser
+                                                    (encodeMessageIndex index replyMessageIndex)
+                                                    message
+                                                    repliedToMessage
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             _ ->
@@ -4414,10 +4429,6 @@ discordConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
-        channels =
-            LocalState.discordChannelMentions guildOrDmIdNoThread local
-
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread )
@@ -4525,6 +4536,11 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     , ( String.fromInt index
                       , case isEditing of
                             Just edit ->
+                                let
+                                    channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+                                    channels =
+                                        LocalState.discordChannelMentions guildOrDmIdNoThread local
+                                in
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     discordMessageView
@@ -4582,7 +4598,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
                                     Nothing ->
-                                        case ( maybeRepliedTo2, Message.mentionsChannel message ) of
+                                        case ( maybeRepliedTo2, Message.mentionsChannel message || repliedToMentionsChannel maybeRepliedTo2 ) of
                                             ( Nothing, False ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarter
@@ -4592,6 +4608,45 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     local.localUser
                                                     index
                                                     message
+                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                            ( Nothing, True ) ->
+                                                Ui.Lazy.lazy6
+                                                    discordMessageViewNotThreadStarterWithChannelMention
+                                                    (encodeDiscordMessageViewWithReply
+                                                        (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                        (encodeMessageIndex index (Id.fromInt 0))
+                                                    )
+                                                    revealedSpoilers
+                                                    currentDiscordUserId
+                                                    local.localUser
+                                                    message
+                                                    (case guildOrDmIdNoThread of
+                                                        DiscordGuildOrDmId_Guild { guildId } ->
+                                                            case SeqDict.get guildId local.discordGuilds of
+                                                                Just guild ->
+                                                                    guild.channels
+
+                                                                Nothing ->
+                                                                    SeqDict.empty
+
+                                                        DiscordGuildOrDmId_Dm _ ->
+                                                            SeqDict.empty
+                                                    )
+                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                            ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
+                                                Ui.Lazy.lazy6
+                                                    discordMessageViewNotThreadStarterWithReply
+                                                    (encodeDiscordMessageViewWithReply
+                                                        (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                        (encodeMessageIndex index replyMessageIndex)
+                                                    )
+                                                    revealedSpoilers
+                                                    currentDiscordUserId
+                                                    local.localUser
+                                                    message
+                                                    repliedToMessage
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             _ ->
@@ -4605,7 +4660,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     currentDiscordUserId
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                    channels
+                                                    (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
@@ -4637,7 +4692,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     currentDiscordUserId
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                    channels
+                                                    (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
@@ -5429,6 +5484,48 @@ decodeMessageView packed =
     }
 
 
+{-| A reply's lazy view takes the message it replies to as well, which leaves no room for
+the two indices as separate arguments. Each gets 26 bits, which is more messages than a
+channel will hold, and both together stay inside the range integers are exact in.
+-}
+encodeMessageIndex : Int -> Id messageId -> Int
+encodeMessageIndex messageIndex replyMessageIndex =
+    messageIndex + Id.toInt replyMessageIndex * messageIndexPackingOffset
+
+
+messageIndexPackingOffset : Int
+messageIndexPackingOffset =
+    2 ^ 26
+
+
+decodeMessageIndex : Int -> { messageIndex : Int, replyMessageIndex : Int }
+decodeMessageIndex packed =
+    { messageIndex = modBy messageIndexPackingOffset packed
+    , replyMessageIndex = packed // messageIndexPackingOffset
+    }
+
+
+{-| A Discord reply's lazy view also takes the current Discord user, one argument more than
+`Ui.Lazy` goes up to, and the Int `encodeMessageView` packs has no bits left for the message
+indices. `Ui.Lazy` compares strings by value just like Ints, so the two travel as one string.
+-}
+encodeDiscordMessageViewWithReply : Int -> Int -> String
+encodeDiscordMessageViewWithReply data messageIndexAndReplyMessageIndex =
+    String.fromInt data ++ " " ++ String.fromInt messageIndexAndReplyMessageIndex
+
+
+decodeDiscordMessageViewWithReply : String -> { data : Int, messageIndexAndReplyMessageIndex : Int }
+decodeDiscordMessageViewWithReply packed =
+    case String.split " " packed of
+        [ data, messageIndexAndReplyMessageIndex ] ->
+            { data = String.toInt data |> Maybe.withDefault 0
+            , messageIndexAndReplyMessageIndex = String.toInt messageIndexAndReplyMessageIndex |> Maybe.withDefault 0
+            }
+
+        _ ->
+            { data = 0, messageIndexAndReplyMessageIndex = 0 }
+
+
 encodeFriendsColumn : Bool -> Int -> Int
 encodeFriendsColumn canScroll time =
     (if canScroll then
@@ -5786,39 +5883,48 @@ newMessagesId =
 {-| Messages that arrived without the conversation scrolling to the bottom, either
 because the user had scrolled up or because the drawing tab held the scroll
 position, are counted in this warning above the message input. Pressing it
-deselects the drawing anchor and scrolls to the bottom.
+deselects the drawing anchor and scrolls to the bottom. With nothing new, it's
+still shown once the user has scrolled so far up that the newest messages have
+been unloaded, and pressing it loads them again.
 -}
-newMessagesView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
-newMessagesView model loggedIn =
-    if loggedIn.newMessagesWhileNotScrolledToBottom > 0 then
-        MyUi.elButton
-            newMessagesId
-            PressedNewMessagesWarning
-            [ Ui.Font.color MyUi.font1
-            , Ui.background MyUi.buttonBackground
-            , Ui.paddingXY 12 8
-            , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-            , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
-            , Ui.borderColor MyUi.buttonBorder
-            , Ui.pointer
-            , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
-            ]
-            (Ui.Prose.paragraph
-                []
-                [ Ui.text
-                    ((if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
-                        "1 new message"
-
-                      else
-                        String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages"
-                     )
-                        ++ ". Click here to jump to the bottom."
-                    )
+newMessagesView :
+    LoadedFrontend
+    -> LoggedIn2
+    -> { a | messages : MessageArray messageId userId channelId, visibleMessages : VisibleMessages messageId }
+    -> Element FrontendMsg_
+newMessagesView model loggedIn channel =
+    let
+        button : String -> Element FrontendMsg_
+        button text =
+            MyUi.elButton
+                newMessagesId
+                PressedNewMessagesWarning
+                [ Ui.Font.color MyUi.font1
+                , Ui.background MyUi.buttonBackground
+                , Ui.paddingXY 12 8
+                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+                , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.pointer
+                , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
                 ]
-            )
+                (Ui.Prose.paragraph [] [ Ui.text text ])
+    in
+    if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
+        button "1 new message. Click here to jump to the bottom."
+
+    else if loggedIn.newMessagesWhileNotScrolledToBottom > 1 then
+        button (String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages. Click here to jump to the bottom.")
+
+    else if
+        VisibleMessages.reachesEnd (MessageArray.length channel.messages) channel.visibleMessages
+            -- Nothing visible means the conversation is still being opened
+            || (channel.visibleMessages.count == 0)
+    then
+        Ui.none
 
     else
-        Ui.none
+        button "Click here to return to most recent messages"
 
 
 {-| Attributes added to the conversation while the drawing tab is open. Until
@@ -6015,7 +6121,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , channelReplyToHeader isMobile ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel.games channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -6201,7 +6307,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case ( LocalState.canSendDiscordMessage local guildOrDmIdNoThread, channel.isForum ) of
                 ( Ok (), False ) ->
@@ -6511,7 +6617,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -6696,7 +6802,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesView model loggedIn
+            [ newMessagesView model loggedIn channel
             , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -7380,6 +7486,41 @@ messageViewNotThreadStarterWithChannelMention data revealedSpoilers localUser me
         message
 
 
+messageViewNotThreadStarterWithReply :
+    Int
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> LocalUser
+    -> Int
+    -> Message ChannelMessageId (Id UserId) (Id ChannelId)
+    -> Message ChannelMessageId (Id UserId) (Id ChannelId)
+    -> Element MessageViewMsg
+messageViewNotThreadStarterWithReply data revealedSpoilers localUser messageIndexAndReplyMessageIndex message replyMessage =
+    let
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+
+        { messageIndex, replyMessageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
+    in
+    messageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        isEditing
+        localUser.session.userId
+        (User.allUsers localUser)
+        SeqDict.empty
+        localUser
+        (Just (RepliedToView_Message (Id.fromInt replyMessageIndex) replyMessage))
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
 messageViewThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -7444,6 +7585,80 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         currentDiscordUserId
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         SeqDict.empty
+        localUser
+        Nothing
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
+discordMessageViewNotThreadStarterWithReply :
+    String
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> Discord.Id Discord.UserId
+    -> LocalUser
+    -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
+    -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
+    -> Element MessageViewMsg
+discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message replyMessage =
+    let
+        { data, messageIndexAndReplyMessageIndex } =
+            decodeDiscordMessageViewWithReply dataAndMessageIndex
+
+        { containerWidth, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+
+        { messageIndex, replyMessageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
+    in
+    discordMessageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        currentDiscordUserId
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        SeqDict.empty
+        localUser
+        (Just (RepliedToView_Message (Id.fromInt replyMessageIndex) replyMessage))
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
+discordMessageViewNotThreadStarterWithChannelMention :
+    String
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> Discord.Id Discord.UserId
+    -> LocalUser
+    -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
+    -> Element MessageViewMsg
+discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message guildChannels =
+    let
+        { data, messageIndexAndReplyMessageIndex } =
+            decodeDiscordMessageViewWithReply dataAndMessageIndex
+
+        { containerWidth, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+
+        { messageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
+    in
+    discordMessageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        currentDiscordUserId
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.discordGuildChannelMentions localUser guildChannels)
         localUser
         Nothing
         Nothing
@@ -9623,6 +9838,19 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
             ++ [ highlightLayer highlight ]
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
+
+
+repliedToMentionsChannel : Maybe (RepliedToView messageId userId channelId msg) -> Bool
+repliedToMentionsChannel maybeRepliedTo2 =
+    case maybeRepliedTo2 of
+        Just (RepliedToView_Message _ repliedTo) ->
+            Message.mentionsChannel repliedTo
+
+        Just (RepliedToView_Game _ _ _) ->
+            False
+
+        Nothing ->
+            False
 
 
 lastThreadMessageMentionsChannel : { a | messages : MessageArray messageId userId channelId } -> Bool

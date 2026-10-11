@@ -66,6 +66,7 @@ module LocalState exposing
     , createChannelMessageFrontend
     , createDiscordChannelMessageBackend
     , createDiscordDmChannelMessageBackend
+    , createDiscordDmMessageFrontend
     , createDiscordThreadMessageBackend
     , createGuild
     , createThreadMessageBackend
@@ -1627,7 +1628,7 @@ createThreadMessageFrontend threadId message channel =
                 threadId
                 (\maybe ->
                     Maybe.withDefault Thread.frontendInit maybe
-                        |> createMessageFrontend message
+                        |> createMessageFrontend [] message
                         |> Just
                 )
                 channel.threads
@@ -1640,18 +1641,42 @@ createChannelMessageFrontend :
         { d
             | messages : MessageArray ChannelMessageId userId channelId
             , visibleMessages : VisibleMessages ChannelMessageId
+            , threads : SeqDict (Id ChannelMessageId) thread
+        }
+    ->
+        { d
+            | messages : MessageArray ChannelMessageId userId channelId
+            , visibleMessages : VisibleMessages ChannelMessageId
+            , threads : SeqDict (Id ChannelMessageId) thread
+        }
+createChannelMessageFrontend message channel =
+    createMessageFrontend (SeqDict.keys channel.threads) message channel
+
+
+{-| Discord DMs don't have threads, so there are no thread starters to hold on to.
+-}
+createDiscordDmMessageFrontend :
+    Message ChannelMessageId userId channelId
+    ->
+        { d
+            | messages : MessageArray ChannelMessageId userId channelId
+            , visibleMessages : VisibleMessages ChannelMessageId
         }
     ->
         { d
             | messages : MessageArray ChannelMessageId userId channelId
             , visibleMessages : VisibleMessages ChannelMessageId
         }
-createChannelMessageFrontend message channel =
-    createMessageFrontend message channel
+createDiscordDmMessageFrontend message channel =
+    createMessageFrontend [] message channel
 
 
+{-| `keep` is the messages to hold on to if the new message pushes the oldest visible message out,
+see `VisibleMessages.unloadHidden`.
+-}
 createMessageFrontend :
-    Message messageId userId channelId
+    List (Id messageId)
+    -> Message messageId userId channelId
     ->
         { d
             | messages : MessageArray messageId userId channelId
@@ -1662,11 +1687,24 @@ createMessageFrontend :
             | messages : MessageArray messageId userId channelId
             , visibleMessages : VisibleMessages messageId
         }
-createMessageFrontend message channel =
-    { channel
-        | messages = MessageArray.push message channel.messages
-        , visibleMessages = VisibleMessages.increment (MessageArray.length channel.messages) channel.visibleMessages
-    }
+createMessageFrontend keep message channel =
+    let
+        visibleMessages : VisibleMessages messageId
+        visibleMessages =
+            VisibleMessages.increment (MessageArray.length channel.messages) channel.visibleMessages
+    in
+    if visibleMessages.oldest == channel.visibleMessages.oldest then
+        { channel
+            | messages = MessageArray.push message channel.messages
+            , visibleMessages = visibleMessages
+        }
+
+    else
+        { channel
+            | messages = MessageArray.push message channel.messages
+            , visibleMessages = visibleMessages
+        }
+            |> VisibleMessages.unloadHidden keep
 
 
 createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild

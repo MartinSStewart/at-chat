@@ -90,7 +90,7 @@ import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), Discord
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
-import VisibleMessages
+import VisibleMessages exposing (PageRequest(..))
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
 
@@ -5343,7 +5343,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
+                Local_LoadChannelMessages guildOrDmId pageRequest _ ->
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             BackendExtra.asGuildMember
@@ -5354,13 +5354,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
-                                            handleMessagesRequest oldestVisibleMessage channel
+                                            handleMessagesRequest pageRequest channel
                                                 |> DmChannel.loadedMessages
                                                     (GuildOrFullDmId_Guild guildId channelId)
                                                     model.goMatchPublicIds
                                                     channel
                                                 |> FilledInByBackend
-                                                |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                                |> Local_LoadChannelMessages guildOrDmId pageRequest
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
 
@@ -5376,19 +5376,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 id
                                 (\_ _ _ dmChannelId dmChannel ->
                                     ( model
-                                    , handleMessagesRequest oldestVisibleMessage dmChannel
+                                    , handleMessagesRequest pageRequest dmChannel
                                         |> DmChannel.loadedMessages
                                             (GuildOrFullDmId_Dm dmChannelId)
                                             model.goMatchPublicIds
                                             dmChannel
                                         |> FilledInByBackend
-                                        |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                        |> Local_LoadChannelMessages guildOrDmId pageRequest
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
                                 )
 
-                Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
+                Local_LoadThreadMessages guildOrDmId threadId pageRequest _ ->
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             BackendExtra.asGuildMember
@@ -5401,9 +5401,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Just channel ->
                                             SeqDict.get threadId channel.threads
                                                 |> Maybe.withDefault Thread.backendInit
-                                                |> handleMessagesRequest oldestVisibleMessage
+                                                |> handleMessagesRequest pageRequest
                                                 |> FilledInByBackend
-                                                |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
+                                                |> Local_LoadThreadMessages guildOrDmId threadId pageRequest
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
 
@@ -5421,15 +5421,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model
                                     , SeqDict.get threadId dmChannel.threads
                                         |> Maybe.withDefault Thread.backendInit
-                                        |> handleMessagesRequest oldestVisibleMessage
+                                        |> handleMessagesRequest pageRequest
                                         |> FilledInByBackend
-                                        |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
+                                        |> Local_LoadThreadMessages guildOrDmId threadId pageRequest
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
                                 )
 
-                Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
+                Local_Discord_LoadChannelMessages guildOrDmId pageRequest _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild id ->
                             BackendExtra.asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
@@ -5439,9 +5439,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 id
                                 (\_ _ _ _ _ channel ->
                                     ( model
-                                    , handleMessagesRequest oldestVisibleMessage channel
+                                    , handleMessagesRequest pageRequest channel
                                         |> FilledInByBackend
-                                        |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                        |> Local_Discord_LoadChannelMessages guildOrDmId pageRequest
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
@@ -5454,15 +5454,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 data
                                 (\_ _ _ channel ->
                                     ( model
-                                    , handleMessagesRequest oldestVisibleMessage channel
+                                    , handleMessagesRequest pageRequest channel
                                         |> FilledInByBackend
-                                        |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                        |> Local_Discord_LoadChannelMessages guildOrDmId pageRequest
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
                                 )
 
-                Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
+                Local_Discord_LoadThreadMessages guildOrDmId threadId pageRequest _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild id ->
                             BackendExtra.asDiscordGuildChannelMember
@@ -5473,9 +5473,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model
                                     , SeqDict.get threadId channel.threads
                                         |> Maybe.withDefault Thread.discordBackendInit
-                                        |> handleMessagesRequest oldestVisibleMessage
+                                        |> handleMessagesRequest pageRequest
                                         |> FilledInByBackend
-                                        |> Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
+                                        |> Local_Discord_LoadThreadMessages guildOrDmId threadId pageRequest
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
@@ -8672,20 +8672,27 @@ loadMessagesHelper channel =
 
 
 handleMessagesRequest :
-    Id messageId
+    PageRequest messageId
     -> { b | messages : IdArray messageId (Message messageId userId channelId) }
     -> SeqDict (Id messageId) (Message messageId userId channelId)
-handleMessagesRequest oldestVisibleMessage channel =
+handleMessagesRequest pageRequest channel =
     let
-        oldestVisibleMessage2 =
-            oldestVisibleMessage
+        ( start, end ) =
+            case pageRequest of
+                PageBefore oldestVisibleMessage ->
+                    ( max (Id.toInt oldestVisibleMessage - VisibleMessages.pageSize) 0
+                    , Id.toInt oldestVisibleMessage
+                    )
 
-        nextOldestVisible =
-            max (Id.toInt oldestVisibleMessage2 - VisibleMessages.pageSize) 0
+                PageFrom firstNewMessage ->
+                    ( max (Id.toInt firstNewMessage) 0
+                    , Id.toInt firstNewMessage + VisibleMessages.pageSize
+                    )
     in
-    IdArray.slice (Id.fromInt nextOldestVisible) oldestVisibleMessage2 channel.messages
+    -- A negative end would make Array.slice count back from the end of the whole channel
+    IdArray.slice (Id.fromInt start) (Id.fromInt (max start end)) channel.messages
         |> IdArray.toList
-        |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
+        |> List.indexedMap (\index message -> ( Id.fromInt (index + start), message ))
         |> SeqDict.fromList
         |> Thread.withRepliedToMessages channel.messages
 
