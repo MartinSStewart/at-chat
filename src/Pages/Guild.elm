@@ -4429,20 +4429,6 @@ discordConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        discordGuildChannels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
-        discordGuildChannels =
-            case guildOrDmIdNoThread of
-                DiscordGuildOrDmId_Guild { guildId } ->
-                    case SeqDict.get guildId local.discordGuilds of
-                        Just guild ->
-                            guild.channels
-
-                        Nothing ->
-                            SeqDict.empty
-
-                DiscordGuildOrDmId_Dm _ ->
-                    SeqDict.empty
-
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread )
@@ -4635,7 +4621,18 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     currentDiscordUserId
                                                     local.localUser
                                                     message
-                                                    discordGuildChannels
+                                                    (case guildOrDmIdNoThread of
+                                                        DiscordGuildOrDmId_Guild { guildId } ->
+                                                            case SeqDict.get guildId local.discordGuilds of
+                                                                Just guild ->
+                                                                    guild.channels
+
+                                                                Nothing ->
+                                                                    SeqDict.empty
+
+                                                        DiscordGuildOrDmId_Dm _ ->
+                                                            SeqDict.empty
+                                                    )
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
