@@ -4609,6 +4609,20 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     message
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
+                                            ( Nothing, True ) ->
+                                                Ui.Lazy.lazy6
+                                                    discordMessageViewNotThreadStarterWithChannelMention
+                                                    (encodeDiscordMessageViewWithReply
+                                                        (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                        (encodeMessageIndex index (Id.fromInt 0))
+                                                    )
+                                                    revealedSpoilers
+                                                    currentDiscordUserId
+                                                    local.localUser
+                                                    message
+                                                    channels
+                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
                                             ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarterWithReply
@@ -7589,6 +7603,43 @@ discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers
         SeqDict.empty
         localUser
         (Just (RepliedToView_Message (Id.fromInt replyMessageIndex) replyMessage))
+        Nothing
+        (Id.fromInt messageIndex)
+        message
+
+
+discordMessageViewNotThreadStarterWithChannelMention :
+    String
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> Discord.Id Discord.UserId
+    -> LocalUser
+    -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+    -> Element MessageViewMsg
+discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message channels =
+    let
+        { data, messageIndexAndReplyMessageIndex } =
+            decodeDiscordMessageViewWithReply dataAndMessageIndex
+
+        { containerWidth, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+
+        { messageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
+    in
+    discordMessageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        currentDiscordUserId
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        channels
+        localUser
+        Nothing
         Nothing
         (Id.fromInt messageIndex)
         message
