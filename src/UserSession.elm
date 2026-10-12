@@ -22,7 +22,9 @@ module UserSession exposing
     , Viewing_DmData
     , Viewing_DmThreadData
     , Viewing_SlackChannelData
+    , Viewing_SlackChannelThreadData
     , Viewing_SlackDmData
+    , Viewing_SlackDmThreadData
     , collapseUserOptionSection
     , expandUserOptionSection
     , init
@@ -125,7 +127,9 @@ type Viewing
     | Viewing_DiscordChannel Viewing_DiscordChannelData
     | Viewing_DiscordChannelThread Viewing_DiscordChannelThreadData
     | Viewing_SlackChannel Viewing_SlackChannelData
+    | Viewing_SlackChannelThread Viewing_SlackChannelThreadData
     | Viewing_SlackDm Viewing_SlackDmData
+    | Viewing_SlackDmThread Viewing_SlackDmThreadData
     | Viewing_None
     | Viewing_Overview
 
@@ -182,6 +186,20 @@ type alias Viewing_SlackChannelData =
 type alias Viewing_SlackDmData =
     { id : Viewing_SlackDmId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
+    }
+
+
+type alias Viewing_SlackChannelThreadData =
+    { id : Viewing_SlackChannelId
+    , threadId : Id ChannelMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_SlackDmThreadData =
+    { id : Viewing_SlackDmId
+    , threadId : Id ChannelMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
     }
 
 
@@ -303,6 +321,12 @@ isViewing guildOrDmId threadRoute viewing =
         ( Viewing_SlackDm data, NoThread ) ->
             guildOrDmId == SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id)
 
+        ( Viewing_SlackChannelThread data, ViewThread threadId ) ->
+            guildOrDmId == SlackGuildOrDmId (SlackGuildOrDmId_Workspace data.id) && data.threadId == threadId
+
+        ( Viewing_SlackDmThread data, ViewThread threadId ) ->
+            guildOrDmId == SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id) && data.threadId == threadId
+
         _ ->
             False
 
@@ -330,6 +354,12 @@ setPreviouslyLastViewedChannelMessage messageId viewing =
 
         Viewing_SlackDm data ->
             Viewing_SlackDm { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_SlackChannelThread _ ->
+            viewing
+
+        Viewing_SlackDmThread _ ->
+            viewing
 
         Viewing_DmThread _ ->
             viewing
@@ -360,6 +390,12 @@ setPreviouslyLastViewedThreadMessage messageId viewing =
 
         Viewing_DiscordChannelThread data ->
             Viewing_DiscordChannelThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_SlackChannelThread data ->
+            Viewing_SlackChannelThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_SlackDmThread data ->
+            Viewing_SlackDmThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
 
         Viewing_Dm _ ->
             viewing
@@ -427,6 +463,12 @@ isViewingGame guildOrDmId matchId viewing =
             False
 
         Viewing_SlackDm _ ->
+            False
+
+        Viewing_SlackChannelThread _ ->
+            False
+
+        Viewing_SlackDmThread _ ->
             False
 
         Viewing_Overview ->
@@ -498,6 +540,12 @@ setLastViewedGuild viewing session =
             session
 
         Viewing_SlackDm _ ->
+            session
+
+        Viewing_SlackChannelThread _ ->
+            session
+
+        Viewing_SlackDmThread _ ->
             session
 
         Viewing_None ->

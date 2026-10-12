@@ -139,7 +139,7 @@ import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
-import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
+import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, SlackFrontendThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..))
@@ -201,7 +201,7 @@ pendingChangesText localChange =
         Local_Discord_SendMessage _ _ _ _ _ _ ->
             Just "Sent a message"
 
-        Local_Slack_SendMessage _ _ _ _ ->
+        Local_Slack_SendMessage _ _ _ _ _ ->
             Just "Sent a message"
 
         Local_Slack_UnlinkUser _ ->
@@ -277,6 +277,9 @@ pendingChangesText localChange =
             Nothing
 
         Local_Slack_LoadChannelMessages _ _ _ ->
+            Nothing
+
+        Local_Slack_LoadThreadMessages _ _ _ _ ->
             Nothing
 
         Local_Discord_LoadChannelMessages _ _ _ ->
@@ -1606,11 +1609,12 @@ when it mentions one of the linked accounts. `guildOrDmId` is the author's.
 -}
 playNotificationSoundForSlackMessage :
     SlackGuildOrDmId
+    -> ThreadRoute
     -> LocalState
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
-playNotificationSoundForSlackMessage guildOrDmId local content model =
+playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model =
     case local.localUser.session.notificationMode of
         NoNotifications ->
             Command.none
@@ -1673,7 +1677,7 @@ playNotificationSoundForSlackMessage guildOrDmId local content model =
                                                             { currentSlackUserId = currentUserId
                                                             , teamId = teamId
                                                             , channelId = channelId
-                                                            , viewingMessage = Nothing
+                                                            , threadRoute = Id.threadRouteWithNoMessage threadRoute
                                                             , channelsVisible = ChannelsHiddenOnMobile
                                                             , overlay = Nothing
                                                             }
@@ -1682,7 +1686,7 @@ playNotificationSoundForSlackMessage guildOrDmId local content model =
                                                         SlackDmRoute
                                                             { currentSlackUserId = currentUserId
                                                             , channelId = channelId
-                                                            , viewingMessage = Nothing
+                                                            , threadRoute = Id.threadRouteWithNoMessage threadRoute
                                                             , channelsVisible = ChannelsHiddenOnMobile
                                                             , overlay = Nothing
                                                             }
@@ -2268,7 +2272,7 @@ routeRequest previousRoute newRoute model =
                         sameChannelRoute
                         (SlackGuildOrDmId guildOrDmId)
                         Nothing
-                        (NoThreadWithFriends routeData.viewingMessage HideChannelSettings)
+                        (slackThreadRouteWithFriends routeData.threadRoute)
                         (Local.model loggedIn.localState)
                         loggedIn
                         model3
@@ -2303,7 +2307,7 @@ routeRequest previousRoute newRoute model =
                         sameDmRoute
                         (SlackGuildOrDmId guildOrDmId)
                         Nothing
-                        (NoThreadWithFriends routeData.viewingMessage HideChannelSettings)
+                        (slackThreadRouteWithFriends routeData.threadRoute)
                         (Local.model loggedIn.localState)
                         loggedIn
                         model3
@@ -2313,9 +2317,16 @@ routeRequest previousRoute newRoute model =
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
-{-| Slack conversations aren't preloaded and there's no viewing state on the backend to load
-them, so the newest page is requested the first time one is opened.
--}
+slackThreadRouteWithFriends : ThreadRouteWithMaybeMessage -> ThreadRouteWithFriends
+slackThreadRouteWithFriends threadRoute =
+    case threadRoute of
+        NoThreadWithMaybeMessage maybeMessageId ->
+            NoThreadWithFriends maybeMessageId HideChannelSettings
+
+        ViewThreadWithMaybeMessage threadId maybeMessageId ->
+            ViewThreadWithFriends threadId maybeMessageId HideChannelSettings
+
+
 encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
 encryptedDmOtherUser guildOrDmId local loggedIn =
     case guildOrDmId of
@@ -2464,6 +2475,7 @@ type ConversationWindow
     | DiscordChannelWindow DiscordGuildOrDmId (VisibleMessages ChannelMessageId) Int
     | DiscordThreadWindow DiscordGuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
     | SlackChannelWindow SlackGuildOrDmId (VisibleMessages ChannelMessageId) Int
+    | SlackThreadWindow SlackGuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
 
 
 conversationWindow : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe ConversationWindow
@@ -2539,8 +2551,13 @@ conversationWindow guildOrDmId threadRoute local =
                         NoThread ->
                             SlackChannelWindow guildOrDmId2 channel.visibleMessages (MessageArray.length channel.messages) |> Just
 
-                        ViewThread _ ->
-                            Nothing
+                        ViewThread threadId ->
+                            let
+                                thread : SlackFrontendThread
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
+                            in
+                            SlackThreadWindow guildOrDmId2 threadId thread.visibleMessages (MessageArray.length thread.messages) |> Just
 
                 Nothing ->
                     Nothing
@@ -2548,7 +2565,17 @@ conversationWindow guildOrDmId threadRoute local =
         SlackGuildOrDmId ((SlackGuildOrDmId_Dm data) as guildOrDmId2) ->
             case SeqDict.get data.channelId local.slackDmChannels of
                 Just dmChannel ->
-                    SlackChannelWindow guildOrDmId2 dmChannel.visibleMessages (MessageArray.length dmChannel.messages) |> Just
+                    case threadRoute of
+                        NoThread ->
+                            SlackChannelWindow guildOrDmId2 dmChannel.visibleMessages (MessageArray.length dmChannel.messages) |> Just
+
+                        ViewThread threadId ->
+                            let
+                                thread : SlackFrontendThread
+                                thread =
+                                    SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
+                            in
+                            SlackThreadWindow guildOrDmId2 threadId thread.visibleMessages (MessageArray.length thread.messages) |> Just
 
                 Nothing ->
                     Nothing
@@ -2610,6 +2637,10 @@ jumpToNewestMessages guildOrDmId threadRoute local =
 
         Just (SlackChannelWindow guildOrDmId2 visibleMessages messageCount) ->
             Local_Slack_LoadChannelMessages guildOrDmId2 (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Just (SlackThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_Slack_LoadThreadMessages guildOrDmId2 threadId (newestPage messageCount) EmptyPlaceholder
                 |> ifNotAtEnd visibleMessages messageCount
 
         Nothing ->
@@ -3438,10 +3469,11 @@ textToRichText text memberIds channels local =
 slackSendMessage :
     Time.Posix
     -> SlackGuildOrDmId
+    -> ThreadRoute
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     -> LocalState
     -> LocalState
-slackSendMessage createdAt guildOrDmId content local =
+slackSendMessage createdAt guildOrDmId threadRoute content local =
     case guildOrDmId of
         SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
             case LocalState.getSlackWorkspaceAndChannel teamId channelId local of
@@ -3454,7 +3486,7 @@ slackSendMessage createdAt guildOrDmId content local =
                         ( currentlyViewing2, user2 ) =
                             slackMessageAddedFrontend
                                 guildOrDmId
-                                (MessageArray.length channel.messages |> Id.fromInt)
+                                (slackNextMessageId threadRoute channel)
                                 content
                                 localUser
                     in
@@ -3466,10 +3498,7 @@ slackSendMessage createdAt guildOrDmId content local =
                                     | channels =
                                         SeqDict.insert
                                             channelId
-                                            (LocalState.createDiscordDmMessageFrontend
-                                                (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
-                                                channel
-                                            )
+                                            (slackAddMessage createdAt currentUserId threadRoute content channel)
                                             workspace.channels
                                 }
                                 local.slackWorkspaces
@@ -3490,7 +3519,7 @@ slackSendMessage createdAt guildOrDmId content local =
                         ( currentlyViewing2, user2 ) =
                             slackMessageAddedFrontend
                                 guildOrDmId
-                                (MessageArray.length dmChannel.messages |> Id.fromInt)
+                                (slackNextMessageId threadRoute dmChannel)
                                 content
                                 localUser
                     in
@@ -3498,10 +3527,7 @@ slackSendMessage createdAt guildOrDmId content local =
                         | slackDmChannels =
                             SeqDict.insert
                                 channelId
-                                (LocalState.createDiscordDmMessageFrontend
-                                    (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
-                                    dmChannel
-                                )
+                                (slackAddMessage createdAt currentUserId threadRoute content dmChannel)
                                 local.slackDmChannels
                         , localUser = { localUser | user = user2, currentlyViewing = currentlyViewing2 }
                     }
@@ -3510,15 +3536,68 @@ slackSendMessage createdAt guildOrDmId content local =
                     local
 
 
+slackNextMessageId :
+    ThreadRoute
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+        }
+    -> ThreadRouteWithMessage
+slackNextMessageId threadRoute channel =
+    case threadRoute of
+        NoThread ->
+            NoThreadWithMessage (MessageArray.length channel.messages |> Id.fromInt)
+
+        ViewThread threadId ->
+            case SeqDict.get threadId channel.threads of
+                Just thread ->
+                    ViewThreadWithMessage threadId (MessageArray.length thread.messages |> Id.fromInt)
+
+                Nothing ->
+                    ViewThreadWithMessage threadId (Id.fromInt 0)
+
+
+slackAddMessage :
+    Time.Posix
+    -> Slack.Id Slack.UserId
+    -> ThreadRoute
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+            , visibleMessages : VisibleMessages ChannelMessageId
+            , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+        }
+    ->
+        { a
+            | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+            , visibleMessages : VisibleMessages ChannelMessageId
+            , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+        }
+slackAddMessage createdAt author threadRoute content channel =
+    case threadRoute of
+        NoThread ->
+            LocalState.createChannelMessageFrontend
+                (Message.userTextMessageFrontend createdAt author content Message.NoReply SeqDict.empty)
+                channel
+
+        ViewThread threadId ->
+            LocalState.createThreadMessageFrontend
+                threadId
+                (Message.userTextMessageFrontend createdAt author content Message.NoReply SeqDict.empty)
+                channel
+
+
 {-| The frontend's copy of `Backend.slackMessageAdded`, for the one user it belongs to.
 -}
 slackMessageAddedFrontend :
     SlackGuildOrDmId
-    -> Id ChannelMessageId
+    -> ThreadRouteWithMessage
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     -> LocalUser
     -> ( UserSession.Viewing, FrontendCurrentUser )
-slackMessageAddedFrontend guildOrDmId messageId content localUser =
+slackMessageAddedFrontend guildOrDmId threadRouteWithMessage content localUser =
     let
         author : Slack.Id Slack.UserId
         author =
@@ -3531,16 +3610,30 @@ slackMessageAddedFrontend guildOrDmId messageId content localUser =
 
         viewingId : Maybe SlackGuildOrDmId
         viewingId =
-            case ( localUser.currentlyViewing, guildOrDmId ) of
-                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId } ) ->
+            case ( localUser.currentlyViewing, guildOrDmId, threadRouteWithMessage ) of
+                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId }, NoThreadWithMessage _ ) ->
                     if data.id.teamId == teamId && data.id.channelId == channelId then
                         Just (SlackGuildOrDmId_Workspace data.id)
 
                     else
                         Nothing
 
-                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId } ) ->
+                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId }, NoThreadWithMessage _ ) ->
                     if data.id.channelId == channelId then
+                        Just (SlackGuildOrDmId_Dm data.id)
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackChannelThread data, SlackGuildOrDmId_Workspace { teamId, channelId }, ViewThreadWithMessage threadId _ ) ->
+                    if data.id.teamId == teamId && data.id.channelId == channelId && data.threadId == threadId then
+                        Just (SlackGuildOrDmId_Workspace data.id)
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackDmThread data, SlackGuildOrDmId_Dm { channelId }, ViewThreadWithMessage threadId _ ) ->
+                    if data.id.channelId == channelId && data.threadId == threadId then
                         Just (SlackGuildOrDmId_Dm data.id)
 
                     else
@@ -3552,7 +3645,7 @@ slackMessageAddedFrontend guildOrDmId messageId content localUser =
     if SeqDict.member author localUser.linkedSlackUsers then
         LocalState.ownMessageIsReadFrontend
             (SlackGuildOrDmId guildOrDmId)
-            (NoThreadWithMessage messageId)
+            threadRouteWithMessage
             ( localUser.currentlyViewing, localUser.user )
 
     else
@@ -3560,7 +3653,7 @@ slackMessageAddedFrontend guildOrDmId messageId content localUser =
             Just viewingId2 ->
                 LocalState.incrementLastViewedMessageFrontend
                     (SlackGuildOrDmId viewingId2)
-                    (NoThreadWithMessage messageId)
+                    threadRouteWithMessage
                     ( localUser.currentlyViewing, localUser.user )
 
             Nothing ->
@@ -3571,7 +3664,7 @@ slackMessageAddedFrontend guildOrDmId messageId content localUser =
                             SeqSet.toList (RichText.mentionsUser content)
                                 |> List.any (\userId -> SeqDict.member userId localUser.linkedSlackUsers)
                         then
-                            User.addSlackDirectMention teamId channelId NoThread localUser.user
+                            User.addSlackDirectMention teamId channelId (Id.threadRouteWithoutMessage threadRouteWithMessage) localUser.user
 
                         else
                             localUser.user
@@ -4203,6 +4296,83 @@ changeUpdate localMsg local =
                                         local.slackDmChannels
                             }
 
+                        ViewSlackChannelThread data messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastSlackChannelViewed
+                                                data.id
+                                                (ViewThreadWithMaybeMessage
+                                                    data.threadId
+                                                    (if markMessagesAsViewed then
+                                                        LocalState.getSlackWorkspaceAndChannel data.id.teamId data.id.channelId local
+                                                            |> Maybe.andThen (\( _, channel ) -> SeqDict.get data.threadId channel.threads)
+                                                            |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
+                                                localUser.user
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
+                                    }
+                                , slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        data.id.teamId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            data.threadId
+                                                            (DmChannel.loadMessages messagesLoaded)
+                                                            channel.threads
+                                                }
+                                            )
+                                            data.id.channelId
+                                        )
+                                        local.slackWorkspaces
+                            }
+
+                        ViewSlackDmThread data messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            case
+                                                SeqDict.get data.id.channelId local.slackDmChannels
+                                                    |> Maybe.andThen (\dmChannel -> SeqDict.get data.threadId dmChannel.threads)
+                                            of
+                                                Just thread ->
+                                                    if markMessagesAsViewed then
+                                                        User.setLastViewedMessage
+                                                            (SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id))
+                                                            (ViewThreadWithMessage data.threadId (DmChannel.latestFrontendThreadMessageId thread))
+                                                            localUser.user
+
+                                                    else
+                                                        localUser.user
+
+                                                Nothing ->
+                                                    localUser.user
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
+                                    }
+                                , slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        data.id.channelId
+                                        (\dmChannel ->
+                                            { dmChannel
+                                                | threads =
+                                                    SeqDict.updateIfExists
+                                                        data.threadId
+                                                        (DmChannel.loadMessages messagesLoaded)
+                                                        dmChannel.threads
+                                            }
+                                        )
+                                        local.slackDmChannels
+                            }
+
                         ViewDiscordDm data messagesLoaded ->
                             { local
                                 | localUser =
@@ -4633,10 +4803,38 @@ changeUpdate localMsg local =
                                         local.slackDmChannels
                             }
 
-                Local_Slack_SendMessage createdAt _ guildOrDmId text ->
+                Local_Slack_LoadThreadMessages guildOrDmId threadId pageRequest messagesLoaded ->
+                    let
+                        loadThreadPage :
+                            { a | threads : SeqDict (Id ChannelMessageId) SlackFrontendThread }
+                            -> { a | threads : SeqDict (Id ChannelMessageId) SlackFrontendThread }
+                        loadThreadPage channel =
+                            { channel
+                                | threads =
+                                    SeqDict.updateIfExists
+                                        threadId
+                                        (DmChannel.loadPage [] pageRequest messagesLoaded)
+                                        channel.threads
+                            }
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel loadThreadPage channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm data ->
+                            { local | slackDmChannels = SeqDict.updateIfExists data.channelId loadThreadPage local.slackDmChannels }
+
+                Local_Slack_SendMessage createdAt _ guildOrDmId threadRoute text ->
                     slackSendMessage
                         createdAt
                         guildOrDmId
+                        threadRoute
                         (RichText.fromNonemptyString
                             local.localUser.timezone
                             local.localUser.slackUsers
@@ -5161,17 +5359,25 @@ changeUpdate localMsg local =
                                 threadRoute
                                 local
 
-                Server_Slack_SendMessage createdAt guildOrDmId content ->
-                    slackSendMessage createdAt guildOrDmId content local
+                Server_Slack_SendMessage createdAt guildOrDmId threadRoute content ->
+                    slackSendMessage createdAt guildOrDmId threadRoute content local
 
-                Server_Slack_EditMessage editedAt guildOrDmId messageId content ->
+                Server_Slack_EditMessage editedAt guildOrDmId threadRoute content ->
                     let
                         edit :
                             Slack.Id Slack.UserId
-                            -> { a | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) }
-                            -> { a | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) }
+                            ->
+                                { a
+                                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+                                }
+                            ->
+                                { a
+                                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+                                }
                         edit editedBy channel =
-                            LocalState.editMessageFrontendHelperNoThread editedAt editedBy content DoNotChangeAttachments messageId channel
+                            LocalState.editMessageFrontendHelper editedAt editedBy content DoNotChangeAttachments threadRoute channel
                                 |> Result.withDefault channel
                     in
                     case guildOrDmId of
@@ -5187,14 +5393,14 @@ changeUpdate localMsg local =
                         SlackGuildOrDmId_Dm { currentUserId, channelId } ->
                             { local | slackDmChannels = SeqDict.updateIfExists channelId (edit currentUserId) local.slackDmChannels }
 
-                Server_Slack_DeleteMessage guildOrDmId messageId ->
+                Server_Slack_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
                         SlackGuildOrDmId_Workspace { teamId, channelId } ->
                             { local
                                 | slackWorkspaces =
                                     SeqDict.updateIfExists
                                         teamId
-                                        (LocalState.updateChannel (LocalState.deleteMessageFrontendNoThread messageId) channelId)
+                                        (LocalState.updateChannel (LocalState.deleteMessageFrontendHelper threadRoute) channelId)
                                         local.slackWorkspaces
                             }
 
@@ -5203,7 +5409,7 @@ changeUpdate localMsg local =
                                 | slackDmChannels =
                                     SeqDict.updateIfExists
                                         channelId
-                                        (LocalState.deleteMessageFrontendNoThread messageId)
+                                        (LocalState.deleteMessageFrontendHelper threadRoute)
                                         local.slackDmChannels
                             }
 
@@ -8540,6 +8746,9 @@ isShowingNewestMessages guildOrDmId threadRoute local =
         Just (SlackChannelWindow _ visibleMessages messageCount) ->
             VisibleMessages.reachesEnd messageCount visibleMessages
 
+        Just (SlackThreadWindow _ _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
         Nothing ->
             True
 
@@ -8575,6 +8784,11 @@ holdScrollOnNewMessage guildOrDmId threadRoute local =
             Ports.shiftScrollByElementDelta
                 Pages.Guild.conversationContainerId
                 (Pages.Guild.channelMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Just (SlackThreadWindow _ _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.threadMessageHtmlId (Id.fromInt (messageCount - 2)))
 
         Nothing ->
             Command.none

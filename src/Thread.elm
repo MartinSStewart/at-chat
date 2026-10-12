@@ -5,12 +5,16 @@ module Thread exposing
     , FrontendGenericThread
     , FrontendThread
     , LastTypedAt
+    , SlackBackendThread
+    , SlackFrontendThread
     , backendInit
     , discordBackendInit
     , discordFrontendInit
     , discordToFrontend
     , frontendInit
     , loadMessages
+    , slackBackendInit
+    , slackToFrontend
     , toFrontend
     , withRepliedToMessages
     )
@@ -26,6 +30,7 @@ import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
+import Slack
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -60,6 +65,31 @@ type alias DiscordFrontendThread =
     { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
+    }
+
+
+type alias SlackBackendThread =
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ThreadMessageId)
+    }
+
+
+type alias SlackFrontendThread =
+    FrontendGenericThread (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+
+
+slackBackendInit : SlackBackendThread
+slackBackendInit =
+    { messages = IdArray.empty
+    , linkedMessageIds = OneToOne.empty
+    }
+
+
+slackToFrontend : Bool -> SlackBackendThread -> SlackFrontendThread
+slackToFrontend preloadMessages thread =
+    { messages = loadMessages preloadMessages thread.messages
+    , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length thread.messages)
+    , dateDividerDrawings = SeqDict.empty
     }
 
 

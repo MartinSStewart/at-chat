@@ -59,6 +59,7 @@ type ToBackendLog
     | ToBackendLog_Local_LoadThreadMessages
     | ToBackendLog_Local_Discord_LoadChannelMessages
     | ToBackendLog_Local_Slack_LoadChannelMessages
+    | ToBackendLog_Local_Slack_LoadThreadMessages
     | ToBackendLog_Local_Discord_LoadThreadMessages
     | ToBackendLog_Local_SetGuildNotificationLevel
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
@@ -253,6 +254,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Slack_LoadChannelMessages ->
             "Local_Slack_LoadChannelMessages"
+
+        ToBackendLog_Local_Slack_LoadThreadMessages ->
+            "Local_Slack_LoadThreadMessages"
 
         ToBackendLog_Local_Discord_LoadThreadMessages ->
             "Local_Discord_LoadThreadMessages"

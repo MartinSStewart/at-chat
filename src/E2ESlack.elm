@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Duration
@@ -878,6 +878,163 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackThreadReplyEvent : { ts : String, text : String } -> String
+slackThreadReplyEvent { ts, text } =
+    """{"type":"message","channel":"C09DJDQSWLU","text":\""""
+        ++ text
+        ++ """ <@U09DJDQL1A8>","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":\""""
+        ++ text
+        ++ """ "},{"type":"user","user_id":"U09DJDQL1A8"}]}]}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":\""""
+        ++ ts
+        ++ """","ts":\""""
+        ++ ts
+        ++ """","thread_ts":"1791638760.000100","parent_user_id":"U09DJDQL1A8"}"""
+
+
+allTestSlackThreadMessageCount : E2EHelper.BackendModel2 -> Int
+allTestSlackThreadMessageCount backend =
+    SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+        |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+        |> Maybe.andThen (\channel -> SeqDict.get (Id.fromInt 2) channel.threads)
+        |> Maybe.map (\thread -> IdArray.length thread.messages)
+        |> Maybe.withDefault 0
+
+
+slackThreadsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackThreadsTest config =
+    E2EHelper.startTest
+        "Slack threads can be read and replied to, and replies elsewhere show up live"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if allTestSlackThreadMessageCount backend == 2 then
+                            Ok ()
+
+                        else
+                            Err "Expected the thread's replies to be loaded when the account was linked"
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                , E2EHelper.hasExactText admin [ "First reply", "Second reply" ]
+                , E2EHelper.writeMessage admin 100 "Reply from at-chat"
+                , E2EHelper.hasExactText admin [ "Reply from at-chat" ]
+                , T.checkState
+                    100
+                    (\data ->
+                        let
+                            replyRequests : List E2EHelper.CustomRequest
+                            replyRequests =
+                                List.filterMap
+                                    (\request ->
+                                        case E2EHelper.decodeCustomRequest request of
+                                            Just customRequest ->
+                                                if
+                                                    String.endsWith "chat.postMessage" customRequest.url
+                                                        && List.member "thread_ts=1791638760.000100" (E2EHelper.slackFormFields customRequest.body)
+                                                then
+                                                    Just customRequest
+
+                                                else
+                                                    Nothing
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    data.httpRequests
+                        in
+                        if List.length replyRequests /= 1 then
+                            Err "Expected the reply to be posted to Slack in the thread"
+
+                        else if allTestSlackThreadMessageCount data.backend /= 3 then
+                            Err "Expected the reply to be stored in the thread"
+
+                        else
+                            Ok ()
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.hasExactText admin [ "This is the start of #social" ]
+                , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackThreadReplyEvent { ts = "1791640001.000100", text = "Thread news" })
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if adminSlackMentionCount backend /= 1 then
+                                    Err "Expected the mention in the thread to be counted"
+
+                                else if allTestSlackThreadMessageCount backend /= 4 then
+                                    Err "Expected the reply from Slack to be added to the thread"
+
+                                else
+                                    Ok ()
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                        , admin.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                        , E2EHelper.hasExactText admin [ "Thread news " ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if adminSlackMentionCount backend == 0 then
+                                    Ok ()
+
+                                else
+                                    Err "Opening the thread should clear its mention"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"message_changed","channel":"C09DJDQSWLU","message":{"user":"U09DK3NCPMG","type":"message","edited":{"user":"U09DK3NCPMG","ts":"1791640010.000000"},"text":"Edited reply","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Edited reply"}]}]}],"ts":"1791640001.000100","thread_ts":"1791638760.000100"},"event_ts":"1791640010.000200","ts":"1791640010.000200"}"""
+                        , E2EHelper.hasExactText admin [ "Edited reply" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"message_deleted","previous_message":{"user":"U09DK3NCPMG","type":"message","ts":"1791640001.000100","thread_ts":"1791638760.000100","text":"Edited reply"},"channel":"C09DJDQSWLU","hidden":true,"deleted_ts":"1791640001.000100","event_ts":"1791640020.000400","ts":"1791640020.000400"}"""
+                        , E2EHelper.hasNotExactText admin [ "Edited reply" ]
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs

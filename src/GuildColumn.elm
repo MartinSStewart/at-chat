@@ -1,5 +1,6 @@
 module GuildColumn exposing
     ( canChangeUnreadNotificationCount
+    , channelNewMessageCount
     , channelOrThreadHasNotifications
     , discordDmCurrentUserId
     , discordDmHasNotifications
@@ -22,7 +23,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty
@@ -192,15 +193,13 @@ slackWorkspaceHasNotifications currentSlackUserId currentUser teamId workspace =
                 SeqDict.foldl
                     (\channelId channel total ->
                         total
-                            + newMessageCount
-                                (SeqDict.get
-                                    (SlackGuildOrDmId
-                                        (SlackGuildOrDmId_Workspace
-                                            { currentUserId = currentSlackUserId, teamId = teamId, channelId = channelId }
-                                        )
+                            + channelNewMessageCount
+                                (SlackGuildOrDmId
+                                    (SlackGuildOrDmId_Workspace
+                                        { currentUserId = currentSlackUserId, teamId = teamId, channelId = channelId }
                                     )
-                                    currentUser.lastViewedMessage
                                 )
+                                currentUser
                                 channel
                     )
                     0
@@ -237,7 +236,7 @@ slackDmGuildIcon route localUser channelId dmChannel =
                         (SlackDmRoute
                             { currentSlackUserId = currentUserId
                             , channelId = channelId
-                            , viewingMessage = Nothing
+                            , threadRoute = NoThreadWithMaybeMessage Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
                             , overlay = Nothing
                             }
@@ -272,11 +271,9 @@ slackDmHasNotifications :
 slackDmHasNotifications localUser channelId dmChannel =
     case slackDmCurrentUserId localUser dmChannel of
         Just currentUserId ->
-            newMessageCount
-                (SeqDict.get
-                    (SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                    localUser.user.lastViewedMessage
-                )
+            channelNewMessageCount
+                (SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                localUser.user
                 dmChannel
                 |> OneOrGreater.fromInt
                 |> Maybe.map (Tuple.pair currentUserId)
@@ -311,7 +308,7 @@ slackWorkspaceRoute localUser teamId workspace =
                 { currentSlackUserId = currentSlackUserId
                 , teamId = teamId
                 , channelId = channelId
-                , viewingMessage = Nothing
+                , threadRoute = NoThreadWithMaybeMessage Nothing
                 , channelsVisible = ChannelsVisibleOnMobile
                 , overlay = Nothing
                 }
@@ -932,7 +929,7 @@ canChangeUnreadNotificationCount change =
         Local_Discord_SendMessage _ _ _ _ _ _ ->
             True
 
-        Local_Slack_SendMessage _ _ _ _ ->
+        Local_Slack_SendMessage _ _ _ _ _ ->
             True
 
         Local_Slack_UnlinkUser _ ->
@@ -1018,6 +1015,9 @@ canChangeUnreadNotificationCount change =
             False
 
         Local_Slack_LoadChannelMessages _ _ _ ->
+            False
+
+        Local_Slack_LoadThreadMessages _ _ _ _ ->
             False
 
         Local_Discord_LoadThreadMessages _ _ _ _ ->

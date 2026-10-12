@@ -147,6 +147,7 @@ import Slack exposing (SlackCookie, SlackData, SlackToken)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
+import Thread
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
@@ -861,7 +862,7 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
-    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Result Slack.HttpError (Slack.Id Slack.MessageId))
+    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Result Slack.HttpError (Slack.Id Slack.MessageId))
     | SlackWebsocketCreatedHandle (Slack.Id Slack.UserId) Websocket.Connection
     | SlackWebsocketClosedByBackend
     | SlackWebsocketMsg (Slack.Id Slack.UserId) (Result ( Websocket.CloseEventCode, String ) String)
@@ -887,8 +888,8 @@ type BackendMsg
         (Slack.Id Slack.UserId)
         (Result
             Slack.HttpError
-            { channels : List ( Slack.Channel, List Slack.Message )
-            , dmChannels : List ( Slack.DmChannel, List Slack.Message )
+            { channels : List ( Slack.Channel, Slack.History )
+            , dmChannels : List ( Slack.DmChannel, Slack.History )
             , users : List Slack.User
             }
         )
@@ -1049,6 +1050,7 @@ type alias SlackBackendChannel =
     , linkedMembers : SeqSet (Slack.Id Slack.UserId)
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+    , threads : SeqDict (Id ChannelMessageId) Thread.SlackBackendThread
     }
 
 
@@ -1057,6 +1059,7 @@ type alias SlackDmChannel =
     , members : NonemptySet (Slack.Id Slack.UserId)
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+    , threads : SeqDict (Id ChannelMessageId) Thread.SlackBackendThread
     }
 
 
@@ -1198,9 +1201,9 @@ type ServerChange
         , stickers : SeqDict (Id StickerId) StickerData
         , repliedToData : RepliedToData
         }
-    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
-    | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId (Id ChannelMessageId) (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
-    | Server_Slack_DeleteMessage SlackGuildOrDmId (Id ChannelMessageId)
+    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
@@ -1325,7 +1328,7 @@ type LocalChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
     | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId NonemptyString
+    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString
     | Local_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -1351,6 +1354,7 @@ type LocalChange
     | Local_LoadChannelMessages GuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
     | Local_Slack_LoadChannelMessages SlackGuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
+    | Local_Slack_LoadThreadMessages SlackGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel

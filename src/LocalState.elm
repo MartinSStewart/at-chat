@@ -220,7 +220,7 @@ import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing(..))
 import Slack
 import TextEditor
-import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
+import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt, SlackFrontendThread)
 import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
@@ -463,6 +463,7 @@ type alias SlackFrontendChannel =
     , isPrivate : Bool
     , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
+    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
     }
 
 
@@ -471,6 +472,7 @@ type alias SlackFrontendDmChannel =
     , members : NonemptySet (Slack.Id Slack.UserId)
     , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
+    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
     }
 
 
@@ -3980,12 +3982,23 @@ routeToViewing isMobile route local =
                         StopViewingChannel
 
                     else
-                        ViewSlackChannel
-                            { id = id
-                            , previouslyLastViewedMessage =
-                                previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
-                            }
-                            EmptyPlaceholder
+                        case data.threadRoute of
+                            NoThreadWithMaybeMessage _ ->
+                                ViewSlackChannel
+                                    { id = id
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
+                                    }
+                                    EmptyPlaceholder
+
+                            ViewThreadWithMaybeMessage threadId _ ->
+                                ViewSlackChannelThread
+                                    { id = id
+                                    , threadId = threadId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) threadId local
+                                    }
+                                    EmptyPlaceholder
 
                 Nothing ->
                     StopViewingChannel
@@ -3997,12 +4010,23 @@ routeToViewing isMobile route local =
                     { currentUserId = data.currentSlackUserId, channelId = data.channelId }
             in
             if SeqDict.member data.channelId local.slackDmChannels && not (isMobile && data.channelsVisible == ChannelsVisibleOnMobile) then
-                ViewSlackDm
-                    { id = id
-                    , previouslyLastViewedMessage =
-                        previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) local
-                    }
-                    EmptyPlaceholder
+                case data.threadRoute of
+                    NoThreadWithMaybeMessage _ ->
+                        ViewSlackDm
+                            { id = id
+                            , previouslyLastViewedMessage =
+                                previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) local
+                            }
+                            EmptyPlaceholder
+
+                    ViewThreadWithMaybeMessage threadId _ ->
+                        ViewSlackDmThread
+                            { id = id
+                            , threadId = threadId
+                            , previouslyLastViewedMessage =
+                                previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) threadId local
+                            }
+                            EmptyPlaceholder
 
             else
                 StopViewingChannel

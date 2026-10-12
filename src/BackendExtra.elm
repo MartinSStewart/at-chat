@@ -1497,6 +1497,12 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
             UserSession.Viewing_SlackDm _ ->
                 visibleDmUsers
 
+            UserSession.Viewing_SlackChannelThread _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_SlackDmThread _ ->
+                visibleDmUsers
+
             UserSession.Viewing_None ->
                 visibleDmUsers
 
@@ -2909,7 +2915,7 @@ backendMsgLog msg =
         BackendMsgCompleted _ _ ->
             BackendMsgLog_BackendMsgCompleted
 
-        SentSlackMessage _ _ _ _ _ _ _ _ ->
+        SentSlackMessage _ _ _ _ _ _ _ _ _ ->
             BackendMsgLog_SentSlackMessage
 
         SlackWebsocketCreatedHandle _ _ ->
@@ -3158,7 +3164,7 @@ toBackendLog toBackend =
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedEditMessage
 
-                Local_Slack_SendMessage _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ ->
                     ToBackendLog_Local_Slack_SendMessage
 
                 Local_Slack_UnlinkUser _ ->
@@ -3166,6 +3172,9 @@ toBackendLog toBackend =
 
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     ToBackendLog_Local_Slack_LoadChannelMessages
+
+                Local_Slack_LoadThreadMessages _ _ _ _ ->
+                    ToBackendLog_Local_Slack_LoadThreadMessages
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend

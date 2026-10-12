@@ -925,20 +925,34 @@ usersViewingDiscordDm channelId model =
 {-| Each viewer is keyed by their own linked Slack account, which is the id their last viewed
 message is stored under.
 -}
-usersViewingSlackConversation : SlackGuildOrDmId -> BackendModel -> List ( Id UserId, Id.AnyGuildOrDmId )
-usersViewingSlackConversation guildOrDmId model =
+usersViewingSlackConversation : SlackGuildOrDmId -> ThreadRoute -> BackendModel -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingSlackConversation guildOrDmId threadRoute model =
     viewingConnections
         (\viewing ->
-            case ( viewing, guildOrDmId ) of
-                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId } ) ->
+            case ( viewing, guildOrDmId, threadRoute ) of
+                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId }, NoThread ) ->
                     if data.id.teamId == teamId && data.id.channelId == channelId then
                         Id.SlackGuildOrDmId (SlackGuildOrDmId_Workspace data.id) |> Just
 
                     else
                         Nothing
 
-                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId } ) ->
+                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId }, NoThread ) ->
                     if data.id.channelId == channelId then
+                        Id.SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id) |> Just
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackChannelThread data, SlackGuildOrDmId_Workspace { teamId, channelId }, ViewThread threadId ) ->
+                    if data.id.teamId == teamId && data.id.channelId == channelId && data.threadId == threadId then
+                        Id.SlackGuildOrDmId (SlackGuildOrDmId_Workspace data.id) |> Just
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackDmThread data, SlackGuildOrDmId_Dm { channelId }, ViewThread threadId ) ->
+                    if data.id.channelId == channelId && data.threadId == threadId then
                         Id.SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id) |> Just
 
                     else
@@ -1423,10 +1437,11 @@ them in a channel. `guildOrDmId` is the author's.
 slackMessageNotification :
     Time.Posix
     -> SlackGuildOrDmId
+    -> ThreadRoute
     -> UserTextMessageData messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-slackMessageNotification time guildOrDmId message model =
+slackMessageNotification time guildOrDmId threadRoute message model =
     let
         author : Slack.Id Slack.UserId
         author =
@@ -1451,7 +1466,7 @@ slackMessageNotification time guildOrDmId message model =
 
         viewers : List (Id UserId)
         viewers =
-            usersViewingSlackConversation guildOrDmId model |> List.map Tuple.first
+            usersViewingSlackConversation guildOrDmId threadRoute model |> List.map Tuple.first
 
         recipients : List (Slack.Id Slack.UserId)
         recipients =
@@ -1522,7 +1537,7 @@ slackMessageNotification time guildOrDmId message model =
                                         { currentSlackUserId = recipient
                                         , teamId = teamId
                                         , channelId = channelId
-                                        , viewingMessage = Nothing
+                                        , threadRoute = Id.threadRouteWithNoMessage threadRoute
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }
@@ -1532,7 +1547,7 @@ slackMessageNotification time guildOrDmId message model =
                                     Route.SlackDmRoute
                                         { currentSlackUserId = recipient
                                         , channelId = channelId
-                                        , viewingMessage = Nothing
+                                        , threadRoute = Id.threadRouteWithNoMessage threadRoute
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }

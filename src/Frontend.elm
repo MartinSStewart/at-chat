@@ -2961,6 +2961,31 @@ updateLoaded msg model =
                                     }
                                 )
 
+                        ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId }), NoThreadWithMessage messageId ) ->
+                            FrontendExtra.routePush
+                                model
+                                (SlackWorkspaceRoute
+                                    { currentSlackUserId = currentUserId
+                                    , teamId = teamId
+                                    , channelId = channelId
+                                    , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
+                                    }
+                                )
+
+                        ( SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId, channelId }), NoThreadWithMessage messageId ) ->
+                            FrontendExtra.routePush
+                                model
+                                (SlackDmRoute
+                                    { currentSlackUserId = currentUserId
+                                    , channelId = channelId
+                                    , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
+                                    }
+                                )
+
                         _ ->
                             ( model, Command.none )
 
@@ -4915,7 +4940,7 @@ updateLoaded msg model =
                                                                 )
 
                                                         SlackGuildOrDmId guildOrDmId2 ->
-                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 nonempty
+                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 threadRoute nonempty
                                                      )
                                                         |> Just
                                                     )
@@ -6877,6 +6902,10 @@ loadOlderMessages guildOrDmId threadRoute local =
             Local_Slack_LoadChannelMessages guildOrDmId2 (PageBefore visibleMessages.oldest) EmptyPlaceholder
                 |> messagesLeft visibleMessages
 
+        Just (FrontendExtra.SlackThreadWindow guildOrDmId2 threadId visibleMessages _) ->
+            Local_Slack_LoadThreadMessages guildOrDmId2 threadId (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
+
         Nothing ->
             Nothing
 
@@ -6917,6 +6946,10 @@ loadNewerMessages guildOrDmId threadRoute local =
 
         Just (FrontendExtra.SlackChannelWindow guildOrDmId2 visibleMessages messageCount) ->
             Local_Slack_LoadChannelMessages guildOrDmId2 (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Just (FrontendExtra.SlackThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
+            Local_Slack_LoadThreadMessages guildOrDmId2 threadId (firstNewMessage visibleMessages) EmptyPlaceholder
                 |> messagesLeft visibleMessages messageCount
 
         Nothing ->
@@ -8837,6 +8870,30 @@ updateLoadedFromBackend msg model =
                                             _ ->
                                                 Command.none
 
+                                    ViewSlackChannelThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace routeId), ViewThread threadIdRoute ) ->
+                                                if data.id == routeId && data.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewSlackDmThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( SlackGuildOrDmId (SlackGuildOrDmId_Dm routeId), ViewThread threadIdRoute ) ->
+                                                if data.id == routeId && data.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
                                     ViewOverview _ ->
                                         Command.none
 
@@ -8862,6 +8919,20 @@ updateLoadedFromBackend msg model =
                                     pageLoadedScroll Pages.Guild.channelMessageHtmlId pageRequest loggedIn.channelScrollPosition
 
                             Local_Discord_LoadThreadMessages _ _ pageRequest (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
+                                    Command.none
+
+                                else
+                                    pageLoadedScroll Pages.Guild.threadMessageHtmlId pageRequest loggedIn.channelScrollPosition
+
+                            Local_Slack_LoadChannelMessages _ pageRequest (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
+                                    Command.none
+
+                                else
+                                    pageLoadedScroll Pages.Guild.channelMessageHtmlId pageRequest loggedIn.channelScrollPosition
+
+                            Local_Slack_LoadThreadMessages _ _ pageRequest (FilledInByBackend messagesLoaded) ->
                                 if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
@@ -9076,7 +9147,7 @@ updateLoadedFromBackend msg model =
                                                             Command.none
                                             )
 
-                                        Server_Slack_SendMessage _ guildOrDmId content ->
+                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content ->
                                             let
                                                 scrollsToBottom : Bool
                                                 scrollsToBottom =
@@ -9085,8 +9156,8 @@ updateLoadedFromBackend msg model =
                                                 viewedConversation : Maybe SlackGuildOrDmId
                                                 viewedConversation =
                                                     case Route.toGuildOrDmId local.localUser.session.userId model.route of
-                                                        Just ( SlackGuildOrDmId routeId, NoThread ) ->
-                                                            if FrontendExtra.isSameSlackConversation routeId guildOrDmId then
+                                                        Just ( SlackGuildOrDmId routeId, routeThreadRoute ) ->
+                                                            if FrontendExtra.isSameSlackConversation routeId guildOrDmId && routeThreadRoute == threadRoute then
                                                                 Just routeId
 
                                                             else
@@ -9100,7 +9171,7 @@ updateLoadedFromBackend msg model =
                                                     if scrollsToBottom then
                                                         ( loggedIn2
                                                         , Command.batch
-                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
+                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                                             , if MyUi.isMobile model then
                                                                 Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
@@ -9128,14 +9199,14 @@ updateLoadedFromBackend msg model =
                                                                         loggedIn2.channelScrollPosition
                                                           }
                                                         , Command.batch
-                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
-                                                            , FrontendExtra.holdScrollOnNewMessage (SlackGuildOrDmId routeId) NoThread local
+                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
+                                                            , FrontendExtra.holdScrollOnNewMessage (SlackGuildOrDmId routeId) threadRoute local
                                                             ]
                                                         )
 
                                                 Nothing ->
                                                     ( loggedIn2
-                                                    , FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
+                                                    , FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                                     )
 
                                         Server_GotDmMessageEmbed userId threadRoute _ ->

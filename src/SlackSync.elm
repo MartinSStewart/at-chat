@@ -1,7 +1,7 @@
 module SlackSync exposing
-    ( dmChannelsToFrontend
+    ( conversationFromHistory
+    , dmChannelsToFrontend
     , linkedUsers
-    , messagesAndLinks
     , newChannelMaxMessages
     , toMessage
     , userDataName
@@ -22,7 +22,7 @@ import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
-import Thread
+import Thread exposing (SlackBackendThread)
 import Types exposing (SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackUserData(..))
 import User exposing (BackendUser)
 import UserSession exposing (SlackFrontendUser)
@@ -40,12 +40,12 @@ left out.
 messagesAndLinks :
     List Slack.Message
     ->
-        ( IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-        , OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+        ( IdArray messageId (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        , OneToOne (Slack.Id Slack.MessageId) (Id messageId)
         )
 messagesAndLinks messages =
     let
-        converted : List ( Slack.Id Slack.MessageId, Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
+        converted : List ( Slack.Id Slack.MessageId, Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
         converted =
             List.filterMap
                 (\message -> toMessage message |> Maybe.map (Tuple.pair message.id))
@@ -56,7 +56,46 @@ messagesAndLinks messages =
     )
 
 
-toMessage : Slack.Message -> Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+{-| A conversation built from its history, newest first as Slack gives it.
+-}
+conversationFromHistory :
+    Slack.History
+    ->
+        { messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+        , threads : SeqDict (Id ChannelMessageId) SlackBackendThread
+        }
+conversationFromHistory history =
+    let
+        ( messages, linkedMessageIds ) =
+            messagesAndLinks (List.reverse history.messages)
+    in
+    { messages = messages
+    , linkedMessageIds = linkedMessageIds
+    , threads =
+        SeqDict.foldl
+            (\parentId replies dict ->
+                case OneToOne.second parentId linkedMessageIds of
+                    Just threadId ->
+                        let
+                            ( threadMessages, threadLinks ) =
+                                messagesAndLinks replies
+                        in
+                        if IdArray.length threadMessages > 0 then
+                            SeqDict.insert threadId { messages = threadMessages, linkedMessageIds = threadLinks } dict
+
+                        else
+                            dict
+
+                    Nothing ->
+                        dict
+            )
+            SeqDict.empty
+            history.replies
+    }
+
+
+toMessage : Slack.Message -> Maybe (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
 toMessage message =
     case message.content of
         Slack.TextMessage { text, blocks } ->
@@ -124,6 +163,7 @@ channelToFrontend linked channel =
         , isPrivate = channel.isPrivate
         , messages = Thread.loadMessages False channel.messages
         , visibleMessages = VisibleMessages.init False (IdArray.length channel.messages)
+        , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) channel.threads
         }
             |> Just
 
@@ -143,6 +183,7 @@ dmChannelsToFrontend linked dmChannels =
                 , members = dmChannel.members
                 , messages = Thread.loadMessages False dmChannel.messages
                 , visibleMessages = VisibleMessages.init False (IdArray.length dmChannel.messages)
+                , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) dmChannel.threads
                 }
                     |> Just
 

@@ -9,7 +9,7 @@ import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import Message exposing (Message)
 import SeqDict exposing (SeqDict)
 import Slack
-import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDiscordGuildData, Viewing(..), Viewing_ChannelData, Viewing_ChannelThreadData, Viewing_DiscordChannelData, Viewing_DiscordChannelThreadData, Viewing_DiscordDmData, Viewing_DmData, Viewing_DmThreadData, Viewing_SlackChannelData, Viewing_SlackDmData)
+import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDiscordGuildData, Viewing(..), Viewing_ChannelData, Viewing_ChannelThreadData, Viewing_DiscordChannelData, Viewing_DiscordChannelThreadData, Viewing_DiscordDmData, Viewing_DmData, Viewing_DmThreadData, Viewing_SlackChannelData, Viewing_SlackChannelThreadData, Viewing_SlackDmData, Viewing_SlackDmThreadData)
 
 
 type SetViewing
@@ -22,6 +22,8 @@ type SetViewing
     | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | ViewSlackChannel Viewing_SlackChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
     | ViewSlackDm Viewing_SlackDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
+    | ViewSlackChannelThread Viewing_SlackChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
+    | ViewSlackDmThread Viewing_SlackDmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
     | StopViewingChannel
     | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
@@ -55,6 +57,12 @@ setViewingToCurrentlyViewing viewing =
 
         ViewSlackDm data _ ->
             Viewing_SlackDm data
+
+        ViewSlackChannelThread data _ ->
+            Viewing_SlackChannelThread data
+
+        ViewSlackDmThread data _ ->
+            Viewing_SlackDmThread data
 
         StopViewingChannel ->
             Viewing_None

@@ -3,8 +3,10 @@ module Slack exposing
     , ChannelId
     , DmChannel
     , DmChannelId
+    , History
     , HttpError(..)
     , Id(..)
+    , InThread(..)
     , Message
     , MessageContent(..)
     , MessageId
@@ -20,9 +22,9 @@ module Slack exposing
     , UserBoot
     , UserId
     , WebsocketEvent(..)
+    , history
     , httpErrorToString
     , idToString
-    , newestMessages
     , noStyle
     , parseWebsocketEvent
     , postMessage
@@ -48,6 +50,7 @@ import Json.Encode
 import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
+import SeqDict exposing (SeqDict)
 import Url
 
 
@@ -330,6 +333,25 @@ type alias Message =
     , createdAt : Time.Posix
     , user : Id UserId
     , content : MessageContent
+    , inThread : InThread
+    , replyCount : Int
+    }
+
+
+{-| A thread's parent isn't in it, only its replies are. A reply that was also sent to the channel
+shows up in both.
+-}
+type InThread
+    = NotAReply
+    | ReplyTo (Id MessageId)
+    | BroadcastReplyTo (Id MessageId)
+
+
+{-| A conversation's newest messages, and the replies of each of them that has a thread.
+-}
+type alias History =
+    { messages : List Message
+    , replies : SeqDict (Id MessageId) (List Message)
     }
 
 
@@ -390,6 +412,61 @@ newestMessages secretKey cookie token limit channelId =
         |> Task.onError (\_ -> Task.succeed [])
 
 
+history :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Int
+    -> Id channelId
+    -> Task BackendOnly x History
+history secretKey cookie token limit channelId =
+    newestMessages secretKey cookie token limit channelId
+        |> Task.andThen
+            (\messages ->
+                List.filterMap
+                    (\message ->
+                        if message.replyCount > 0 then
+                            threadReplies secretKey cookie token channelId message.id
+                                |> Task.map (Tuple.pair message.id)
+                                |> Just
+
+                        else
+                            Nothing
+                    )
+                    messages
+                    |> Task.sequence
+                    |> Task.map (\replies -> { messages = messages, replies = SeqDict.fromList replies })
+            )
+
+
+{-| Oldest first. Slack includes the thread's parent, it's left out here.
+-}
+threadReplies :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly x (List Message)
+threadReplies secretKey cookie token channelId threadId =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.replies"
+        [ ( "channel", idToString channelId )
+        , ( "ts", idToString threadId )
+        , ( "limit", "1000" )
+        , ( "include_free_team_extra_messages", "true" )
+        ]
+        (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
+            |> Decode.map (List.filterMap identity)
+        )
+        |> retryWhenRateLimited
+        |> Task.map (List.filter (\message -> message.id /= threadId))
+        |> Task.onError (\_ -> Task.succeed [])
+
+
 {-| Returns the ts Slack gave the message, which is also its id. The text is only what notifications
 show, the blocks are what Slack displays.
 -}
@@ -398,19 +475,20 @@ postMessage :
     -> SlackCookie
     -> SlackToken
     -> Id channelId
+    -> Maybe (Id MessageId)
     -> String
     -> List RichTextElement
     -> Task BackendOnly HttpError (Id MessageId)
-postMessage secretKey cookie token channelId text blocks =
+postMessage secretKey cookie token channelId maybeThreadId text blocks =
     http
         secretKey
         cookie
         token
         "chat.postMessage"
-        [ ( "channel", idToString channelId )
-        , ( "text", text )
-        , ( "blocks"
-          , Json.Encode.list
+        ([ ( "channel", idToString channelId )
+         , ( "text", text )
+         , ( "blocks"
+           , Json.Encode.list
                 identity
                 [ Json.Encode.object
                     [ ( "type", Json.Encode.string "rich_text" )
@@ -418,8 +496,16 @@ postMessage secretKey cookie token channelId text blocks =
                     ]
                 ]
                 |> Json.Encode.encode 0
-          )
-        ]
+           )
+         ]
+            ++ (case maybeThreadId of
+                    Just threadId ->
+                        [ ( "thread_ts", idToString threadId ) ]
+
+                    Nothing ->
+                        []
+               )
+        )
         (Decode.field "ts" decodeId)
 
 
@@ -535,15 +621,15 @@ show for fail to decode.
 -}
 decodeMessage : Decoder Message
 decodeMessage =
-    Decode.map4
-        Message
-        (Decode.field "ts" decodeId)
-        (Decode.field "ts" decodeTimestamp)
-        (Decode.field "user" decodeId)
-        (Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
-            |> Decode.andThen
-                (\subtype ->
-                    if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
+    Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
+        |> Decode.andThen
+            (\subtype ->
+                Decode.map6
+                    Message
+                    (Decode.field "ts" decodeId)
+                    (Decode.field "ts" decodeTimestamp)
+                    (Decode.field "user" decodeId)
+                    (if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
                         Decode.map2
                             (\text blocks -> TextMessage { text = text, blocks = blocks })
                             (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
@@ -553,13 +639,33 @@ decodeMessage =
                                 ]
                             )
 
-                    else if subtype == "channel_join" then
+                     else if subtype == "channel_join" then
                         Decode.succeed JoinedChannel
 
-                    else
+                     else
                         Decode.fail ("Unsupported subtype " ++ subtype)
-                )
-        )
+                    )
+                    (Decode.map2
+                        (\ts maybeThreadTs ->
+                            case maybeThreadTs of
+                                Just threadTs ->
+                                    if threadTs == ts then
+                                        NotAReply
+
+                                    else if subtype == "thread_broadcast" then
+                                        BroadcastReplyTo (Id threadTs)
+
+                                    else
+                                        ReplyTo (Id threadTs)
+
+                                Nothing ->
+                                    NotAReply
+                        )
+                        (Decode.field "ts" Decode.string)
+                        (Decode.maybe (Decode.field "thread_ts" Decode.string))
+                    )
+                    (Decode.oneOf [ Decode.field "reply_count" Decode.int, Decode.succeed 0 ])
+            )
 
 
 
@@ -623,8 +729,6 @@ parseWebsocketEvent text =
                 WebsocketOtherEvent
 
 
-{-| Thread replies are left out since threads aren't supported yet.
--}
 decodeWebsocketEvent : Decoder WebsocketEvent
 decodeWebsocketEvent =
     Decode.map2 Tuple.pair
@@ -657,28 +761,10 @@ decodeWebsocketEvent =
                         (Decode.field "deleted_ts" decodeId)
 
                 else
-                    Decode.map3
-                        (\channel message isThreadReply ->
-                            if isThreadReply then
-                                WebsocketOtherEvent
-
-                            else
-                                WebsocketMessageCreated channel message
-                        )
+                    Decode.map2
+                        WebsocketMessageCreated
                         (Decode.field "channel" Decode.string)
                         decodeMessage
-                        (Decode.map2
-                            (\ts maybeThreadTs ->
-                                case maybeThreadTs of
-                                    Just threadTs ->
-                                        threadTs /= ts && subtype /= "thread_broadcast"
-
-                                    Nothing ->
-                                        False
-                            )
-                            (Decode.field "ts" Decode.string)
-                            (Decode.maybe (Decode.field "thread_ts" Decode.string))
-                        )
             )
 
 
