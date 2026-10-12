@@ -4218,6 +4218,25 @@ slackWorkspacesSection isMobile expandedSections expandedSlackWorkspaces adminDa
                                                         [ Ui.spacing 8, Ui.Font.size 13 ]
                                                         [ Ui.text (Slack.idToString channelId)
                                                         , Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                        , if channel.isPrivate then
+                                                            Ui.text "Private"
+
+                                                          else
+                                                            Ui.none
+                                                        , Ui.row
+                                                            [ Ui.spacing 8 ]
+                                                            (Ui.text "Visible to:"
+                                                                :: List.map
+                                                                    (\slackUserId ->
+                                                                        case SeqDict.get slackUserId workspace.linkedUsers of
+                                                                            Just slackUser ->
+                                                                                Ui.text slackUser.name
+
+                                                                            Nothing ->
+                                                                                Ui.text (Slack.idToString slackUserId)
+                                                                    )
+                                                                    (SeqSet.toList channel.linkedMembers)
+                                                            )
                                                         ]
                                                 )
                                                 (SeqDict.toList workspace.channels)

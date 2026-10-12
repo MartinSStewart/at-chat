@@ -235,6 +235,7 @@ decodeTeam =
 type alias Channel =
     { id : Id ChannelId
     , name : String
+    , isPrivate : Bool
     }
 
 
@@ -390,10 +391,11 @@ decodeConversation =
                     Decode.map GroupDmConversation (Decode.field "id" decodeId)
 
                 else
-                    Decode.map2
-                        (\id name -> ChannelConversation { id = id, name = name })
+                    Decode.map3
+                        (\id name isPrivate -> ChannelConversation { id = id, name = name, isPrivate = isPrivate })
                         (Decode.field "id" decodeId)
                         (Decode.field "name" Decode.string)
+                        (optionalBool "is_private")
             )
 
 

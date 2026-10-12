@@ -2696,7 +2696,7 @@ backendMsgLog msg =
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 
-        GotSlackConversations _ _ _ ->
+        GotSlackConversations _ _ _ _ ->
             BackendMsgLog_GotSlackConversations
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->

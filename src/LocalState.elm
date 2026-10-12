@@ -1354,7 +1354,13 @@ type alias AdminData_DiscordGuild =
 type alias AdminData_SlackWorkspace =
     { name : String
     , domain : String
-    , channels : SeqDict (Slack.Id Slack.ChannelId) { name : ChannelName }
+    , channels :
+        SeqDict
+            (Slack.Id Slack.ChannelId)
+            { name : ChannelName
+            , isPrivate : Bool
+            , linkedMembers : SeqSet (Slack.Id Slack.UserId)
+            }
     , linkedUsers : SeqDict (Slack.Id Slack.UserId) { name : String, linkedTo : Id UserId }
     }
 

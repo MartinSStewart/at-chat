@@ -870,7 +870,7 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
-    | GotSlackConversations Time.Posix (Slack.Id Slack.TeamId) (Result Slack.HttpError { channels : List Slack.Channel, dmChannels : List Slack.DmChannel })
+    | GotSlackConversations Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError { channels : List Slack.Channel, dmChannels : List Slack.DmChannel })
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1018,8 +1018,14 @@ type alias SlackBackendWorkspace =
     }
 
 
+{-| Slack has no permission settings for reading a channel. A private channel can only be read
+by its members, so a linked user is counted as able to see a channel once their own
+users.conversations request has returned it.
+-}
 type alias SlackBackendChannel =
     { name : ChannelName
+    , isPrivate : Bool
+    , linkedMembers : SeqSet (Slack.Id Slack.UserId)
     }
 
 

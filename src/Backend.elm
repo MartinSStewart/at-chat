@@ -829,7 +829,7 @@ updateHelper msg model =
                             case result of
                                 Ok { self, team } ->
                                     Slack.userConversations model.serverSecret cookie token self.id
-                                        |> Task.attempt (GotSlackConversations linkedAt team.id)
+                                        |> Task.attempt (GotSlackConversations linkedAt team.id self.id)
                                         |> Just
 
                                 Err _ ->
@@ -839,7 +839,7 @@ updateHelper msg model =
                 ]
             )
 
-        GotSlackConversations time teamId result ->
+        GotSlackConversations time teamId slackUserId result ->
             case result of
                 Ok { channels, dmChannels } ->
                     ( { model
@@ -849,15 +849,27 @@ updateHelper msg model =
                                 (\workspace ->
                                     { workspace
                                         | channels =
-                                            SeqDict.union
-                                                (List.map
-                                                    (\channel ->
-                                                        ( channel.id, { name = ChannelName.fromStringLossy channel.name } )
-                                                    )
-                                                    channels
-                                                    |> SeqDict.fromList
+                                            List.foldl
+                                                (\channel dict ->
+                                                    SeqDict.insert
+                                                        channel.id
+                                                        { name = ChannelName.fromStringLossy channel.name
+                                                        , isPrivate = channel.isPrivate
+                                                        , linkedMembers =
+                                                            case SeqDict.get channel.id dict of
+                                                                Just existing ->
+                                                                    SeqSet.insert slackUserId existing.linkedMembers
+
+                                                                Nothing ->
+                                                                    SeqSet.singleton slackUserId
+                                                        }
+                                                        dict
                                                 )
-                                                workspace.channels
+                                                (SeqDict.map
+                                                    (\_ channel -> { channel | linkedMembers = SeqSet.remove slackUserId channel.linkedMembers })
+                                                    workspace.channels
+                                                )
+                                                channels
                                     }
                                 )
                                 model.slackWorkspaces

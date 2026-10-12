@@ -95,6 +95,8 @@ module E2EHelper exposing
     , scrollToTop
     , secondDiscordToken
     , secondDiscordUserId
+    , secondSlackToken
+    , secondSlackTokenAfterLeaving
     , selectionEvent
     , sessionId0
     , sessionId1
@@ -2051,6 +2053,9 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                     (if isLegitSlackRequest headers body then
                         """{"ok":true,"self":{"id":"U09DJDQL1A8","name":"slack-admin"},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
+                     else if isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
+                        """{"ok":true,"self":{"id":"U09DK3NCPMG","name":"ziggler"},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
                     )
@@ -2058,11 +2063,17 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
             ( "POST", [ "slack.com", "api", "users.conversations" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    (if not (isLegitSlackRequest headers body) then
+                    (if isSecondSlackUserRequest headers body then
+                        """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false},{"id":"C0SECRET123","name":"secret","is_channel":true,"is_private":true,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
+
+                     else if isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
+                        """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
+
+                     else if not (isLegitSlackRequest headers body) then
                         """{"ok":false,"error":"invalid_auth"}"""
 
                      else if List.member "cursor=page2" (slackFormFields body) then
-                        """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":false,"is_archived":false},{"id":"D09DK3P5RPC","is_im":true,"is_archived":false,"user":"U09DK3NCPMG"},{"id":"D09DJDQMBPW","is_im":true,"is_archived":false,"user":"U09DJDQL1A8"},{"id":"C0AMPIM1234","name":"mpdm-slack-admin--ziggler--third-1","is_channel":false,"is_group":true,"is_mpim":true,"is_private":true,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
+                        """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":true,"is_archived":false},{"id":"D09DK3P5RPC","is_im":true,"is_archived":false,"user":"U09DK3NCPMG"},{"id":"D09DJDQMBPW","is_im":true,"is_archived":false,"user":"U09DJDQL1A8"},{"id":"C0AMPIM1234","name":"mpdm-slack-admin--ziggler--third-1","is_channel":false,"is_group":true,"is_mpim":true,"is_private":true,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
 
                      else
                         """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false},{"id":"C09DJDQUKKN","name":"social","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":"page2"}}"""
@@ -2169,8 +2180,18 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
 isLegitSlackRequest headers body =
+    isSlackRequestWithToken legitSlackToken headers body
+
+
+isSecondSlackUserRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
+isSecondSlackUserRequest headers body =
+    isSlackRequestWithToken secondSlackToken headers body
+
+
+isSlackRequestWithToken : String -> List ( String, String ) -> Maybe Json.Decode.Value -> Bool
+isSlackRequestWithToken token headers body =
     List.member ( "Cookie", "d=" ++ legitSlackCookie ) headers
-        && List.member ("token=" ++ legitSlackToken) (slackFormFields body)
+        && List.member ("token=" ++ token) (slackFormFields body)
 
 
 slackFormFields : Maybe Json.Decode.Value -> List String
@@ -2189,6 +2210,20 @@ slackFormFields body =
 legitSlackCookie : String
 legitSlackCookie =
     "xoxd-legit-cookie"
+
+
+{-| Signs in as a second Slack user in the same workspace as legitSlackToken.
+-}
+secondSlackToken : String
+secondSlackToken =
+    "xoxc-second-token"
+
+
+{-| The same Slack user as secondSlackToken after they've left the private #secret channel.
+-}
+secondSlackTokenAfterLeaving : String
+secondSlackTokenAfterLeaving =
+    "xoxc-second-token-after-leaving"
 
 
 legitSlackToken : String
