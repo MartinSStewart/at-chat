@@ -58,6 +58,7 @@ module Types exposing
     , ServerChange(..)
     , SlackBackendChannel
     , SlackBackendWorkspace
+    , SlackDmChannel
     , SlackLinkedUser
     , ToBackend(..)
     , ToFrontend(..)
@@ -486,6 +487,7 @@ type alias BackendModel =
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackLinkedUser
+    , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
     , files : SeqDict FileHash BackendFileData
     , orphanedFilesLastHour : SeqSet FileHash
     , privateVapidKey : PrivateVapidKey
@@ -868,7 +870,7 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
-    | GotSlackChannels Time.Posix (Slack.Id Slack.TeamId) (Result Slack.HttpError (List Slack.Channel))
+    | GotSlackConversations Time.Posix (Slack.Id Slack.TeamId) (Result Slack.HttpError { channels : List Slack.Channel, dmChannels : List Slack.DmChannel })
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1018,6 +1020,12 @@ type alias SlackBackendWorkspace =
 
 type alias SlackBackendChannel =
     { name : ChannelName
+    }
+
+
+type alias SlackDmChannel =
+    { teamId : Slack.Id Slack.TeamId
+    , members : NonemptySet (Slack.Id Slack.UserId)
     }
 
 

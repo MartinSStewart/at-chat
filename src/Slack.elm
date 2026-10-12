@@ -1,6 +1,8 @@
 module Slack exposing
     ( Channel
     , ChannelId
+    , DmChannel
+    , DmChannelId
     , HttpError(..)
     , Id(..)
     , SlackCookie
@@ -15,7 +17,7 @@ module Slack exposing
     , stringToSlackCookie
     , teamsJsonToSlackTokens
     , userBoot
-    , userChannels
+    , userConversations
     , validateSlackData
     )
 
@@ -26,7 +28,8 @@ import Effect.Task as Task exposing (Task)
 import FileStatus
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
-import List.Nonempty exposing (Nonempty)
+import List.Nonempty exposing (Nonempty(..))
+import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
 import Url
 
@@ -139,6 +142,10 @@ type ChannelId
     = ChannelId Never
 
 
+type DmChannelId
+    = DmChannelId Never
+
+
 idToString : Id a -> String
 idToString (Id id) =
     id
@@ -231,65 +238,196 @@ type alias Channel =
     }
 
 
-{-| Every public and private channel the user is in, archived ones left out. Slack hands these out
-a page at a time.
+type alias DmChannel =
+    { id : Id DmChannelId
+    , members : NonemptySet (Id UserId)
+    }
+
+
+type Conversation
+    = ChannelConversation Channel
+    | DmConversation { id : Id DmChannelId, user : Id UserId }
+    | GroupDmConversation (Id DmChannelId)
+
+
+{-| Every channel, DM and group DM the user is in, archived ones left out.
 -}
-userChannels : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError (List Channel)
-userChannels secretKey cookie token =
-    userChannelsHelper secretKey cookie token Nothing []
+userConversations :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id UserId
+    -> Task BackendOnly HttpError { channels : List Channel, dmChannels : List DmChannel }
+userConversations secretKey cookie token selfId =
+    userConversationsHelper secretKey cookie token Nothing []
+        |> Task.andThen
+            (\conversations ->
+                List.filterMap
+                    (\conversation ->
+                        case conversation of
+                            ChannelConversation _ ->
+                                Nothing
+
+                            DmConversation { id, user } ->
+                                Task.succeed { id = id, members = NonemptySet.fromNonemptyList (Nonempty selfId [ user ]) }
+                                    |> Just
+
+                            GroupDmConversation id ->
+                                groupDmMembers secretKey cookie token id
+                                    |> Task.map
+                                        (\members -> { id = id, members = NonemptySet.fromNonemptyList (Nonempty selfId members) })
+                                    |> Just
+                    )
+                    conversations
+                    |> Task.sequence
+                    |> Task.map
+                        (\dmChannels ->
+                            { channels =
+                                List.filterMap
+                                    (\conversation ->
+                                        case conversation of
+                                            ChannelConversation channel ->
+                                                Just channel
+
+                                            DmConversation _ ->
+                                                Nothing
+
+                                            GroupDmConversation _ ->
+                                                Nothing
+                                    )
+                                    conversations
+                            , dmChannels = dmChannels
+                            }
+                        )
+            )
 
 
-userChannelsHelper :
+userConversationsHelper :
     SecretId ServerSecret
     -> SlackCookie
     -> SlackToken
     -> Maybe String
-    -> List Channel
-    -> Task BackendOnly HttpError (List Channel)
-userChannelsHelper secretKey cookie token cursor channelsSoFar =
+    -> List Conversation
+    -> Task BackendOnly HttpError (List Conversation)
+userConversationsHelper secretKey cookie token cursor conversationsSoFar =
     http
         secretKey
         cookie
         token
         "users.conversations"
-        ([ ( "types", "public_channel,private_channel" )
-         , ( "exclude_archived", "true" )
-         , ( "limit", "200" )
-         ]
-            ++ (case cursor of
-                    Just cursor2 ->
-                        [ ( "cursor", cursor2 ) ]
-
-                    Nothing ->
-                        []
-               )
+        (( "types", "public_channel,private_channel,mpim,im" )
+            :: ( "exclude_archived", "true" )
+            :: ( "limit", "200" )
+            :: cursorParameter cursor
         )
         (Decode.map2
             Tuple.pair
-            (Decode.field
-                "channels"
-                (Decode.list
-                    (Decode.map2
-                        Channel
-                        (Decode.field "id" decodeId)
-                        (Decode.field "name" Decode.string)
-                    )
-                )
-            )
-            (Decode.oneOf
-                [ Decode.at [ "response_metadata", "next_cursor" ] Decode.string
-                , Decode.succeed ""
-                ]
-            )
+            (Decode.field "channels" (Decode.list decodeConversation))
+            decodeNextCursor
         )
         |> Task.andThen
-            (\( channels, nextCursor ) ->
-                if nextCursor == "" then
-                    Task.succeed (channelsSoFar ++ channels)
+            (\( conversations, nextCursor ) ->
+                case nextCursor of
+                    Just nextCursor2 ->
+                        userConversationsHelper secretKey cookie token (Just nextCursor2) (conversationsSoFar ++ conversations)
+
+                    Nothing ->
+                        Task.succeed (conversationsSoFar ++ conversations)
+            )
+
+
+groupDmMembers : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id DmChannelId -> Task BackendOnly HttpError (List (Id UserId))
+groupDmMembers secretKey cookie token channelId =
+    groupDmMembersHelper secretKey cookie token channelId Nothing []
+
+
+groupDmMembersHelper :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id DmChannelId
+    -> Maybe String
+    -> List (Id UserId)
+    -> Task BackendOnly HttpError (List (Id UserId))
+groupDmMembersHelper secretKey cookie token channelId cursor membersSoFar =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.members"
+        (( "channel", idToString channelId ) :: ( "limit", "200" ) :: cursorParameter cursor)
+        (Decode.map2
+            Tuple.pair
+            (Decode.field "members" (Decode.list decodeId))
+            decodeNextCursor
+        )
+        |> Task.andThen
+            (\( members, nextCursor ) ->
+                case nextCursor of
+                    Just nextCursor2 ->
+                        groupDmMembersHelper secretKey cookie token channelId (Just nextCursor2) (membersSoFar ++ members)
+
+                    Nothing ->
+                        Task.succeed (membersSoFar ++ members)
+            )
+
+
+decodeConversation : Decoder Conversation
+decodeConversation =
+    Decode.map2
+        Tuple.pair
+        (optionalBool "is_im")
+        (optionalBool "is_mpim")
+        |> Decode.andThen
+            (\( isIm, isMpim ) ->
+                if isIm then
+                    Decode.map2
+                        (\id user -> DmConversation { id = id, user = user })
+                        (Decode.field "id" decodeId)
+                        (Decode.field "user" decodeId)
+
+                else if isMpim then
+                    Decode.map GroupDmConversation (Decode.field "id" decodeId)
 
                 else
-                    userChannelsHelper secretKey cookie token (Just nextCursor) (channelsSoFar ++ channels)
+                    Decode.map2
+                        (\id name -> ChannelConversation { id = id, name = name })
+                        (Decode.field "id" decodeId)
+                        (Decode.field "name" Decode.string)
             )
+
+
+optionalBool : String -> Decoder Bool
+optionalBool field =
+    Decode.oneOf [ Decode.field field Decode.bool, Decode.succeed False ]
+
+
+cursorParameter : Maybe String -> List ( String, String )
+cursorParameter cursor =
+    case cursor of
+        Just cursor2 ->
+            [ ( "cursor", cursor2 ) ]
+
+        Nothing ->
+            []
+
+
+{-| Slack sends an empty string once there are no more pages.
+-}
+decodeNextCursor : Decoder (Maybe String)
+decodeNextCursor =
+    Decode.oneOf
+        [ Decode.at [ "response_metadata", "next_cursor" ] Decode.string
+            |> Decode.map
+                (\cursor ->
+                    if cursor == "" then
+                        Nothing
+
+                    else
+                        Just cursor
+                )
+        , Decode.succeed Nothing
+        ]
 
 
 {-| Goes through the Rust server since Slack needs the `d` cookie, and browsers and the Lamdera

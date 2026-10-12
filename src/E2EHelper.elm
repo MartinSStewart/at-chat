@@ -2062,10 +2062,20 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":false,"error":"invalid_auth"}"""
 
                      else if List.member "cursor=page2" (slackFormFields body) then
-                        """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
+                        """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":false,"is_archived":false},{"id":"D09DK3P5RPC","is_im":true,"is_archived":false,"user":"U09DK3NCPMG"},{"id":"D09DJDQMBPW","is_im":true,"is_archived":false,"user":"U09DJDQL1A8"},{"id":"C0AMPIM1234","name":"mpdm-slack-admin--ziggler--third-1","is_channel":false,"is_group":true,"is_mpim":true,"is_private":true,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
 
                      else
                         """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false},{"id":"C09DJDQUKKN","name":"social","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":"page2"}}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "conversations.members" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body && List.member "channel=C0AMPIM1234" (slackFormFields body) then
+                        """{"ok":true,"members":["U09DJDQL1A8","U09DK3NCPMG","U0THIRD"],"response_metadata":{"next_cursor":""}}"""
+
+                     else
+                        """{"ok":false,"error":"channel_not_found"}"""
                     )
 
             ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->

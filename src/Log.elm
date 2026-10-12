@@ -53,7 +53,7 @@ type Log
     | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
-    | FailedToLoadSlackChannels (Slack.Id Slack.TeamId) Slack.HttpError
+    | FailedToLoadSlackConversations (Slack.Id Slack.TeamId) Slack.HttpError
     | ReceivedTypeThatIsAlwaysInvalid
     | DeletedLog
 
@@ -148,7 +148,7 @@ shouldNotifyAdmin log =
         FailedToDeleteOrphanedFiles _ ->
             Nothing
 
-        FailedToLoadSlackChannels _ _ ->
+        FailedToLoadSlackConversations _ _ ->
             Nothing
 
         ReceivedTypeThatIsAlwaysInvalid ->
@@ -557,10 +557,10 @@ logContent onPressCopy emojiData customEmojis log =
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 
-        FailedToLoadSlackChannels teamId error ->
+        FailedToLoadSlackConversations teamId error ->
             Ui.column
                 [ Ui.spacing 4 ]
-                [ tag errorTag "Loading Slack channels failed"
+                [ tag errorTag "Loading Slack channels and DMs failed"
                 , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
                 , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
                 ]

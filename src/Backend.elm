@@ -239,6 +239,7 @@ init =
       , discordDmChannels = SeqDict.empty
       , slackWorkspaces = SeqDict.empty
       , slackUsers = SeqDict.empty
+      , slackDmChannels = SeqDict.empty
       , files = SeqDict.empty
       , orphanedFilesLastHour = SeqSet.empty
       , orphanedDiscordGuildsLastHour = SeqSet.empty
@@ -826,9 +827,9 @@ updateHelper msg model =
                     |> List.filterMap
                         (\( token, result ) ->
                             case result of
-                                Ok { team } ->
-                                    Slack.userChannels model.serverSecret cookie token
-                                        |> Task.attempt (GotSlackChannels linkedAt team.id)
+                                Ok { self, team } ->
+                                    Slack.userConversations model.serverSecret cookie token self.id
+                                        |> Task.attempt (GotSlackConversations linkedAt team.id)
                                         |> Just
 
                                 Err _ ->
@@ -838,9 +839,9 @@ updateHelper msg model =
                 ]
             )
 
-        GotSlackChannels time teamId result ->
+        GotSlackConversations time teamId result ->
             case result of
-                Ok channels ->
+                Ok { channels, dmChannels } ->
                     ( { model
                         | slackWorkspaces =
                             SeqDict.updateIfExists
@@ -860,12 +861,20 @@ updateHelper msg model =
                                     }
                                 )
                                 model.slackWorkspaces
+                        , slackDmChannels =
+                            SeqDict.union
+                                (List.map
+                                    (\dmChannel -> ( dmChannel.id, { teamId = teamId, members = dmChannel.members } ))
+                                    dmChannels
+                                    |> SeqDict.fromList
+                                )
+                                model.slackDmChannels
                       }
                     , Command.none
                     )
 
                 Err error ->
-                    BackendExtra.addLog time (Log.FailedToLoadSlackChannels teamId error) model
+                    BackendExtra.addLog time (Log.FailedToLoadSlackConversations teamId error) model
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
             case ( SeqDict.get discordUserId model.discordUsers, result ) of
@@ -9234,6 +9243,14 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 (Pages.Admin.LoadSlackWorkspaces (FilledInByBackend (BackendExtra.adminSlackWorkspaces model)))
             )
 
+        Pages.Admin.LoadSlackDmChannels _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadSlackDmChannels (FilledInByBackend (BackendExtra.adminSlackDmChannels model)))
+            )
+
         Pages.Admin.LoadDiscordDmChannels _ ->
             ( model
             , adminDataResponse
@@ -9407,6 +9424,19 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 model2 : BackendModel
                 model2 =
                     { model | slackWorkspaces = SeqDict.remove teamId model.slackWorkspaces }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.DeleteSlackDmChannel channelId ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | slackDmChannels = SeqDict.remove channelId model.slackDmChannels }
             in
             ( model2
             , Command.batch

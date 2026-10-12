@@ -6737,6 +6737,7 @@ initAdminData adminData =
     , discordUsers = LocalState.AdminDataNotLoaded
     , discordGuilds = LocalState.AdminDataNotLoaded
     , slackWorkspaces = LocalState.AdminDataNotLoaded
+    , slackDmChannels = LocalState.AdminDataNotLoaded
     , guilds = LocalState.AdminDataNotLoaded
     , deletedGuilds = LocalState.AdminDataNotLoaded
     , loadingDiscordChannels = adminData.loadingDiscordChannels

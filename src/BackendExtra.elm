@@ -9,6 +9,7 @@ module BackendExtra exposing
     , adminDmChannels
     , adminGuilds
     , adminSessions
+    , adminSlackDmChannels
     , adminSlackWorkspaces
     , asAdmin
     , asDiscordDmUser
@@ -1679,6 +1680,11 @@ adminDiscordGuilds model =
         model.discordGuilds
 
 
+adminSlackDmChannels : BackendModel -> SeqDict (Slack.Id Slack.DmChannelId) LocalState.AdminData_SlackDmChannel
+adminSlackDmChannels model =
+    SeqDict.map (\_ dmChannel -> { teamId = dmChannel.teamId, members = dmChannel.members }) model.slackDmChannels
+
+
 adminSlackWorkspaces : BackendModel -> SeqDict (Slack.Id Slack.TeamId) LocalState.AdminData_SlackWorkspace
 adminSlackWorkspaces model =
     SeqDict.map
@@ -2690,8 +2696,8 @@ backendMsgLog msg =
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 
-        GotSlackChannels _ _ _ ->
-            BackendMsgLog_GotSlackChannels
+        GotSlackConversations _ _ _ ->
+            BackendMsgLog_GotSlackConversations
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_ReloadDiscordUserStep1

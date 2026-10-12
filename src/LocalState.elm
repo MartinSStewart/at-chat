@@ -8,6 +8,7 @@ module LocalState exposing
     , AdminData_DmChannel
     , AdminData_Guild
     , AdminData_GuildChannel
+    , AdminData_SlackDmChannel
     , AdminData_SlackWorkspace
     , AdminStatus(..)
     , Archived
@@ -997,6 +998,7 @@ type alias AdminData =
     , discordUsers : AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     , discordGuilds : AdminDataStatus (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild)
     , slackWorkspaces : AdminDataStatus (SeqDict (Slack.Id Slack.TeamId) AdminData_SlackWorkspace)
+    , slackDmChannels : AdminDataStatus (SeqDict (Slack.Id Slack.DmChannelId) AdminData_SlackDmChannel)
     , guilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_Guild)
     , deletedGuilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_DeletedGuild)
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -1354,6 +1356,12 @@ type alias AdminData_SlackWorkspace =
     , domain : String
     , channels : SeqDict (Slack.Id Slack.ChannelId) { name : ChannelName }
     , linkedUsers : SeqDict (Slack.Id Slack.UserId) { name : String, linkedTo : Id UserId }
+    }
+
+
+type alias AdminData_SlackDmChannel =
+    { teamId : Slack.Id Slack.TeamId
+    , members : NonemptySet (Slack.Id Slack.UserId)
     }
 
 
