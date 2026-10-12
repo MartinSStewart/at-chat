@@ -8,6 +8,8 @@ module LocalState exposing
     , AdminData_DmChannel
     , AdminData_Guild
     , AdminData_GuildChannel
+    , AdminData_SlackDmChannel
+    , AdminData_SlackWorkspace
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -40,6 +42,9 @@ module LocalState exposing
     , LogWithTime
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
+    , SlackFrontendChannel
+    , SlackFrontendDmChannel
+    , SlackFrontendWorkspace
     , WebsocketClosedEvent(..)
     , WordSpellingGameStatus(..)
     , addEmbedBackend
@@ -118,6 +123,7 @@ module LocalState exposing
     , getAdminData
     , getDiscordGuildAndChannel
     , getGuildAndChannel
+    , getSlackWorkspaceAndChannel
     , guildChannelMentions
     , guildChannelNames
     , guildChannels
@@ -158,6 +164,7 @@ module LocalState exposing
     , routeToViewing
     , sentEnoughDiscordDmMessages
     , setDmE2ee
+    , slackChannelMentions
     , typingIn
     , updateAdminData
     , updateChannel
@@ -187,7 +194,7 @@ import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (BackendFileData, FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -239,6 +246,8 @@ type alias LocalState =
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+    , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
@@ -443,6 +452,28 @@ type alias FrontendChannel =
     }
 
 
+type alias SlackFrontendWorkspace =
+    { name : String
+    , channels : SeqDict (Slack.Id Slack.ChannelId) SlackFrontendChannel
+    }
+
+
+type alias SlackFrontendChannel =
+    { name : ChannelName
+    , isPrivate : Bool
+    , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+    , visibleMessages : VisibleMessages ChannelMessageId
+    }
+
+
+type alias SlackFrontendDmChannel =
+    { teamId : Slack.Id Slack.TeamId
+    , members : NonemptySet (Slack.Id Slack.UserId)
+    , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+    , visibleMessages : VisibleMessages ChannelMessageId
+    }
+
+
 type alias DiscordFrontendChannel =
     { name : ChannelName
     , description : ChannelDescription
@@ -612,6 +643,26 @@ guildChannels guildOrDmId local =
                     SeqDict.empty
 
         GuildOrDmId_Dm _ ->
+            SeqDict.empty
+
+
+slackChannelMentions : SlackGuildOrDmId -> LocalState -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+slackChannelMentions guildOrDmId local =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId } ->
+            case SeqDict.get teamId local.slackWorkspaces of
+                Just workspace ->
+                    SeqDict.foldl
+                        (\channelId channel dict ->
+                            SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict
+                        )
+                        SeqDict.empty
+                        workspace.channels
+
+                Nothing ->
+                    SeqDict.empty
+
+        SlackGuildOrDmId_Dm _ ->
             SeqDict.empty
 
 
@@ -984,7 +1035,6 @@ type alias AdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
-    , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkKey : Postmark.ApiKey
     , dmChannels : AdminDataStatus (SeqDict DmChannelId AdminData_DmChannel)
@@ -996,6 +1046,8 @@ type alias AdminData =
             )
     , discordUsers : AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     , discordGuilds : AdminDataStatus (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild)
+    , slackWorkspaces : AdminDataStatus (SeqDict (Slack.Id Slack.TeamId) AdminData_SlackWorkspace)
+    , slackDmChannels : AdminDataStatus (SeqDict (Slack.Id Slack.DmChannelId) AdminData_SlackDmChannel)
     , guilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_Guild)
     , deletedGuilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_DeletedGuild)
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -1345,6 +1397,31 @@ type alias AdminData_DiscordGuild =
             , roles : SeqSet (Discord.Id Discord.RoleId)
             }
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    }
+
+
+type alias AdminData_SlackWorkspace =
+    { name : String
+    , domain : String
+    , channels :
+        SeqDict
+            (Slack.Id Slack.ChannelId)
+            { name : ChannelName
+            , isPrivate : Bool
+            , linkedMembers : SeqSet (Slack.Id Slack.UserId)
+            , messageCount : Int
+            , firstMessage : Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+            }
+    , linkedUsers : SeqDict (Slack.Id Slack.UserId) { name : String, linkedTo : Id UserId }
+    , userCount : Int
+    }
+
+
+type alias AdminData_SlackDmChannel =
+    { teamId : Slack.Id Slack.TeamId
+    , members : List { id : Slack.Id Slack.UserId, name : String }
+    , messageCount : Int
+    , firstMessage : Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     }
 
 
@@ -3327,6 +3404,31 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
+getSlackWorkspaceAndChannel :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    ->
+        { a
+            | slackWorkspaces :
+                SeqDict
+                    (Slack.Id Slack.TeamId)
+                    { b | channels : SeqDict (Slack.Id Slack.ChannelId) channel }
+        }
+    -> Maybe ( { b | channels : SeqDict (Slack.Id Slack.ChannelId) channel }, channel )
+getSlackWorkspaceAndChannel teamId channelId local =
+    case SeqDict.get teamId local.slackWorkspaces of
+        Just workspace ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    Just ( workspace, channel )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
 {-| True when the reader had seen every message in a conversation and the one that just
 arrived is the only one they haven't. `Nothing` means they have never opened it, so the
 message sitting at index 0 is the only unseen one.
@@ -3853,9 +3955,6 @@ routeToViewing isMobile route local =
         AiChatRoute ->
             StopViewingChannel
 
-        SlackOAuthRedirect _ ->
-            StopViewingChannel
-
         TextEditorRoute ->
             StopViewingChannel
 
@@ -3866,6 +3965,12 @@ routeToViewing isMobile route local =
             StopViewingChannel
 
         PublicGoMatchRoute _ ->
+            StopViewingChannel
+
+        SlackWorkspaceRoute _ ->
+            StopViewingChannel
+
+        SlackDmRoute _ ->
             StopViewingChannel
 
 
@@ -4290,6 +4395,22 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace id) ->
+            case getSlackWorkspaceAndChannel id.teamId id.channelId local of
+                Just ( _, channel ) ->
+                    Just (MessageArray.length channel.messages)
+
+                Nothing ->
+                    Nothing
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm data) ->
+            case SeqDict.get data.channelId local.slackDmChannels of
+                Just dmChannel ->
+                    Just (MessageArray.length dmChannel.messages)
+
+                Nothing ->
+                    Nothing
+
 
 discordGuildAvailableStickersAndCustomEmojis : LocalUser -> DiscordFrontendGuild -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
 discordGuildAvailableStickersAndCustomEmojis localUser guild =
@@ -4399,6 +4520,9 @@ drawingHandleChangeFrontend guildOrDmId anchor changedBy change local =
                         )
                         local.discordDmChannels
             }
+
+        SlackGuildOrDmId _ ->
+            local
 
 
 drawingHandleDateDivider :

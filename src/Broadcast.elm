@@ -34,6 +34,8 @@ module Broadcast exposing
     , toGuildExcludingOne
     , toOtherAdmins
     , toSession
+    , toSlack
+    , toSlackExcludingOne
     , toUser
     , toUserAlt
     , userGetAllConnections
@@ -62,7 +64,7 @@ import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
-import Id exposing (ChannelId, ChannelMessageId, GamePublicId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (ChannelId, ChannelMessageId, GamePublicId, GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
@@ -71,6 +73,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), ThreadRouteWithRepliedTo(..), UserTextMessageData)
 import MyUi
 import NonemptyDict
+import NonemptySet
 import OneToOne exposing (OneToOne)
 import PersonName
 import Ports exposing (SubscribeData)
@@ -81,10 +84,11 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (BackendThread)
-import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), RepliedToData(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), RepliedToData(..), ServerChange(..), SlackUserData(..), ToFrontend(..))
 import Unsafe
 import Url
 import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), FrontendUser)
@@ -238,6 +242,74 @@ discordDmConnections channelId model =
 
         Nothing ->
             []
+
+
+{-| Everyone who has linked a Slack account that can see the channel or DM.
+-}
+slackConnections : SlackGuildOrDmId -> BackendModel -> List ClientId
+slackConnections guildOrDmId model =
+    let
+        viewers : List (Slack.Id Slack.UserId)
+        viewers =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                    case LocalState.getSlackWorkspaceAndChannel teamId channelId model of
+                        Just ( _, channel ) ->
+                            SeqSet.toList channel.linkedMembers
+
+                        Nothing ->
+                            []
+
+                SlackGuildOrDmId_Dm { channelId } ->
+                    case SeqDict.get channelId model.slackDmChannels of
+                        Just dmChannel ->
+                            NonemptySet.toList dmChannel.members
+
+                        Nothing ->
+                            []
+    in
+    List.foldl
+        (\slackUserId set ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData slackUser) ->
+                    SeqSet.insert slackUser.linkedTo set
+
+                _ ->
+                    set
+        )
+        SeqSet.empty
+        viewers
+        |> SeqSet.toList
+        |> List.concatMap
+            (\linkedTo ->
+                List.concatMap
+                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                    (userConnections linkedTo model)
+            )
+
+
+toSlack : SlackGuildOrDmId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toSlack guildOrDmId msg model =
+    List.map
+        (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
+        (slackConnections guildOrDmId model)
+        |> Command.batch
+
+
+toSlackExcludingOne : ClientId -> SlackGuildOrDmId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toSlackExcludingOne clientToSkip guildOrDmId msg model =
+    List.filterMap
+        (\clientId ->
+            if clientToSkip == clientId then
+                Nothing
+
+            else
+                ChangeBroadcast msg
+                    |> Lamdera.sendToFrontend clientId
+                    |> Just
+        )
+        (slackConnections guildOrDmId model)
+        |> Command.batch
 
 
 toDiscordDmChannelExcludingOne : ClientId -> Discord.Id Discord.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg

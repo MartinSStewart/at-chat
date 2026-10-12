@@ -291,6 +291,9 @@ usedFiles model =
         , SeqDict.values model.discordGuilds |> List.concatMap discordGuildFiles
         , SeqDict.values model.dmChannels |> List.concatMap dmChannelFiles
         , SeqDict.values model.discordDmChannels |> List.concatMap (\dmChannel -> messagesFiles dmChannel.messages)
+        , SeqDict.values model.slackWorkspaces
+            |> List.concatMap (\workspace -> SeqDict.values workspace.channels |> List.concatMap (\channel -> messagesFiles channel.messages))
+        , SeqDict.values model.slackDmChannels |> List.concatMap (\dmChannel -> messagesFiles dmChannel.messages)
         , SeqDict.values model.sessions |> List.concatMap savedSheepGameQuestionFiles
         , SeqDict.values model.stickers |> List.filterMap stickerFile
         , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile

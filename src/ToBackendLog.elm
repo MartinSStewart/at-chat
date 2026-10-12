@@ -21,8 +21,8 @@ type ToBackendLog
     | ToBackendLog_FinishUserCreationRequest
     | ToBackendLog_AiChatToBackend
     | ToBackendLog_ReloadDataRequest
-    | ToBackendLog_LinkSlackOAuthCode
     | ToBackendLog_LinkDiscordRequest
+    | ToBackendLog_LinkSlackRequest
     | ToBackendLog_ProfilePictureEditorToBackend
     | ToBackendLog_AdminDataRequest
     | ToBackendLog_GetPublicGoMatchRequest
@@ -32,6 +32,8 @@ type ToBackendLog
     | ToBackendLog_Local_Admin
     | ToBackendLog_Local_SendMessage
     | ToBackendLog_Local_Discord_SendMessage
+    | ToBackendLog_Local_Slack_SendMessage
+    | ToBackendLog_Local_Slack_UnlinkUser
     | ToBackendLog_Local_NewChannel
     | ToBackendLog_Local_EditChannel
     | ToBackendLog_Local_DeleteChannel
@@ -56,6 +58,7 @@ type ToBackendLog
     | ToBackendLog_Local_LoadChannelMessages
     | ToBackendLog_Local_LoadThreadMessages
     | ToBackendLog_Local_Discord_LoadChannelMessages
+    | ToBackendLog_Local_Slack_LoadChannelMessages
     | ToBackendLog_Local_Discord_LoadThreadMessages
     | ToBackendLog_Local_SetGuildNotificationLevel
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
@@ -137,11 +140,11 @@ toBackendLogToString log =
         ToBackendLog_ReloadDataRequest ->
             "ReloadDataRequest"
 
-        ToBackendLog_LinkSlackOAuthCode ->
-            "LinkSlackOAuthCode"
-
         ToBackendLog_LinkDiscordRequest ->
             "LinkDiscordRequest"
+
+        ToBackendLog_LinkSlackRequest ->
+            "LinkSlackRequest"
 
         ToBackendLog_ProfilePictureEditorToBackend ->
             "ProfilePictureEditorToBackend"
@@ -169,6 +172,12 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Discord_SendMessage ->
             "Local_Discord_SendMessage"
+
+        ToBackendLog_Local_Slack_SendMessage ->
+            "Local_Slack_SendMessage"
+
+        ToBackendLog_Local_Slack_UnlinkUser ->
+            "Local_Slack_UnlinkUser"
 
         ToBackendLog_Local_NewChannel ->
             "Local_NewChannel"
@@ -241,6 +250,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Discord_LoadChannelMessages ->
             "Local_Discord_LoadChannelMessages"
+
+        ToBackendLog_Local_Slack_LoadChannelMessages ->
+            "Local_Slack_LoadChannelMessages"
 
         ToBackendLog_Local_Discord_LoadThreadMessages ->
             "Local_Discord_LoadThreadMessages"

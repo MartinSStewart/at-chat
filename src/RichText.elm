@@ -30,6 +30,7 @@ module RichText exposing
     , failedToDecryptMessageText
     , fromDiscord
     , fromNonemptyString
+    , fromSlack
     , hasLargeContent
     , hyperlinks
     , mapChannelId
@@ -47,6 +48,7 @@ module RichText exposing
     , timestampToDiscordString
     , timestampToString
     , toDiscord
+    , toSlack
     , toString
     , toStringWithGetter
     , tryParseTimestamp
@@ -72,6 +74,7 @@ import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), VideoMetadata)
+import Hex
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -91,6 +94,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Serialize
 import Set
+import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import SyntaxHighlight
@@ -6372,90 +6376,393 @@ emojiTextWithSelection emojiData selection startIndex text =
             Emoji.inputTextView emojiSizeInInput emojiData text
 
 
+{-| Messages are built from their rich\_text blocks. Messages posted without any (some integrations,
+very old messages) fall back to their plain text.
+-}
+fromSlack :
+    String
+    -> List Slack.RichTextElement
+    -> Maybe (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+fromSlack text elements =
+    case elements of
+        [] ->
+            String.replace "&lt;" "<" text
+                |> String.replace "&gt;" ">"
+                |> String.replace "&amp;" "&"
+                |> slackText
+                |> Maybe.map (\a -> Nonempty a [])
 
---
---fromSlack : List Slack.Block -> Nonempty (RichText (Slack.Id Slack.UserId))
---fromSlack blocks =
---    List.concatMap
---        (\block ->
---            case block of
---                Slack.RichTextBlock elements ->
---                    List.concatMap
---                        (\element ->
---                            case element of
---                                Slack.RichTextSection elements2 ->
---                                    List.filterMap
---                                        (\element2 ->
---                                            case element2 of
---                                                Slack.RichText_Text data ->
---                                                    case String.Nonempty.fromString data.text of
---                                                        Just text ->
---                                                            (if data.code then
---                                                                InlineCode (String.Nonempty.head text) (String.Nonempty.tail text)
---
---                                                             else
---                                                                NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
---                                                            )
---                                                                |> (\a ->
---                                                                        if data.italic then
---                                                                            Italic (Nonempty a [])
---
---                                                                        else
---                                                                            a
---                                                                   )
---                                                                |> (\a ->
---                                                                        if data.bold then
---                                                                            Bold (Nonempty a [])
---
---                                                                        else
---                                                                            a
---                                                                   )
---                                                                |> (\a ->
---                                                                        if data.strikethrough then
---                                                                            Strikethrough (Nonempty a [])
---
---                                                                        else
---                                                                            a
---                                                                   )
---                                                                |> Just
---
---                                                        Nothing ->
---                                                            Nothing
---
---                                                Slack.RichText_Emoji data ->
---                                                    NormalText
---                                                        (String.Nonempty.head data.unicode)
---                                                        (String.Nonempty.tail data.unicode)
---                                                        |> Just
---
---                                                Slack.RichText_UserMention id ->
---                                                    UserMention id |> Just
---                                        )
---                                        elements2
---
---                                Slack.RichTextPreformattedSection elements2 ->
---                                    [ List.filterMap
---                                        (\element2 ->
---                                            case element2 of
---                                                Slack.RichText_Text data ->
---                                                    Just data.text
---
---                                                Slack.RichText_Emoji _ ->
---                                                    Nothing
---
---                                                Slack.RichText_UserMention _ ->
---                                                    Nothing
---                                        )
---                                        elements2
---                                        |> String.concat
---                                        |> CodeBlock NoLanguage
---                                    ]
---                        )
---                        elements
---        )
---        blocks
---        |> List.Nonempty.fromList
---        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
+        _ ->
+            List.foldl
+                (\element revNodes ->
+                    case element of
+                        Slack.RichTextSection inlines ->
+                            List.reverse (List.filterMap slackInline inlines) ++ revNodes
+
+                        Slack.RichTextPreformatted inlines ->
+                            let
+                                code : String
+                                code =
+                                    String.concat (List.map slackInlineToString inlines)
+                            in
+                            if code == "" then
+                                revNodes
+
+                            else
+                                CodeBlock NoLanguage code :: revNodes
+
+                        Slack.RichTextQuote inlines ->
+                            BlockQuote (slackLeadingLineBreak revNodes) (List.filterMap slackInline inlines)
+                                :: dropTrailingLineBreak revNodes
+
+                        Slack.RichTextList items ->
+                            case List.Nonempty.fromList (List.map (List.filterMap slackInline) items) of
+                                Just items2 ->
+                                    BulletPoint (slackLeadingLineBreak revNodes) items2 :: dropTrailingLineBreak revNodes
+
+                                Nothing ->
+                                    revNodes
+                )
+                []
+                elements
+                |> List.reverse
+                |> List.Nonempty.fromList
+
+
+slackLeadingLineBreak : List (RichText userId channelId) -> HasLeadingLineBreak
+slackLeadingLineBreak revNodes =
+    if List.isEmpty revNodes then
+        NoLeadingLineBreak
+
+    else
+        HasLeadingLineBreak
+
+
+{-| A block quote or list with a leading line break stands in for the line break before it, so the
+one the text before it ends with is dropped.
+-}
+dropTrailingLineBreak : List (RichText userId channelId) -> List (RichText userId channelId)
+dropTrailingLineBreak revNodes =
+    case revNodes of
+        (NormalText char rest) :: restOfNodes ->
+            let
+                text : String
+                text =
+                    String.cons char rest
+            in
+            if String.endsWith "\n" text then
+                case String.uncons (String.dropRight 1 text) of
+                    Just ( char2, rest2 ) ->
+                        NormalText char2 rest2 :: restOfNodes
+
+                    Nothing ->
+                        restOfNodes
+
+            else
+                revNodes
+
+        _ ->
+            revNodes
+
+
+slackInline : Slack.RichTextInline -> Maybe (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackInline inline =
+    case inline of
+        Slack.RichText_Text { text, style } ->
+            if style.code then
+                case String.uncons text of
+                    Just ( char, rest ) ->
+                        InlineCode char rest |> slackStyle style |> Just
+
+                    Nothing ->
+                        Nothing
+
+            else
+                slackText text |> Maybe.map (slackStyle style)
+
+        Slack.RichText_Link { url, text, style } ->
+            let
+                label : String
+                label =
+                    if text == "" then
+                        url
+
+                    else
+                        text
+            in
+            (case ( Url.fromString url, String.Nonempty.fromString label ) of
+                ( Just parsedUrl, Just nonemptyLabel ) ->
+                    if label == url then
+                        Just (Hyperlink parsedUrl)
+
+                    else
+                        Just (MarkdownLink nonemptyLabel parsedUrl)
+
+                ( Just parsedUrl, Nothing ) ->
+                    Just (Hyperlink parsedUrl)
+
+                ( Nothing, _ ) ->
+                    slackText label
+            )
+                |> Maybe.map (slackStyle style)
+
+        Slack.RichText_Emoji { name, unicode, style } ->
+            (if unicode == "" then
+                slackText (":" ++ name ++ ":")
+
+             else
+                slackText (slackUnicode unicode)
+            )
+                |> Maybe.map (slackStyle style)
+
+        Slack.RichText_User userId ->
+            Just (UserMention userId)
+
+        Slack.RichText_Channel channelId ->
+            Just (ChannelMention channelId Nothing)
+
+        Slack.RichText_Broadcast range ->
+            slackText ("@" ++ range)
+
+        Slack.RichText_Date { timestamp } ->
+            Just (Timestamp (TimeInMinutes.fromMinutes (timestamp // 60)))
+
+
+slackInlineToString : Slack.RichTextInline -> String
+slackInlineToString inline =
+    case inline of
+        Slack.RichText_Text { text } ->
+            text
+
+        Slack.RichText_Link { url, text } ->
+            if text == "" then
+                url
+
+            else
+                text
+
+        Slack.RichText_Emoji { name, unicode } ->
+            if unicode == "" then
+                ":" ++ name ++ ":"
+
+            else
+                slackUnicode unicode
+
+        Slack.RichText_User userId ->
+            "<@" ++ Slack.idToString userId ++ ">"
+
+        Slack.RichText_Channel channelId ->
+            "<#" ++ Slack.idToString channelId ++ ">"
+
+        Slack.RichText_Broadcast range ->
+            "@" ++ range
+
+        Slack.RichText_Date { fallback } ->
+            fallback
+
+
+{-| Slack gives an emoji's code points in hex, joined by dashes.
+-}
+slackUnicode : String -> String
+slackUnicode unicode =
+    String.split "-" unicode
+        |> List.filterMap (\codePoint -> Hex.fromString (String.toLower codePoint) |> Result.toMaybe)
+        |> List.map Char.fromCode
+        |> String.fromList
+
+
+slackText : String -> Maybe (RichText userId channelId)
+slackText text =
+    String.uncons text |> Maybe.map (\( char, rest ) -> NormalText char rest)
+
+
+slackStyle : Slack.Style -> RichText userId channelId -> RichText userId channelId
+slackStyle style node =
+    node
+        |> (\a ->
+                if style.strike then
+                    Strikethrough (Nonempty a [])
+
+                else
+                    a
+           )
+        |> (\a ->
+                if style.italic then
+                    Italic (Nonempty a [])
+
+                else
+                    a
+           )
+        |> (\a ->
+                if style.bold then
+                    Bold (Nonempty a [])
+
+                else
+                    a
+           )
+
+
+{-| The rich\_text elements to post to Slack. Things Slack has nothing for (stickers, attached files,
+custom emojis) are left out, and underline and spoilers become plain text.
+-}
+toSlack : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)) -> List Slack.RichTextElement
+toSlack content =
+    let
+        ( revElements, revSection ) =
+            List.foldl
+                (\node ( revElements2, revSection2 ) ->
+                    case toSlackBlock node of
+                        Just element ->
+                            ( element :: closeSlackSection revSection2 revElements2, [] )
+
+                        Nothing ->
+                            ( revElements2, List.reverse (toSlackInlines Slack.noStyle node) ++ revSection2 )
+                )
+                ( [], [] )
+                (List.Nonempty.toList content)
+    in
+    closeSlackSection revSection revElements |> List.reverse
+
+
+toSlackBlock : RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> Maybe Slack.RichTextElement
+toSlackBlock node =
+    case node of
+        BlockQuote _ list ->
+            Slack.RichTextQuote (List.concatMap (toSlackInlines Slack.noStyle) list) |> Just
+
+        CodeBlock _ code ->
+            Slack.RichTextPreformatted [ Slack.RichText_Text { text = code, style = Slack.noStyle } ] |> Just
+
+        BulletPoint _ items ->
+            Slack.RichTextList (List.map (List.concatMap (toSlackInlines Slack.noStyle)) (List.Nonempty.toList items))
+                |> Just
+
+        UserMention _ ->
+            Nothing
+
+        ChannelMention _ _ ->
+            Nothing
+
+        NormalText _ _ ->
+            Nothing
+
+        Bold _ ->
+            Nothing
+
+        Italic _ ->
+            Nothing
+
+        Underline _ ->
+            Nothing
+
+        Strikethrough _ ->
+            Nothing
+
+        Spoiler _ ->
+            Nothing
+
+        Heading _ _ _ ->
+            Nothing
+
+        Hyperlink _ ->
+            Nothing
+
+        MarkdownLink _ _ ->
+            Nothing
+
+        InlineCode _ _ ->
+            Nothing
+
+        AttachedFile _ ->
+            Nothing
+
+        EscapedChar _ ->
+            Nothing
+
+        Sticker _ ->
+            Nothing
+
+        CustomEmoji _ ->
+            Nothing
+
+        Timestamp _ ->
+            Nothing
+
+
+closeSlackSection : List Slack.RichTextInline -> List Slack.RichTextElement -> List Slack.RichTextElement
+closeSlackSection revSection revElements =
+    if List.isEmpty revSection then
+        revElements
+
+    else
+        Slack.RichTextSection (List.reverse revSection) :: revElements
+
+
+toSlackInlines : Slack.Style -> RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> List Slack.RichTextInline
+toSlackInlines style node =
+    case node of
+        UserMention userId ->
+            [ Slack.RichText_User userId ]
+
+        ChannelMention channelId _ ->
+            [ Slack.RichText_Channel channelId ]
+
+        NormalText char rest ->
+            [ Slack.RichText_Text { text = String.cons char rest, style = style } ]
+
+        Bold nonempty ->
+            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+
+        Italic nonempty ->
+            List.concatMap (toSlackInlines { style | italic = True }) (List.Nonempty.toList nonempty)
+
+        Underline nonempty ->
+            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+
+        Strikethrough nonempty ->
+            List.concatMap (toSlackInlines { style | strike = True }) (List.Nonempty.toList nonempty)
+
+        Spoiler nonempty ->
+            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+
+        BlockQuote _ list ->
+            List.concatMap (toSlackInlines style) list
+
+        Heading _ _ nonempty ->
+            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+
+        Hyperlink url ->
+            [ Slack.RichText_Link { url = Url.toString url, text = "", style = style } ]
+
+        MarkdownLink alias url ->
+            [ Slack.RichText_Link { url = Url.toString url, text = String.Nonempty.toString alias, style = style } ]
+
+        InlineCode char rest ->
+            [ Slack.RichText_Text { text = String.cons char rest, style = { style | code = True } } ]
+
+        CodeBlock _ code ->
+            [ Slack.RichText_Text { text = code, style = { style | code = True } } ]
+
+        AttachedFile _ ->
+            []
+
+        EscapedChar char ->
+            [ Slack.RichText_Text { text = escapedCharToString char, style = style } ]
+
+        Sticker _ ->
+            []
+
+        CustomEmoji _ ->
+            []
+
+        BulletPoint _ items ->
+            List.Nonempty.toList items
+                |> List.map (List.concatMap (toSlackInlines style))
+                |> List.intersperse [ Slack.RichText_Text { text = "\n", style = Slack.noStyle } ]
+                |> List.concat
+
+        Timestamp time ->
+            [ Slack.RichText_Date { timestamp = TimeInMinutes.toSeconds time, fallback = "" } ]
 
 
 fromDiscord :

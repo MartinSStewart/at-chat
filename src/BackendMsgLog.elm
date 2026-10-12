@@ -34,9 +34,15 @@ type BackendMsgLog
     | BackendMsgLog_GotDiscordUserAvatars
     | BackendMsgLog_SentNotification
     | BackendMsgLog_GotVapidKeys
-    | BackendMsgLog_GotSlackChannels
-    | BackendMsgLog_GotSlackOAuth
     | BackendMsgLog_LinkDiscordUserStep1
+    | BackendMsgLog_LinkSlackUserStep1
+    | BackendMsgLog_LinkSlackUserStep2
+    | BackendMsgLog_SentSlackMessage
+    | BackendMsgLog_SlackWebsocketCreatedHandle
+    | BackendMsgLog_SlackWebsocketClosedByBackend
+    | BackendMsgLog_SlackWebsocketMsg
+    | BackendMsgLog_SlackWebsocketSentData
+    | BackendMsgLog_SlackWebsocketReconnectTick
     | BackendMsgLog_ReloadDiscordUserStep1
     | BackendMsgLog_HandleReadyDataStep2
     | BackendMsgLog_WebsocketCreatedHandleForUser
@@ -157,14 +163,32 @@ backendMsgLogToString log =
         BackendMsgLog_GotVapidKeys ->
             "GotVapidKeys"
 
-        BackendMsgLog_GotSlackChannels ->
-            "GotSlackChannels"
-
-        BackendMsgLog_GotSlackOAuth ->
-            "GotSlackOAuth"
-
         BackendMsgLog_LinkDiscordUserStep1 ->
             "LinkDiscordUserStep1"
+
+        BackendMsgLog_LinkSlackUserStep1 ->
+            "LinkSlackUserStep1"
+
+        BackendMsgLog_LinkSlackUserStep2 ->
+            "LinkSlackUserStep2"
+
+        BackendMsgLog_SentSlackMessage ->
+            "SentSlackMessage"
+
+        BackendMsgLog_SlackWebsocketCreatedHandle ->
+            "SlackWebsocketCreatedHandle"
+
+        BackendMsgLog_SlackWebsocketClosedByBackend ->
+            "SlackWebsocketClosedByBackend"
+
+        BackendMsgLog_SlackWebsocketMsg ->
+            "SlackWebsocketMsg"
+
+        BackendMsgLog_SlackWebsocketSentData ->
+            "SlackWebsocketSentData"
+
+        BackendMsgLog_SlackWebsocketReconnectTick ->
+            "SlackWebsocketReconnectTick"
 
         BackendMsgLog_ReloadDiscordUserStep1 ->
             "ReloadDiscordUserStep1"

@@ -1328,6 +1328,9 @@ latestChannelMessageId guildOrDmId local =
         Id.DiscordGuildOrDmId _ ->
             Nothing
 
+        Id.SlackGuildOrDmId _ ->
+            Nothing
+
 
 latestThreadMessageId : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> LocalState -> Maybe (Id.Id Id.ThreadMessageId)
 latestThreadMessageId guildOrDmId threadId local =
@@ -1343,6 +1346,9 @@ latestThreadMessageId guildOrDmId threadId local =
                 |> Maybe.map DmChannel.latestFrontendThreadMessageId
 
         Id.DiscordGuildOrDmId _ ->
+            Nothing
+
+        Id.SlackGuildOrDmId _ ->
             Nothing
 
 

@@ -11,6 +11,7 @@ module Id exposing
     , Id(..)
     , InviteLinkId(..)
     , QuestionId(..)
+    , SlackGuildOrDmId(..)
     , StickerId(..)
     , ThreadMessageId(..)
     , ThreadRoute(..)
@@ -25,6 +26,8 @@ module Id exposing
     , Viewing_DiscordDmId
     , Viewing_DmId
     , Viewing_DmThreadId
+    , Viewing_SlackChannelId
+    , Viewing_SlackDmId
     , changeType
     , codec
     , fromInt
@@ -46,6 +49,7 @@ import Discord
 import List.Extra
 import SeqDict exposing (SeqDict)
 import Serialize
+import Slack
 
 
 type GuildOrDmId
@@ -56,6 +60,11 @@ type GuildOrDmId
 type DiscordGuildOrDmId
     = DiscordGuildOrDmId_Guild Viewing_DiscordChannelId
     | DiscordGuildOrDmId_Dm Viewing_DiscordDmId
+
+
+type SlackGuildOrDmId
+    = SlackGuildOrDmId_Workspace Viewing_SlackChannelId
+    | SlackGuildOrDmId_Dm Viewing_SlackDmId
 
 
 type alias Viewing_DmId =
@@ -72,6 +81,12 @@ type alias Viewing_DmThreadId =
 type alias Viewing_DiscordDmId =
     { currentUserId : Discord.Id Discord.UserId
     , channelId : Discord.Id Discord.PrivateChannelId
+    }
+
+
+type alias Viewing_SlackDmId =
+    { currentUserId : Slack.Id Slack.UserId
+    , channelId : Slack.Id Slack.DmChannelId
     }
 
 
@@ -103,9 +118,17 @@ type alias Viewing_DiscordChannelThreadId =
     }
 
 
+type alias Viewing_SlackChannelId =
+    { teamId : Slack.Id Slack.TeamId
+    , channelId : Slack.Id Slack.ChannelId
+    , currentUserId : Slack.Id Slack.UserId
+    }
+
+
 type AnyGuildOrDmId
     = GuildOrDmId GuildOrDmId
     | DiscordGuildOrDmId DiscordGuildOrDmId
+    | SlackGuildOrDmId SlackGuildOrDmId
 
 
 {-| Identifies a channel that the user wants to export the messages of.

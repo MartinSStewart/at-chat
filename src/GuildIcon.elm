@@ -11,6 +11,7 @@ module GuildIcon exposing
     , iconFontColor
     , notificationView
     , showFriendsButton
+    , slackView
     , userView
     , view
     )
@@ -196,6 +197,25 @@ view mode guild =
             :: selectedEdgeCurves mode guild.icon
         )
         (guildIcon guild mode (GuildName.toString guild.name))
+
+
+slackView : Mode -> String -> Element msg
+slackView mode name =
+    Ui.el
+        (notificationView
+            -4
+            -3
+            MyUi.background1
+            (case mode of
+                IsSelected ->
+                    NoNotification
+
+                Normal notification ->
+                    notification
+            )
+            :: selectedEdgeCurves mode Nothing
+        )
+        (guildIcon { icon = Nothing } mode name)
 
 
 guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg

@@ -109,6 +109,9 @@ pressedArrowInDropdown isMobile timezone time nameSoFar guildOrDmId index maybeP
                         DiscordGuildOrDmId guildOrDmId2 ->
                             discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local |> List.length |> helper
 
+                        SlackGuildOrDmId _ ->
+                            Nothing
+
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
                         Just emojiData2 ->
@@ -193,6 +196,9 @@ channelDropdownList isMobile nameSoFar guildOrDmId local =
             LocalState.discordChannelMentions guildOrDmId2 local
                 |> SeqDict.toList
                 |> List.map (\( _, mention ) -> { name = mention.name })
+
+        SlackGuildOrDmId _ ->
+            []
     )
         |> List.filterMap
             (\mention ->
@@ -434,6 +440,9 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
                                 Nothing ->
                                     Nothing
 
+                        SlackGuildOrDmId _ ->
+                            Nothing
+
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
                         Just emojiData2 ->
@@ -549,6 +558,9 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                                         (Ui.text (PersonName.toString user.name))
                                 )
                                 (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local)
+
+                        SlackGuildOrDmId _ ->
+                            []
 
                 dropdownViewHeight : Int
                 dropdownViewHeight =

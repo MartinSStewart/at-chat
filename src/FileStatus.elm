@@ -88,7 +88,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadRoute(..))
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
@@ -97,6 +97,7 @@ import SafeFloat exposing (SafeFloat)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import Serialize
+import Slack
 import StringExtra
 import Ui exposing (Element)
 import Url
@@ -1038,6 +1039,18 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
                 ++ Discord.idToString currentUserId
                 ++ ","
                 ++ Discord.idToString channelId
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace id) ->
+            "s"
+                ++ Slack.idToString id.teamId
+                ++ ","
+                ++ Slack.idToString id.channelId
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId, channelId }) ->
+            "sd"
+                ++ Slack.idToString currentUserId
+                ++ ","
+                ++ Slack.idToString channelId
     )
         ++ (case threadRoute of
                 ViewThread threadMessageIndex ->

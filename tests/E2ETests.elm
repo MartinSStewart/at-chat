@@ -18,6 +18,7 @@ import E2ELogin
 import E2EMedia
 import E2EMisc
 import E2ESheepGame
+import E2ESlack
 import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
@@ -428,6 +429,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
+    , E2ESlack.linkSlackLoadsChannelsTest normalConfig
+    , E2ESlack.viewAndWriteInSlackTest normalConfig
+    , E2ESlack.slackWebsocketTest normalConfig
+    , E2ESlack.slackWebsocketBackoffTest normalConfig
+    , E2ESlack.unlinkSlackTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.notificationClickOpensConversationTest normalConfig
@@ -3906,12 +3912,6 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
 
                                                                 else
                                                                     [ "Private VAPID key was modified by attacker" ]
-                                                               )
-                                                            ++ (if (E2EHelper.unwrapBackend before.backend).slackClientSecret == (E2EHelper.unwrapBackend after.backend).slackClientSecret then
-                                                                    []
-
-                                                                else
-                                                                    [ "Slack client secret was modified by attacker" ]
                                                                )
                                                             ++ (if (E2EHelper.unwrapBackend before.backend).openRouterKey == (E2EHelper.unwrapBackend after.backend).openRouterKey then
                                                                     []

@@ -9,6 +9,8 @@ module BackendExtra exposing
     , adminDmChannels
     , adminGuilds
     , adminSessions
+    , adminSlackDmChannels
+    , adminSlackWorkspaces
     , asAdmin
     , asDiscordDmUser
     , asDiscordDmUser_AllowUserThatNeedsAuthAgain
@@ -21,6 +23,8 @@ module BackendExtra exposing
     , asGuildMember
     , asGuildMemberRpc
     , asGuildOwner
+    , asSlackChannelMember
+    , asSlackDmUser
     , asUser
     , backendMsgLog
     , channelDataToDecrypt
@@ -82,7 +86,7 @@ import Env
 import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
 import Hex
 import Http
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -97,6 +101,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pagination exposing (PageId)
 import Postmark
@@ -108,10 +113,12 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
+import SlackSync
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -993,6 +1000,10 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
         linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
 
+        linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linkedSlackUsers =
+            SlackSync.linkedUsers session.userId model.slackUsers
+
         guilds : SeqDict (Id GuildId) FrontendGuild
         guilds =
             SeqDict.filterMap
@@ -1110,6 +1121,10 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
             model.discordDmChannels
+    , slackWorkspaces = SlackSync.workspacesToFrontend linkedSlackUsers model.slackWorkspaces
+    , slackDmChannels = SlackSync.dmChannelsToFrontend linkedSlackUsers model.slackDmChannels
+    , slackUsers = SlackSync.usersToFrontend model.users linkedSlackUsers model.slackUsers
+    , linkedSlackUsers = linkedSlackUsers
     , dmChannels = dmChannels
     , user = User.backendToFrontendCurrent email user
     , otherUsers = visibleUsers session.userId guilds dmChannels model.users
@@ -1530,7 +1545,6 @@ adminData model lastLogPageViewed =
     , discordLinkLimit = model.discordLinkLimit
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
-    , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
     , postmarkApiKey = model.postmarkApiKey
     , loadingDiscordChannels =
@@ -1676,6 +1690,92 @@ adminDiscordGuilds model =
             }
         )
         model.discordGuilds
+
+
+adminSlackDmChannels : BackendModel -> SeqDict (Slack.Id Slack.DmChannelId) LocalState.AdminData_SlackDmChannel
+adminSlackDmChannels model =
+    SeqDict.map
+        (\_ dmChannel ->
+            { teamId = dmChannel.teamId
+            , members =
+                List.map
+                    (\slackUserId ->
+                        { id = slackUserId
+                        , name =
+                            case SeqDict.get slackUserId model.slackUsers of
+                                Just (SlackFullData linkedUser) ->
+                                    linkedUser.user.name
+
+                                Just (SlackBasicData user) ->
+                                    user.name
+
+                                Nothing ->
+                                    Slack.idToString slackUserId
+                        }
+                    )
+                    (NonemptySet.toList dmChannel.members)
+            , messageCount = IdArray.length dmChannel.messages
+            , firstMessage = IdArray.get (Id.fromInt 0) dmChannel.messages
+            }
+        )
+        model.slackDmChannels
+
+
+adminSlackWorkspaces : BackendModel -> SeqDict (Slack.Id Slack.TeamId) LocalState.AdminData_SlackWorkspace
+adminSlackWorkspaces model =
+    SeqDict.map
+        (\teamId workspace ->
+            { name = workspace.name
+            , domain = workspace.domain
+            , channels =
+                SeqDict.map
+                    (\_ channel ->
+                        { name = channel.name
+                        , isPrivate = channel.isPrivate
+                        , linkedMembers = channel.linkedMembers
+                        , messageCount = IdArray.length channel.messages
+                        , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
+                        }
+                    )
+                    workspace.channels
+            , linkedUsers =
+                SeqDict.filterMap
+                    (\_ slackUser ->
+                        case slackUser of
+                            SlackFullData linkedUser ->
+                                if linkedUser.user.teamId == teamId then
+                                    Just { name = linkedUser.user.name, linkedTo = linkedUser.linkedTo }
+
+                                else
+                                    Nothing
+
+                            SlackBasicData _ ->
+                                Nothing
+                    )
+                    model.slackUsers
+            , userCount =
+                SeqDict.foldl
+                    (\_ slackUser count ->
+                        case slackUser of
+                            SlackFullData linkedUser ->
+                                if linkedUser.user.teamId == teamId then
+                                    count + 1
+
+                                else
+                                    count
+
+                            SlackBasicData user ->
+                                if user.teamId == teamId then
+                                    count + 1
+
+                                else
+                                    count
+                    )
+                    0
+                    model.slackUsers
+            }
+        )
+        model.slackWorkspaces
 
 
 adminDiscordDmChannels :
@@ -2585,6 +2685,9 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                     )
                 )
 
+        SlackGuildOrDmId _ ->
+            ( model, invalidChangeResponse changeId clientId )
+
 
 {-| The admin page groups BackendMsg updates by their variant name, so each message is
 boiled down to the variant it was built with before it's stored.
@@ -2661,14 +2764,14 @@ backendMsgLog msg =
         GotVapidKeys _ ->
             BackendMsgLog_GotVapidKeys
 
-        GotSlackChannels _ _ _ ->
-            BackendMsgLog_GotSlackChannels
-
-        GotSlackOAuth _ _ _ ->
-            BackendMsgLog_GotSlackOAuth
-
         LinkDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkDiscordUserStep1
+
+        LinkSlackUserStep1 _ _ _ _ _ ->
+            BackendMsgLog_LinkSlackUserStep1
+
+        LinkSlackUserStep2 _ _ _ _ ->
+            BackendMsgLog_LinkSlackUserStep2
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_ReloadDiscordUserStep1
@@ -2798,6 +2901,24 @@ backendMsgLog msg =
 
         BackendMsgCompleted _ _ ->
             BackendMsgLog_BackendMsgCompleted
+
+        SentSlackMessage _ _ _ _ _ _ _ _ ->
+            BackendMsgLog_SentSlackMessage
+
+        SlackWebsocketCreatedHandle _ _ ->
+            BackendMsgLog_SlackWebsocketCreatedHandle
+
+        SlackWebsocketClosedByBackend ->
+            BackendMsgLog_SlackWebsocketClosedByBackend
+
+        SlackWebsocketMsg _ _ ->
+            BackendMsgLog_SlackWebsocketMsg
+
+        SlackWebsocketSentData _ _ ->
+            BackendMsgLog_SlackWebsocketSentData
+
+        SlackWebsocketReconnectTick ->
+            BackendMsgLog_SlackWebsocketReconnectTick
 
 
 toBackendLog : ToBackend -> ToBackendLog
@@ -3030,6 +3151,15 @@ toBackendLog toBackend =
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedEditMessage
 
+                Local_Slack_SendMessage _ _ _ _ ->
+                    ToBackendLog_Local_Slack_SendMessage
+
+                Local_Slack_UnlinkUser _ ->
+                    ToBackendLog_Local_Slack_UnlinkUser
+
+                Local_Slack_LoadChannelMessages _ _ _ ->
+                    ToBackendLog_Local_Slack_LoadChannelMessages
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 
@@ -3045,11 +3175,11 @@ toBackendLog toBackend =
         ReloadDataRequest _ ->
             ToBackendLog_ReloadDataRequest
 
-        LinkSlackOAuthCode _ _ ->
-            ToBackendLog_LinkSlackOAuthCode
-
         LinkDiscordRequest _ ->
             ToBackendLog_LinkDiscordRequest
+
+        LinkSlackRequest _ ->
+            ToBackendLog_LinkSlackRequest
 
         ProfilePictureEditorToBackend _ ->
             ToBackendLog_ProfilePictureEditorToBackend
@@ -3543,6 +3673,65 @@ asDiscordDmUser model sessionId { currentUserId, channelId } func =
                     ( model, Command.none )
 
         Nothing ->
+            ( model, Command.none )
+
+
+asSlackChannelMember :
+    BackendModel
+    -> SessionId
+    -> Viewing_SlackChannelId
+    ->
+        (UserSession
+         -> SlackLinkedUser
+         -> SlackBackendWorkspace
+         -> SlackBackendChannel
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asSlackChannelMember model sessionId { teamId, channelId, currentUserId } func =
+    case
+        ( SeqDict.get sessionId model.sessions
+        , SeqDict.get currentUserId model.slackUsers
+        , LocalState.getSlackWorkspaceAndChannel teamId channelId model
+        )
+    of
+        ( Just session, Just (SlackFullData slackUser), Just ( workspace, channel ) ) ->
+            if slackUser.linkedTo == session.userId && SeqSet.member currentUserId channel.linkedMembers then
+                func session slackUser workspace channel
+
+            else
+                ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+asSlackDmUser :
+    BackendModel
+    -> SessionId
+    -> Viewing_SlackDmId
+    ->
+        (UserSession
+         -> SlackLinkedUser
+         -> SlackDmChannel
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asSlackDmUser model sessionId { currentUserId, channelId } func =
+    case
+        ( SeqDict.get sessionId model.sessions
+        , SeqDict.get currentUserId model.slackUsers
+        , SeqDict.get channelId model.slackDmChannels
+        )
+    of
+        ( Just session, Just (SlackFullData slackUser), Just dmChannel ) ->
+            if slackUser.linkedTo == session.userId && NonemptySet.member currentUserId dmChannel.members then
+                func session slackUser dmChannel
+
+            else
+                ( model, Command.none )
+
+        _ ->
             ( model, Command.none )
 
 

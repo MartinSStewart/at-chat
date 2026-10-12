@@ -353,6 +353,9 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText
                                     allUsers
                                     channels
+
+                            SlackGuildOrDmId _ ->
+                                Ui.none
                           )
                             |> Ui.map
                                 (EditMessage_MessageInputMsg
@@ -654,6 +657,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                         Nothing ->
                             Nothing
+
+                SlackGuildOrDmId _ ->
+                    Nothing
     in
     case maybeData of
         Just { canEditAndDelete, text, messageCustomEmojiIdsList, openDm } ->
@@ -846,6 +852,9 @@ availableCustomEmojisAndStickers guildOrDmId local =
                     ( SeqSet.empty, SeqSet.empty )
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+            ( SeqSet.empty, SeqSet.empty )
+
+        SlackGuildOrDmId _ ->
             ( SeqSet.empty, SeqSet.empty )
 
 

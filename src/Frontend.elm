@@ -88,6 +88,7 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SetViewing exposing (SetViewing(..))
 import SheepGame
+import Slack
 import Sticker
 import String.Extra
 import String.Nonempty exposing (NonemptyString)
@@ -2491,6 +2492,9 @@ updateLoaded msg model =
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     removeFile (LocalState.discordChannelMentions guildOrDmId2 local) draft
 
+                                                SlackGuildOrDmId guildOrDmId2 ->
+                                                    removeFile (LocalState.slackChannelMentions guildOrDmId2 local) draft
+
                                         Nothing ->
                                             Nothing
                                 )
@@ -2539,6 +2543,9 @@ updateLoaded msg model =
 
                                                             DiscordGuildOrDmId guildOrDmId2 ->
                                                                 removeFile (LocalState.discordChannelMentions guildOrDmId2 local) nonempty edit.text
+
+                                                            SlackGuildOrDmId guildOrDmId2 ->
+                                                                removeFile (LocalState.slackChannelMentions guildOrDmId2 local) nonempty edit.text
 
                                                     Nothing ->
                                                         edit.text
@@ -2840,6 +2847,9 @@ updateLoaded msg model =
                                         _ ->
                                             ( model, Command.none )
 
+                                SlackGuildOrDmId _ ->
+                                    ( model, Command.none )
+
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
@@ -3056,9 +3066,6 @@ updateLoaded msg model =
                         AiChatRoute ->
                             ( model, Command.none )
 
-                        SlackOAuthRedirect _ ->
-                            ( model, Command.none )
-
                         TextEditorRoute ->
                             ( model, Command.none )
 
@@ -3069,6 +3076,12 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         PublicGoMatchRoute _ ->
+                            ( model, Command.none )
+
+                        SlackWorkspaceRoute _ ->
+                            ( model, Command.none )
+
+                        SlackDmRoute _ ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -3962,6 +3975,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedUnlinkSlackUser slackUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_Slack_UnlinkUser slackUserId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedUnlinkDiscordUser discordUserId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -4331,6 +4355,9 @@ updateLoaded msg model =
 
                                                             DiscordGuildOrDmId _ ->
                                                                 GuildOrDmId_Dm { otherUserId = local.localUser.session.userId }
+
+                                                            SlackGuildOrDmId _ ->
+                                                                GuildOrDmId_Dm { otherUserId = local.localUser.session.userId }
                                                         )
                                                         (Id.threadRouteWithMessage edit.messageIndex threadRoute)
                                                         local
@@ -4498,6 +4525,9 @@ updateLoaded msg model =
 
                                                                 _ ->
                                                                     Nothing
+
+                                                        SlackGuildOrDmId _ ->
+                                                            Nothing
                                                     )
                                                     (if MyUi.isMobile model then
                                                         MessageMenu.close model loggedIn
@@ -4800,6 +4830,9 @@ updateLoaded msg model =
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
                                                             LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
+
+                                                        SlackGuildOrDmId _ ->
+                                                            True
                                                    )
                                     in
                                     if not safeToSend then
@@ -4880,6 +4913,9 @@ updateLoaded msg model =
                                                                     Nothing ->
                                                                         SeqDict.empty
                                                                 )
+
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 nonempty
                                                      )
                                                         |> Just
                                                     )
@@ -5180,6 +5216,9 @@ updateLoaded msg model =
 
                                         DiscordGuildOrDmId guildOrDmId2 ->
                                             toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                        SlackGuildOrDmId guildOrDmId2 ->
+                                            toggleSpoiler (LocalState.slackChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                     )
                                         |> String.Nonempty.fromString
                                         |> Maybe.withDefault text
@@ -5230,6 +5269,9 @@ updateLoaded msg model =
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
                                                             toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            toggleSpoiler (LocalState.slackChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                             }
 
                                         Nothing ->
@@ -5674,9 +5716,6 @@ updateLoaded msg model =
                 AiChatRoute ->
                     ( model, Command.none )
 
-                SlackOAuthRedirect _ ->
-                    ( model, Command.none )
-
                 TextEditorRoute ->
                     ( model, Command.none )
 
@@ -5687,6 +5726,12 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 PublicGoMatchRoute _ ->
+                    ( model, Command.none )
+
+                SlackWorkspaceRoute _ ->
+                    ( model, Command.none )
+
+                SlackDmRoute _ ->
                     ( model, Command.none )
 
         GoSpectatorMsg spectatorMsg ->
@@ -6057,6 +6102,9 @@ updateLoaded msg model =
                         DiscordGuildOrDmId _ ->
                             ( model, Command.none )
 
+                        SlackGuildOrDmId _ ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
@@ -6090,6 +6138,9 @@ updateLoaded msg model =
                                     ( model, Command.none )
 
                         DiscordGuildOrDmId _ ->
+                            ( model, Command.none )
+
+                        SlackGuildOrDmId _ ->
                             ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIconAnchor _ _ ->
@@ -6240,6 +6291,49 @@ updateLoaded msg model =
                       }
                     , Command.none
                     )
+                )
+                model
+
+        TypedSlackCookie text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | slackCookie = text }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        TypedSlackTeamsJson text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | slackTeamsJson = text }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitSlackData ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case Slack.validateSlackData userOptions of
+                                Ok slackData ->
+                                    ( loggedIn, Lamdera.sendToBackend (LinkSlackRequest slackData) )
+
+                                Err _ ->
+                                    ( { loggedIn | userOptions = Just { userOptions | pressedSubmitSlackData = True } }
+                                    , Command.none
+                                    )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -6779,6 +6873,10 @@ loadOlderMessages guildOrDmId threadRoute local =
             Local_Discord_LoadThreadMessages guildOrDmId2 threadId (PageBefore visibleMessages.oldest) EmptyPlaceholder
                 |> messagesLeft visibleMessages
 
+        Just (FrontendExtra.SlackChannelWindow guildOrDmId2 visibleMessages _) ->
+            Local_Slack_LoadChannelMessages guildOrDmId2 (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
+
         Nothing ->
             Nothing
 
@@ -6815,6 +6913,10 @@ loadNewerMessages guildOrDmId threadRoute local =
 
         Just (FrontendExtra.DiscordThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
             Local_Discord_LoadThreadMessages guildOrDmId2 threadId (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Just (FrontendExtra.SlackChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_Slack_LoadChannelMessages guildOrDmId2 (firstNewMessage visibleMessages) EmptyPlaceholder
                 |> messagesLeft visibleMessages messageCount
 
         Nothing ->
@@ -6888,6 +6990,9 @@ messageHasReaction emoji guildOrDmId threadRoute local =
 
                 Nothing ->
                     False
+
+        SlackGuildOrDmId _ ->
+            False
 
 
 scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_
@@ -7077,6 +7182,9 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 local
                                                                 |> List.isEmpty
                                                                 |> not
+
+                                                        SlackGuildOrDmId _ ->
+                                                            False
 
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of
@@ -7424,9 +7532,6 @@ setShowMembers showMembers model =
         AiChatRoute ->
             ( model, Command.none )
 
-        SlackOAuthRedirect _ ->
-            ( model, Command.none )
-
         TextEditorRoute ->
             ( model, Command.none )
 
@@ -7437,6 +7542,12 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         PublicGoMatchRoute _ ->
+            ( model, Command.none )
+
+        SlackWorkspaceRoute _ ->
+            ( model, Command.none )
+
+        SlackDmRoute _ ->
             ( model, Command.none )
 
 
@@ -7595,6 +7706,9 @@ pressedEditMessage guildOrDmId threadRoute model =
 
                                 Nothing ->
                                     Nothing
+
+                        SlackGuildOrDmId _ ->
+                            Nothing
             in
             ( case maybeContentAndFiles of
                 Just ( content, attachedFiles ) ->
@@ -9167,6 +9281,18 @@ updateLoadedFromBackend msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        LinkSlackResponse result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | linkSlackResult = Just result }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
         ProfilePictureEditorToFrontend imageEditorToFrontend ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -9488,18 +9614,6 @@ view _ model =
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (SelectedDmChannel dmRoute) loaded)
 
-                    SlackOAuthRedirect result ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.contentCenterX, Ui.contentCenterY ]
-                            (case result of
-                                Ok _ ->
-                                    Ui.text "Slack is now linked with your account. You can return to the original page."
-
-                                Err () ->
-                                    Ui.text "Something went wrong when linking Slack to at-chat..."
-                            )
-
                     TextEditorRoute ->
                         requiresLogin
                             (\_ local ->
@@ -9538,6 +9652,13 @@ view _ model =
                     DiscordDmRoute routeData ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (SelectedDiscordDmChannel routeData) loaded)
+
+                    SlackWorkspaceRoute routeData ->
+                        requiresLogin (Pages.Guild.slackWorkspaceView loaded routeData)
+
+                    SlackDmRoute routeData ->
+                        requiresLogin
+                            (Pages.Guild.homePageLoggedInView (SelectedSlackDmChannel routeData) loaded)
 
                     LinkDiscord result ->
                         FrontendExtra.layout

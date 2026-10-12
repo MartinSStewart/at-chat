@@ -8,11 +8,12 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileStatus
 import Icons
-import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, SlackGuildOrDmId(..), StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import Postmark
 import SeqDict exposing (SeqDict)
+import Slack
 import Sticker exposing (AnimationMode(..))
 import Time exposing (Month(..))
 import Ui exposing (Element)
@@ -52,6 +53,8 @@ type Log
     | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
+    | FailedToLoadSlackConversations (Slack.Id Slack.TeamId) Slack.HttpError
+    | FailedToSendSlackMessage SlackGuildOrDmId Slack.HttpError
     | ReceivedTypeThatIsAlwaysInvalid
     | DeletedLog
 
@@ -144,6 +147,12 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToDeleteOrphanedFiles _ ->
+            Nothing
+
+        FailedToLoadSlackConversations _ _ ->
+            Nothing
+
+        FailedToSendSlackMessage _ _ ->
             Nothing
 
         ReceivedTypeThatIsAlwaysInvalid ->
@@ -550,6 +559,36 @@ logContent onPressCopy emojiData customEmojis log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Deleting orphaned files failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedToLoadSlackConversations teamId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Loading Slack channels and DMs failed"
+                , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
+                ]
+
+        FailedToSendSlackMessage guildOrDmId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Sending Slack message failed"
+                , case guildOrDmId of
+                    SlackGuildOrDmId_Workspace { teamId, channelId, currentUserId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                            , fieldRow "Channel" (Ui.text (Slack.idToString channelId))
+                            ]
+
+                    SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "DM" (Ui.text (Slack.idToString channelId))
+                            ]
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
                 ]
 
         ReceivedTypeThatIsAlwaysInvalid ->

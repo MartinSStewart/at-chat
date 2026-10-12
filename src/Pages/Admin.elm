@@ -21,11 +21,14 @@ module Pages.Admin exposing
     , UsersChangeError(..)
     , applyChangesToBackendUsers
     , deleteOrphanedFilesButtonId
+    , deleteSlackDmChannelButtonId
+    , deleteSlackWorkspaceButtonId
     , disconnectClient
     , discordChannelReloadUser
     , discordLinkLimitId
     , discordLinkingEnabledText
     , expandSectionButtonId
+    , expandSlackWorkspaceButtonId
     , importedText
     , initForAdmin
     , initForUser
@@ -78,7 +81,7 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminData_SlackDmChannel, AdminData_SlackWorkspace, AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -202,10 +205,12 @@ type Msg
     | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
     | PressedExpandDiscordGuild (Discord.Id Discord.GuildId)
+    | PressedDeleteSlackWorkspace (Slack.Id Slack.TeamId)
+    | PressedExpandSlackWorkspace (Slack.Id Slack.TeamId)
+    | PressedDeleteSlackDmChannel (Slack.Id Slack.DmChannelId)
     | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
     | PressedRestoreGuild (Id GuildId)
-    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
@@ -278,9 +283,9 @@ type alias Model =
     , expandedSections : SeqSet AdminUiSection
     , expandedGuilds : SeqSet (Id GuildId)
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
+    , expandedSlackWorkspaces : SeqSet (Slack.Id Slack.TeamId)
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
-    , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
@@ -334,7 +339,6 @@ type alias InitAdminData =
     { emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
-    , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkApiKey : Postmark.ApiKey
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -377,6 +381,8 @@ type AdminChange
     | LoadDiscordGuilds (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild))
     | LoadDiscordDmChannels (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel))
     | LoadDiscordUsers (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin))
+    | LoadSlackWorkspaces (ToBeFilledInByBackend (SeqDict (Slack.Id Slack.TeamId) AdminData_SlackWorkspace))
+    | LoadSlackDmChannels (ToBeFilledInByBackend (SeqDict (Slack.Id Slack.DmChannelId) AdminData_SlackDmChannel))
     | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
     | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
     | LoadOrphanedFiles (ToBeFilledInByBackend (SeqDict FileHash BackendFileData))
@@ -388,11 +394,12 @@ type AdminChange
     | SetDiscordLinkLimit (Maybe Int)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
-    | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
+    | DeleteSlackWorkspace (Slack.Id Slack.TeamId)
+    | DeleteSlackDmChannel (Slack.Id Slack.DmChannelId)
     | DeleteGuild (Id GuildId)
     | RestoreGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -429,6 +436,7 @@ initForUser =
     , expandedSections = SeqSet.empty
     , expandedGuilds = SeqSet.empty
     , expandedDiscordGuilds = SeqSet.empty
+    , expandedSlackWorkspaces = SeqSet.empty
     , userTable =
         { table = Table.init 1
         , changedUsers = SeqDict.empty
@@ -437,7 +445,6 @@ initForUser =
         , deletedUsers = SeqSet.empty
         }
     , submitError = Nothing
-    , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
@@ -458,6 +465,7 @@ initForAdmin { highlightLog } =
     , expandedSections = SeqSet.empty
     , expandedGuilds = SeqSet.empty
     , expandedDiscordGuilds = SeqSet.empty
+    , expandedSlackWorkspaces = SeqSet.empty
     , userTable =
         { table = Table.init 1
         , changedUsers = SeqDict.empty
@@ -466,7 +474,6 @@ initForAdmin { highlightLog } =
         , deletedUsers = SeqSet.empty
         }
     , submitError = Nothing
-    , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
@@ -539,6 +546,12 @@ updateAdmin changedBy change adminData local =
         LoadDiscordUsers filledInByBackend ->
             { local | adminData = IsAdmin { adminData | discordUsers = loadedAdminData filledInByBackend } }
 
+        LoadSlackWorkspaces filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | slackWorkspaces = loadedAdminData filledInByBackend } }
+
+        LoadSlackDmChannels filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | slackDmChannels = loadedAdminData filledInByBackend } }
+
         LoadSessions filledInByBackend ->
             { local | adminData = IsAdmin { adminData | sessions = loadedAdminData filledInByBackend } }
 
@@ -572,9 +585,6 @@ updateAdmin changedBy change adminData local =
         SetPublicVapidKey publicVapidKey ->
             { local | publicVapidKey = publicVapidKey }
 
-        SetSlackClientSecret clientSecret ->
-            { local | adminData = IsAdmin { adminData | slackClientSecret = clientSecret } }
-
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
 
@@ -597,6 +607,24 @@ updateAdmin changedBy change adminData local =
                     IsAdmin
                         { adminData
                             | discordGuilds = LocalState.updateAdminData (SeqDict.remove guildId) adminData.discordGuilds
+                        }
+            }
+
+        DeleteSlackWorkspace teamId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | slackWorkspaces = LocalState.updateAdminData (SeqDict.remove teamId) adminData.slackWorkspaces
+                        }
+            }
+
+        DeleteSlackDmChannel channelId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | slackDmChannels = LocalState.updateAdminData (SeqDict.remove channelId) adminData.slackDmChannels
                         }
             }
 
@@ -1187,6 +1215,25 @@ update navigationKey time adminData localState msg model =
         PressedDeleteDiscordGuild guildId ->
             ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
+        PressedDeleteSlackWorkspace teamId ->
+            ( model, Command.none, AdminChange (DeleteSlackWorkspace teamId) )
+
+        PressedDeleteSlackDmChannel channelId ->
+            ( model, Command.none, AdminChange (DeleteSlackDmChannel channelId) )
+
+        PressedExpandSlackWorkspace teamId ->
+            ( { model
+                | expandedSlackWorkspaces =
+                    if SeqSet.member teamId model.expandedSlackWorkspaces then
+                        SeqSet.remove teamId model.expandedSlackWorkspaces
+
+                    else
+                        SeqSet.insert teamId model.expandedSlackWorkspaces
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
         PressedExpandDiscordGuild guildId ->
             ( { model
                 | expandedDiscordGuilds =
@@ -1218,14 +1265,6 @@ update navigationKey time adminData localState msg model =
 
         PressedRestoreGuild guildId ->
             ( model, Command.none, AdminChange (RestoreGuild guildId) )
-
-        SlackClientSecretEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | slackClientSecret = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetSlackClientSecret value |> AdminChange )
 
         PublicVapidKeyEditableMsg editableMsg ->
             case editableMsg of
@@ -1712,6 +1751,21 @@ deleteDiscordGuildButtonId guildId =
     "Admin_deleteDiscordGuildButton_" ++ Discord.idToString guildId |> Dom.id
 
 
+deleteSlackDmChannelButtonId : Slack.Id Slack.DmChannelId -> HtmlId
+deleteSlackDmChannelButtonId channelId =
+    "Admin_deleteSlackDmChannelButton_" ++ Slack.idToString channelId |> Dom.id
+
+
+expandSlackWorkspaceButtonId : Slack.Id Slack.TeamId -> HtmlId
+expandSlackWorkspaceButtonId teamId =
+    "Admin_expandSlackWorkspaceButton_" ++ Slack.idToString teamId |> Dom.id
+
+
+deleteSlackWorkspaceButtonId : Slack.Id Slack.TeamId -> HtmlId
+deleteSlackWorkspaceButtonId teamId =
+    "Admin_deleteSlackWorkspaceButton_" ++ Slack.idToString teamId |> Dom.id
+
+
 deleteDiscordDmChannelButtonId : Discord.Id Discord.PrivateChannelId -> HtmlId
 deleteDiscordDmChannelButtonId channelId =
     "Admin_deleteDiscordDmChannelButton_" ++ Discord.idToString channelId |> Dom.id
@@ -1746,6 +1800,12 @@ pendingChangesText change =
 
         LoadDiscordUsers _ ->
             "Loading Discord users in admin page"
+
+        LoadSlackWorkspaces _ ->
+            "Loading Slack workspaces in admin page"
+
+        LoadSlackDmChannels _ ->
+            "Loading Slack DM channels in admin page"
 
         LoadSessions _ ->
             "Loading sessions in admin page"
@@ -1795,9 +1855,6 @@ pendingChangesText change =
         SetPublicVapidKey _ ->
             "Set public vapid key"
 
-        SetSlackClientSecret _ ->
-            "Set slack client secret"
-
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
 
@@ -1809,6 +1866,12 @@ pendingChangesText change =
 
         DeleteDiscordGuild _ ->
             "Deleted Discord guild"
+
+        DeleteSlackWorkspace _ ->
+            "Deleted Slack workspace"
+
+        DeleteSlackDmChannel _ ->
+            "Deleted Slack DM channel"
 
         DeleteGuild _ ->
             "Deleted guild"
@@ -1866,8 +1929,10 @@ view isMobile2 version time local adminData model =
             , Ui.Lazy.lazy4 guildsSection isMobile2 model.expandedSections model.expandedGuilds adminData
             , Ui.Lazy.lazy3 deletedGuildsSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy4 discordGuildsSection isMobile2 model.expandedSections model.expandedDiscordGuilds adminData
+            , Ui.Lazy.lazy4 slackWorkspacesSection isMobile2 model.expandedSections model.expandedSlackWorkspaces adminData
             , Ui.Lazy.lazy3 dmChannelsSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 discordDmChannelsSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 slackDmChannelsSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 discordUsersSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy5 logSection isMobile2 local.localUser model.expandedSections adminData model
             , Ui.Lazy.lazy5 apiKeysSection isMobile2 local model.expandedSections adminData model
@@ -3552,30 +3617,6 @@ apiKeysSection isMobile local expandedSections adminData2 model =
         expandedSections
         ApiKeysSection
         [ Editable.view
-            (Dom.id "userOptions_slackClientSecret")
-            True
-            "Slack client secret"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Slack.ClientSecret text2) |> Ok
-            )
-            SlackClientSecretEditableMsg
-            (case adminData2.slackClientSecret of
-                Just (Slack.ClientSecret a) ->
-                    a
-
-                Nothing ->
-                    ""
-            )
-            model.slackClientSecret
-        , Editable.view
             (Dom.id "userOptions_publicVapidKey")
             True
             "Public VAPID key"
@@ -4086,6 +4127,176 @@ discordGuildsSection isMobile expandedSections expandedDiscordGuilds adminData =
                                     ]
                             )
                             (SeqDict.toList discordGuilds)
+                        )
+
+            _ ->
+                Ui.text loadingText
+        ]
+
+
+slackWorkspacesSection :
+    Bool
+    -> SeqSet AdminUiSection
+    -> SeqSet (Slack.Id Slack.TeamId)
+    -> AdminData
+    -> Element Msg
+slackWorkspacesSection isMobile expandedSections expandedSlackWorkspaces adminData =
+    section
+        isMobile
+        expandedSections
+        SlackWorkspacesSection
+        [ case adminData.slackWorkspaces of
+            AdminDataLoaded slackWorkspaces ->
+                if SeqDict.isEmpty slackWorkspaces then
+                    Ui.text "No Slack workspaces"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( teamId, workspace ) ->
+                                let
+                                    isExpanded : Bool
+                                    isExpanded =
+                                        SeqSet.member teamId expandedSlackWorkspaces
+                                in
+                                Ui.column
+                                    [ Ui.spacing 4 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 8, Ui.Font.size 14 ]
+                                        [ Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.Input.button (PressedExpandSlackWorkspace teamId)
+                                            , Ui.id (Dom.idToString (expandSlackWorkspaceButtonId teamId))
+                                            , MyUi.hoverText
+                                                (if isExpanded then
+                                                    "Collapse"
+
+                                                 else
+                                                    "Expand"
+                                                )
+                                            ]
+                                            (if isExpanded then
+                                                Icons.collapseContainer
+
+                                             else
+                                                Icons.expandContainer
+                                            )
+                                        , Ui.text (Slack.idToString teamId)
+                                        , Ui.text workspace.name
+                                        , Ui.text workspace.domain
+                                        , Ui.text ("Channels: " ++ String.fromInt (SeqDict.size workspace.channels))
+                                        , Ui.text ("Users: " ++ String.fromInt workspace.userCount)
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            (Ui.text "Linked:"
+                                                :: List.map
+                                                    (\( slackUserId, slackUser ) ->
+                                                        Ui.row
+                                                            [ Ui.spacing 4, Ui.width Ui.shrink ]
+                                                            [ Ui.text slackUser.name
+                                                            , Ui.text "→"
+                                                            , case adminUser slackUser.linkedTo adminData of
+                                                                Just user ->
+                                                                    userLabel user
+
+                                                                Nothing ->
+                                                                    Ui.text (Id.toString slackUser.linkedTo)
+                                                            ]
+                                                            |> Ui.el [ MyUi.hoverText (Slack.idToString slackUserId) ]
+                                                    )
+                                                    (SeqDict.toList workspace.linkedUsers)
+                                            )
+                                        , MyUi.deleteButton (deleteSlackWorkspaceButtonId teamId) (PressedDeleteSlackWorkspace teamId)
+                                        ]
+                                    , if isExpanded then
+                                        Ui.column
+                                            [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
+                                            (List.map
+                                                (\( channelId, channel ) ->
+                                                    Ui.row
+                                                        [ Ui.spacing 8, Ui.Font.size 13 ]
+                                                        [ Ui.text (Slack.idToString channelId)
+                                                        , Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                        , if channel.isPrivate then
+                                                            Ui.text "Private"
+
+                                                          else
+                                                            Ui.none
+                                                        , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                        , firstMessageView channel
+                                                        , Ui.row
+                                                            [ Ui.spacing 8 ]
+                                                            (Ui.text "Visible to:"
+                                                                :: List.map
+                                                                    (\slackUserId ->
+                                                                        case SeqDict.get slackUserId workspace.linkedUsers of
+                                                                            Just slackUser ->
+                                                                                Ui.text slackUser.name
+
+                                                                            Nothing ->
+                                                                                Ui.text (Slack.idToString slackUserId)
+                                                                    )
+                                                                    (SeqSet.toList channel.linkedMembers)
+                                                            )
+                                                        ]
+                                                )
+                                                (SeqDict.toList workspace.channels)
+                                            )
+
+                                      else
+                                        Ui.none
+                                    ]
+                            )
+                            (SeqDict.toList slackWorkspaces)
+                        )
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+        ]
+
+
+slackDmChannelsSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+slackDmChannelsSection isMobile expandedSections adminData =
+    section
+        isMobile
+        expandedSections
+        SlackDmChannelsSection
+        [ case ( adminData.slackDmChannels, adminData.slackWorkspaces ) of
+            ( AdminDataLoaded slackDmChannels, AdminDataLoaded slackWorkspaces ) ->
+                if SeqDict.isEmpty slackDmChannels then
+                    Ui.text "No Slack DM channels"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( channelId, channel ) ->
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ Ui.text (Slack.idToString channelId)
+                                    , case SeqDict.get channel.teamId slackWorkspaces of
+                                        Just workspace ->
+                                            Ui.text workspace.name
+
+                                        Nothing ->
+                                            Ui.text (Slack.idToString channel.teamId)
+                                    , Ui.row
+                                        [ Ui.spacing 8 ]
+                                        (Ui.text "Members:"
+                                            :: List.map
+                                                (\member -> Ui.el [ MyUi.hoverText (Slack.idToString member.id) ] (Ui.text member.name))
+                                                channel.members
+                                        )
+                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    , firstMessageView channel
+                                    , MyUi.deleteButton (deleteSlackDmChannelButtonId channelId) (PressedDeleteSlackDmChannel channelId)
+                                    ]
+                            )
+                            (SeqDict.toList slackDmChannels)
                         )
 
             _ ->
@@ -5276,6 +5487,16 @@ sectionDataToLoad section2 adminData =
             loadIfNeeded adminData.discordGuilds (LoadDiscordGuilds EmptyPlaceholder)
                 ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
 
+        SlackDmChannelsSection ->
+            -- Members are named after the linked Slack users listed with each workspace.
+            loadIfNeeded adminData.slackDmChannels (LoadSlackDmChannels EmptyPlaceholder)
+                ++ loadIfNeeded adminData.slackWorkspaces (LoadSlackWorkspaces EmptyPlaceholder)
+
+        SlackWorkspacesSection ->
+            -- Linked Slack users are shown next to the account they're linked to.
+            loadIfNeeded adminData.slackWorkspaces (LoadSlackWorkspaces EmptyPlaceholder)
+                ++ loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
         GuildsSection ->
             -- Each guild is shown with its owner.
             loadIfNeeded adminData.guilds (LoadGuilds EmptyPlaceholder)
@@ -5345,6 +5566,8 @@ type AdminUiSection
     | DiscordDmChannelsSection
     | DiscordUsersSection
     | DiscordGuildsSection
+    | SlackWorkspacesSection
+    | SlackDmChannelsSection
     | GuildsSection
     | DeletedGuildsSection
     | ApiKeysSection
@@ -5378,6 +5601,12 @@ sectionToString section2 =
 
         DiscordGuildsSection ->
             "Discord guilds"
+
+        SlackWorkspacesSection ->
+            "Slack workspaces"
+
+        SlackDmChannelsSection ->
+            "Slack DM channels"
 
         GuildsSection ->
             "Guilds"
