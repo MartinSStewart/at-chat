@@ -34,9 +34,8 @@ type BackendMsgLog
     | BackendMsgLog_GotDiscordUserAvatars
     | BackendMsgLog_SentNotification
     | BackendMsgLog_GotVapidKeys
-    | BackendMsgLog_GotSlackChannels
-    | BackendMsgLog_GotSlackOAuth
     | BackendMsgLog_LinkDiscordUserStep1
+    | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_ReloadDiscordUserStep1
     | BackendMsgLog_HandleReadyDataStep2
     | BackendMsgLog_WebsocketCreatedHandleForUser
@@ -157,14 +156,11 @@ backendMsgLogToString log =
         BackendMsgLog_GotVapidKeys ->
             "GotVapidKeys"
 
-        BackendMsgLog_GotSlackChannels ->
-            "GotSlackChannels"
-
-        BackendMsgLog_GotSlackOAuth ->
-            "GotSlackOAuth"
-
         BackendMsgLog_LinkDiscordUserStep1 ->
             "LinkDiscordUserStep1"
+
+        BackendMsgLog_LinkSlackUserStep1 ->
+            "LinkSlackUserStep1"
 
         BackendMsgLog_ReloadDiscordUserStep1 ->
             "ReloadDiscordUserStep1"

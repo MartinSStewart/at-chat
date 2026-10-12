@@ -909,9 +909,6 @@ tabBodyView isMobile local loggedIn model =
         AiChatRoute ->
             Nothing
 
-        SlackOAuthRedirect _ ->
-            Nothing
-
         TextEditorRoute ->
             Nothing
 

@@ -78,15 +78,14 @@ import Set exposing (Set)
 import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
-import Slack
+import Slack exposing (SlackToken)
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
-import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
@@ -238,11 +237,8 @@ init =
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDmChannels = SeqDict.empty
-      , slackWorkspaces = OneToOne.empty
-      , slackUsers = OneToOne.empty
-      , slackServers = OneToOne.empty
-      , slackDms = OneToOne.empty
-      , slackToken = Nothing
+      , slackWorkspaces = SeqDict.empty
+      , slackUsers = SeqDict.empty
       , files = SeqDict.empty
       , orphanedFilesLastHour = SeqSet.empty
       , orphanedDiscordGuildsLastHour = SeqSet.empty
@@ -258,7 +254,6 @@ init =
 
             else
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
-      , slackClientSecret = Nothing
       , openRouterKey = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
@@ -559,16 +554,6 @@ updateHelper msg model =
         GotTimeForWebsocketListenClose userId code text time ->
             ( recordWebsocketCloseEvent (WebsocketClosed_ListenCloseEvent userId code text time) model, Command.none )
 
-        GotSlackChannels _ _ result ->
-            case result of
-                Ok _ ->
-                    ( model
-                    , Command.none
-                    )
-
-                Err _ ->
-                    ( model, Command.none )
-
         SentDiscordGuildMessage time changeId _ clientId guildId channelId threadRoute discordUserId result ->
             case result of
                 Ok _ ->
@@ -776,40 +761,6 @@ updateHelper msg model =
             , Command.none
             )
 
-        GotSlackOAuth time userId result ->
-            case result of
-                Ok ok ->
-                    ( model
-                    , Task.map4
-                        T4
-                        (Slack.getCurrentUser ok.userAccessToken)
-                        (Slack.teamInfo ok.botAccessToken)
-                        (Slack.listUsers ok.botAccessToken 100 Nothing)
-                        (Slack.loadWorkspaceChannels ok.userAccessToken ok.teamId)
-                        |> Task.andThen
-                            (\(T4 currentUser teamInfo ( users, _ ) channels) ->
-                                List.map
-                                    (\channel ->
-                                        Slack.loadMessages ok.userAccessToken (Slack.channelId channel) 100
-                                            |> Task.map (\messages -> ( channel, messages ))
-                                    )
-                                    channels
-                                    |> Task.sequence
-                                    |> Task.map
-                                        (\channels2 ->
-                                            { currentUser = currentUser
-                                            , team = teamInfo
-                                            , users = users
-                                            , channels = channels2
-                                            }
-                                        )
-                            )
-                        |> Task.attempt (GotSlackChannels time userId)
-                    )
-
-                Err _ ->
-                    ( model, Command.none )
-
         LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
                 Ok discordUser ->
@@ -823,6 +774,41 @@ updateHelper msg model =
                     ( model
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err (LinkDiscordHttpError error)))
                     )
+
+        LinkSlackUserStep1 linkedAt clientId userId cookie results ->
+            ( List.Nonempty.foldl
+                (\( token, result ) model2 ->
+                    case result of
+                        Ok { self, team } ->
+                            { model2
+                                | slackWorkspaces =
+                                    SeqDict.insert
+                                        team.id
+                                        { name = team.name, domain = team.domain, icon = team.icon }
+                                        model2.slackWorkspaces
+                                , slackUsers =
+                                    SeqDict.insert
+                                        self.id
+                                        { linkedTo = userId
+                                        , linkedAt = linkedAt
+                                        , teamId = team.id
+                                        , name = self.name
+                                        , token = token
+                                        , cookie = cookie
+                                        }
+                                        model2.slackUsers
+                            }
+
+                        Err _ ->
+                            model2
+                )
+                model
+                results
+            , List.Nonempty.map (\( _, result ) -> Result.map (\{ team } -> team.name) result) results
+                |> LoadedSlackWorkspaces
+                |> LinkSlackResponse
+                |> Lamdera.sendToFrontend clientId
+            )
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
             case ( SeqDict.get discordUserId model.discordUsers, result ) of
@@ -6956,22 +6942,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        LinkSlackOAuthCode oAuthCode sessionId2 ->
-            case Broadcast.getSessionFromSessionIdHash sessionId2 model of
-                Just ( _, session ) ->
-                    ( model
-                    , case model.slackClientSecret of
-                        Just clientSecret ->
-                            Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth time session.userId)
-
-                        Nothing ->
-                            Command.none
-                    )
-
-                Nothing ->
-                    ( model, Command.none )
-
         LinkDiscordRequest data ->
             BackendExtra.asUser
                 model
@@ -6999,14 +6969,27 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\session _ ->
                     if model.slackLinkingEnabled then
                         ( model
-                        , Debug.todo ""
+                        , let
+                            loadWorkspace : SlackToken -> Task BackendOnly Never ( SlackToken, Result Slack.HttpError Slack.UserBoot )
+                            loadWorkspace token =
+                                Slack.userBoot model.serverSecret data.cookie token
+                                    |> Task.map Ok
+                                    |> Task.onError (\error -> Task.succeed (Err error))
+                                    |> Task.map (Tuple.pair token)
+
+                            (Nonempty firstToken restOfTokens) =
+                                data.tokens
+                          in
+                          Task.map2
+                            Nonempty
+                            (loadWorkspace firstToken)
+                            (List.map loadWorkspace restOfTokens |> Task.sequence)
+                            |> Task.perform (LinkSlackUserStep1 time clientId session.userId data.cookie)
                         )
 
                     else
                         ( model
-                        , Lamdera.sendToFrontend
-                            clientId
-                            (LinkDiscordResponse (Err (LinkDiscordHttpError (Discord.UnexpectedError "Slack account linking is disabled"))))
+                        , Lamdera.sendToFrontend clientId (LinkSlackResponse SlackLinkingDisabled)
                         )
                 )
 
@@ -9316,11 +9299,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     |> ChangeBroadcast
                     |> Lamdera.broadcast
                 ]
-            )
-
-        Pages.Admin.SetSlackClientSecret clientSecret ->
-            ( { model | slackClientSecret = clientSecret }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
         Pages.Admin.SetOpenRouterKey openRouterKey ->

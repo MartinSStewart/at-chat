@@ -795,9 +795,6 @@ canDropFiles isMobile currentUserId route =
         AiChatRoute ->
             Nothing
 
-        SlackOAuthRedirect _ ->
-            Nothing
-
         TextEditorRoute ->
             Nothing
 
@@ -2074,16 +2071,6 @@ routeRequest previousRoute newRoute model =
                 )
                 model3
 
-        SlackOAuthRedirect result ->
-            ( model2
-            , case result of
-                Ok ( code, sessionId ) ->
-                    Lamdera.sendToBackend (LinkSlackOAuthCode code sessionId)
-
-                Err () ->
-                    Command.none
-            )
-
         TextEditorRoute ->
             ( model2, Command.none )
 
@@ -3159,10 +3146,10 @@ isPressMsg msg =
         ValidatedE2eePrivateKey _ _ ->
             False
 
-        TypedSlackCookie string ->
+        TypedSlackCookie _ ->
             False
 
-        TypedSlackToken string ->
+        TypedSlackTeamsJson _ ->
             False
 
         PressedSubmitSlackData ->
@@ -6743,7 +6730,6 @@ initAdminData adminData =
     , emailNotificationsEnabled = adminData.emailNotificationsEnabled
     , twoFactorAuthentication = adminData.twoFactorAuthentication
     , privateVapidKey = adminData.privateVapidKey
-    , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
     , postmarkKey = adminData.postmarkApiKey
     , dmChannels = LocalState.AdminDataNotLoaded
@@ -8767,9 +8753,6 @@ channelSidebarTarget route =
                     helper routeData.channelsVisible
 
                 AiChatRoute ->
-                    2
-
-                SlackOAuthRedirect _ ->
                     2
 
                 TextEditorRoute ->

@@ -174,7 +174,7 @@ import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
 import SeqSet
-import SessionIdHash exposing (SessionIdHash(..))
+import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
@@ -2043,6 +2043,11 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         { url = url, statusCode = 403, statusText = "OK", headers = Dict.empty }
                         ""
 
+            ( "POST", [ "slack.com", "api", "client.userBoot" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    """{"ok":false,"error":"invalid_auth"}"""
+
             ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2965,6 +2970,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         LinkDiscordResponse _ ->
             False
 
+        LinkSlackResponse _ ->
+            False
+
         ProfilePictureEditorToFrontend _ ->
             False
 
@@ -2993,8 +3001,15 @@ allAttackerToBackendChanges =
     , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
     , AiChatToBackend (AiChat.AiMessageRequestSimple (AiModelName "model") (AiChat.RespondId 0) "hacked")
     , ReloadDataRequest InitialLoadRequested_None
-    , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
+    , LinkSlackRequest
+        (case Slack.validateSlackData { slackCookie = "xoxd-attacker-cookie", slackTeamsJson = "{\"T0\":{\"token\":\"xoxc-attacker-token\"}}" } of
+            Ok slackData ->
+                slackData
+
+            Err () ->
+                Debug.todo "The attacker's Slack data should be valid"
+        )
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (Just (FileStatus.FileHash "fake-hash")))
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (Just (FileStatus.FileHash "fake-hash")))
     , AdminDataRequest Nothing

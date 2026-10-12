@@ -3907,12 +3907,6 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                                 else
                                                                     [ "Private VAPID key was modified by attacker" ]
                                                                )
-                                                            ++ (if (E2EHelper.unwrapBackend before.backend).slackClientSecret == (E2EHelper.unwrapBackend after.backend).slackClientSecret then
-                                                                    []
-
-                                                                else
-                                                                    [ "Slack client secret was modified by attacker" ]
-                                                               )
                                                             ++ (if (E2EHelper.unwrapBackend before.backend).openRouterKey == (E2EHelper.unwrapBackend after.backend).openRouterKey then
                                                                     []
 

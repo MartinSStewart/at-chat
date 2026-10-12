@@ -26,6 +26,7 @@ module Types exposing
     , InitialLoadRequest(..)
     , LastBackupData
     , LinkDiscordFailure(..)
+    , LinkSlackResult(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -55,6 +56,8 @@ module Types exposing
     , RepliedToData(..)
     , RevealedSpoilers
     , ServerChange(..)
+    , SlackBackendWorkspace
+    , SlackLinkedUser
     , ToBackend(..)
     , ToFrontend(..)
     , UploadBackupState
@@ -137,7 +140,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing)
 import SheepGame
-import Slack exposing (SlackData)
+import Slack exposing (SlackCookie, SlackData, SlackToken)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
@@ -383,8 +386,9 @@ type alias UserOptionsModel =
       -- whole key has been checked, so the key isn't left sitting in the model.
       privateKeyText : String
     , slackCookie : String
-    , slackToken : String
+    , slackTeamsJson : String
     , pressedSubmitSlackData : Bool
+    , linkSlackResult : Maybe LinkSlackResult
     }
 
 
@@ -479,16 +483,12 @@ type alias BackendModel =
     , orphanedDiscordGuildsLastHour : SeqSet (Discord.Id Discord.GuildId)
     , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
-    , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
-    , slackWorkspaces : OneToOne String (Id GuildId)
-    , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
-    , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
-    , slackToken : Maybe Slack.AuthToken
+    , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
+    , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackLinkedUser
     , files : SeqDict FileHash BackendFileData
     , orphanedFilesLastHour : SeqSet FileHash
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
-    , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
@@ -759,7 +759,7 @@ type FrontendMsg_
     | ValidatedE2eePrivateKey String E2eeKeysValid
     | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))))
     | TypedSlackCookie String
-    | TypedSlackToken String
+    | TypedSlackTeamsJson String
     | PressedSubmitSlackData
 
 
@@ -833,7 +833,6 @@ type ToBackend
     | FinishUserCreationRequest InitialLoadRequest PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest InitialLoadRequest
-    | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
     | LinkSlackRequest SlackData
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
@@ -867,18 +866,7 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
-    | GotSlackChannels
-        Time.Posix
-        (Id UserId)
-        (Result
-            Http.Error
-            { currentUser : Slack.CurrentUser
-            , team : Slack.Team
-            , users : List Slack.User
-            , channels : List ( Slack.Channel, List Slack.Message )
-            }
-        )
-    | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
+    | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1013,6 +1001,28 @@ type LinkDiscordFailure
     | LinkDiscordLimitReached
 
 
+type LinkSlackResult
+    = SlackLinkingDisabled
+    | LoadedSlackWorkspaces (Nonempty (Result Slack.HttpError String))
+
+
+type alias SlackBackendWorkspace =
+    { name : String
+    , domain : String
+    , icon : String
+    }
+
+
+type alias SlackLinkedUser =
+    { linkedTo : Id UserId
+    , linkedAt : Time.Posix
+    , teamId : Slack.Id Slack.TeamId
+    , name : String
+    , token : SlackToken
+    , cookie : SlackCookie
+    }
+
+
 {-| A backup moving between the backend and the admin page. Only one can be in flight at a
 time.
 
@@ -1073,6 +1083,7 @@ type ToFrontend
     | YouConnected ClientId
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result LinkDiscordFailure ())
+    | LinkSlackResponse LinkSlackResult
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
     | ExportChannelResponse { fileName : String, json : String }

@@ -95,7 +95,6 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
-import Slack
 import Sticker
 import String.Nonempty
 import Svg
@@ -205,7 +204,6 @@ type Msg
     | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
     | PressedRestoreGuild (Id GuildId)
-    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
@@ -280,7 +278,6 @@ type alias Model =
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
-    , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
@@ -334,7 +331,6 @@ type alias InitAdminData =
     { emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
-    , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkApiKey : Postmark.ApiKey
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -388,7 +384,6 @@ type AdminChange
     | SetDiscordLinkLimit (Maybe Int)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
-    | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
@@ -437,7 +432,6 @@ initForUser =
         , deletedUsers = SeqSet.empty
         }
     , submitError = Nothing
-    , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
@@ -466,7 +460,6 @@ initForAdmin { highlightLog } =
         , deletedUsers = SeqSet.empty
         }
     , submitError = Nothing
-    , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
@@ -571,9 +564,6 @@ updateAdmin changedBy change adminData local =
 
         SetPublicVapidKey publicVapidKey ->
             { local | publicVapidKey = publicVapidKey }
-
-        SetSlackClientSecret clientSecret ->
-            { local | adminData = IsAdmin { adminData | slackClientSecret = clientSecret } }
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
@@ -1219,14 +1209,6 @@ update navigationKey time adminData localState msg model =
         PressedRestoreGuild guildId ->
             ( model, Command.none, AdminChange (RestoreGuild guildId) )
 
-        SlackClientSecretEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | slackClientSecret = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetSlackClientSecret value |> AdminChange )
-
         PublicVapidKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1794,9 +1776,6 @@ pendingChangesText change =
 
         SetPublicVapidKey _ ->
             "Set public vapid key"
-
-        SetSlackClientSecret _ ->
-            "Set slack client secret"
 
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
@@ -3552,30 +3531,6 @@ apiKeysSection isMobile local expandedSections adminData2 model =
         expandedSections
         ApiKeysSection
         [ Editable.view
-            (Dom.id "userOptions_slackClientSecret")
-            True
-            "Slack client secret"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Slack.ClientSecret text2) |> Ok
-            )
-            SlackClientSecretEditableMsg
-            (case adminData2.slackClientSecret of
-                Just (Slack.ClientSecret a) ->
-                    a
-
-                Nothing ->
-                    ""
-            )
-            model.slackClientSecret
-        , Editable.view
             (Dom.id "userOptions_publicVapidKey")
             True
             "Public VAPID key"

@@ -3057,9 +3057,6 @@ updateLoaded msg model =
                         AiChatRoute ->
                             ( model, Command.none )
 
-                        SlackOAuthRedirect _ ->
-                            ( model, Command.none )
-
                         TextEditorRoute ->
                             ( model, Command.none )
 
@@ -5675,9 +5672,6 @@ updateLoaded msg model =
                 AiChatRoute ->
                     ( model, Command.none )
 
-                SlackOAuthRedirect _ ->
-                    ( model, Command.none )
-
                 TextEditorRoute ->
                     ( model, Command.none )
 
@@ -6256,12 +6250,12 @@ updateLoaded msg model =
                 )
                 model
 
-        TypedSlackToken text ->
+        TypedSlackTeamsJson text ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
-                            Maybe.map (\userOptions -> { userOptions | slackToken = text }) loggedIn.userOptions
+                            Maybe.map (\userOptions -> { userOptions | slackTeamsJson = text }) loggedIn.userOptions
                       }
                     , Command.none
                     )
@@ -7466,9 +7460,6 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         AiChatRoute ->
-            ( model, Command.none )
-
-        SlackOAuthRedirect _ ->
             ( model, Command.none )
 
         TextEditorRoute ->
@@ -9211,6 +9202,18 @@ updateLoadedFromBackend msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        LinkSlackResponse result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | linkSlackResult = Just result }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
         ProfilePictureEditorToFrontend imageEditorToFrontend ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -9531,18 +9534,6 @@ view _ model =
                     DmRoute dmRoute ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (SelectedDmChannel dmRoute) loaded)
-
-                    SlackOAuthRedirect result ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.contentCenterX, Ui.contentCenterY ]
-                            (case result of
-                                Ok _ ->
-                                    Ui.text "Slack is now linked with your account. You can return to the original page."
-
-                                Err () ->
-                                    Ui.text "Something went wrong when linking Slack to at-chat..."
-                            )
 
                     TextEditorRoute ->
                         requiresLogin

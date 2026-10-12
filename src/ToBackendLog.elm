@@ -21,7 +21,6 @@ type ToBackendLog
     | ToBackendLog_FinishUserCreationRequest
     | ToBackendLog_AiChatToBackend
     | ToBackendLog_ReloadDataRequest
-    | ToBackendLog_LinkSlackOAuthCode
     | ToBackendLog_LinkDiscordRequest
     | ToBackendLog_LinkSlackRequest
     | ToBackendLog_ProfilePictureEditorToBackend
@@ -137,9 +136,6 @@ toBackendLogToString log =
 
         ToBackendLog_ReloadDataRequest ->
             "ReloadDataRequest"
-
-        ToBackendLog_LinkSlackOAuthCode ->
-            "LinkSlackOAuthCode"
 
         ToBackendLog_LinkDiscordRequest ->
             "LinkDiscordRequest"

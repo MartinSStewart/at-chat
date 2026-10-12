@@ -42,8 +42,6 @@ import Message
 import Pagination
 import SecretId exposing (SecretId)
 import Serialize
-import SessionIdHash exposing (SessionIdHash)
-import Slack
 import Url exposing (Url)
 import Url.Builder
 import User
@@ -59,7 +57,6 @@ type Route
     | DmRoute DmRouteData
     | DiscordDmRoute DiscordDmRouteData
     | AiChatRoute
-    | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | PrivacyRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
@@ -436,14 +433,6 @@ decode url =
                 _ ->
                     HomePageRoute overlay
 
-        [ "slack-oauth" ] ->
-            case ( Dict.get "code" url2.queryParameters, Dict.get "state" url2.queryParameters ) of
-                ( Just [ code ], Just [ state ] ) ->
-                    SlackOAuthRedirect (Ok ( Slack.OAuthCode code, SessionIdHash.fromString state ))
-
-                _ ->
-                    SlackOAuthRedirect (Err ())
-
         [ "text-editor" ] ->
             TextEditorRoute
 
@@ -565,9 +554,6 @@ toChannelHeaderTab route =
         AiChatRoute ->
             Nothing
 
-        SlackOAuthRedirect _ ->
-            Nothing
-
         TextEditorRoute ->
             Nothing
 
@@ -660,9 +646,6 @@ toShowMembersTabVisible { sidebarMode } route =
         AiChatRoute ->
             ( HideChannelSettings, False )
 
-        SlackOAuthRedirect _ ->
-            ( HideChannelSettings, False )
-
         TextEditorRoute ->
             ( HideChannelSettings, False )
 
@@ -723,9 +706,6 @@ toShowMembersTab route =
             ( routeData.showMembersTab, False )
 
         AiChatRoute ->
-            ( HideChannelSettings, False )
-
-        SlackOAuthRedirect _ ->
             ( HideChannelSettings, False )
 
         TextEditorRoute ->
@@ -860,9 +840,6 @@ setChannelsVisible channelsVisible route =
         AiChatRoute ->
             route
 
-        SlackOAuthRedirect _ ->
-            route
-
         TextEditorRoute ->
             route
 
@@ -901,9 +878,6 @@ toOverlay route =
             Nothing
 
         AiChatRoute ->
-            Nothing
-
-        SlackOAuthRedirect _ ->
             Nothing
 
         TextEditorRoute ->
@@ -947,9 +921,6 @@ setOverlay overlay route =
             route
 
         AiChatRoute ->
-            route
-
-        SlackOAuthRedirect _ ->
             route
 
         TextEditorRoute ->
@@ -1148,11 +1119,6 @@ encode route =
                         ++ encodeOverlay overlay
                     )
 
-                SlackOAuthRedirect _ ->
-                    ( [ "slack-oauth" ]
-                    , []
-                    )
-
                 TextEditorRoute ->
                     ( [ "text-editor" ], [] )
 
@@ -1302,9 +1268,6 @@ requiresLogin route =
 
         DmRoute _ ->
             True
-
-        SlackOAuthRedirect _ ->
-            False
 
         TextEditorRoute ->
             False

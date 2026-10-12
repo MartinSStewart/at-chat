@@ -211,7 +211,6 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing(..))
-import Slack
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
@@ -984,7 +983,6 @@ type alias AdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
-    , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkKey : Postmark.ApiKey
     , dmChannels : AdminDataStatus (SeqDict DmChannelId AdminData_DmChannel)
@@ -3851,9 +3849,6 @@ routeToViewing isMobile route local =
                 StopViewingChannel
 
         AiChatRoute ->
-            StopViewingChannel
-
-        SlackOAuthRedirect _ ->
             StopViewingChannel
 
         TextEditorRoute ->

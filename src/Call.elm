@@ -451,9 +451,6 @@ displayMode isMobile currentUserId route local =
         AiChatRoute ->
             thumbnailOrNoVideo
 
-        SlackOAuthRedirect _ ->
-            thumbnailOrNoVideo
-
         TextEditorRoute ->
             thumbnailOrNoVideo
 

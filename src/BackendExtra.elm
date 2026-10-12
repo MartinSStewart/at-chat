@@ -1530,7 +1530,6 @@ adminData model lastLogPageViewed =
     , discordLinkLimit = model.discordLinkLimit
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
-    , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
     , postmarkApiKey = model.postmarkApiKey
     , loadingDiscordChannels =
@@ -2661,14 +2660,11 @@ backendMsgLog msg =
         GotVapidKeys _ ->
             BackendMsgLog_GotVapidKeys
 
-        GotSlackChannels _ _ _ ->
-            BackendMsgLog_GotSlackChannels
-
-        GotSlackOAuth _ _ _ ->
-            BackendMsgLog_GotSlackOAuth
-
         LinkDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkDiscordUserStep1
+
+        LinkSlackUserStep1 _ _ _ _ _ ->
+            BackendMsgLog_LinkSlackUserStep1
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_ReloadDiscordUserStep1
@@ -3044,9 +3040,6 @@ toBackendLog toBackend =
 
         ReloadDataRequest _ ->
             ToBackendLog_ReloadDataRequest
-
-        LinkSlackOAuthCode _ _ ->
-            ToBackendLog_LinkSlackOAuthCode
 
         LinkDiscordRequest _ ->
             ToBackendLog_LinkDiscordRequest
