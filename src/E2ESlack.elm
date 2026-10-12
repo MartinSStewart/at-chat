@@ -1,10 +1,12 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, slackWebsocketTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
+import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import Id exposing (ChannelMessageId)
 import IdArray
 import Message exposing (Message(..))
@@ -516,6 +518,167 @@ slackWebsocketTest config =
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+adminSlackUserId : Slack.Id Slack.UserId
+adminSlackUserId =
+    Slack.Id "U09DJDQL1A8"
+
+
+slackWebsocketBackoffTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackWebsocketBackoffTest config =
+    E2EHelper.startTest
+        "The Slack websocket reconnects with jittered exponential backoff"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+
+                -- The relay drops the connection four times without Slack ever saying hello, so the
+                -- wait doubles each time: 0s, 1s, 3s, 7s (each shortened by up to half by the jitter).
+                , slackDropAndReconnect 0
+                , slackDropAndReconnect 1
+                , slackDropAndReconnect 3
+                , slackDropAndReconnect 7
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ -> [ T.websocketSendString 100 connection """{"type":"hello"}""" ])
+                , -- Slack's hello means the connection works again, so the backoff starts over.
+                  slackDropAndReconnect 0
+                ]
+            )
+        ]
+
+
+slackDropAndReconnect : Float -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackDropAndReconnect unjitteredDelay =
+    T.group
+        [ E2EHelper.andThenWebsocket
+            100
+            (\connection _ ->
+                [ T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed"
+
+                -- Check before any time passes, otherwise a delay of 0 has already run down.
+                , T.checkBackend
+                    0
+                    (\backend ->
+                        case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).pendingSlackReconnects of
+                            Just delay ->
+                                if Duration.inSeconds delay >= unjitteredDelay / 2 && Duration.inSeconds delay <= unjitteredDelay then
+                                    Ok ()
+
+                                else
+                                    Err
+                                        ("Expected the Slack reconnect to be delayed by between "
+                                            ++ String.fromFloat (unjitteredDelay / 2)
+                                            ++ "s and "
+                                            ++ String.fromFloat unjitteredDelay
+                                            ++ "s, but it was "
+                                            ++ String.fromFloat (Duration.inSeconds delay)
+                                            ++ "s"
+                                        )
+
+                            Nothing ->
+                                Err "Expected the backend to be waiting to reopen the Slack websocket"
+                    )
+                ]
+            )
+        , T.checkBackend
+            (unjitteredDelay * 1000 + E2EHelper.gatewayReconnectDelay)
+            (\backend ->
+                case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).slackUsers of
+                    Just (Types.SlackFullData linkedUser) ->
+                        case linkedUser.websocket of
+                            Just _ ->
+                                Ok ()
+
+                            Nothing ->
+                                Err "Expected the Slack websocket to be open again"
+
+                    _ ->
+                        Err "Expected the Slack user to still be linked"
+            )
+        ]
+
+
+unlinkSlackTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+unlinkSlackTest config =
+    E2EHelper.startTest
+        "Unlinking a Slack account forgets its token and closes its websocket"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_openSlackWorkspace_T09DJDQL18U" ])
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , E2EHelper.hasExactText admin [ "Slack Admin", "test-slack" ]
+                , admin.click 100 (Dom.id "userOptions_unlinkSlack_U09DJDQL1A8")
+                , E2EHelper.hasNotExactText admin [ "Slack Admin" ]
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openSlackWorkspace_T09DJDQL18U" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        let
+                            backend : Types.BackendModel
+                            backend =
+                                E2EHelper.unwrapBackend data.backend
+                        in
+                        case SeqDict.get adminSlackUserId backend.slackUsers of
+                            Just (Types.SlackBasicData _) ->
+                                if
+                                    List.any
+                                        (\( ( requestedBy, _ ), websocketState ) ->
+                                            requestedBy == T.RequestedByBackend && websocketState.closedAt == Nothing
+                                        )
+                                        (SeqDict.toList data.websockets)
+                                then
+                                    Err "Expected the Slack websocket to be closed"
+
+                                else if SeqDict.isEmpty backend.pendingSlackReconnects then
+                                    Ok ()
+
+                                else
+                                    Err "Expected no Slack reconnect to be pending"
+
+                            _ ->
+                                Err "Expected the Slack user to only have its basic data left"
+                    )
                 ]
             )
         ]

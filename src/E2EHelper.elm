@@ -2604,6 +2604,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Slack_SendMessage _ _ _ _ ->
                     True
 
+                Local_Slack_UnlinkUser _ ->
+                    True
+
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     True
 
@@ -2851,6 +2854,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_Slack_DeleteMessage _ _ ->
+                            True
+
+                        Types.Server_Slack_UnlinkUser _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ _ ->
@@ -3312,6 +3318,7 @@ allAttackerLocalChanges =
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace normalText
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm normalText
+    , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_ExpandUserOptionSection UserSession.UserOption_Debug { collapseOthers = False }

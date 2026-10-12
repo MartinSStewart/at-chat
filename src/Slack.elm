@@ -598,6 +598,7 @@ websocketRelayRequest secretKey (SlackCookie cookie) (SlackToken token) =
 -}
 type WebsocketEvent
     = WebsocketRelayReady
+    | WebsocketHello
     | WebsocketMessageCreated String Message
     | WebsocketMessageChanged String Message Time.Posix
     | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
@@ -627,7 +628,10 @@ decodeWebsocketEvent =
         (Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ])
         |> Decode.andThen
             (\( eventType, subtype ) ->
-                if eventType /= "message" then
+                if eventType == "hello" then
+                    Decode.succeed WebsocketHello
+
+                else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent
 
                 else if subtype == "message_changed" then

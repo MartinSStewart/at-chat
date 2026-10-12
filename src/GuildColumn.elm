@@ -778,6 +778,9 @@ canChangeUnreadNotificationCount change =
         Local_Slack_SendMessage _ _ _ _ ->
             True
 
+        Local_Slack_UnlinkUser _ ->
+            True
+
         Local_NewChannel _ _ _ _ ->
             True
 

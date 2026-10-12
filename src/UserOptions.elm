@@ -55,7 +55,7 @@ import Ui.Prose
 import User exposing (FrontendUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserColor exposing (UserColor)
-import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
+import UserSession exposing (NotificationMode(..), PushSubscription(..), SlackFrontendUser, UserOptionSection(..))
 import X25519
 
 
@@ -734,7 +734,21 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             slackTeamsJsonLabel =
                                 Ui.Input.label "userOptions_slackTeamsJson" [] (Ui.text "JSON.parse(localStorage.localConfig_v2).teams")
                          in
-                         [ Ui.column
+                         [ if SeqDict.isEmpty local.localUser.linkedSlackUsers then
+                            Ui.none
+
+                           else
+                            Ui.column
+                                [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                                [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Slack users")
+                                , Ui.column
+                                    [ Ui.spacing 8 ]
+                                    (List.map
+                                        (\( slackUserId, teamId ) -> slackUserCard local slackUserId teamId)
+                                        (SeqDict.toList local.localUser.linkedSlackUsers)
+                                    )
+                                ]
+                         , Ui.column
                             [ Ui.paddingXY 16 0 ]
                             [ slackCookieLabel.element
                             , Ui.Input.text
@@ -1049,6 +1063,60 @@ numberPoint index content =
         [ Ui.contentTop ]
         [ Ui.el [ MyUi.noShrinking, Ui.width (Ui.px 24) ] (Ui.text (String.fromInt index ++ "."))
         , content
+        ]
+
+
+slackUserCard : LocalState -> Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> Element FrontendMsg_
+slackUserCard local slackUserId teamId =
+    let
+        user : Maybe SlackFrontendUser
+        user =
+            SeqDict.get slackUserId local.localUser.slackUsers
+    in
+    Ui.column
+        [ Ui.spacing 8
+        , Ui.padding 12
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 8
+        , Ui.widthMax 400
+        ]
+        [ Ui.row
+            [ Ui.spacing 8 ]
+            [ User.profileImage user
+            , Ui.column
+                [ Ui.spacing 2 ]
+                [ Ui.text
+                    (case user of
+                        Just user2 ->
+                            PersonName.toString user2.name
+
+                        Nothing ->
+                            Slack.idToString slackUserId
+                    )
+                , case SeqDict.get teamId local.slackWorkspaces of
+                    Just workspace ->
+                        Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text workspace.name)
+
+                    Nothing ->
+                        Ui.none
+                ]
+            ]
+        , MyUi.elButton
+            (Dom.id ("userOptions_unlinkSlack_" ++ Slack.idToString slackUserId))
+            (PressedUnlinkSlackUser slackUserId)
+            [ Ui.background MyUi.deleteButtonBackground
+            , Ui.border 1
+            , Ui.borderColor MyUi.deleteButtonBorder
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.width Ui.shrink
+            , Ui.paddingXY 12 0
+            , Ui.rounded 4
+            , Ui.Font.size 14
+            , Ui.contentCenterY
+            , Ui.height (Ui.px 30)
+            ]
+            (Ui.text "Unlink user")
         ]
 
 

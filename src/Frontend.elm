@@ -3975,6 +3975,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedUnlinkSlackUser slackUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_Slack_UnlinkUser slackUserId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedUnlinkDiscordUser discordUserId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

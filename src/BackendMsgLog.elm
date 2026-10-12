@@ -42,7 +42,7 @@ type BackendMsgLog
     | BackendMsgLog_SlackWebsocketClosedByBackend
     | BackendMsgLog_SlackWebsocketMsg
     | BackendMsgLog_SlackWebsocketSentData
-    | BackendMsgLog_SlackWebsocketReconnect
+    | BackendMsgLog_SlackWebsocketReconnectTick
     | BackendMsgLog_ReloadDiscordUserStep1
     | BackendMsgLog_HandleReadyDataStep2
     | BackendMsgLog_WebsocketCreatedHandleForUser
@@ -187,8 +187,8 @@ backendMsgLogToString log =
         BackendMsgLog_SlackWebsocketSentData ->
             "SlackWebsocketSentData"
 
-        BackendMsgLog_SlackWebsocketReconnect ->
-            "SlackWebsocketReconnect"
+        BackendMsgLog_SlackWebsocketReconnectTick ->
+            "SlackWebsocketReconnectTick"
 
         BackendMsgLog_ReloadDiscordUserStep1 ->
             "ReloadDiscordUserStep1"

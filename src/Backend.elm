@@ -32,7 +32,6 @@ import Duration exposing (Duration)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
-import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
@@ -68,6 +67,7 @@ import PersonName exposing (PersonName)
 import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
+import Random
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
@@ -290,6 +290,7 @@ init =
       , wordSpellingGameSwedish = WordList_NotLoaded
       , pendingGatewayReconnects = SeqDict.empty
       , pendingSlackSends = SeqDict.empty
+      , pendingSlackReconnects = SeqDict.empty
       }
     , Command.none
     )
@@ -371,6 +372,11 @@ subscriptions model =
 
           else
             Time.every DiscordSync.gatewayReconnectTickInterval (\_ -> GatewayReconnectTick)
+        , if SeqDict.isEmpty model.pendingSlackReconnects then
+            Subscription.none
+
+          else
+            Time.every DiscordSync.gatewayReconnectTickInterval (\_ -> SlackWebsocketReconnectTick)
         , Time.every Duration.hour HourlyUpdate
         ]
 
@@ -930,6 +936,16 @@ updateHelper msg model =
 
                                                     Nothing ->
                                                         Nothing
+                                            , reconnect =
+                                                case SeqDict.get self.id model2.slackUsers of
+                                                    Just (SlackFullData existing) ->
+                                                        existing.reconnect
+
+                                                    Just (SlackBasicData _) ->
+                                                        { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
+
+                                                    Nothing ->
+                                                        { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
                                             }
                                         )
                                         model2.slackUsers
@@ -1090,13 +1106,19 @@ updateHelper msg model =
                             let
                                 _ =
                                     Debug.log "Slack websocket closed" ( slackUserId, DiscordSync.closeEventCodeToInt code, reason )
+
+                                ( delay, reconnect ) =
+                                    nextSlackReconnectDelay linkedUser.reconnect
                             in
                             ( { model
                                 | slackUsers =
-                                    SeqDict.insert slackUserId (SlackFullData { linkedUser | websocket = Nothing }) model.slackUsers
+                                    SeqDict.insert
+                                        slackUserId
+                                        (SlackFullData { linkedUser | websocket = Nothing, reconnect = reconnect })
+                                        model.slackUsers
+                                , pendingSlackReconnects = SeqDict.insert slackUserId delay model.pendingSlackReconnects
                               }
-                            , Process.sleep slackWebsocketReconnectDelay
-                                |> Task.perform (\() -> SlackWebsocketReconnect slackUserId)
+                            , Command.none
                             )
 
                 _ ->
@@ -1114,18 +1136,44 @@ updateHelper msg model =
                     in
                     ( model, Command.none )
 
-        SlackWebsocketReconnect slackUserId ->
-            case SeqDict.get slackUserId model.slackUsers of
-                Just (SlackFullData linkedUser) ->
-                    case linkedUser.websocket of
-                        Just _ ->
-                            ( model, Command.none )
+        SlackWebsocketReconnectTick ->
+            let
+                ( stillWaiting, reopenNow ) =
+                    SeqDict.foldl
+                        (\slackUserId delay ( waiting, reopen ) ->
+                            let
+                                remaining : Duration
+                                remaining =
+                                    Quantity.minus DiscordSync.gatewayReconnectTickInterval delay
+                            in
+                            if Quantity.greaterThanZero remaining then
+                                ( SeqDict.insert slackUserId remaining waiting, reopen )
 
-                        Nothing ->
-                            ( model, Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl )
+                            else
+                                case SeqDict.get slackUserId model.slackUsers of
+                                    Just (SlackFullData linkedUser) ->
+                                        case linkedUser.websocket of
+                                            Just _ ->
+                                                ( waiting, reopen )
 
-                _ ->
-                    ( model, Command.none )
+                                            Nothing ->
+                                                ( waiting, slackUserId :: reopen )
+
+                                    Just (SlackBasicData _) ->
+                                        ( waiting, reopen )
+
+                                    Nothing ->
+                                        ( waiting, reopen )
+                        )
+                        ( SeqDict.empty, [] )
+                        model.pendingSlackReconnects
+            in
+            ( { model | pendingSlackReconnects = stillWaiting }
+            , List.map
+                (\slackUserId -> Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl)
+                reopenNow
+                |> Command.batch
+            )
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
             case ( SeqDict.get discordUserId model.discordUsers, result ) of
@@ -5859,6 +5907,62 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                Local_Slack_UnlinkUser slackUserId ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session _ ->
+                            case SeqDict.get slackUserId model.slackUsers of
+                                Just (SlackFullData linkedUser) ->
+                                    if linkedUser.linkedTo == session.userId then
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | slackUsers = SeqDict.insert slackUserId (SlackBasicData linkedUser.user) model.slackUsers
+                                                    , slackWorkspaces =
+                                                        SeqDict.updateIfExists
+                                                            linkedUser.user.teamId
+                                                            (\workspace ->
+                                                                { workspace
+                                                                    | channels =
+                                                                        SeqDict.map
+                                                                            (\_ channel -> { channel | linkedMembers = SeqSet.remove slackUserId channel.linkedMembers })
+                                                                            workspace.channels
+                                                                }
+                                                            )
+                                                            model.slackWorkspaces
+                                                    , pendingSlackReconnects = SeqDict.remove slackUserId model.pendingSlackReconnects
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                            , Broadcast.toUser
+                                                (Just clientId)
+                                                Nothing
+                                                session.userId
+                                                (Server_Slack_UnlinkUser slackUserId |> ServerChange)
+                                                model2
+                                            , case linkedUser.websocket of
+                                                Just connection ->
+                                                    Websocket.close connection |> Task.perform (\() -> SlackWebsocketClosedByBackend)
+
+                                                Nothing ->
+                                                    Command.none
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (SlackBasicData _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_Slack_SendMessage _ timezone guildOrDmId text ->
                     let
                         send :
@@ -10417,9 +10521,22 @@ slackPendingSendKey guildOrDmId =
             ( currentUserId, Slack.idToString channelId )
 
 
-slackWebsocketReconnectDelay : Duration
-slackWebsocketReconnectDelay =
-    Duration.seconds 10
+{-| The same jittered exponential backoff as Discord's gateway: 0s, 1s, 3s, 7s… up to a minute,
+each shortened by up to half. Slack's hello event resets it.
+-}
+nextSlackReconnectDelay : { failedAttempts : Int, seed : Int } -> ( Duration, { failedAttempts : Int, seed : Int } )
+nextSlackReconnectDelay reconnect =
+    let
+        ( ( jitter, nextSeed ), _ ) =
+            Random.step
+                (Random.map2 Tuple.pair (Random.float 0.5 1) (Random.int Random.minInt Random.maxInt))
+                (Random.initialSeed reconnect.seed)
+    in
+    ( Duration.seconds (2 ^ toFloat reconnect.failedAttempts - 1)
+        |> Quantity.min (Duration.seconds 60)
+        |> Quantity.multiplyBy jitter
+    , { failedAttempts = reconnect.failedAttempts + 1, seed = nextSeed }
+    )
 
 
 {-| Slack doesn't say which channels are DMs in its websocket events, so the channel ID is
@@ -10694,6 +10811,17 @@ handleSlackWebsocketEvent linkedUser event model =
 
                 Nothing ->
                     ( model, Command.none )
+
+        Slack.WebsocketHello ->
+            ( { model
+                | slackUsers =
+                    SeqDict.insert
+                        linkedUser.user.id
+                        (SlackFullData { linkedUser | reconnect = { failedAttempts = 0, seed = linkedUser.reconnect.seed } })
+                        model.slackUsers
+              }
+            , Command.none
+            )
 
         Slack.WebsocketOtherEvent ->
             ( model, Command.none )

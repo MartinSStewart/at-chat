@@ -2917,8 +2917,8 @@ backendMsgLog msg =
         SlackWebsocketSentData _ _ ->
             BackendMsgLog_SlackWebsocketSentData
 
-        SlackWebsocketReconnect _ ->
-            BackendMsgLog_SlackWebsocketReconnect
+        SlackWebsocketReconnectTick ->
+            BackendMsgLog_SlackWebsocketReconnectTick
 
 
 toBackendLog : ToBackend -> ToBackendLog
@@ -3153,6 +3153,9 @@ toBackendLog toBackend =
 
                 Local_Slack_SendMessage _ _ _ _ ->
                     ToBackendLog_Local_Slack_SendMessage
+
+                Local_Slack_UnlinkUser _ ->
+                    ToBackendLog_Local_Slack_UnlinkUser
 
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     ToBackendLog_Local_Slack_LoadChannelMessages

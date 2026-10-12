@@ -202,6 +202,9 @@ pendingChangesText localChange =
         Local_Slack_SendMessage _ _ _ _ ->
             Just "Sent a message"
 
+        Local_Slack_UnlinkUser _ ->
+            Just "Unlink Slack user"
+
         Local_NewChannel _ _ _ _ ->
             Just "Created new channel"
 
@@ -3318,6 +3321,9 @@ isPressMsg msg =
         PressedSubmitSlackData ->
             True
 
+        PressedUnlinkSlackUser _ ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
@@ -4572,6 +4578,9 @@ changeUpdate localMsg local =
                             TextEditor.localChangeUpdate local.localUser.session.userId localChange2 local.textEditor
                     }
 
+                Local_Slack_UnlinkUser slackUserId ->
+                    unlinkSlackUser slackUserId local
+
                 Local_UnlinkDiscordUser userId ->
                     let
                         localUser =
@@ -5639,6 +5648,9 @@ changeUpdate localMsg local =
                                     LinkedAndOtherDiscordUsers.addLinkedUser userId user localUser.discordUsers
                             }
                     }
+
+                Server_Slack_UnlinkUser slackUserId ->
+                    unlinkSlackUser slackUserId local
 
                 Server_UnlinkDiscordUser userId ->
                     let
@@ -9099,3 +9111,32 @@ openUserOptionsAndExpandContainer section model =
             routePush model2 (Route.setOverlay (Just Route.UserOptionsOverlay) model2.route)
     in
     ( model3, Command.batch [ expandCmd, routeCmd ] )
+
+
+{-| Workspaces and DMs that none of the remaining linked Slack accounts are in are removed too.
+-}
+unlinkSlackUser : Slack.Id Slack.UserId -> LocalState -> LocalState
+unlinkSlackUser slackUserId local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linkedSlackUsers =
+            SeqDict.remove slackUserId localUser.linkedSlackUsers
+
+        linkedTeams : List (Slack.Id Slack.TeamId)
+        linkedTeams =
+            SeqDict.values linkedSlackUsers
+    in
+    { local
+        | localUser = { localUser | linkedSlackUsers = linkedSlackUsers }
+        , slackWorkspaces = SeqDict.filter (\teamId _ -> List.member teamId linkedTeams) local.slackWorkspaces
+        , slackDmChannels =
+            SeqDict.filter
+                (\_ dmChannel ->
+                    List.any (\linkedId -> NonemptySet.member linkedId dmChannel.members) (SeqDict.keys linkedSlackUsers)
+                )
+                local.slackDmChannels
+    }
