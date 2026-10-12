@@ -626,7 +626,15 @@ discordSpecificTests : Test
 discordSpecificTests =
     Test.describe
         "Discord-specific features"
-        [ Test.test "user ping" <|
+        [ Test.test "shrug keeps its arm" <|
+            \_ ->
+                fromDiscordHelper "a ¯\\_(ツ)_/¯ b"
+                    |> Expect.equal [ NormalText 'a' " ¯\\_(ツ)_/¯ b" ]
+        , Test.test "shrug keeps its arm inside bold" <|
+            \_ ->
+                fromDiscordHelper "**¯\\_(ツ)_/¯**"
+                    |> Expect.equal [ Bold (Nonempty (NormalText '¯' "\\_(ツ)_/¯") []) ]
+        , Test.test "user ping" <|
             \_ ->
                 fromDiscordHelper "<@!137748026084163580>"
                     |> Expect.equal [ UserMention userId ]
