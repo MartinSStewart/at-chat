@@ -94,7 +94,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -133,6 +133,7 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SetViewing exposing (SetViewing(..))
 import SheepGame
+import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
@@ -196,6 +197,9 @@ pendingChangesText localChange =
             Just "Sent a message"
 
         Local_Discord_SendMessage _ _ _ _ _ _ ->
+            Just "Sent a message"
+
+        Local_Slack_SendMessage _ _ _ _ ->
             Just "Sent a message"
 
         Local_NewChannel _ _ _ _ ->
@@ -265,6 +269,9 @@ pendingChangesText localChange =
             Just "Load channel messages"
 
         Local_LoadThreadMessages _ _ _ _ ->
+            Nothing
+
+        Local_Slack_LoadChannelMessages _ _ _ ->
             Nothing
 
         Local_Discord_LoadChannelMessages _ _ _ ->
@@ -805,6 +812,12 @@ canDropFiles isMobile currentUserId route =
             Nothing
 
         PublicGoMatchRoute _ ->
+            Nothing
+
+        SlackWorkspaceRoute _ ->
+            Nothing
+
+        SlackDmRoute _ ->
             Nothing
 
 
@@ -2101,8 +2114,132 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
+
+        SlackWorkspaceRoute routeData ->
+            let
+                sameChannelRoute =
+                    case previousRoute of
+                        Just (SlackWorkspaceRoute previousRouteData) ->
+                            (routeData.teamId == previousRouteData.teamId)
+                                && (routeData.channelId == previousRouteData.channelId)
+
+                        _ ->
+                            False
+
+                model3 : LoadedFrontend
+                model3 =
+                    if sameChannelRoute then
+                        model2
+
+                    else
+                        clearRevealedSpoilers model2
+
+                guildOrDmId : SlackGuildOrDmId
+                guildOrDmId =
+                    SlackGuildOrDmId_Workspace
+                        { currentUserId = routeData.currentSlackUserId
+                        , teamId = routeData.teamId
+                        , channelId = routeData.channelId
+                        }
+            in
+            updateLoggedIn
+                (\loggedIn ->
+                    routeRequestChannelHelper
+                        sameChannelRoute
+                        (SlackGuildOrDmId guildOrDmId)
+                        Nothing
+                        (NoThreadWithFriends routeData.viewingMessage HideChannelSettings)
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                        model3
+                        |> loadSlackConversation model3.time guildOrDmId
+                )
+                model3
+
+        SlackDmRoute routeData ->
+            let
+                sameDmRoute =
+                    case previousRoute of
+                        Just (SlackDmRoute previousDmRoute) ->
+                            routeData.channelId == previousDmRoute.channelId
+
+                        _ ->
+                            False
+
+                model3 : LoadedFrontend
+                model3 =
+                    if sameDmRoute then
+                        model2
+
+                    else
+                        clearRevealedSpoilers model2
+
+                guildOrDmId : SlackGuildOrDmId
+                guildOrDmId =
+                    SlackGuildOrDmId_Dm { currentUserId = routeData.currentSlackUserId, channelId = routeData.channelId }
+            in
+            updateLoggedIn
+                (\loggedIn ->
+                    routeRequestChannelHelper
+                        sameDmRoute
+                        (SlackGuildOrDmId guildOrDmId)
+                        Nothing
+                        (NoThreadWithFriends routeData.viewingMessage HideChannelSettings)
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                        model3
+                        |> loadSlackConversation model3.time guildOrDmId
+                )
+                model3
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
+
+
+{-| Slack conversations aren't preloaded and there's no viewing state on the backend to load
+them, so the newest page is requested the first time one is opened.
+-}
+loadSlackConversation :
+    Time.Posix
+    -> SlackGuildOrDmId
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+loadSlackConversation time guildOrDmId ( loggedIn, cmd ) =
+    let
+        loadNewest : VisibleMessages ChannelMessageId -> Int -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+        loadNewest visibleMessages messageCount =
+            if visibleMessages.count == 0 && messageCount > 0 && not visibleMessages.loadingMessages then
+                handleLocalChange
+                    time
+                    (Local_Slack_LoadChannelMessages
+                        guildOrDmId
+                        (messageCount - VisibleMessages.pageSize |> max 0 |> Id.fromInt |> PageFrom)
+                        EmptyPlaceholder
+                        |> Just
+                    )
+                    loggedIn
+                    cmd
+
+            else
+                ( loggedIn, cmd )
+    in
+    case conversationWindow (SlackGuildOrDmId guildOrDmId) NoThread (Local.model loggedIn.localState) of
+        Just (SlackChannelWindow _ visibleMessages messageCount) ->
+            loadNewest visibleMessages messageCount
+
+        Just (ChannelWindow _ _ _) ->
+            ( loggedIn, cmd )
+
+        Just (ThreadWindow _ _ _ _) ->
+            ( loggedIn, cmd )
+
+        Just (DiscordChannelWindow _ _ _) ->
+            ( loggedIn, cmd )
+
+        Just (DiscordThreadWindow _ _ _ _) ->
+            ( loggedIn, cmd )
+
+        Nothing ->
+            ( loggedIn, cmd )
 
 
 encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
@@ -2252,6 +2389,7 @@ type ConversationWindow
     | ThreadWindow GuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
     | DiscordChannelWindow DiscordGuildOrDmId (VisibleMessages ChannelMessageId) Int
     | DiscordThreadWindow DiscordGuildOrDmId (Id ChannelMessageId) (VisibleMessages ThreadMessageId) Int
+    | SlackChannelWindow SlackGuildOrDmId (VisibleMessages ChannelMessageId) Int
 
 
 conversationWindow : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe ConversationWindow
@@ -2320,6 +2458,27 @@ conversationWindow guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
+        SlackGuildOrDmId ((SlackGuildOrDmId_Workspace { teamId, channelId }) as guildOrDmId2) ->
+            case LocalState.getSlackWorkspaceAndChannel teamId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        NoThread ->
+                            SlackChannelWindow guildOrDmId2 channel.visibleMessages (MessageArray.length channel.messages) |> Just
+
+                        ViewThread _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+
+        SlackGuildOrDmId ((SlackGuildOrDmId_Dm data) as guildOrDmId2) ->
+            case SeqDict.get data.channelId local.slackDmChannels of
+                Just dmChannel ->
+                    SlackChannelWindow guildOrDmId2 dmChannel.visibleMessages (MessageArray.length dmChannel.messages) |> Just
+
+                Nothing ->
+                    Nothing
+
 
 {-| Like `jumpToNewestMessages`, and since the user is headed for the bottom of the conversation
 once the newest messages arrive, sticks to the bottom of it.
@@ -2373,6 +2532,10 @@ jumpToNewestMessages guildOrDmId threadRoute local =
 
         Just (DiscordThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
             Local_Discord_LoadThreadMessages guildOrDmId2 threadId (newestPage messageCount) EmptyPlaceholder
+                |> ifNotAtEnd visibleMessages messageCount
+
+        Just (SlackChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_Slack_LoadChannelMessages guildOrDmId2 (newestPage messageCount) EmptyPlaceholder
                 |> ifNotAtEnd visibleMessages messageCount
 
         Nothing ->
@@ -3195,6 +3358,40 @@ textToRichText text memberIds channels local =
         text
 
 
+slackSendMessage :
+    Time.Posix
+    -> SlackGuildOrDmId
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> LocalState
+    -> LocalState
+slackSendMessage createdAt guildOrDmId content local =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
+            { local
+                | slackWorkspaces =
+                    SeqDict.updateIfExists
+                        teamId
+                        (LocalState.updateChannel
+                            (LocalState.createDiscordDmMessageFrontend
+                                (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
+                            )
+                            channelId
+                        )
+                        local.slackWorkspaces
+            }
+
+        SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+            { local
+                | slackDmChannels =
+                    SeqDict.updateIfExists
+                        channelId
+                        (LocalState.createDiscordDmMessageFrontend
+                            (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
+                        )
+                        local.slackDmChannels
+            }
+
+
 textToDiscordRichText :
     NonemptyString
     -> List (Discord.Id Discord.UserId)
@@ -3585,6 +3782,9 @@ changeUpdate localMsg local =
 
                                 DiscordGuildOrDmId_Dm data ->
                                     discordDmMemberTyping time data.currentUserId data.channelId local
+
+                        SlackGuildOrDmId _ ->
+                            local
 
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     addReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
@@ -4171,6 +4371,38 @@ changeUpdate localMsg local =
                                         local.discordDmChannels
                             }
 
+                Local_Slack_LoadChannelMessages guildOrDmId pageRequest messagesLoaded ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel (DmChannel.loadPage [] pageRequest messagesLoaded) channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm data ->
+                            { local
+                                | slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        data.channelId
+                                        (DmChannel.loadPage [] pageRequest messagesLoaded)
+                                        local.slackDmChannels
+                            }
+
+                Local_Slack_SendMessage createdAt _ guildOrDmId text ->
+                    slackSendMessage
+                        createdAt
+                        guildOrDmId
+                        (RichText.fromNonemptyString
+                            local.localUser.timezone
+                            local.localUser.slackUsers
+                            (LocalState.slackChannelMentions guildOrDmId local)
+                            text
+                        )
+                        local
+
                 Local_Discord_LoadThreadMessages guildOrDmId threadId pageRequest messagesLoaded ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { guildId, channelId } ->
@@ -4683,6 +4915,9 @@ changeUpdate localMsg local =
                                 )
                                 threadRoute
                                 local
+
+                Server_Slack_SendMessage createdAt guildOrDmId content ->
+                    slackSendMessage createdAt guildOrDmId content local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
@@ -6960,6 +7195,9 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         , localUser = localUser2
                     }
 
+        SlackGuildOrDmId _ ->
+            local
+
 
 removeReactionEmoji :
     Id UserId
@@ -7017,6 +7255,9 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                                 local.discordDmChannels
                     }
 
+        SlackGuildOrDmId _ ->
+            local
+
 
 memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId threadRoute local =
@@ -7073,6 +7314,9 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                                 )
                                 local.discordDmChannels
                     }
+
+        SlackGuildOrDmId _ ->
+            local
 
 
 editMessage :
@@ -7176,6 +7420,9 @@ deleteMessage guildOrDmId threadRoute local =
 
                 ViewThreadWithMessage _ _ ->
                     local
+
+        SlackGuildOrDmId _ ->
+            local
 
 
 pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
@@ -7861,6 +8108,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                         Nothing ->
                             ( loggedIn, Command.none )
+
+                SlackGuildOrDmId _ ->
+                    ( loggedIn, Command.none )
         )
         model
 
@@ -7995,6 +8245,9 @@ isShowingNewestMessages guildOrDmId threadRoute local =
         Just (DiscordThreadWindow _ _ visibleMessages messageCount) ->
             VisibleMessages.reachesEnd messageCount visibleMessages
 
+        Just (SlackChannelWindow _ visibleMessages messageCount) ->
+            VisibleMessages.reachesEnd messageCount visibleMessages
+
         Nothing ->
             True
 
@@ -8025,6 +8278,11 @@ holdScrollOnNewMessage guildOrDmId threadRoute local =
             Ports.shiftScrollByElementDelta
                 Pages.Guild.conversationContainerId
                 (Pages.Guild.threadMessageHtmlId (Id.fromInt (messageCount - 2)))
+
+        Just (SlackChannelWindow _ _ messageCount) ->
+            Ports.shiftScrollByElementDelta
+                Pages.Guild.conversationContainerId
+                (Pages.Guild.channelMessageHtmlId (Id.fromInt (messageCount - 2)))
 
         Nothing ->
             Command.none
@@ -8624,6 +8882,8 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
     , discordGuilds = loginData.discordGuilds
     , dmChannels = loginData.dmChannels
     , discordDmChannels = loginData.discordDmChannels
+    , slackWorkspaces = loginData.slackWorkspaces
+    , slackDmChannels = loginData.slackDmChannels
     , joinGuildError = Nothing
     , localUser =
         { session = loginData.session
@@ -8631,6 +8891,8 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , discordUsers = loginData.discordUsers
+        , slackUsers = loginData.slackUsers
+        , linkedSlackUsers = loginData.linkedSlackUsers
         , timezone = startupData.timezone
         , userAgent = startupData.userAgent
         , devicePixelRatio = startupData.devicePixelRatio
@@ -8752,6 +9014,12 @@ channelSidebarTarget route =
                     helper routeData.channelsVisible
 
                 DiscordDmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                SlackWorkspaceRoute routeData ->
+                    helper routeData.channelsVisible
+
+                SlackDmRoute routeData ->
                     helper routeData.channelsVisible
 
                 AiChatRoute ->

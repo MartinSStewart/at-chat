@@ -150,7 +150,7 @@ import FileStatus
 import Game
 import Go
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import IdArray
 import IdString
 import ImageEditor
@@ -2105,6 +2105,16 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":false,"error":"invalid_auth"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "chat.postMessage" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true,"channel":"C09DJDQSWLU","ts":"1791638900.000100"}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "conversations.members" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2591,6 +2601,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Discord_SendMessage _ _ _ _ _ _ ->
                     True
 
+                Local_Slack_SendMessage _ _ _ _ ->
+                    True
+
+                Local_Slack_LoadChannelMessages _ _ _ ->
+                    True
+
                 Local_NewChannel _ _ _ _ ->
                     True
 
@@ -2826,6 +2842,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_Slack_SendMessage _ _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ _ ->
@@ -3228,6 +3247,14 @@ allAttackerLocalChanges =
         discordGuildOrDmId_dm =
             DiscordGuildOrDmId_Dm { currentUserId = discordUserId, channelId = discordPrivateChannelId }
 
+        slackGuildOrDmId_workspace : SlackGuildOrDmId
+        slackGuildOrDmId_workspace =
+            SlackGuildOrDmId_Workspace { currentUserId = Slack.Id "U09DJDQL1A8", teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+
+        slackGuildOrDmId_dm : SlackGuildOrDmId
+        slackGuildOrDmId_dm =
+            SlackGuildOrDmId_Dm { currentUserId = Slack.Id "U09DJDQL1A8", channelId = Slack.Id "D09DK3P5RPC" }
+
         threadRouteWithMessage =
             NoThreadWithMessage (Id.fromInt 0)
 
@@ -3275,6 +3302,10 @@ allAttackerLocalChanges =
     , Local_Discord_SendEditGuildMessage messageTime Time.utc discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Slack_LoadChannelMessages slackGuildOrDmId_workspace (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Slack_LoadChannelMessages slackGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm normalText
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_ExpandUserOptionSection UserSession.UserOption_Debug { collapseOthers = False }

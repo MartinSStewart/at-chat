@@ -51,6 +51,7 @@ module User exposing
     , setLastDmViewed
     , setLastViewedMessage
     , setName
+    , slackUserColor
     , smallDiscordProfileImage
     , smallProfileImage
     , smallProfileImageRounding
@@ -88,13 +89,14 @@ import RichText exposing (Domain)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
-import UserSession exposing (DiscordFrontendUser, UserSession)
+import UserSession exposing (DiscordFrontendUser, SlackFrontendUser, UserSession)
 import X25519
 
 
@@ -862,6 +864,8 @@ type alias LocalUser =
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers
+    , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+    , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
@@ -1045,6 +1049,16 @@ userColor localUser userId =
 discordUserColor : LocalUser -> Discord.Id Discord.UserId -> UserColor
 discordUserColor localUser userId =
     case getDiscordUser userId localUser of
+        Just user ->
+            user.color
+
+        Nothing ->
+            RichText.defaultColor
+
+
+slackUserColor : LocalUser -> Slack.Id Slack.UserId -> UserColor
+slackUserColor localUser userId =
+    case SeqDict.get userId localUser.slackUsers of
         Just user ->
             user.color
 

@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, viewAndWriteInSlackTest)
 
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -8,12 +8,15 @@ import Id exposing (ChannelMessageId)
 import IdArray
 import Message exposing (Message(..))
 import NonemptySet
+import OneToOne
 import Pages.Admin
 import PersonName
 import RichText
 import SeqDict
 import SeqSet
 import Slack
+import Test.Html.Query
+import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
@@ -250,6 +253,134 @@ linkSlackLoadsChannelsTest config =
                         else
                             Err "Deleting the workspace in the admin page should remove it from the backend"
                     )
+                ]
+            )
+        ]
+
+
+linkSlack : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+linkSlack user =
+    T.group
+        [ user.click 1000 (Dom.id "guild_showUserOptions")
+        , user.click 100 (Dom.id "userOptions_slackSection")
+        , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+        , user.input
+            100
+            (Dom.id "userOptions_slackTeamsJson")
+            ("{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}")
+        , user.click 100 (Dom.id "userOptions_submitSlackData")
+        , E2EHelper.hasExactText user [ "Loaded test-slack" ]
+        ]
+
+
+lastSlackMessage :
+    E2EHelper.BackendModel2
+    -> (Types.BackendModel -> Maybe { a | messages : IdArray.IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)), linkedMessageIds : OneToOne.OneToOne (Slack.Id Slack.MessageId) (Id.Id ChannelMessageId) })
+    -> Result String ( String, Bool )
+lastSlackMessage backend getChannel =
+    case getChannel (E2EHelper.unwrapBackend backend) of
+        Just channel ->
+            case List.reverse (IdArray.toList channel.messages) of
+                last :: _ ->
+                    Ok
+                        ( messageToString last
+                        , OneToOne.memberFirst (Slack.Id "1791638900.000100") channel.linkedMessageIds
+                        )
+
+                [] ->
+                    Err "No messages"
+
+        Nothing ->
+            Err "Channel not found"
+
+
+boolToString : Bool -> String
+boolToString bool =
+    if bool then
+        "yes"
+
+    else
+        "no"
+
+
+viewAndWriteInSlackTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+viewAndWriteInSlackTest config =
+    E2EHelper.startTest
+        "Slack workspace channels and DMs can be read and written in"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_slackFriendLabel_D09DK3P5RPC")
+                , E2EHelper.hasExactText admin [ "This is the start of your conversation with zig" ]
+                , -- The message is "Good a~~fternoon!~~" so its text is split by the strikethrough
+                  admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "fternoon!" ])
+                , E2EHelper.writeMessage admin 100 "Hello zig"
+                , E2EHelper.hasExactText admin [ "Hello zig" ]
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case lastSlackMessage backend (\model -> SeqDict.get (Slack.Id "D09DK3P5RPC") model.slackDmChannels) of
+                            Ok ( "U09DJDQL1A8: Hello zig", True ) ->
+                                Ok ()
+
+                            Ok ( text, hasTs ) ->
+                                Err ("Expected the DM message to be stored with the ts Slack gave it, got " ++ text ++ " (has ts: " ++ boolToString hasTs ++ ")")
+
+                            Err error ->
+                                Err error
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "test-slack", "all-test-slack", "social", "newer-channel", "This is the start of #all-test-slack", "Plain <old> message" ]
+                , E2EHelper.writeMessage admin 100 "Hi from *at-chat*"
+                , E2EHelper.hasExactText admin [ "Hi from " ]
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case
+                            lastSlackMessage
+                                backend
+                                (\model ->
+                                    SeqDict.get (Slack.Id "T09DJDQL18U") model.slackWorkspaces
+                                        |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                )
+                        of
+                            Ok ( "U09DJDQL1A8: Hi from *at-chat*", True ) ->
+                                Ok ()
+
+                            Ok ( text, hasTs ) ->
+                                Err ("Expected the channel message to be stored with the ts Slack gave it, got " ++ text ++ " (has ts: " ++ boolToString hasTs ++ ")")
+
+                            Err error ->
+                                Err error
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.hasExactText admin [ "This is the start of #social" ]
                 ]
             )
         ]

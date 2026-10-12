@@ -2492,6 +2492,9 @@ updateLoaded msg model =
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     removeFile (LocalState.discordChannelMentions guildOrDmId2 local) draft
 
+                                                SlackGuildOrDmId guildOrDmId2 ->
+                                                    removeFile (LocalState.slackChannelMentions guildOrDmId2 local) draft
+
                                         Nothing ->
                                             Nothing
                                 )
@@ -2540,6 +2543,9 @@ updateLoaded msg model =
 
                                                             DiscordGuildOrDmId guildOrDmId2 ->
                                                                 removeFile (LocalState.discordChannelMentions guildOrDmId2 local) nonempty edit.text
+
+                                                            SlackGuildOrDmId guildOrDmId2 ->
+                                                                removeFile (LocalState.slackChannelMentions guildOrDmId2 local) nonempty edit.text
 
                                                     Nothing ->
                                                         edit.text
@@ -2841,6 +2847,9 @@ updateLoaded msg model =
                                         _ ->
                                             ( model, Command.none )
 
+                                SlackGuildOrDmId _ ->
+                                    ( model, Command.none )
+
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
@@ -3067,6 +3076,12 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         PublicGoMatchRoute _ ->
+                            ( model, Command.none )
+
+                        SlackWorkspaceRoute _ ->
+                            ( model, Command.none )
+
+                        SlackDmRoute _ ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -4329,6 +4344,9 @@ updateLoaded msg model =
 
                                                             DiscordGuildOrDmId _ ->
                                                                 GuildOrDmId_Dm { otherUserId = local.localUser.session.userId }
+
+                                                            SlackGuildOrDmId _ ->
+                                                                GuildOrDmId_Dm { otherUserId = local.localUser.session.userId }
                                                         )
                                                         (Id.threadRouteWithMessage edit.messageIndex threadRoute)
                                                         local
@@ -4496,6 +4514,9 @@ updateLoaded msg model =
 
                                                                 _ ->
                                                                     Nothing
+
+                                                        SlackGuildOrDmId _ ->
+                                                            Nothing
                                                     )
                                                     (if MyUi.isMobile model then
                                                         MessageMenu.close model loggedIn
@@ -4798,6 +4819,9 @@ updateLoaded msg model =
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
                                                             LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
+
+                                                        SlackGuildOrDmId _ ->
+                                                            True
                                                    )
                                     in
                                     if not safeToSend then
@@ -4878,6 +4902,9 @@ updateLoaded msg model =
                                                                     Nothing ->
                                                                         SeqDict.empty
                                                                 )
+
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 nonempty
                                                      )
                                                         |> Just
                                                     )
@@ -5178,6 +5205,9 @@ updateLoaded msg model =
 
                                         DiscordGuildOrDmId guildOrDmId2 ->
                                             toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                        SlackGuildOrDmId guildOrDmId2 ->
+                                            toggleSpoiler (LocalState.slackChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                     )
                                         |> String.Nonempty.fromString
                                         |> Maybe.withDefault text
@@ -5228,6 +5258,9 @@ updateLoaded msg model =
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
                                                             toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            toggleSpoiler (LocalState.slackChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                             }
 
                                         Nothing ->
@@ -5684,6 +5717,12 @@ updateLoaded msg model =
                 PublicGoMatchRoute _ ->
                     ( model, Command.none )
 
+                SlackWorkspaceRoute _ ->
+                    ( model, Command.none )
+
+                SlackDmRoute _ ->
+                    ( model, Command.none )
+
         GoSpectatorMsg spectatorMsg ->
             case model.publicGoMatch of
                 PublicGoMatch_Loaded data gameModel ->
@@ -6052,6 +6091,9 @@ updateLoaded msg model =
                         DiscordGuildOrDmId _ ->
                             ( model, Command.none )
 
+                        SlackGuildOrDmId _ ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
@@ -6085,6 +6127,9 @@ updateLoaded msg model =
                                     ( model, Command.none )
 
                         DiscordGuildOrDmId _ ->
+                            ( model, Command.none )
+
+                        SlackGuildOrDmId _ ->
                             ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIconAnchor _ _ ->
@@ -6817,6 +6862,10 @@ loadOlderMessages guildOrDmId threadRoute local =
             Local_Discord_LoadThreadMessages guildOrDmId2 threadId (PageBefore visibleMessages.oldest) EmptyPlaceholder
                 |> messagesLeft visibleMessages
 
+        Just (FrontendExtra.SlackChannelWindow guildOrDmId2 visibleMessages _) ->
+            Local_Slack_LoadChannelMessages guildOrDmId2 (PageBefore visibleMessages.oldest) EmptyPlaceholder
+                |> messagesLeft visibleMessages
+
         Nothing ->
             Nothing
 
@@ -6853,6 +6902,10 @@ loadNewerMessages guildOrDmId threadRoute local =
 
         Just (FrontendExtra.DiscordThreadWindow guildOrDmId2 threadId visibleMessages messageCount) ->
             Local_Discord_LoadThreadMessages guildOrDmId2 threadId (firstNewMessage visibleMessages) EmptyPlaceholder
+                |> messagesLeft visibleMessages messageCount
+
+        Just (FrontendExtra.SlackChannelWindow guildOrDmId2 visibleMessages messageCount) ->
+            Local_Slack_LoadChannelMessages guildOrDmId2 (firstNewMessage visibleMessages) EmptyPlaceholder
                 |> messagesLeft visibleMessages messageCount
 
         Nothing ->
@@ -6926,6 +6979,9 @@ messageHasReaction emoji guildOrDmId threadRoute local =
 
                 Nothing ->
                     False
+
+        SlackGuildOrDmId _ ->
+            False
 
 
 scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_
@@ -7115,6 +7171,9 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 local
                                                                 |> List.isEmpty
                                                                 |> not
+
+                                                        SlackGuildOrDmId _ ->
+                                                            False
 
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of
@@ -7474,6 +7533,12 @@ setShowMembers showMembers model =
         PublicGoMatchRoute _ ->
             ( model, Command.none )
 
+        SlackWorkspaceRoute _ ->
+            ( model, Command.none )
+
+        SlackDmRoute _ ->
+            ( model, Command.none )
+
 
 viewImageInfo :
     ( AnyGuildOrDmId, ThreadRoute )
@@ -7630,6 +7695,9 @@ pressedEditMessage guildOrDmId threadRoute model =
 
                                 Nothing ->
                                     Nothing
+
+                        SlackGuildOrDmId _ ->
+                            Nothing
             in
             ( case maybeContentAndFiles of
                 Just ( content, attachedFiles ) ->
@@ -9573,6 +9641,13 @@ view _ model =
                     DiscordDmRoute routeData ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (SelectedDiscordDmChannel routeData) loaded)
+
+                    SlackWorkspaceRoute routeData ->
+                        requiresLogin (Pages.Guild.slackWorkspaceView loaded routeData)
+
+                    SlackDmRoute routeData ->
+                        requiresLogin
+                            (Pages.Guild.homePageLoggedInView (SelectedSlackDmChannel routeData) loaded)
 
                     LinkDiscord result ->
                         FrontendExtra.layout

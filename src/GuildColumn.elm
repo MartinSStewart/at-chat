@@ -13,6 +13,7 @@ module GuildColumn exposing
     , unreadNotificationCount
     )
 
+import ChannelName
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId
@@ -23,7 +24,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Extra
-import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
+import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState, SlackFrontendWorkspace)
 import MembersAndOwner exposing (IsMember(..))
 import MessageArray exposing (MessageArray)
 import MuteSettings exposing (IsMuted(..))
@@ -31,9 +32,10 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import RichText
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
+import Slack
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LocalChange(..))
 import Ui exposing (Element)
 import Ui.Gradient
@@ -43,87 +45,6 @@ import User exposing (FrontendCurrentUser, LocalUser)
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
-    Ui.Lazy.lazy6
-        (case ( MyUi.canScroll isMobile model.drag, isMobile ) of
-            ( True, True ) ->
-                guildColumnCanScrollMobile
-
-            ( True, False ) ->
-                guildColumnCanScrollNotMobile
-
-            ( False, True ) ->
-                guildColumnCannotScrollMobile
-
-            ( False, False ) ->
-                guildColumnCannotScrollNotMobile
-        )
-        model.route
-        local.localUser
-        local.dmChannels
-        local.discordDmChannels
-        local.guilds
-        local.discordGuilds
-
-
-guildColumnCanScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCanScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCannotScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds False
-
-
-guildColumnCannotScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds False
-
-
-guildColumn :
-    Bool
-    -> Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Bool
-    -> Element FrontendMsg_
-guildColumn isMobile route localUser dmChannels discordDmChannels guilds discordGuilds canScroll2 =
     Ui.el
         [ Ui.inFront
             (Ui.el
@@ -134,7 +55,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                         , Ui.Gradient.percent 100 MyUi.black
                         ]
                     ]
-                , MyUi.htmlStyle "height" (String.fromInt (max 6 localUser.safeAreaInsetTop) ++ "px")
+                , MyUi.htmlStyle "height" (String.fromInt (max 6 local.localUser.safeAreaInsetTop) ++ "px")
                 ]
                 Ui.none
             )
@@ -145,36 +66,116 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
             [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , MyUi.scrollable canScroll2
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            , Ui.paddingWith { left = 0, right = 0, top = max 6 localUser.safeAreaInsetTop, bottom = 4 }
+            , Ui.paddingWith { left = 0, right = 0, top = max 6 local.localUser.safeAreaInsetTop, bottom = 4 }
             , MyUi.bounceScroll isMobile
             ]
-            (List.map
-                (\( otherUserId, dmChannel ) ->
-                    Ui.Lazy.lazy4 dmGuildIcon route localUser otherUserId dmChannel
-                )
-                (SeqDict.toList dmChannels)
-                ++ List.map
-                    (\( channelId, dmChannel ) ->
-                        Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
-                    )
-                    (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
-                :: List.map
-                    (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
-                    (SeqDict.toList guilds)
-                ++ List.map
-                    (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
-                    (SeqDict.toList discordGuilds)
-                ++ [ GuildIcon.addGuildButton
-                        (Dom.id "guild_createGuild")
-                        (route == NewGuildRoute)
-                        (PressedLink NewGuildRoute)
-                   ]
-            )
+            [ Ui.Lazy.lazy6
+                guildColumnIcons
+                model.route
+                local.localUser
+                local.dmChannels
+                local.discordDmChannels
+                local.guilds
+                local.discordGuilds
+            , Ui.Lazy.lazy3 slackWorkspaceIcons model.route local.localUser local.slackWorkspaces
+            , GuildIcon.addGuildButton
+                (Dom.id "guild_createGuild")
+                (model.route == NewGuildRoute)
+                (PressedLink NewGuildRoute)
+            ]
         )
+
+
+guildColumnIcons :
+    Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg_
+guildColumnIcons route localUser dmChannels discordDmChannels guilds discordGuilds =
+    Ui.column
+        [ Ui.spacing 6 ]
+        (List.map
+            (\( otherUserId, dmChannel ) ->
+                Ui.Lazy.lazy4 dmGuildIcon route localUser otherUserId dmChannel
+            )
+            (SeqDict.toList dmChannels)
+            ++ List.map
+                (\( channelId, dmChannel ) ->
+                    Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
+                )
+                (SeqDict.toList discordDmChannels)
+            ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
+            :: List.map
+                (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
+                (SeqDict.toList guilds)
+            ++ List.map
+                (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
+                (SeqDict.toList discordGuilds)
+        )
+
+
+slackWorkspaceIcons : Route -> LocalUser -> SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace -> Element FrontendMsg_
+slackWorkspaceIcons route localUser workspaces =
+    Ui.column
+        [ Ui.spacing 6 ]
+        (List.filterMap
+            (\( teamId, workspace ) ->
+                case slackWorkspaceRoute localUser teamId workspace of
+                    Just routeData ->
+                        elLinkButton
+                            (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
+                            (SlackWorkspaceRoute routeData)
+                            []
+                            (GuildIcon.slackView
+                                (case route of
+                                    SlackWorkspaceRoute data ->
+                                        if data.teamId == teamId then
+                                            GuildIcon.IsSelected
+
+                                        else
+                                            GuildIcon.Normal NoNotification
+
+                                    _ ->
+                                        GuildIcon.Normal NoNotification
+                                )
+                                workspace.name
+                            )
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+            )
+            (SeqDict.toList workspaces)
+        )
+
+
+slackWorkspaceRoute : LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Maybe SlackWorkspaceRouteData
+slackWorkspaceRoute localUser teamId workspace =
+    case
+        ( SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) localUser.linkedSlackUsers |> SeqDict.keys |> List.head
+        , SeqDict.toList workspace.channels
+            |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
+            |> List.head
+        )
+    of
+        ( Just currentSlackUserId, Just ( channelId, _ ) ) ->
+            Just
+                { currentSlackUserId = currentSlackUserId
+                , teamId = teamId
+                , channelId = channelId
+                , viewingMessage = Nothing
+                , channelsVisible = ChannelsVisibleOnMobile
+                , overlay = Nothing
+                }
+
+        _ ->
+            Nothing
 
 
 {-| Find the linked Discord user that is a member of this Discord guild (i.e. "us").
@@ -761,6 +762,9 @@ canChangeUnreadNotificationCount change =
         Local_Discord_SendMessage _ _ _ _ _ _ ->
             True
 
+        Local_Slack_SendMessage _ _ _ _ ->
+            True
+
         Local_NewChannel _ _ _ _ ->
             True
 
@@ -838,6 +842,9 @@ canChangeUnreadNotificationCount change =
             False
 
         Local_Discord_LoadChannelMessages _ _ _ ->
+            False
+
+        Local_Slack_LoadChannelMessages _ _ _ ->
             False
 
         Local_Discord_LoadThreadMessages _ _ _ _ ->

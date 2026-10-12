@@ -43,7 +43,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -86,10 +86,10 @@ import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SlackFrontendUser, ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages exposing (PageRequest(..))
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
@@ -566,6 +566,74 @@ updateHelper msg model =
                     BackendExtra.addLogWithCmd
                         time
                         (Log.FailedToSendDiscordGuildMessage discordUserId guildId channelId threadRoute error)
+                        model
+                        (BackendExtra.invalidChangeResponse changeId clientId)
+
+        SentSlackMessage time changeId clientId timezone guildOrDmId text richText result ->
+            case result of
+                Ok slackMessageId ->
+                    let
+                        addMessage :
+                            { a
+                                | messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+                            }
+                            -> Slack.Id Slack.UserId
+                            ->
+                                { a
+                                    | messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                    , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+                                }
+                        addMessage channel currentUserId =
+                            { channel
+                                | messages =
+                                    IdArray.push
+                                        (Message.userTextMessageNoEmbeds time currentUserId richText SeqDict.empty Message.NoReply SeqDict.empty
+                                            |> UserTextMessage
+                                        )
+                                        channel.messages
+                                , linkedMessageIds =
+                                    OneToOne.insert slackMessageId (IdArray.nextId channel.messages) channel.linkedMessageIds
+                            }
+
+                        model2 : BackendModel
+                        model2 =
+                            case guildOrDmId of
+                                SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
+                                    { model
+                                        | slackWorkspaces =
+                                            SeqDict.updateIfExists
+                                                teamId
+                                                (LocalState.updateChannel (\channel -> addMessage channel currentUserId) channelId)
+                                                model.slackWorkspaces
+                                    }
+
+                                SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                                    { model
+                                        | slackDmChannels =
+                                            SeqDict.updateIfExists
+                                                channelId
+                                                (\channel -> addMessage channel currentUserId)
+                                                model.slackDmChannels
+                                    }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ Local_Slack_SendMessage time timezone guildOrDmId text
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toSlackExcludingOne
+                            clientId
+                            guildOrDmId
+                            (Server_Slack_SendMessage time guildOrDmId richText |> ServerChange)
+                            model2
+                        ]
+                    )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd
+                        time
+                        (Log.FailedToSendSlackMessage guildOrDmId error)
                         model
                         (BackendExtra.invalidChangeResponse changeId clientId)
 
@@ -4099,6 +4167,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild id) ->
@@ -4270,6 +4341,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         _ ->
                                             ( model, Command.none )
                                 )
+
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
@@ -4456,6 +4530,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         _ ->
                                             ( model, Command.none )
                                 )
+
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_SendEditMessage _ timezone guildOrDmId threadRoute newContent attachedFiles ->
                     if String.Nonempty.length newContent > RichText.maxLength then
@@ -4870,6 +4947,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
                                 )
 
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     let
                         helper : UserSession -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend msg )
@@ -4917,6 +4997,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session _ user _ -> helper session user)
+
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
@@ -5084,6 +5167,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ViewThreadWithMessage _ _ ->
                                             ( model, Command.none )
                                 )
+
+                        SlackGuildOrDmId _ ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
@@ -5616,6 +5702,100 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         |> Lamdera.sendToFrontend clientId
                                     )
                                 )
+
+                Local_Slack_LoadChannelMessages guildOrDmId pageRequest _ ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace id ->
+                            BackendExtra.asSlackChannelMember
+                                model
+                                sessionId
+                                id
+                                (\_ _ _ channel ->
+                                    ( model
+                                    , handleMessagesRequest pageRequest channel
+                                        |> FilledInByBackend
+                                        |> Local_Slack_LoadChannelMessages guildOrDmId pageRequest
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
+                        SlackGuildOrDmId_Dm data ->
+                            BackendExtra.asSlackDmUser
+                                model
+                                sessionId
+                                data
+                                (\_ _ channel ->
+                                    ( model
+                                    , handleMessagesRequest pageRequest channel
+                                        |> FilledInByBackend
+                                        |> Local_Slack_LoadChannelMessages guildOrDmId pageRequest
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
+                Local_Slack_SendMessage _ timezone guildOrDmId text ->
+                    let
+                        send :
+                            SlackLinkedUser
+                            -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+                            -> Slack.Id channelId
+                            -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+                        send slackUser channelMentions slackChannelId =
+                            case RateLimit.checkAndUpdateRateLimit time slackUser.linkedTo model.sendMessageRateLimits of
+                                Ok sendMessageRateLimits ->
+                                    let
+                                        workspaceUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+                                        workspaceUsers =
+                                            SlackSync.usersToFrontend
+                                                model.users
+                                                (SeqDict.singleton slackUser.user.id slackUser.user.teamId)
+                                                model.slackUsers
+
+                                        richText : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                        richText =
+                                            RichText.fromNonemptyString timezone workspaceUsers channelMentions text
+                                    in
+                                    ( { model | sendMessageRateLimits = sendMessageRateLimits }
+                                    , Slack.postMessage
+                                        model.serverSecret
+                                        slackUser.cookie
+                                        slackUser.token
+                                        slackChannelId
+                                        (RichText.toString timezone False workspaceUsers channelMentions richText)
+                                        (RichText.toSlack richText)
+                                        |> Task.attempt (SentSlackMessage time changeId clientId timezone guildOrDmId text richText)
+                                    )
+
+                                Err _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace id ->
+                            BackendExtra.asSlackChannelMember
+                                model
+                                sessionId
+                                id
+                                (\_ slackUser workspace _ ->
+                                    send
+                                        slackUser
+                                        (SeqDict.foldl
+                                            (\channelId channel dict ->
+                                                SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict
+                                            )
+                                            SeqDict.empty
+                                            workspace.channels
+                                        )
+                                        id.channelId
+                                )
+
+                        SlackGuildOrDmId_Dm data ->
+                            BackendExtra.asSlackDmUser
+                                model
+                                sessionId
+                                data
+                                (\_ slackUser _ -> send slackUser SeqDict.empty data.channelId)
 
                 Local_Discord_LoadChannelMessages guildOrDmId pageRequest _ ->
                     case guildOrDmId of

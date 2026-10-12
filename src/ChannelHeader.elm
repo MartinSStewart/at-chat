@@ -8,6 +8,7 @@ module ChannelHeader exposing
     , e2eeRequestDot
     , headerBackButton
     , showDmSettingsRedDot
+    , slackChannel
     , startDrawingText
     , thread
     , zoomInText
@@ -24,7 +25,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Game
 import Html.Attributes
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
 import Message
@@ -246,6 +247,31 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     ]
         )
         (tabBodyView isMobile local loggedIn model)
+
+
+slackChannel : Bool -> String -> SlackGuildOrDmId -> Element FrontendMsg_
+slackChannel isMobile name guildOrDmIdNoThread =
+    channelHeader
+        isMobile
+        (case guildOrDmIdNoThread of
+            SlackGuildOrDmId_Dm _ ->
+                Ui.row
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 5, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
+                    (if isMobile then
+                        [ Ui.text name ]
+
+                     else
+                        [ Ui.text "Chat with ", Ui.text name ]
+                    )
+
+            SlackGuildOrDmId_Workspace _ ->
+                Ui.row
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
+                    [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                    , Ui.text name
+                    ]
+        )
+        Nothing
 
 
 chattingWithYourself : Viewing_DiscordDmId -> LocalState -> Bool
@@ -921,6 +947,12 @@ tabBodyView isMobile local loggedIn model =
         PublicGoMatchRoute _ ->
             Nothing
 
+        SlackWorkspaceRoute _ ->
+            Nothing
+
+        SlackDmRoute _ ->
+            Nothing
+
 
 gameTabBody :
     GuildOrDmId
@@ -1053,6 +1085,9 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
 
                 Nothing ->
                     ( False, False )
+
+        SlackGuildOrDmId _ ->
+            ( False, False )
 
 
 {-| Shown in the channel header below the tab buttons while the drawing tab is selected.

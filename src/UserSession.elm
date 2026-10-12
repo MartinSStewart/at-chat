@@ -7,6 +7,7 @@ module UserSession exposing
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SheepGameQuestion
+    , SlackFrontendUser
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
     , UserOptionSection(..)
@@ -230,6 +231,13 @@ type alias UnreadOverviewData =
 type alias ViewDiscordGuildData messageId =
     { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , newUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    }
+
+
+type alias SlackFrontendUser =
+    { name : PersonName
+    , icon : Maybe FileHash
+    , color : UserColor
     }
 
 

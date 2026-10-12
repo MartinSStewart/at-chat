@@ -48,6 +48,7 @@ module RichText exposing
     , timestampToDiscordString
     , timestampToString
     , toDiscord
+    , toSlack
     , toString
     , toStringWithGetter
     , tryParseTimestamp
@@ -6523,6 +6524,9 @@ slackInline inline =
         Slack.RichText_Broadcast range ->
             slackText ("@" ++ range)
 
+        Slack.RichText_Date { timestamp } ->
+            Just (Timestamp (TimeInMinutes.fromMinutes (timestamp // 60)))
+
 
 slackInlineToString : Slack.RichTextInline -> String
 slackInlineToString inline =
@@ -6552,6 +6556,9 @@ slackInlineToString inline =
 
         Slack.RichText_Broadcast range ->
             "@" ++ range
+
+        Slack.RichText_Date { fallback } ->
+            fallback
 
 
 {-| Slack gives an emoji's code points in hex, joined by dashes.
@@ -6593,6 +6600,169 @@ slackStyle style node =
                 else
                     a
            )
+
+
+{-| The rich\_text elements to post to Slack. Things Slack has nothing for (stickers, attached files,
+custom emojis) are left out, and underline and spoilers become plain text.
+-}
+toSlack : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)) -> List Slack.RichTextElement
+toSlack content =
+    let
+        ( revElements, revSection ) =
+            List.foldl
+                (\node ( revElements2, revSection2 ) ->
+                    case toSlackBlock node of
+                        Just element ->
+                            ( element :: closeSlackSection revSection2 revElements2, [] )
+
+                        Nothing ->
+                            ( revElements2, List.reverse (toSlackInlines Slack.noStyle node) ++ revSection2 )
+                )
+                ( [], [] )
+                (List.Nonempty.toList content)
+    in
+    closeSlackSection revSection revElements |> List.reverse
+
+
+toSlackBlock : RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> Maybe Slack.RichTextElement
+toSlackBlock node =
+    case node of
+        BlockQuote _ list ->
+            Slack.RichTextQuote (List.concatMap (toSlackInlines Slack.noStyle) list) |> Just
+
+        CodeBlock _ code ->
+            Slack.RichTextPreformatted [ Slack.RichText_Text { text = code, style = Slack.noStyle } ] |> Just
+
+        BulletPoint _ items ->
+            Slack.RichTextList (List.map (List.concatMap (toSlackInlines Slack.noStyle)) (List.Nonempty.toList items))
+                |> Just
+
+        UserMention _ ->
+            Nothing
+
+        ChannelMention _ _ ->
+            Nothing
+
+        NormalText _ _ ->
+            Nothing
+
+        Bold _ ->
+            Nothing
+
+        Italic _ ->
+            Nothing
+
+        Underline _ ->
+            Nothing
+
+        Strikethrough _ ->
+            Nothing
+
+        Spoiler _ ->
+            Nothing
+
+        Heading _ _ _ ->
+            Nothing
+
+        Hyperlink _ ->
+            Nothing
+
+        MarkdownLink _ _ ->
+            Nothing
+
+        InlineCode _ _ ->
+            Nothing
+
+        AttachedFile _ ->
+            Nothing
+
+        EscapedChar _ ->
+            Nothing
+
+        Sticker _ ->
+            Nothing
+
+        CustomEmoji _ ->
+            Nothing
+
+        Timestamp _ ->
+            Nothing
+
+
+closeSlackSection : List Slack.RichTextInline -> List Slack.RichTextElement -> List Slack.RichTextElement
+closeSlackSection revSection revElements =
+    if List.isEmpty revSection then
+        revElements
+
+    else
+        Slack.RichTextSection (List.reverse revSection) :: revElements
+
+
+toSlackInlines : Slack.Style -> RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> List Slack.RichTextInline
+toSlackInlines style node =
+    case node of
+        UserMention userId ->
+            [ Slack.RichText_User userId ]
+
+        ChannelMention channelId _ ->
+            [ Slack.RichText_Channel channelId ]
+
+        NormalText char rest ->
+            [ Slack.RichText_Text { text = String.cons char rest, style = style } ]
+
+        Bold nonempty ->
+            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+
+        Italic nonempty ->
+            List.concatMap (toSlackInlines { style | italic = True }) (List.Nonempty.toList nonempty)
+
+        Underline nonempty ->
+            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+
+        Strikethrough nonempty ->
+            List.concatMap (toSlackInlines { style | strike = True }) (List.Nonempty.toList nonempty)
+
+        Spoiler nonempty ->
+            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+
+        BlockQuote _ list ->
+            List.concatMap (toSlackInlines style) list
+
+        Heading _ _ nonempty ->
+            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+
+        Hyperlink url ->
+            [ Slack.RichText_Link { url = Url.toString url, text = "", style = style } ]
+
+        MarkdownLink alias url ->
+            [ Slack.RichText_Link { url = Url.toString url, text = String.Nonempty.toString alias, style = style } ]
+
+        InlineCode char rest ->
+            [ Slack.RichText_Text { text = String.cons char rest, style = { style | code = True } } ]
+
+        CodeBlock _ code ->
+            [ Slack.RichText_Text { text = code, style = { style | code = True } } ]
+
+        AttachedFile _ ->
+            []
+
+        EscapedChar char ->
+            [ Slack.RichText_Text { text = escapedCharToString char, style = style } ]
+
+        Sticker _ ->
+            []
+
+        CustomEmoji _ ->
+            []
+
+        BulletPoint _ items ->
+            List.Nonempty.toList items
+                |> List.map (List.concatMap (toSlackInlines style))
+                |> List.intersperse [ Slack.RichText_Text { text = "\n", style = Slack.noStyle } ]
+                |> List.concat
+
+        Timestamp time ->
+            [ Slack.RichText_Date { timestamp = TimeInMinutes.toSeconds time, fallback = "" } ]
 
 
 fromDiscord :

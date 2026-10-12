@@ -104,14 +104,14 @@ import FileStatus exposing (BackendFileData, FileData, FileDataWithImage, FileHa
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, SlackGuildOrDmId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendChannel, BackendGuild, BackupContents, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendChannel, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendChannel, BackendGuild, BackupContents, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendChannel, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, SlackFrontendDmChannel, SlackFrontendWorkspace, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -155,7 +155,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, EmbedVisibility, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
-import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, ToBeFilledInByBackend, UserOptionSection, UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SlackFrontendUser, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import VisibleMessages exposing (PageRequest)
 import WordSpellingGame exposing (WordList)
 import X25519
@@ -857,6 +857,7 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
+    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Result Slack.HttpError (Slack.Id Slack.MessageId))
     | DeletedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | DeletedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
@@ -1140,6 +1141,10 @@ type alias LoginData =
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+    , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
+    , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+    , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers
@@ -1182,6 +1187,7 @@ type ServerChange
         , stickers : SeqDict (Id StickerId) StickerData
         , repliedToData : RepliedToData
         }
+    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
@@ -1305,6 +1311,7 @@ type LocalChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
     | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId NonemptyString
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -1328,6 +1335,7 @@ type LocalChange
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
+    | Local_Slack_LoadChannelMessages SlackGuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (PageRequest ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel

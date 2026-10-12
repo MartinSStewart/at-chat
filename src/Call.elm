@@ -448,6 +448,12 @@ displayMode isMobile currentUserId route local =
         DiscordDmRoute _ ->
             thumbnailOrNoVideo
 
+        SlackWorkspaceRoute _ ->
+            thumbnailOrNoVideo
+
+        SlackDmRoute _ ->
+            thumbnailOrNoVideo
+
         AiChatRoute ->
             thumbnailOrNoVideo
 

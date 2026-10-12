@@ -22,6 +22,8 @@ module Slack exposing
     , httpErrorToString
     , idToString
     , newestMessages
+    , noStyle
+    , postMessage
     , stringToSlackCookie
     , teamsJsonToSlackTokens
     , userBoot
@@ -36,7 +38,7 @@ import Effect.Http as Http
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
-import FileStatus
+import Env
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
 import List.Nonempty exposing (Nonempty(..))
@@ -233,7 +235,6 @@ type alias User =
     }
 
 
-
 userBoot : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError UserBoot
 userBoot secretKey cookie token =
     http
@@ -343,6 +344,7 @@ type RichTextInline
     | RichText_User (Id UserId)
     | RichText_Channel (Id ChannelId)
     | RichText_Broadcast String
+    | RichText_Date { timestamp : Int, fallback : String }
 
 
 type alias Style =
@@ -378,6 +380,146 @@ newestMessages secretKey cookie token limit channelId =
         )
         |> retryWhenRateLimited
         |> Task.onError (\_ -> Task.succeed [])
+
+
+{-| Returns the ts Slack gave the message, which is also its id. The text is only what notifications
+show, the blocks are what Slack displays.
+-}
+postMessage :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> String
+    -> List RichTextElement
+    -> Task BackendOnly HttpError (Id MessageId)
+postMessage secretKey cookie token channelId text blocks =
+    http
+        secretKey
+        cookie
+        token
+        "chat.postMessage"
+        [ ( "channel", idToString channelId )
+        , ( "text", text )
+        , ( "blocks"
+          , Json.Encode.list
+                identity
+                [ Json.Encode.object
+                    [ ( "type", Json.Encode.string "rich_text" )
+                    , ( "elements", Json.Encode.list encodeRichTextElement blocks )
+                    ]
+                ]
+                |> Json.Encode.encode 0
+          )
+        ]
+        (Decode.field "ts" decodeId)
+
+
+encodeRichTextElement : RichTextElement -> Json.Encode.Value
+encodeRichTextElement element =
+    case element of
+        RichTextSection inlines ->
+            encodeRichTextElementHelper "rich_text_section" inlines
+
+        RichTextPreformatted inlines ->
+            encodeRichTextElementHelper "rich_text_preformatted" inlines
+
+        RichTextQuote inlines ->
+            encodeRichTextElementHelper "rich_text_quote" inlines
+
+        RichTextList items ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "rich_text_list" )
+                , ( "style", Json.Encode.string "bullet" )
+                , ( "elements", Json.Encode.list (encodeRichTextElementHelper "rich_text_section") items )
+                ]
+
+
+encodeRichTextElementHelper : String -> List RichTextInline -> Json.Encode.Value
+encodeRichTextElementHelper elementType inlines =
+    Json.Encode.object
+        [ ( "type", Json.Encode.string elementType )
+        , ( "elements", Json.Encode.list encodeInline inlines )
+        ]
+
+
+encodeInline : RichTextInline -> Json.Encode.Value
+encodeInline inline =
+    case inline of
+        RichText_Text { text, style } ->
+            Json.Encode.object
+                (( "type", Json.Encode.string "text" )
+                    :: ( "text", Json.Encode.string text )
+                    :: encodeStyle style
+                )
+
+        RichText_Link { url, text, style } ->
+            Json.Encode.object
+                (( "type", Json.Encode.string "link" )
+                    :: ( "url", Json.Encode.string url )
+                    :: (if text == "" then
+                            encodeStyle style
+
+                        else
+                            ( "text", Json.Encode.string text ) :: encodeStyle style
+                       )
+                )
+
+        RichText_Emoji { name, unicode, style } ->
+            Json.Encode.object
+                (( "type", Json.Encode.string "emoji" )
+                    :: ( "name", Json.Encode.string name )
+                    :: ( "unicode", Json.Encode.string unicode )
+                    :: encodeStyle style
+                )
+
+        RichText_User userId ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "user" )
+                , ( "user_id", Json.Encode.string (idToString userId) )
+                ]
+
+        RichText_Channel channelId ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "channel" )
+                , ( "channel_id", Json.Encode.string (idToString channelId) )
+                ]
+
+        RichText_Broadcast range ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "broadcast" )
+                , ( "range", Json.Encode.string range )
+                ]
+
+        RichText_Date { timestamp, fallback } ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "date" )
+                , ( "timestamp", Json.Encode.int timestamp )
+                , ( "format", Json.Encode.string "{date_short_pretty} at {time}" )
+                , ( "fallback", Json.Encode.string fallback )
+                ]
+
+
+encodeStyle : Style -> List ( String, Json.Encode.Value )
+encodeStyle style =
+    if style == noStyle then
+        []
+
+    else
+        [ ( "style"
+          , Json.Encode.object
+                [ ( "bold", Json.Encode.bool style.bold )
+                , ( "italic", Json.Encode.bool style.italic )
+                , ( "strike", Json.Encode.bool style.strike )
+                , ( "code", Json.Encode.bool style.code )
+                ]
+          )
+        ]
+
+
+noStyle : Style
+noStyle =
+    { bold = False, italic = False, strike = False, code = False }
 
 
 {-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
@@ -506,6 +648,12 @@ decodeInline =
                     "broadcast" ->
                         Decode.map RichText_Broadcast (Decode.field "range" Decode.string)
 
+                    "date" ->
+                        Decode.map2
+                            (\timestamp fallback -> RichText_Date { timestamp = timestamp, fallback = fallback })
+                            (Decode.field "timestamp" Decode.int)
+                            (optionalString [ "fallback" ])
+
                     _ ->
                         Decode.fail ("Unsupported rich text inline " ++ inlineType)
             )
@@ -523,7 +671,7 @@ decodeStyle =
                 (optionalBool "strike")
                 (optionalBool "code")
             )
-        , Decode.succeed { bold = False, italic = False, strike = False, code = False }
+        , Decode.succeed noStyle
         ]
 
 
@@ -785,8 +933,8 @@ http :
 http secretKey (SlackCookie cookie) (SlackToken token) method parameters decoder =
     Http.task
         { method = "POST"
-        , headers = [ FileStatus.secretKeyHeader secretKey ]
-        , url = FileStatus.domain ++ "/file/internal/custom-request"
+        , headers = [ Http.header "x-secret-key" (SecretId.toString secretKey) ]
+        , url = rustServerDomain ++ "/file/internal/custom-request"
         , body =
             Json.Encode.object
                 [ ( "method", Json.Encode.string "POST" )
@@ -860,3 +1008,14 @@ decodeResponse decoder =
 decodeId : Decoder (Id a)
 decodeId =
     Decode.map Id Decode.string
+
+
+{-| Same as FileStatus.domain. Slack can't import FileStatus since that would be an import cycle through Id.
+-}
+rustServerDomain : String
+rustServerDomain =
+    if Env.isProduction then
+        Env.domain
+
+    else
+        "http://localhost:3000"
