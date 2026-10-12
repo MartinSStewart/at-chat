@@ -384,6 +384,7 @@ type alias UserOptionsModel =
       privateKeyText : String
     , slackCookie : String
     , slackToken : String
+    , pressedSubmitSlackData : Bool
     }
 
 

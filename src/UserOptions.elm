@@ -42,6 +42,7 @@ import SafeFloat
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Time
 import TwoFactorAuthentication
@@ -88,6 +89,7 @@ init domainWhitelist =
     , privateKeyText = ""
     , slackCookie = ""
     , slackToken = ""
+    , pressedSubmitSlackData = False
     }
 
 
@@ -741,9 +743,15 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             ]
                             { onChange = TypedSlackCookie
                             , text = model.slackCookie
-                            , placeholder = Just "xoxd-..."
+                            , placeholder = Just "xoxc-..."
                             , label = slackCookieLabel.id
                             }
+                        , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
+                            ( True, Err error ) ->
+                                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                            _ ->
+                                Ui.none
                         ]
                      , Ui.column
                         [ Ui.paddingXY 16 0 ]
@@ -756,16 +764,28 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             ]
                             { onChange = TypedSlackToken
                             , text = model.slackToken
-                            , placeholder = Just "xoxc-..."
+                            , placeholder = Just "xoxd-..."
                             , label = slackTokenLabel.id
                             }
+                        , case ( model.pressedSubmitSlackData, Slack.stringToSlackToken model.slackToken ) of
+                            ( True, Err error ) ->
+                                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                            _ ->
+                                Ui.none
                         ]
                      , Ui.el
                         [ Ui.paddingXY 16 0 ]
                         (MyUi.elButton
                             (Dom.id "userOptions_submitSlackData")
                             PressedSubmitSlackData
-                            []
+                            [ Ui.background MyUi.buttonBackground
+                            , Ui.width Ui.shrink
+                            , Ui.paddingXY 16 8
+                            , Ui.rounded 4
+                            , Ui.borderColor MyUi.buttonBorder
+                            , Ui.border 1
+                            ]
                             (Ui.text "Link Slack account")
                         )
                      ]

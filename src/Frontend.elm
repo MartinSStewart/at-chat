@@ -6278,7 +6278,9 @@ updateLoaded msg model =
                                     ( loggedIn, Lamdera.sendToBackend (LinkSlackRequest slackData) )
 
                                 Err _ ->
-                                    ( loggedIn, Command.none )
+                                    ( { loggedIn | userOptions = Just { userOptions | pressedSubmitSlackData = True } }
+                                    , Command.none
+                                    )
 
                         Nothing ->
                             ( loggedIn, Command.none )
