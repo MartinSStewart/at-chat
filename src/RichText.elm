@@ -6826,6 +6826,19 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
             --
             --    Nothing ->
             --        discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
+            "¯" ->
+                if String.slice index (index + String.length shrugEmoticon) source == shrugEmoticon then
+                    discordParseLoop
+                        customEmojis2
+                        source
+                        (index + String.length shrugEmoticon)
+                        modifiers
+                        ""
+                        (NormalText '¯' "\\_(ツ)_/¯" :: flushText accText revNodes)
+
+                else
+                    discordParseLoop customEmojis2 source (index + 1) modifiers (accText ++ "¯") revNodes
+
             "\\" ->
                 let
                     afterBackslash =
@@ -7649,7 +7662,7 @@ skipDiscordNormalChars source index len =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "[" || c == "\n" then
+        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "[" || c == "\n" || c == "¯" then
             index
 
         else

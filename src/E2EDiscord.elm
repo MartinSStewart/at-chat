@@ -472,6 +472,92 @@ discordTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ E2EHelper.startTest
+        "Hourly update deletes Discord guilds that no linked Discord user stayed in for an hour"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Err "Discord guilds with a linked member should be kept"
+
+                        else
+                            Ok ()
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordGuildsSection)
+                        , E2EHelper.hasExactText adminPage [ "Owner:" ]
+                        , E2EHelper.hasNotExactText adminPage [ "Orphaned" ]
+                        ]
+                    )
+                , admin.update 100 (Audio.userMsg (Types.PressedUnlinkDiscordUser E2EHelper.currentDiscordUserId))
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordGuildsSection)
+                        , E2EHelper.hasExactText adminPage [ "Orphaned" ]
+                        ]
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Err "Discord guilds orphaned since the last hourly update should be kept for another hour"
+
+                        else
+                            Ok ()
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Ok ()
+
+                        else
+                            Err "Discord guilds orphaned over two hourly updates should be deleted"
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Got rich text embed"
         E2EHelper.startTime
         normalConfig
@@ -3156,6 +3242,67 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                                     _ ->
                                         Err "Expected the second user's frontend to be loaded"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Discord channel deleted via CHANNEL_DELETE disappears"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelCreateEvent
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , admin.click 100 (Dom.id ("guild_openChannel_" ++ Discord.idToString E2EHelper.regularDiscordChannelId))
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "regular-channel" ])
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"t":"CHANNEL_DELETE","s":92,"op":0,"d":{"id":"1500000000000000778","type":0,"guild_id":"705745250815311942","name":"regular-channel","position":11,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"1024","deny":"0"}]}}"""
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "regular-channel" ])
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend backend).discordGuilds of
+                                    Just guild ->
+                                        if SeqDict.member E2EHelper.regularDiscordChannelId guild.channels then
+                                            Err "The deleted channel is still on the backend"
+
+                                        else
+                                            Ok ()
+
+                                    Nothing ->
+                                        Err "The backend doesn't have the Bot Test guild"
+                            )
+                        , -- Closing a DM in Discord sends a CHANNEL_DELETE too, but that only hides it
+                          -- from the DM list there
+                          T.websocketSendString
+                            100
+                            connection
+                            """{"t":"CHANNEL_DELETE","s":93,"op":0,"d":{"type":1,"id":"222087308516524036","flags":0,"recipients":[{"username":"kess","id":"168547048902098944","discriminator":"0","avatar":null}],"last_message_id":"1533200000000000003"}}"""
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if
+                                    SeqDict.member
+                                        kessDmChannelId
+                                        (E2EHelper.unwrapBackend backend).discordDmChannels
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Closing a DM in Discord deleted it"
                             )
                         ]
                     )

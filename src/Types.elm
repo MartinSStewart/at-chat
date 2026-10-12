@@ -473,6 +473,7 @@ type alias BackendModel =
     , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+    , orphanedDiscordGuildsLastHour : SeqSet (Discord.Id Discord.GuildId)
     , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
@@ -1199,6 +1200,7 @@ type ServerChange
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordGuildLeftOrDeleted (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId)
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData (Maybe String)) (OptionalData (Maybe String)) (List Discord.Overwrite)
+    | Server_DiscordChannelDeleted (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | Server_DiscordUpdateGuild (Discord.Id Discord.GuildId) GuildName (Maybe FileHash) (SeqDict (Discord.Id Discord.RoleId) DiscordRole)
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_DiscordUpdateGuildCustomEmojis (Discord.Id Discord.GuildId) (SeqSet (Id CustomEmojiId))

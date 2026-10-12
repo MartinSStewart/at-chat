@@ -245,6 +245,7 @@ init =
       , slackToken = Nothing
       , files = SeqDict.empty
       , orphanedFilesLastHour = SeqSet.empty
+      , orphanedDiscordGuildsLastHour = SeqSet.empty
       , publicVapidKey =
             if Env.isProduction then
                 ""
@@ -1963,6 +1964,14 @@ updateHelper msg model =
                 filesToDelete =
                     SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
 
+                orphanedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
+                orphanedDiscordGuilds =
+                    DeleteUserAndFiles.orphanedDiscordGuilds model
+
+                discordGuildsToDelete : SeqSet (Discord.Id Discord.GuildId)
+                discordGuildsToDelete =
+                    SeqSet.intersect model.orphanedDiscordGuildsLastHour orphanedDiscordGuilds
+
                 shouldExport : Bool
                 shouldExport =
                     case model.lastScheduledExportTime of
@@ -1994,6 +2003,8 @@ updateHelper msg model =
                         time
                         { model
                             | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
+                            , orphanedDiscordGuildsLastHour = SeqSet.diff orphanedDiscordGuilds discordGuildsToDelete
+                            , discordGuilds = SeqSet.foldl SeqDict.remove model.discordGuilds discordGuildsToDelete
                             , logs = deleteOldLogs time model.logs
                         }
             in

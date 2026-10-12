@@ -5395,6 +5395,9 @@ decodeDispatchUserEvent eventName =
         "CHANNEL_UPDATE" ->
             JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelUpdate
 
+        "CHANNEL_DELETE" ->
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelDelete
+
         "GUILD_UPDATE" ->
             JD.field "d" decodeGuildUpdate |> JD.map DispatchUser_GuildUpdate
 
@@ -5761,6 +5764,7 @@ type OpDispatchUserEvent
     | DispatchUser_GuildPowerupEntitlementsCreate
     | DispatchUser_GuildPowerupEntitlementsDelete
     | DispatchUser_ChannelUpdate Channel
+    | DispatchUser_ChannelDelete Channel
     | DispatchUser_GuildRoleUpdate GuildRoleUpdate
     | DispatchUser_GuildEmojisUpdate GuildEmojisUpdate
     | DispatchUser_ChannelPinsUpdate ChannelPinsUpdate
@@ -6543,6 +6547,7 @@ type UserOutMsg connection
     | UserOutMsg_VoiceStateUpdate VoiceStateUpdate
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
     | UserOutMsg_ChannelUpdated Channel
+    | UserOutMsg_ChannelDeleted Channel
     | UserOutMsg_GuildUpdate GuildUpdate
     | UserOutMsg_LeftOrDeletedGuild (Id GuildId)
     | UserOutMsg_GuildRoleUpdate GuildRoleUpdate
@@ -7121,6 +7126,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_ChannelUpdate channel ->
                             ( model, [ UserOutMsg_ChannelUpdated channel ] )
+
+                        DispatchUser_ChannelDelete channel ->
+                            ( model, [ UserOutMsg_ChannelDeleted channel ] )
 
                         DispatchUser_GuildRoleUpdate guildRoleUpdate ->
                             ( model, [ UserOutMsg_GuildRoleUpdate guildRoleUpdate ] )
