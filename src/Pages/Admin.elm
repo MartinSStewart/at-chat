@@ -2039,6 +2039,12 @@ viewingToString adminData viewing =
                 ++ ", thread "
                 ++ Id.toString data.id.threadId
 
+        Viewing_SlackChannel data ->
+            "Slack channel " ++ Slack.idToString data.id.channelId
+
+        Viewing_SlackDm data ->
+            "Slack DM " ++ Slack.idToString data.id.channelId
+
         Viewing_None ->
             "Nothing"
 

@@ -1491,6 +1491,12 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
             UserSession.Viewing_DiscordDm _ ->
                 visibleDmUsers
 
+            UserSession.Viewing_SlackChannel _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_SlackDm _ ->
+                visibleDmUsers
+
             UserSession.Viewing_None ->
                 visibleDmUsers
 

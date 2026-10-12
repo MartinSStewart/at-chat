@@ -47,7 +47,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -8813,6 +8813,30 @@ updateLoadedFromBackend msg model =
                                             _ ->
                                                 Command.none
 
+                                    ViewSlackChannel data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace routeId), NoThread ) ->
+                                                if data.id == routeId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewSlackDm data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( SlackGuildOrDmId (SlackGuildOrDmId_Dm routeId), NoThread ) ->
+                                                if data.id == routeId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
                                     ViewOverview _ ->
                                         Command.none
 
@@ -9051,6 +9075,68 @@ updateLoadedFromBackend msg model =
                                                         Nothing ->
                                                             Command.none
                                             )
+
+                                        Server_Slack_SendMessage _ guildOrDmId content ->
+                                            let
+                                                scrollsToBottom : Bool
+                                                scrollsToBottom =
+                                                    loggedIn2.channelScrollPosition == ScrolledToBottom
+
+                                                viewedConversation : Maybe SlackGuildOrDmId
+                                                viewedConversation =
+                                                    case Route.toGuildOrDmId local.localUser.session.userId model.route of
+                                                        Just ( SlackGuildOrDmId routeId, NoThread ) ->
+                                                            if FrontendExtra.isSameSlackConversation routeId guildOrDmId then
+                                                                Just routeId
+
+                                                            else
+                                                                Nothing
+
+                                                        _ ->
+                                                            Nothing
+                                            in
+                                            case viewedConversation of
+                                                Just routeId ->
+                                                    if scrollsToBottom then
+                                                        ( loggedIn2
+                                                        , Command.batch
+                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
+                                                            , if MyUi.isMobile model then
+                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                                                              else
+                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                            ]
+                                                        )
+
+                                                    else
+                                                        ( { loggedIn2
+                                                            | newMessagesWhileNotScrolledToBottom =
+                                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                                            , channelScrollPosition =
+                                                                case loggedIn2.channelScrollPosition of
+                                                                    ScrolledToBottom ->
+                                                                        ScrolledToMiddle
+
+                                                                    ScrolledCloseToBottom ->
+                                                                        loggedIn2.channelScrollPosition
+
+                                                                    ScrolledToTop ->
+                                                                        loggedIn2.channelScrollPosition
+
+                                                                    ScrolledToMiddle ->
+                                                                        loggedIn2.channelScrollPosition
+                                                          }
+                                                        , Command.batch
+                                                            [ FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
+                                                            , FrontendExtra.holdScrollOnNewMessage (SlackGuildOrDmId routeId) NoThread local
+                                                            ]
+                                                        )
+
+                                                Nothing ->
+                                                    ( loggedIn2
+                                                    , FrontendExtra.playNotificationSoundForSlackMessage guildOrDmId local content model
+                                                    )
 
                                         Server_GotDmMessageEmbed userId threadRoute _ ->
                                             let

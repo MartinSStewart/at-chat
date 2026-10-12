@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Duration
@@ -7,10 +7,15 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
 import Effect.Websocket as Websocket
+import Html.Attributes
 import Id exposing (ChannelMessageId)
 import IdArray
+import Json.Decode
+import Json.Encode
 import Message exposing (Message(..))
+import NonemptyDict
 import NonemptySet
+import OneOrGreater
 import OneToOne
 import Pages.Admin
 import PersonName
@@ -679,6 +684,203 @@ unlinkSlackTest config =
                             _ ->
                                 Err "Expected the Slack user to only have its basic data left"
                     )
+                ]
+            )
+        ]
+
+
+slackMentionEvent : { channel : String, user : String, ts : String, mentions : String } -> String
+slackMentionEvent { channel, user, ts, mentions } =
+    """{"type":"message","channel":\""""
+        ++ channel
+        ++ """","text":"<@"""
+        ++ mentions
+        ++ """> look","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"user","user_id":\""""
+        ++ mentions
+        ++ """"},{"type":"text","text":" look"}]}]}],"user":\""""
+        ++ user
+        ++ """","team":"T09DJDQL18U","event_ts":\""""
+        ++ ts
+        ++ """","ts":\""""
+        ++ ts
+        ++ "\"}"
+
+
+slackDmEvent : { user : String, ts : String, text : String } -> String
+slackDmEvent { user, ts, text } =
+    """{"type":"message","channel":"D09DK3P5RPC","text":\""""
+        ++ text
+        ++ """","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":\""""
+        ++ text
+        ++ """"}]}]}],"user":\""""
+        ++ user
+        ++ """","team":"T09DJDQL18U","event_ts":\""""
+        ++ ts
+        ++ """","ts":\""""
+        ++ ts
+        ++ "\"}"
+
+
+hasNotificationCount :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> String
+    -> Maybe String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+hasNotificationCount user htmlId maybeCount =
+    user.checkView
+        100
+        (\html ->
+            case maybeCount of
+                Just count ->
+                    Test.Html.Query.find [ Test.Html.Selector.id htmlId ] html
+                        |> Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" count) ]
+
+                Nothing ->
+                    Test.Html.Query.find [ Test.Html.Selector.id htmlId ] html
+                        |> Test.Html.Query.hasNot [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "1") ]
+        )
+
+
+shownNotificationUrls : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+shownNotificationUrls user data =
+    List.filterMap
+        (\request ->
+            if request.clientId == user.clientId && request.portName == "show_notification" then
+                Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) request.value |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portRequests
+
+
+adminSlackMentionCount : E2EHelper.BackendModel2 -> Int
+adminSlackMentionCount backend =
+    case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+        Just user ->
+            SeqDict.values user.slackDirectMentions
+                |> List.concatMap (\dict -> NonemptyDict.toList dict |> List.map Tuple.second)
+                |> List.map OneOrGreater.toInt
+                |> List.sum
+
+        Nothing ->
+            0
+
+
+slackUnreadAndNotificationsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackUnreadAndNotificationsTest config =
+    E2EHelper.startTest
+        "Slack messages show unread counts, and mentions and DMs notify"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.portEvent 100 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , admin.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool False)
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.hasExactText admin [ "This is the start of #social" ]
+                , -- Everything loaded when the account was linked starts out read.
+                  hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "Not for you" })
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , T.checkState
+                            100
+                            (\data ->
+                                if List.isEmpty (shownNotificationUrls admin data) then
+                                    Ok ()
+
+                                else
+                                    Err "A channel message that doesn't mention anyone shouldn't notify"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMentionEvent { channel = "C09DJDQSWLU", user = "U09DK3NCPMG", ts = "1791640001.000100", mentions = "U09DJDQL1A8" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackDmEvent { user = "U09DK3NCPMG", ts = "1791640002.000100", text = "Psst" })
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" (Just "1")
+                        , T.checkState
+                            100
+                            (\data ->
+                                if adminSlackMentionCount data.backend /= 1 then
+                                    Err "Expected the mention to be counted"
+
+                                else
+                                    case List.sort (shownNotificationUrls admin data) of
+                                        [ dmUrl, mentionUrl ] ->
+                                            if
+                                                String.endsWith "/sd/U09DJDQL1A8/D09DK3P5RPC" dmUrl
+                                                    && String.endsWith "/sw/U09DJDQL1A8/T09DJDQL18U/c/C09DJDQSWLU" mentionUrl
+                                            then
+                                                Ok ()
+
+                                            else
+                                                Err ("Notifications open the wrong conversations: " ++ mentionUrl ++ ", " ++ dmUrl)
+
+                                        urls ->
+                                            Err ("Expected a notification for the mention and the DM, got " ++ String.fromInt (List.length urls))
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                        , E2EHelper.hasExactText admin [ "Not for you" ]
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if adminSlackMentionCount backend == 0 then
+                                    Ok ()
+
+                                else
+                                    Err "Opening the channel should clear its mention"
+                            )
+                        , admin.click 100 (Dom.id "guildsColumn_openSlackDm_D09DK3P5RPC")
+                        , E2EHelper.hasExactText admin [ "Psst" ]
+                        , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                        , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
                 ]
             )
         ]

@@ -12586,6 +12586,7 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
                     )
                  )
                     :: slackConversationViewHelper
+                        (slackLastViewedIndex guildOrDmIdNoThread local)
                         currentSlackUserId
                         guildOrDmIdNoThread
                         maybeUrlMessageId
@@ -12629,8 +12630,36 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
         ]
 
 
+slackLastViewedIndex : SlackGuildOrDmId -> LocalState -> Id ChannelMessageId
+slackLastViewedIndex guildOrDmId local =
+    let
+        lastViewed : Id ChannelMessageId
+        lastViewed =
+            SeqDict.get (SlackGuildOrDmId guildOrDmId) local.localUser.user.lastViewedMessage
+                |> Maybe.withDefault (Id.fromInt -1)
+    in
+    case local.localUser.currentlyViewing of
+        Viewing_SlackChannel data ->
+            if SlackGuildOrDmId_Workspace data.id == guildOrDmId then
+                unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+            else
+                lastViewed
+
+        Viewing_SlackDm data ->
+            if SlackGuildOrDmId_Dm data.id == guildOrDmId then
+                unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+            else
+                lastViewed
+
+        _ ->
+            lastViewed
+
+
 slackConversationViewHelper :
-    Slack.Id Slack.UserId
+    Id ChannelMessageId
+    -> Slack.Id Slack.UserId
     -> SlackGuildOrDmId
     -> Maybe (Id ChannelMessageId)
     ->
@@ -12642,7 +12671,7 @@ slackConversationViewHelper :
     -> LocalState
     -> LoadedFrontend
     -> List ( String, Element FrontendMsg_ )
-slackConversationViewHelper currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
+slackConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -12704,7 +12733,7 @@ slackConversationViewHelper currentSlackUserId guildOrDmIdNoThread maybeUrlMessa
                                 SeqDict.empty
                                 maybeLastDate
                                 date
-                                (Id.fromInt -1)
+                                lastViewedIndex
                                 index
                                 messageId
                             )
@@ -12969,18 +12998,62 @@ slackChannelColumn isMobile canScroll2 localUser routeData workspace =
             ]
             (SeqDict.toList workspace.channels
                 |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
-                |> List.map (\( channelId, channel ) -> slackChannelColumnRow isMobile routeData channelId channel)
+                |> List.map
+                    (\( channelId, channel ) ->
+                        slackChannelColumnRow
+                            isMobile
+                            (slackChannelNotification localUser.user routeData channelId channel)
+                            routeData
+                            channelId
+                            channel
+                    )
             )
         )
 
 
+slackChannelNotification :
+    FrontendCurrentUser
+    -> SlackWorkspaceRouteData
+    -> Slack.Id Slack.ChannelId
+    -> SlackFrontendChannel
+    -> ChannelNotificationType
+slackChannelNotification currentUser routeData channelId channel =
+    case
+        SeqDict.get routeData.teamId currentUser.slackDirectMentions
+            |> Maybe.andThen (NonemptyDict.get ( channelId, NoThread ))
+    of
+        Just count ->
+            NewMessageForUser count
+
+        Nothing ->
+            case
+                GuildColumn.newMessageCount
+                    (SeqDict.get
+                        (SlackGuildOrDmId
+                            (SlackGuildOrDmId_Workspace
+                                { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId }
+                            )
+                        )
+                        currentUser.lastViewedMessage
+                    )
+                    channel
+                    |> OneOrGreater.fromInt
+            of
+                Just count ->
+                    NewMessage count
+
+                Nothing ->
+                    NoNotification
+
+
 slackChannelColumnRow :
     Bool
+    -> ChannelNotificationType
     -> SlackWorkspaceRouteData
     -> Slack.Id Slack.ChannelId
     -> SlackFrontendChannel
     -> Element FrontendMsg_
-slackChannelColumnRow isMobile routeData channelId channel =
+slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -13004,7 +13077,14 @@ slackChannelColumnRow isMobile routeData channelId channel =
             , bottom = 0
             }
         , Ui.el
-            [ Ui.width (Ui.px 20)
+            [ (if isSelected && not isMobile then
+                NoNotification
+
+               else
+                hasNotifications
+              )
+                |> GuildIcon.notificationView 0 -3 MyUi.background2
+            , Ui.width (Ui.px 20)
             , Ui.move { x = 4, y = 0, z = 0 }
             , Ui.centerY
             ]
@@ -13132,7 +13212,20 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                 , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
                 ]
                 [ Ui.el
-                    [ Ui.width Ui.shrink ]
+                    [ (if isSelected then
+                        NoNotification
+
+                       else
+                        case GuildColumn.slackDmHasNotifications localUser dmChannelId channel of
+                            Just ( _, count ) ->
+                                NewMessageForUser count
+
+                            Nothing ->
+                                NoNotification
+                      )
+                        |> GuildIcon.notificationView 4 -3 MyUi.background2
+                    , Ui.width Ui.shrink
+                    ]
                     (User.profileImage (List.head members |> Maybe.andThen (\userId -> SeqDict.get userId localUser.slackUsers)))
                 , Ui.column
                     []

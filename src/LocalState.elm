@@ -194,7 +194,7 @@ import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (BackendFileData, FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -3968,11 +3968,44 @@ routeToViewing isMobile route local =
         PublicGoMatchRoute _ ->
             StopViewingChannel
 
-        SlackWorkspaceRoute _ ->
-            StopViewingChannel
+        SlackWorkspaceRoute data ->
+            let
+                id : Viewing_SlackChannelId
+                id =
+                    { currentUserId = data.currentSlackUserId, teamId = data.teamId, channelId = data.channelId }
+            in
+            case getSlackWorkspaceAndChannel data.teamId data.channelId local of
+                Just _ ->
+                    if isMobile && data.channelsVisible == ChannelsVisibleOnMobile then
+                        StopViewingChannel
 
-        SlackDmRoute _ ->
-            StopViewingChannel
+                    else
+                        ViewSlackChannel
+                            { id = id
+                            , previouslyLastViewedMessage =
+                                previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
+                            }
+                            EmptyPlaceholder
+
+                Nothing ->
+                    StopViewingChannel
+
+        SlackDmRoute data ->
+            let
+                id : Viewing_SlackDmId
+                id =
+                    { currentUserId = data.currentSlackUserId, channelId = data.channelId }
+            in
+            if SeqDict.member data.channelId local.slackDmChannels && not (isMobile && data.channelsVisible == ChannelsVisibleOnMobile) then
+                ViewSlackDm
+                    { id = id
+                    , previouslyLastViewedMessage =
+                        previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) local
+                    }
+                    EmptyPlaceholder
+
+            else
+                StopViewingChannel
 
 
 guildOrDmIdToMessage :

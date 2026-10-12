@@ -33,6 +33,7 @@ module FrontendExtra exposing
     , handleUndo
     , holdScrollOnNewMessage
     , isPressMsg
+    , isSameSlackConversation
     , isShowingNewestMessages
     , jumpToNewest
     , layout
@@ -45,6 +46,7 @@ module FrontendExtra exposing
     , pastedMessageFileName
     , pingUserNameSoFar
     , playNotificationSoundForDiscordMessage
+    , playNotificationSoundForSlackMessage
     , routePush
     , routeReplace
     , routeRequest
@@ -1583,6 +1585,121 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
             Command.none
 
 
+isSameSlackConversation : SlackGuildOrDmId -> SlackGuildOrDmId -> Bool
+isSameSlackConversation a b =
+    case ( a, b ) of
+        ( SlackGuildOrDmId_Workspace a2, SlackGuildOrDmId_Workspace b2 ) ->
+            a2.teamId == b2.teamId && a2.channelId == b2.channelId
+
+        ( SlackGuildOrDmId_Dm a2, SlackGuildOrDmId_Dm b2 ) ->
+            a2.channelId == b2.channelId
+
+        ( SlackGuildOrDmId_Workspace _, SlackGuildOrDmId_Dm _ ) ->
+            False
+
+        ( SlackGuildOrDmId_Dm _, SlackGuildOrDmId_Workspace _ ) ->
+            False
+
+
+{-| Every Slack DM message is announced, the same as Slack does, while a channel message only is
+when it mentions one of the linked accounts. `guildOrDmId` is the author's.
+-}
+playNotificationSoundForSlackMessage :
+    SlackGuildOrDmId
+    -> LocalState
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> LoadedFrontend
+    -> Command FrontendOnly toMsg msg
+playNotificationSoundForSlackMessage guildOrDmId local content model =
+    case local.localUser.session.notificationMode of
+        NoNotifications ->
+            Command.none
+
+        NotifyWhenRunning ->
+            let
+                author : Slack.Id Slack.UserId
+                author =
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace data ->
+                            data.currentUserId
+
+                        SlackGuildOrDmId_Dm data ->
+                            data.currentUserId
+
+                recipient : Maybe (Slack.Id Slack.UserId)
+                recipient =
+                    if SeqDict.member author local.localUser.linkedSlackUsers then
+                        Nothing
+
+                    else
+                        case guildOrDmId of
+                            SlackGuildOrDmId_Workspace _ ->
+                                RichText.mentionsUser content
+                                    |> SeqSet.toList
+                                    |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
+
+                            SlackGuildOrDmId_Dm { channelId } ->
+                                SeqDict.get channelId local.slackDmChannels
+                                    |> Maybe.andThen
+                                        (\dmChannel ->
+                                            NonemptySet.toList dmChannel.members
+                                                |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
+                                        )
+            in
+            case recipient of
+                Just currentUserId ->
+                    if model.pageHasFocus then
+                        Command.none
+
+                    else
+                        Command.batch
+                            [ Ports.setFavicon "/favicon-red.ico"
+                            , case model.startupData.notificationPermission of
+                                Ports.Granted ->
+                                    Ports.showNotification
+                                        (User.toString author local.localUser.slackUsers)
+                                        (RichText.toString
+                                            local.localUser.timezone
+                                            True
+                                            local.localUser.slackUsers
+                                            (LocalState.slackChannelMentions guildOrDmId local)
+                                            content
+                                        )
+                                        (Env.domain
+                                            ++ Route.encode
+                                                (case guildOrDmId of
+                                                    SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                                                        SlackWorkspaceRoute
+                                                            { currentSlackUserId = currentUserId
+                                                            , teamId = teamId
+                                                            , channelId = channelId
+                                                            , viewingMessage = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
+                                                            }
+
+                                                    SlackGuildOrDmId_Dm { channelId } ->
+                                                        SlackDmRoute
+                                                            { currentSlackUserId = currentUserId
+                                                            , channelId = channelId
+                                                            , viewingMessage = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
+                                                            }
+                                                )
+                                        )
+
+                                _ ->
+                                    Command.none
+                            ]
+
+                Nothing ->
+                    Command.none
+
+        PushNotifications ->
+            Command.none
+
+
 playNotificationSoundForDiscordMessage :
     Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
@@ -2155,7 +2272,6 @@ routeRequest previousRoute newRoute model =
                         (Local.model loggedIn.localState)
                         loggedIn
                         model3
-                        |> loadSlackConversation model3.time guildOrDmId
                 )
                 model3
 
@@ -2191,7 +2307,6 @@ routeRequest previousRoute newRoute model =
                         (Local.model loggedIn.localState)
                         loggedIn
                         model3
-                        |> loadSlackConversation model3.time guildOrDmId
                 )
                 model3
     )
@@ -2201,50 +2316,6 @@ routeRequest previousRoute newRoute model =
 {-| Slack conversations aren't preloaded and there's no viewing state on the backend to load
 them, so the newest page is requested the first time one is opened.
 -}
-loadSlackConversation :
-    Time.Posix
-    -> SlackGuildOrDmId
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadSlackConversation time guildOrDmId ( loggedIn, cmd ) =
-    let
-        loadNewest : VisibleMessages ChannelMessageId -> Int -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-        loadNewest visibleMessages messageCount =
-            if visibleMessages.count == 0 && messageCount > 0 && not visibleMessages.loadingMessages then
-                handleLocalChange
-                    time
-                    (Local_Slack_LoadChannelMessages
-                        guildOrDmId
-                        (messageCount - VisibleMessages.pageSize |> max 0 |> Id.fromInt |> PageFrom)
-                        EmptyPlaceholder
-                        |> Just
-                    )
-                    loggedIn
-                    cmd
-
-            else
-                ( loggedIn, cmd )
-    in
-    case conversationWindow (SlackGuildOrDmId guildOrDmId) NoThread (Local.model loggedIn.localState) of
-        Just (SlackChannelWindow _ visibleMessages messageCount) ->
-            loadNewest visibleMessages messageCount
-
-        Just (ChannelWindow _ _ _) ->
-            ( loggedIn, cmd )
-
-        Just (ThreadWindow _ _ _ _) ->
-            ( loggedIn, cmd )
-
-        Just (DiscordChannelWindow _ _ _) ->
-            ( loggedIn, cmd )
-
-        Just (DiscordThreadWindow _ _ _ _) ->
-            ( loggedIn, cmd )
-
-        Nothing ->
-            ( loggedIn, cmd )
-
-
 encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
 encryptedDmOtherUser guildOrDmId local loggedIn =
     case guildOrDmId of
@@ -3373,29 +3444,141 @@ slackSendMessage :
 slackSendMessage createdAt guildOrDmId content local =
     case guildOrDmId of
         SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
-            { local
-                | slackWorkspaces =
-                    SeqDict.updateIfExists
-                        teamId
-                        (LocalState.updateChannel
-                            (LocalState.createDiscordDmMessageFrontend
-                                (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
-                            )
-                            channelId
-                        )
-                        local.slackWorkspaces
-            }
+            case LocalState.getSlackWorkspaceAndChannel teamId channelId local of
+                Just ( workspace, channel ) ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        ( currentlyViewing2, user2 ) =
+                            slackMessageAddedFrontend
+                                guildOrDmId
+                                (MessageArray.length channel.messages |> Id.fromInt)
+                                content
+                                localUser
+                    in
+                    { local
+                        | slackWorkspaces =
+                            SeqDict.insert
+                                teamId
+                                { workspace
+                                    | channels =
+                                        SeqDict.insert
+                                            channelId
+                                            (LocalState.createDiscordDmMessageFrontend
+                                                (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
+                                                channel
+                                            )
+                                            workspace.channels
+                                }
+                                local.slackWorkspaces
+                        , localUser = { localUser | user = user2, currentlyViewing = currentlyViewing2 }
+                    }
+
+                Nothing ->
+                    local
 
         SlackGuildOrDmId_Dm { currentUserId, channelId } ->
-            { local
-                | slackDmChannels =
-                    SeqDict.updateIfExists
-                        channelId
-                        (LocalState.createDiscordDmMessageFrontend
-                            (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
-                        )
-                        local.slackDmChannels
-            }
+            case SeqDict.get channelId local.slackDmChannels of
+                Just dmChannel ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        ( currentlyViewing2, user2 ) =
+                            slackMessageAddedFrontend
+                                guildOrDmId
+                                (MessageArray.length dmChannel.messages |> Id.fromInt)
+                                content
+                                localUser
+                    in
+                    { local
+                        | slackDmChannels =
+                            SeqDict.insert
+                                channelId
+                                (LocalState.createDiscordDmMessageFrontend
+                                    (Message.userTextMessageFrontend createdAt currentUserId content Message.NoReply SeqDict.empty)
+                                    dmChannel
+                                )
+                                local.slackDmChannels
+                        , localUser = { localUser | user = user2, currentlyViewing = currentlyViewing2 }
+                    }
+
+                Nothing ->
+                    local
+
+
+{-| The frontend's copy of `Backend.slackMessageAdded`, for the one user it belongs to.
+-}
+slackMessageAddedFrontend :
+    SlackGuildOrDmId
+    -> Id ChannelMessageId
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> LocalUser
+    -> ( UserSession.Viewing, FrontendCurrentUser )
+slackMessageAddedFrontend guildOrDmId messageId content localUser =
+    let
+        author : Slack.Id Slack.UserId
+        author =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace data ->
+                    data.currentUserId
+
+                SlackGuildOrDmId_Dm data ->
+                    data.currentUserId
+
+        viewingId : Maybe SlackGuildOrDmId
+        viewingId =
+            case ( localUser.currentlyViewing, guildOrDmId ) of
+                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId } ) ->
+                    if data.id.teamId == teamId && data.id.channelId == channelId then
+                        Just (SlackGuildOrDmId_Workspace data.id)
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId } ) ->
+                    if data.id.channelId == channelId then
+                        Just (SlackGuildOrDmId_Dm data.id)
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+    in
+    if SeqDict.member author localUser.linkedSlackUsers then
+        LocalState.ownMessageIsReadFrontend
+            (SlackGuildOrDmId guildOrDmId)
+            (NoThreadWithMessage messageId)
+            ( localUser.currentlyViewing, localUser.user )
+
+    else
+        case viewingId of
+            Just viewingId2 ->
+                LocalState.incrementLastViewedMessageFrontend
+                    (SlackGuildOrDmId viewingId2)
+                    (NoThreadWithMessage messageId)
+                    ( localUser.currentlyViewing, localUser.user )
+
+            Nothing ->
+                ( localUser.currentlyViewing
+                , case guildOrDmId of
+                    SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                        if
+                            SeqSet.toList (RichText.mentionsUser content)
+                                |> List.any (\userId -> SeqDict.member userId localUser.linkedSlackUsers)
+                        then
+                            User.addSlackDirectMention teamId channelId NoThread localUser.user
+
+                        else
+                            localUser.user
+
+                    SlackGuildOrDmId_Dm _ ->
+                        localUser.user
+                )
 
 
 textToDiscordRichText :
@@ -3965,6 +4148,59 @@ changeUpdate localMsg local =
                                             }
                                         )
                                         local.dmChannels
+                            }
+
+                        ViewSlackChannel data messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastSlackChannelViewed
+                                                data.id
+                                                (NoThreadWithMaybeMessage
+                                                    (if markMessagesAsViewed then
+                                                        LocalState.getSlackWorkspaceAndChannel data.id.teamId data.id.channelId local
+                                                            |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
+                                                localUser.user
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
+                                    }
+                                , slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        data.id.teamId
+                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) data.id.channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        ViewSlackDm data messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            case SeqDict.get data.id.channelId local.slackDmChannels of
+                                                Just dmChannel ->
+                                                    if markMessagesAsViewed then
+                                                        User.setLastViewedMessage
+                                                            (SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id))
+                                                            (NoThreadWithMessage (DmChannel.latestFrontendMessageId dmChannel))
+                                                            localUser.user
+
+                                                    else
+                                                        localUser.user
+
+                                                Nothing ->
+                                                    localUser.user
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
+                                    }
+                                , slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        data.id.channelId
+                                        (DmChannel.loadMessages messagesLoaded)
+                                        local.slackDmChannels
                             }
 
                         ViewDiscordDm data messagesLoaded ->

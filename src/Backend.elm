@@ -645,6 +645,10 @@ updateHelper msg model =
                                     OneToOne.insert slackMessageId (IdArray.nextId channel.messages) channel.linkedMessageIds
                             }
 
+                        messageId : Id ChannelMessageId
+                        messageId =
+                            slackMessageCount guildOrDmId model1 |> Id.fromInt
+
                         model2 : BackendModel
                         model2 =
                             case guildOrDmId of
@@ -665,17 +669,37 @@ updateHelper msg model =
                                                 (\channel -> addMessage channel currentUserId)
                                                 model1.slackDmChannels
                                     }
+
+                        ( sessions, notificationCmds ) =
+                            Broadcast.slackMessageNotification
+                                time
+                                guildOrDmId
+                                (Message.userTextMessageNoEmbeds time (slackAuthor guildOrDmId) richText SeqDict.empty Message.NoReply SeqDict.empty)
+                                model2
+
+                        model3 : BackendModel
+                        model3 =
+                            { model2
+                                | users =
+                                    slackMessageAdded
+                                        guildOrDmId
+                                        messageId
+                                        richText
+                                        model2
+                                , sessions = sessions
+                            }
                     in
-                    ( model2
+                    ( model3
                     , Command.batch
-                        [ Local_Slack_SendMessage time timezone guildOrDmId text
+                        [ Command.batch notificationCmds
+                        , Local_Slack_SendMessage time timezone guildOrDmId text
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toSlackExcludingOne
                             clientId
                             guildOrDmId
                             (Server_Slack_SendMessage time guildOrDmId richText |> ServerChange)
-                            model2
+                            model3
                         ]
                     )
 
@@ -1066,6 +1090,11 @@ updateHelper msg model =
                                 model.slackUsers
                                 users
                       }
+                        |> markNewSlackConversationsAsViewed
+                            slackUserId
+                            teamId
+                            (List.map (\( channel, _ ) -> channel.id) channels)
+                            (List.map (\( dmChannel, _ ) -> dmChannel.id) dmChannels)
                     , Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
                     )
 
@@ -5171,8 +5200,33 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 data
                                 (\session _ user _ -> helper session user)
 
-                        SlackGuildOrDmId _ ->
-                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        SlackGuildOrDmId (SlackGuildOrDmId_Workspace id) ->
+                            BackendExtra.asSlackChannelMember
+                                model
+                                sessionId
+                                id
+                                (\session _ _ _ ->
+                                    case NonemptyDict.get session.userId model.users of
+                                        Just user ->
+                                            helper session user
+
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
+
+                        SlackGuildOrDmId (SlackGuildOrDmId_Dm id) ->
+                            BackendExtra.asSlackDmUser
+                                model
+                                sessionId
+                                id
+                                (\session _ _ ->
+                                    case NonemptyDict.get session.userId model.users of
+                                        Just user ->
+                                            helper session user
+
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
@@ -5495,6 +5549,71 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> loadMessagesHelper
                                                 |> FilledInByBackend
                                             )
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
+                                    )
+                                )
+
+                        ViewSlackChannel data _ ->
+                            BackendExtra.asSlackChannelMember
+                                model
+                                sessionId
+                                data.id
+                                (\session _ _ channel ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.updateIfExists
+                                                session.userId
+                                                (User.setLastSlackChannelViewed
+                                                    data.id
+                                                    (NoThreadWithMaybeMessage
+                                                        (if markMessagesAsViewed then
+                                                            DmChannel.latestMessageId channel |> Just
+
+                                                         else
+                                                            Nothing
+                                                        )
+                                                    )
+                                                )
+                                                model.users
+                                        , connections = connections
+                                      }
+                                    , Command.batch
+                                        [ ViewSlackChannel data (loadMessagesHelper channel |> FilledInByBackend)
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
+                                    )
+                                )
+
+                        ViewSlackDm data _ ->
+                            BackendExtra.asSlackDmUser
+                                model
+                                sessionId
+                                data.id
+                                (\session _ dmChannel ->
+                                    ( { model
+                                        | users =
+                                            if markMessagesAsViewed then
+                                                NonemptyDict.updateIfExists
+                                                    session.userId
+                                                    (User.setLastViewedMessage
+                                                        (SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id))
+                                                        (NoThreadWithMessage (DmChannel.latestMessageId dmChannel))
+                                                    )
+                                                    model.users
+
+                                            else
+                                                model.users
+                                        , connections = connections
+                                      }
+                                    , Command.batch
+                                        [ ViewSlackDm data (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -10618,6 +10737,10 @@ handleSlackWebsocketEvent linkedUser event model =
                                 }
                                     |> Just
 
+                        messageId : Id ChannelMessageId
+                        messageId =
+                            slackMessageCount guildOrDmId model |> Id.fromInt
+
                         maybeModel2 : Maybe BackendModel
                         maybeModel2 =
                             if SeqDict.member (slackPendingSendKey guildOrDmId) model.pendingSlackSends then
@@ -10653,11 +10776,30 @@ handleSlackWebsocketEvent linkedUser event model =
                     in
                     case maybeModel2 of
                         Just model2 ->
-                            ( model2
-                            , Broadcast.toSlack
-                                guildOrDmId
-                                (Server_Slack_SendMessage message.createdAt guildOrDmId data.content.content |> ServerChange)
-                                model2
+                            let
+                                ( sessions, notificationCmds ) =
+                                    Broadcast.slackMessageNotification message.createdAt guildOrDmId data model2
+
+                                model3 : BackendModel
+                                model3 =
+                                    { model2
+                                        | users =
+                                            slackMessageAdded
+                                                guildOrDmId
+                                                messageId
+                                                data.content.content
+                                                model2
+                                        , sessions = sessions
+                                    }
+                            in
+                            ( model3
+                            , Command.batch
+                                (Broadcast.toSlack
+                                    guildOrDmId
+                                    (Server_Slack_SendMessage message.createdAt guildOrDmId data.content.content |> ServerChange)
+                                    model3
+                                    :: notificationCmds
+                                )
                             )
 
                         Nothing ->
@@ -10826,3 +10968,171 @@ handleSlackWebsocketEvent linkedUser event model =
 
         Slack.WebsocketOtherEvent ->
             ( model, Command.none )
+
+
+{-| Keeps up the last viewed message of everyone reading the conversation, marks the message
+read for whoever wrote it, and gives a red dot to the linked accounts it mentions.
+-}
+slackMessageAdded :
+    SlackGuildOrDmId
+    -> Id ChannelMessageId
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> BackendModel
+    -> NonemptyDict (Id UserId) BackendUser
+slackMessageAdded guildOrDmId messageId content model =
+    let
+        viewers : List ( Id UserId, AnyGuildOrDmId )
+        viewers =
+            Broadcast.usersViewingSlackConversation guildOrDmId model
+
+        authorLinkedTo : Maybe (Id UserId)
+        authorLinkedTo =
+            case SeqDict.get (slackAuthor guildOrDmId) model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    Just linkedUser.linkedTo
+
+                Just (SlackBasicData _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        users2 : NonemptyDict (Id UserId) BackendUser
+        users2 =
+            List.foldl
+                (\( userId, viewerGuildOrDmId ) usersAcc ->
+                    NonemptyDict.updateIfExists
+                        userId
+                        (LocalState.incrementLastViewedMessageBackend viewerGuildOrDmId (NoThreadWithMessage messageId))
+                        usersAcc
+                )
+                model.users
+                viewers
+
+        users3 : NonemptyDict (Id UserId) BackendUser
+        users3 =
+            case authorLinkedTo of
+                Just userId ->
+                    BackendExtra.ownMessageIsReadBackend userId (SlackGuildOrDmId guildOrDmId) messageId users2
+
+                Nothing ->
+                    users2
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            SeqSet.foldl
+                (\mentioned usersAcc ->
+                    case SeqDict.get mentioned model.slackUsers of
+                        Just (SlackFullData linkedUser) ->
+                            if
+                                (Just linkedUser.linkedTo == authorLinkedTo)
+                                    || List.any (\( viewer, _ ) -> viewer == linkedUser.linkedTo) viewers
+                            then
+                                usersAcc
+
+                            else
+                                NonemptyDict.updateIfExists
+                                    linkedUser.linkedTo
+                                    (User.addSlackDirectMention teamId channelId NoThread)
+                                    usersAcc
+
+                        Just (SlackBasicData _) ->
+                            usersAcc
+
+                        Nothing ->
+                            usersAcc
+                )
+                users3
+                (RichText.mentionsUser content)
+
+        SlackGuildOrDmId_Dm _ ->
+            users3
+
+
+slackMessageCount : SlackGuildOrDmId -> BackendModel -> Int
+slackMessageCount guildOrDmId model =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            case LocalState.getSlackWorkspaceAndChannel teamId channelId model of
+                Just ( _, channel ) ->
+                    IdArray.length channel.messages
+
+                Nothing ->
+                    0
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            case SeqDict.get channelId model.slackDmChannels of
+                Just channel ->
+                    IdArray.length channel.messages
+
+                Nothing ->
+                    0
+
+
+{-| Linking Slack loads the newest messages of every conversation, and none of them are new to
+the person linking it, so conversations they've never had a last viewed message in start out read.
+-}
+markNewSlackConversationsAsViewed :
+    Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> List (Slack.Id Slack.ChannelId)
+    -> List (Slack.Id Slack.DmChannelId)
+    -> BackendModel
+    -> BackendModel
+markNewSlackConversationsAsViewed slackUserId teamId channelIds dmChannelIds model =
+    case SeqDict.get slackUserId model.slackUsers of
+        Just (SlackFullData linkedUser) ->
+            let
+                markAsViewed : AnyGuildOrDmId -> Int -> BackendUser -> BackendUser
+                markAsViewed guildOrDmId messageCount user =
+                    if messageCount > 0 && not (SeqDict.member guildOrDmId user.lastViewedMessage) then
+                        User.setLastViewedMessage guildOrDmId (NoThreadWithMessage (Id.fromInt (messageCount - 1))) user
+
+                    else
+                        user
+
+                markChannels : BackendUser -> BackendUser
+                markChannels user =
+                    List.foldl
+                        (\channelId user2 ->
+                            let
+                                guildOrDmId : SlackGuildOrDmId
+                                guildOrDmId =
+                                    SlackGuildOrDmId_Workspace { currentUserId = slackUserId, teamId = teamId, channelId = channelId }
+                            in
+                            markAsViewed (SlackGuildOrDmId guildOrDmId) (slackMessageCount guildOrDmId model) user2
+                        )
+                        user
+                        channelIds
+
+                markDmChannels : BackendUser -> BackendUser
+                markDmChannels user =
+                    List.foldl
+                        (\channelId user2 ->
+                            let
+                                guildOrDmId : SlackGuildOrDmId
+                                guildOrDmId =
+                                    SlackGuildOrDmId_Dm { currentUserId = slackUserId, channelId = channelId }
+                            in
+                            markAsViewed (SlackGuildOrDmId guildOrDmId) (slackMessageCount guildOrDmId model) user2
+                        )
+                        user
+                        dmChannelIds
+            in
+            { model | users = NonemptyDict.updateIfExists linkedUser.linkedTo (\user -> markChannels user |> markDmChannels) model.users }
+
+        Just (SlackBasicData _) ->
+            model
+
+        Nothing ->
+            model
+
+
+slackAuthor : SlackGuildOrDmId -> Slack.Id Slack.UserId
+slackAuthor guildOrDmId =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace data ->
+            data.currentUserId
+
+        SlackGuildOrDmId_Dm data ->
+            data.currentUserId

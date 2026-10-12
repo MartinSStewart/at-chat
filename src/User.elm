@@ -15,6 +15,7 @@ module User exposing
     , addNewStickers
     , addRecentlyUsedEmoji
     , addRecentlyUsedEmojis
+    , addSlackDirectMention
     , allUsers
     , backendToFrontendCurrent
     , backendToFrontendForUser
@@ -49,6 +50,7 @@ module User exposing
     , setLastDiscordChannelViewed
     , setLastDiscordDmViewed
     , setLastDmViewed
+    , setLastSlackChannelViewed
     , setLastViewedMessage
     , setName
     , slackUserColor
@@ -75,7 +77,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId, Viewing_SlackChannelId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import Message exposing (MessageContent)
@@ -128,6 +130,7 @@ type alias BackendUser =
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
@@ -301,6 +304,7 @@ type alias FrontendCurrentUser =
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
@@ -434,6 +438,7 @@ init createdAt name email userIsAdmin =
     , discordNotifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
+    , slackDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
@@ -481,6 +486,16 @@ addDiscordDirectMention :
     -> { a | discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater) }
 addDiscordDirectMention guildId channelId threadRoute user =
     { user | discordDirectMentions = addDirectMentionHelper guildId channelId threadRoute user.discordDirectMentions }
+
+
+addSlackDirectMention :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRoute
+    -> { a | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater) }
+addSlackDirectMention teamId channelId threadRoute user =
+    { user | slackDirectMentions = addDirectMentionHelper teamId channelId threadRoute user.slackDirectMentions }
 
 
 addDirectMentionHelper :
@@ -683,6 +698,73 @@ setLastDiscordChannelViewed id threadRoute user =
                 | lastViewedMessage =
                     SeqDict.insert
                         (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
+                        messageId
+                        user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
+
+
+setLastSlackChannelViewed :
+    Viewing_SlackChannelId
+    -> ThreadRouteWithMaybeMessage
+    ->
+        { a
+            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    ->
+        { a
+            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+setLastSlackChannelViewed id threadRoute user =
+    let
+        threadRouteNoMessage : ThreadRoute
+        threadRouteNoMessage =
+            case threadRoute of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        user2 =
+            { user
+                | slackDirectMentions =
+                    SeqDict.update
+                        id.teamId
+                        (Maybe.andThen
+                            (\dict ->
+                                NonemptyDict.toSeqDict dict
+                                    |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
+                                    |> NonemptyDict.fromSeqDict
+                            )
+                        )
+                        user.slackDirectMentions
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace id), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert
+                        (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id))
                         messageId
                         user2.lastViewedMessage
             }
@@ -943,6 +1025,7 @@ backendToFrontendCurrent email user =
     , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
+    , slackDirectMentions = user.slackDirectMentions
     , lastPushNotification = user.lastPushNotification
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist

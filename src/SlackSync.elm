@@ -4,6 +4,7 @@ module SlackSync exposing
     , messagesAndLinks
     , newChannelMaxMessages
     , toMessage
+    , userDataName
     , usersToFrontend
     , workspacesToFrontend
     )
@@ -206,3 +207,13 @@ userName user =
         user.name
     )
         |> PersonName.fromStringLossy
+
+
+userDataName : SlackUserData -> String
+userDataName userData =
+    case userData of
+        SlackFullData linkedUser ->
+            userName linkedUser.user |> PersonName.toString
+
+        SlackBasicData user ->
+            userName user |> PersonName.toString

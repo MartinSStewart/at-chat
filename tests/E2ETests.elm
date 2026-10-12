@@ -434,6 +434,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackWebsocketTest normalConfig
     , E2ESlack.slackWebsocketBackoffTest normalConfig
     , E2ESlack.unlinkSlackTest normalConfig
+    , E2ESlack.slackUnreadAndNotificationsTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.notificationClickOpensConversationTest normalConfig

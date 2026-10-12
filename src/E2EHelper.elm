@@ -2690,6 +2690,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         ViewDiscordChannelThread _ _ ->
                             True
 
+                        ViewSlackChannel _ _ ->
+                            True
+
+                        ViewSlackDm _ _ ->
+                            True
+
                         StopViewingChannel ->
                             False
 
@@ -3319,6 +3325,24 @@ allAttackerLocalChanges =
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace normalText
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm normalText
     , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackChannel
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackDm
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", channelId = Slack.Id "D09DK3P5RPC" }
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
+    , Local_SetLastViewed (SlackGuildOrDmId slackGuildOrDmId_workspace) (NoThreadWithMessage (Id.fromInt 0))
+    , Local_SetLastViewed (SlackGuildOrDmId slackGuildOrDmId_dm) (NoThreadWithMessage (Id.fromInt 0))
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_ExpandUserOptionSection UserSession.UserOption_Debug { collapseOthers = False }

@@ -8,7 +8,8 @@ import DmChannel
 import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import Message exposing (Message)
 import SeqDict exposing (SeqDict)
-import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDiscordGuildData, Viewing(..), Viewing_ChannelData, Viewing_ChannelThreadData, Viewing_DiscordChannelData, Viewing_DiscordChannelThreadData, Viewing_DiscordDmData, Viewing_DmData, Viewing_DmThreadData)
+import Slack
+import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDiscordGuildData, Viewing(..), Viewing_ChannelData, Viewing_ChannelThreadData, Viewing_DiscordChannelData, Viewing_DiscordChannelThreadData, Viewing_DiscordDmData, Viewing_DmData, Viewing_DmThreadData, Viewing_SlackChannelData, Viewing_SlackDmData)
 
 
 type SetViewing
@@ -19,6 +20,8 @@ type SetViewing
     | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
     | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
+    | ViewSlackChannel Viewing_SlackChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
+    | ViewSlackDm Viewing_SlackDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))))
     | StopViewingChannel
     | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
@@ -46,6 +49,12 @@ setViewingToCurrentlyViewing viewing =
 
         ViewDiscordChannelThread data _ ->
             Viewing_DiscordChannelThread data
+
+        ViewSlackChannel data _ ->
+            Viewing_SlackChannel data
+
+        ViewSlackDm data _ ->
+            Viewing_SlackDm data
 
         StopViewingChannel ->
             Viewing_None

@@ -18,6 +18,7 @@ module Broadcast exposing
     , pushNotification
     , pushNotificationCodec
     , repliedToData
+    , slackMessageNotification
     , toAdmins
     , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
@@ -42,8 +43,10 @@ module Broadcast exposing
     , usersViewing
     , usersViewingDiscordChannel
     , usersViewingDiscordDm
+    , usersViewingSlackConversation
     )
 
+import ChannelName
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
@@ -85,6 +88,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import SlackSync
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (BackendThread)
@@ -918,6 +922,34 @@ usersViewingDiscordDm channelId model =
         model
 
 
+{-| Each viewer is keyed by their own linked Slack account, which is the id their last viewed
+message is stored under.
+-}
+usersViewingSlackConversation : SlackGuildOrDmId -> BackendModel -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingSlackConversation guildOrDmId model =
+    viewingConnections
+        (\viewing ->
+            case ( viewing, guildOrDmId ) of
+                ( UserSession.Viewing_SlackChannel data, SlackGuildOrDmId_Workspace { teamId, channelId } ) ->
+                    if data.id.teamId == teamId && data.id.channelId == channelId then
+                        Id.SlackGuildOrDmId (SlackGuildOrDmId_Workspace data.id) |> Just
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_SlackDm data, SlackGuildOrDmId_Dm { channelId } ) ->
+                    if data.id.channelId == channelId then
+                        Id.SlackGuildOrDmId (SlackGuildOrDmId_Dm data.id) |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        model
+
+
 viewingConnections :
     (UserSession.Viewing -> Maybe Id.AnyGuildOrDmId)
     -> BackendModel
@@ -1383,6 +1415,141 @@ discordDmNotification time channelId senderId senderName senderIcon text message
         )
         ( model.sessions, [] )
         usersToNotify
+
+
+{-| Linked accounts hear about every message in a Slack DM, and about the messages that mention
+them in a channel. `guildOrDmId` is the author's.
+-}
+slackMessageNotification :
+    Time.Posix
+    -> SlackGuildOrDmId
+    -> UserTextMessageData messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+slackMessageNotification time guildOrDmId message model =
+    let
+        author : Slack.Id Slack.UserId
+        author =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace data ->
+                    data.currentUserId
+
+                SlackGuildOrDmId_Dm data ->
+                    data.currentUserId
+
+        authorLinkedTo : Maybe (Id UserId)
+        authorLinkedTo =
+            case SeqDict.get author model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    Just linkedUser.linkedTo
+
+                Just (SlackBasicData _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        viewers : List (Id UserId)
+        viewers =
+            usersViewingSlackConversation guildOrDmId model |> List.map Tuple.first
+
+        recipients : List (Slack.Id Slack.UserId)
+        recipients =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace _ ->
+                    RichText.mentionsUser message.content.content |> SeqSet.toList
+
+                SlackGuildOrDmId_Dm { channelId } ->
+                    case SeqDict.get channelId model.slackDmChannels of
+                        Just dmChannel ->
+                            NonemptySet.toList dmChannel.members
+
+                        Nothing ->
+                            []
+
+        channels : SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+        channels =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace { teamId } ->
+                    case SeqDict.get teamId model.slackWorkspaces of
+                        Just workspace ->
+                            SeqDict.foldl
+                                (\channelId channel dict ->
+                                    SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict
+                                )
+                                SeqDict.empty
+                                workspace.channels
+
+                        Nothing ->
+                            SeqDict.empty
+
+                SlackGuildOrDmId_Dm _ ->
+                    SeqDict.empty
+
+        userToString : Slack.Id Slack.UserId -> String
+        userToString userId =
+            case SeqDict.get userId model.slackUsers of
+                Just userData ->
+                    SlackSync.userDataName userData
+
+                Nothing ->
+                    User.missingName
+    in
+    List.foldl
+        (\recipient ( sessions, cmds ) ->
+            case SeqDict.get recipient model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    if
+                        (recipient == author)
+                            || (Just linkedUser.linkedTo == authorLinkedTo)
+                            || List.member linkedUser.linkedTo viewers
+                    then
+                        ( sessions, cmds )
+
+                    else
+                        notification
+                            time
+                            linkedUser.linkedTo
+                            (userToString author)
+                            Nothing
+                            userToString
+                            channels
+                            (RichText.toStringWithGetter Time.utc SlackSync.userDataName True model.slackUsers channels message.content.content)
+                            (UserTextMessage message)
+                            (case guildOrDmId of
+                                SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                                    Route.SlackWorkspaceRoute
+                                        { currentSlackUserId = recipient
+                                        , teamId = teamId
+                                        , channelId = channelId
+                                        , viewingMessage = Nothing
+                                        , channelsVisible = ChannelsHiddenOnMobile
+                                        , overlay = Nothing
+                                        }
+                                        |> Just
+
+                                SlackGuildOrDmId_Dm { channelId } ->
+                                    Route.SlackDmRoute
+                                        { currentSlackUserId = recipient
+                                        , channelId = channelId
+                                        , viewingMessage = Nothing
+                                        , channelsVisible = ChannelsHiddenOnMobile
+                                        , overlay = Nothing
+                                        }
+                                        |> Just
+                            )
+                            sessions
+                            model
+                            |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
+
+                Just (SlackBasicData _) ->
+                    ( sessions, cmds )
+
+                Nothing ->
+                    ( sessions, cmds )
+        )
+        ( model.sessions, [] )
+        recipients
 
 
 toDmChannelExcludingOne :

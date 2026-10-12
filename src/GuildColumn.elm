@@ -10,6 +10,7 @@ module GuildColumn exposing
     , guildRoute
     , newMessageCount
     , rowLinkButton
+    , slackDmHasNotifications
     , unreadNotificationCount
     )
 
@@ -21,15 +22,17 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Extra
-import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState, SlackFrontendWorkspace)
+import List.Nonempty
+import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import MembersAndOwner exposing (IsMember(..))
 import MessageArray exposing (MessageArray)
 import MuteSettings exposing (IsMuted(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import OneOrGreater exposing (OneOrGreater)
 import RichText
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
@@ -122,12 +125,17 @@ guildColumn isMobile route local canScroll2 =
                         Ui.Lazy.lazy4 discordDmGuildIcon route local.localUser channelId dmChannel
                     )
                     (SeqDict.toList local.discordDmChannels)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        Ui.Lazy.lazy4 slackDmGuildIcon route local.localUser channelId dmChannel
+                    )
+                    (SeqDict.toList local.slackDmChannels)
                 ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
                 :: List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon local.localUser route guildId guild)
                     (SeqDict.toList local.guilds)
                 ++ List.map
-                    (\( teamId, workspace ) -> slackWorkspaceIcons route local.localUser teamId workspace)
+                    (\( teamId, workspace ) -> Ui.Lazy.lazy4 slackWorkspaceIcons route local.localUser teamId workspace)
                     (SeqDict.toList local.slackWorkspaces)
                 ++ List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon local.localUser route guildId guild)
@@ -156,10 +164,10 @@ slackWorkspaceIcons route localUser teamId workspace =
                                 GuildIcon.IsSelected
 
                             else
-                                GuildIcon.Normal NoNotification
+                                GuildIcon.Normal (slackWorkspaceHasNotifications routeData.currentSlackUserId localUser.user teamId workspace)
 
                         _ ->
-                            GuildIcon.Normal NoNotification
+                            GuildIcon.Normal (slackWorkspaceHasNotifications routeData.currentSlackUserId localUser.user teamId workspace)
                     )
                     workspace.name
                 )
@@ -168,10 +176,131 @@ slackWorkspaceIcons route localUser teamId workspace =
             Ui.none
 
 
+slackWorkspaceHasNotifications :
+    Slack.Id Slack.UserId
+    -> FrontendCurrentUser
+    -> Slack.Id Slack.TeamId
+    -> SlackFrontendWorkspace
+    -> ChannelNotificationType
+slackWorkspaceHasNotifications currentSlackUserId currentUser teamId workspace =
+    case SeqDict.get teamId currentUser.slackDirectMentions of
+        Just mentions ->
+            NewMessageForUser (NonemptyDict.values mentions |> List.Nonempty.foldl1 OneOrGreater.plus)
+
+        Nothing ->
+            case
+                SeqDict.foldl
+                    (\channelId channel total ->
+                        total
+                            + newMessageCount
+                                (SeqDict.get
+                                    (SlackGuildOrDmId
+                                        (SlackGuildOrDmId_Workspace
+                                            { currentUserId = currentSlackUserId, teamId = teamId, channelId = channelId }
+                                        )
+                                    )
+                                    currentUser.lastViewedMessage
+                                )
+                                channel
+                    )
+                    0
+                    workspace.channels
+                    |> OneOrGreater.fromInt
+            of
+                Just count ->
+                    NewMessage count
+
+                Nothing ->
+                    NoNotification
+
+
+slackDmGuildIcon :
+    Route
+    -> LocalUser
+    -> Slack.Id Slack.DmChannelId
+    -> SlackFrontendDmChannel
+    -> Element FrontendMsg_
+slackDmGuildIcon route localUser channelId dmChannel =
+    let
+        dmIcon =
+            case slackDmHasNotifications localUser channelId dmChannel of
+                Just ( currentUserId, count ) ->
+                    let
+                        otherUserId : Slack.Id Slack.UserId
+                        otherUserId =
+                            NonemptySet.toList dmChannel.members
+                                |> List.Extra.find (\userId -> userId /= currentUserId)
+                                |> Maybe.withDefault currentUserId
+                    in
+                    elLinkButton
+                        (Dom.id ("guildsColumn_openSlackDm_" ++ Slack.idToString channelId))
+                        (SlackDmRoute
+                            { currentSlackUserId = currentUserId
+                            , channelId = channelId
+                            , viewingMessage = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
+                            }
+                        )
+                        []
+                        (GuildIcon.userView
+                            (NewMessageForUser count)
+                            (SeqDict.get otherUserId localUser.slackUsers |> Maybe.andThen .icon)
+                            (User.slackUserColor localUser otherUserId)
+                        )
+
+                Nothing ->
+                    Ui.none
+    in
+    case route of
+        SlackDmRoute dmRoute ->
+            if dmRoute.channelId == channelId then
+                Ui.none
+
+            else
+                dmIcon
+
+        _ ->
+            dmIcon
+
+
+slackDmHasNotifications :
+    LocalUser
+    -> Slack.Id Slack.DmChannelId
+    -> SlackFrontendDmChannel
+    -> Maybe ( Slack.Id Slack.UserId, OneOrGreater )
+slackDmHasNotifications localUser channelId dmChannel =
+    case slackDmCurrentUserId localUser dmChannel of
+        Just currentUserId ->
+            newMessageCount
+                (SeqDict.get
+                    (SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                    localUser.user.lastViewedMessage
+                )
+                dmChannel
+                |> OneOrGreater.fromInt
+                |> Maybe.map (Tuple.pair currentUserId)
+
+        Nothing ->
+            Nothing
+
+
+{-| Find the linked Slack user that is a member of this Slack DM channel (i.e. "us").
+-}
+slackDmCurrentUserId : LocalUser -> SlackFrontendDmChannel -> Maybe (Slack.Id Slack.UserId)
+slackDmCurrentUserId localUser dmChannel =
+    List.Extra.find (\userId -> SeqDict.member userId localUser.linkedSlackUsers) (NonemptySet.toList dmChannel.members)
+
+
+slackWorkspaceCurrentUserId : LocalUser -> Slack.Id Slack.TeamId -> Maybe (Slack.Id Slack.UserId)
+slackWorkspaceCurrentUserId localUser teamId =
+    SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) localUser.linkedSlackUsers |> SeqDict.keys |> List.head
+
+
 slackWorkspaceRoute : LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Maybe SlackWorkspaceRouteData
 slackWorkspaceRoute localUser teamId workspace =
     case
-        ( SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) localUser.linkedSlackUsers |> SeqDict.keys |> List.head
+        ( slackWorkspaceCurrentUserId localUser teamId
         , SeqDict.toList workspace.channels
             |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
             |> List.head
@@ -756,8 +885,36 @@ unreadNotificationCount local =
                 )
                 0
                 local.discordGuilds
+
+        slackDmCount : Int
+        slackDmCount =
+            SeqDict.foldl
+                (\channelId dmChannel total ->
+                    case slackDmHasNotifications local.localUser channelId dmChannel of
+                        Just ( _, count ) ->
+                            total + OneOrGreater.toInt count
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.slackDmChannels
+
+        slackWorkspaceCount : Int
+        slackWorkspaceCount =
+            SeqDict.foldl
+                (\teamId workspace total ->
+                    case slackWorkspaceCurrentUserId local.localUser teamId of
+                        Just currentSlackUserId ->
+                            total + redNotificationCount (slackWorkspaceHasNotifications currentSlackUserId currentUser teamId workspace)
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.slackWorkspaces
     in
-    dmCount + discordDmCount + guildCount + discordGuildCount
+    dmCount + discordDmCount + guildCount + discordGuildCount + slackDmCount + slackWorkspaceCount
 
 
 canChangeUnreadNotificationCount : LocalChange -> Bool
