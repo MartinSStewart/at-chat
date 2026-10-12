@@ -1,4 +1,4 @@
-module DeleteUserAndFiles exposing (deleteAccounts, deleteFiles, orphanedFiles, removeDeletedFiles)
+module DeleteUserAndFiles exposing (deleteAccounts, deleteFiles, orphanedDiscordGuilds, orphanedFiles, removeDeletedFiles)
 
 import Array
 import Codec
@@ -189,6 +189,38 @@ deleteMessageBy usersToDelete message =
 
         GameStarted _ ->
             message
+
+
+orphanedDiscordGuilds : BackendModel -> SeqSet (Discord.Id Discord.GuildId)
+orphanedDiscordGuilds model =
+    let
+        linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) ()
+        linkedDiscordUsers =
+            SeqDict.foldl
+                (\discordUserId discordUser dict ->
+                    case discordUser of
+                        FullData _ ->
+                            SeqDict.insert discordUserId () dict
+
+                        NeedsAuthAgain _ ->
+                            SeqDict.insert discordUserId () dict
+
+                        BasicData _ ->
+                            dict
+                )
+                SeqDict.empty
+                model.discordUsers
+    in
+    SeqDict.foldl
+        (\guildId guild set ->
+            if LocalState.canViewDiscordGuild linkedDiscordUsers guild.membersAndOwner then
+                set
+
+            else
+                SeqSet.insert guildId set
+        )
+        SeqSet.empty
+        model.discordGuilds
 
 
 deleteFiles : SecretId ServerSecret -> List FileHash -> Task BackendOnly Http.Error ()

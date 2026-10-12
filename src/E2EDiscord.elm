@@ -472,6 +472,53 @@ discordTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ E2EHelper.startTest
+        "Hourly update deletes Discord guilds that no linked Discord user stayed in for an hour"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Err "Discord guilds with a linked member should be kept"
+
+                        else
+                            Ok ()
+                    )
+                , admin.update 100 (Audio.userMsg (Types.PressedUnlinkDiscordUser E2EHelper.currentDiscordUserId))
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Err "Discord guilds orphaned since the last hourly update should be kept for another hour"
+
+                        else
+                            Ok ()
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).discordGuilds then
+                            Ok ()
+
+                        else
+                            Err "Discord guilds orphaned over two hourly updates should be deleted"
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Got rich text embed"
         E2EHelper.startTime
         normalConfig

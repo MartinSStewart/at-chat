@@ -473,6 +473,7 @@ type alias BackendModel =
     , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+    , orphanedDiscordGuildsLastHour : SeqSet (Discord.Id Discord.GuildId)
     , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
