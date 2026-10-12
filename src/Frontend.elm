@@ -10530,7 +10530,8 @@ encryptConversation ( requestId, conversation ) =
 
 {-| Keeps what the user is looking at in place after a page of messages arrives. Older messages
 go in above it, and newer messages push the oldest ones out from above it. A page that jumped to
-the newest messages has nothing left in place to hold on to, so that scrolls to the bottom.
+the newest messages scrolls to the bottom instead. Holding the old messages in place as well
+left Firefox part way up the conversation.
 -}
 pageLoadedScroll : (Id messageId -> HtmlId) -> PageRequest messageId -> ScrollPosition -> Command FrontendOnly ToBackend FrontendMsg_
 pageLoadedScroll toHtmlId pageRequest scrollPosition =
@@ -10539,12 +10540,25 @@ pageLoadedScroll toHtmlId pageRequest scrollPosition =
             Ports.shiftScrollByElementDelta Pages.Guild.conversationContainerId (toHtmlId previousOldestVisibleMessage)
 
         PageFrom firstNewMessage ->
-            Command.batch
-                [ Ports.shiftScrollByElementDelta
-                    Pages.Guild.conversationContainerId
-                    (Id.toInt firstNewMessage - 1 |> Id.fromInt |> toHtmlId)
-                , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom scrollPosition
-                ]
+            let
+                holdInPlace : Command FrontendOnly ToBackend FrontendMsg_
+                holdInPlace =
+                    Ports.shiftScrollByElementDelta
+                        Pages.Guild.conversationContainerId
+                        (Id.toInt firstNewMessage - 1 |> Id.fromInt |> toHtmlId)
+            in
+            case scrollPosition of
+                ScrolledToBottom ->
+                    Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+
+                ScrolledCloseToBottom ->
+                    holdInPlace
+
+                ScrolledToTop ->
+                    holdInPlace
+
+                ScrolledToMiddle ->
+                    holdInPlace
 
 
 {-| Encrypted messages take up no space until they're decrypted. Older ones go in above what the
