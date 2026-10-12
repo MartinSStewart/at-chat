@@ -45,6 +45,46 @@ import User exposing (FrontendCurrentUser, LocalUser)
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
+    Ui.Lazy.lazy2
+        (case ( MyUi.canScroll isMobile model.drag, isMobile ) of
+            ( True, True ) ->
+                guildColumnCanScrollMobile
+
+            ( True, False ) ->
+                guildColumnCanScrollNotMobile
+
+            ( False, True ) ->
+                guildColumnCannotScrollMobile
+
+            ( False, False ) ->
+                guildColumnCannotScrollNotMobile
+        )
+        model.route
+        local
+
+
+guildColumnCanScrollMobile : Route -> LocalState -> Element FrontendMsg_
+guildColumnCanScrollMobile route local =
+    guildColumn True route local True
+
+
+guildColumnCanScrollNotMobile : Route -> LocalState -> Element FrontendMsg_
+guildColumnCanScrollNotMobile route local =
+    guildColumn False route local True
+
+
+guildColumnCannotScrollMobile : Route -> LocalState -> Element FrontendMsg_
+guildColumnCannotScrollMobile route local =
+    guildColumn True route local False
+
+
+guildColumnCannotScrollNotMobile : Route -> LocalState -> Element FrontendMsg_
+guildColumnCannotScrollNotMobile route local =
+    guildColumn False route local False
+
+
+guildColumn : Bool -> Route -> LocalState -> Bool -> Element FrontendMsg_
+guildColumn isMobile route local canScroll2 =
     Ui.el
         [ Ui.inFront
             (Ui.el
@@ -66,93 +106,66 @@ guildColumnLazy isMobile model local =
             [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , MyUi.scrollable canScroll2
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
             , Ui.paddingWith { left = 0, right = 0, top = max 6 local.localUser.safeAreaInsetTop, bottom = 4 }
             , MyUi.bounceScroll isMobile
             ]
-            [ Ui.Lazy.lazy6
-                guildColumnIcons
-                model.route
-                local.localUser
-                local.dmChannels
-                local.discordDmChannels
-                local.guilds
-                local.discordGuilds
-            , Ui.Lazy.lazy3 slackWorkspaceIcons model.route local.localUser local.slackWorkspaces
-            , GuildIcon.addGuildButton
-                (Dom.id "guild_createGuild")
-                (model.route == NewGuildRoute)
-                (PressedLink NewGuildRoute)
-            ]
-        )
-
-
-guildColumnIcons :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnIcons route localUser dmChannels discordDmChannels guilds discordGuilds =
-    Ui.column
-        [ Ui.spacing 6 ]
-        (List.map
-            (\( otherUserId, dmChannel ) ->
-                Ui.Lazy.lazy4 dmGuildIcon route localUser otherUserId dmChannel
-            )
-            (SeqDict.toList dmChannels)
-            ++ List.map
-                (\( channelId, dmChannel ) ->
-                    Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
+            (List.map
+                (\( otherUserId, dmChannel ) ->
+                    Ui.Lazy.lazy4 dmGuildIcon route local.localUser otherUserId dmChannel
                 )
-                (SeqDict.toList discordDmChannels)
-            ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
-            :: List.map
-                (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
-                (SeqDict.toList guilds)
-            ++ List.map
-                (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
-                (SeqDict.toList discordGuilds)
-        )
-
-
-slackWorkspaceIcons : Route -> LocalUser -> SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace -> Element FrontendMsg_
-slackWorkspaceIcons route localUser workspaces =
-    Ui.column
-        [ Ui.spacing 6 ]
-        (List.filterMap
-            (\( teamId, workspace ) ->
-                case slackWorkspaceRoute localUser teamId workspace of
-                    Just routeData ->
-                        elLinkButton
-                            (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
-                            (SlackWorkspaceRoute routeData)
-                            []
-                            (GuildIcon.slackView
-                                (case route of
-                                    SlackWorkspaceRoute data ->
-                                        if data.teamId == teamId then
-                                            GuildIcon.IsSelected
-
-                                        else
-                                            GuildIcon.Normal NoNotification
-
-                                    _ ->
-                                        GuildIcon.Normal NoNotification
-                                )
-                                workspace.name
-                            )
-                            |> Just
-
-                    Nothing ->
-                        Nothing
+                (SeqDict.toList local.dmChannels)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        Ui.Lazy.lazy4 discordDmGuildIcon route local.localUser channelId dmChannel
+                    )
+                    (SeqDict.toList local.discordDmChannels)
+                ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
+                :: List.map
+                    (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon local.localUser route guildId guild)
+                    (SeqDict.toList local.guilds)
+                ++ List.map
+                    (\( teamId, workspace ) -> slackWorkspaceIcons route local.localUser teamId workspace)
+                    (SeqDict.toList local.slackWorkspaces)
+                ++ List.map
+                    (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon local.localUser route guildId guild)
+                    (SeqDict.toList local.discordGuilds)
+                ++ [ GuildIcon.addGuildButton
+                        (Dom.id "guild_createGuild")
+                        (route == NewGuildRoute)
+                        (PressedLink NewGuildRoute)
+                   ]
             )
-            (SeqDict.toList workspaces)
         )
+
+
+slackWorkspaceIcons : Route -> LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Element FrontendMsg_
+slackWorkspaceIcons route localUser teamId workspace =
+    case slackWorkspaceRoute localUser teamId workspace of
+        Just routeData ->
+            elLinkButton
+                (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
+                (SlackWorkspaceRoute routeData)
+                []
+                (GuildIcon.slackView
+                    (case route of
+                        SlackWorkspaceRoute data ->
+                            if data.teamId == teamId then
+                                GuildIcon.IsSelected
+
+                            else
+                                GuildIcon.Normal NoNotification
+
+                        _ ->
+                            GuildIcon.Normal NoNotification
+                    )
+                    workspace.name
+                )
+
+        Nothing ->
+            Ui.none
 
 
 slackWorkspaceRoute : LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Maybe SlackWorkspaceRouteData
