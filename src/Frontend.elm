@@ -88,6 +88,7 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SetViewing exposing (SetViewing(..))
 import SheepGame
+import Slack
 import Sticker
 import String.Extra
 import String.Nonempty exposing (NonemptyString)
@@ -6240,6 +6241,47 @@ updateLoaded msg model =
                       }
                     , Command.none
                     )
+                )
+                model
+
+        TypedSlackCookie text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | slackCookie = text }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        TypedSlackToken text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map (\userOptions -> { userOptions | slackToken = text }) loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitSlackData ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case Slack.validateSlackData userOptions of
+                                Ok slackData ->
+                                    ( loggedIn, Lamdera.sendToBackend (LinkSlackRequest slackData) )
+
+                                Err _ ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 

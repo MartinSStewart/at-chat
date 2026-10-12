@@ -86,6 +86,8 @@ init domainWhitelist =
     , color = Nothing
     , e2eeKeysValid = E2eeKeys_NotChecked
     , privateKeyText = ""
+    , slackCookie = ""
+    , slackToken = ""
     }
 
 
@@ -709,6 +711,64 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                 , Ui.text " to do so."
                                 ]
                             ]
+                    )
+                , MyUi.container
+                    16
+                    16
+                    (SeqSet.member UserOption_Slack local.localUser.session.expandedUserOptions)
+                    (Dom.id "userOptions_slackSection")
+                    (PressedExpandContainer UserOption_Slack)
+                    MyUi.background1
+                    isMobile
+                    "Slack"
+                    (let
+                        slackCookieLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+                        slackCookieLabel =
+                            Ui.Input.label "userOptions_slackToken" [] (Ui.text "Paste in cookie starting with xoxc-")
+
+                        slackTokenLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+                        slackTokenLabel =
+                            Ui.Input.label "userOptions_slackToken" [] (Ui.text "JSON.parse(localStorage.localConfig_v2).teams")
+                     in
+                     [ Ui.column
+                        [ Ui.paddingXY 16 0 ]
+                        [ slackCookieLabel.element
+                        , Ui.Input.text
+                            [ Ui.background MyUi.inputBackground
+                            , Ui.paddingXY 8 8
+                            , Ui.widthMax 300
+                            , Ui.borderColor MyUi.inputBorder
+                            ]
+                            { onChange = TypedSlackCookie
+                            , text = model.slackCookie
+                            , placeholder = Just "xoxd-..."
+                            , label = slackCookieLabel.id
+                            }
+                        ]
+                     , Ui.column
+                        [ Ui.paddingXY 16 0 ]
+                        [ slackTokenLabel.element
+                        , Ui.Input.text
+                            [ Ui.background MyUi.inputBackground
+                            , Ui.paddingXY 8 8
+                            , Ui.widthMax 300
+                            , Ui.borderColor MyUi.inputBorder
+                            ]
+                            { onChange = TypedSlackToken
+                            , text = model.slackToken
+                            , placeholder = Just "xoxc-..."
+                            , label = slackTokenLabel.id
+                            }
+                        ]
+                     , Ui.el
+                        [ Ui.paddingXY 16 0 ]
+                        (MyUi.elButton
+                            (Dom.id "userOptions_submitSlackData")
+                            PressedSubmitSlackData
+                            []
+                            (Ui.text "Link Slack account")
+                        )
+                     ]
                     )
                 , MyUi.container
                     16

@@ -3051,6 +3051,9 @@ toBackendLog toBackend =
         LinkDiscordRequest _ ->
             ToBackendLog_LinkDiscordRequest
 
+        LinkSlackRequest _ ->
+            ToBackendLog_LinkSlackRequest
+
         ProfilePictureEditorToBackend _ ->
             ToBackendLog_ProfilePictureEditorToBackend
 

@@ -3159,6 +3159,15 @@ isPressMsg msg =
         ValidatedE2eePrivateKey _ _ ->
             False
 
+        TypedSlackCookie string ->
+            False
+
+        TypedSlackToken string ->
+            False
+
+        PressedSubmitSlackData ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =

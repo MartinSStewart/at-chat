@@ -82,6 +82,7 @@ type UserOptionSection
     | UserOption_ConnectedDevices
     | UserOption_Debug
     | UserOption_Privacy
+    | UserOption_Slack
 
 
 type alias FrontendUserSession =

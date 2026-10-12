@@ -16,6 +16,9 @@ module Slack exposing
     , RichTextElement(..)
     , RichText_Emoji_Data
     , RichText_Text_Data
+    , SlackCookie
+    , SlackData
+    , SlackToken
     , Team
     , TeamId
     , TokenResponse
@@ -27,7 +30,10 @@ module Slack exposing
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
+    , stringToSlackCookie
+    , stringToSlackToken
     , teamInfo
+    , validateSlackData
     )
 
 import Duration
@@ -45,6 +51,66 @@ import Url.Builder
 
 
 -- AUTHENTICATION
+
+
+type SlackToken
+    = SlackToken String
+
+
+w3_validate_SlackToken : SlackToken -> Result String ()
+w3_validate_SlackToken (SlackToken text) =
+    stringToSlackToken text |> Result.map (\_ -> ())
+
+
+type SlackCookie
+    = SlackCookie String
+
+
+w3_validate_SlackCookie : SlackCookie -> Result String ()
+w3_validate_SlackCookie (SlackCookie text) =
+    stringToSlackCookie text |> Result.map (\_ -> ())
+
+
+type alias SlackData =
+    { token : SlackToken
+    , cookie : SlackCookie
+    }
+
+
+validateSlackData : { a | slackCookie : String, slackToken : String } -> Result () SlackData
+validateSlackData { slackCookie, slackToken } =
+    case ( stringToSlackCookie slackCookie, stringToSlackToken slackToken ) of
+        ( Ok cookie, Ok token ) ->
+            Ok { cookie = cookie, token = token }
+
+        _ ->
+            Err ()
+
+
+stringToSlackToken : String -> Result String SlackToken
+stringToSlackToken text =
+    if String.startsWith "xoxd-" text then
+        if String.length text < 10 then
+            Err "Token is too short"
+
+        else
+            Ok (SlackToken text)
+
+    else
+        Err "Token must start with \"xoxd-\""
+
+
+stringToSlackCookie : String -> Result String SlackCookie
+stringToSlackCookie text =
+    if String.startsWith "xoxc-" text then
+        if String.length text < 10 then
+            Err "Cookie is too short"
+
+        else
+            Ok (SlackCookie text)
+
+    else
+        Err "Cookie must start with \"xoxc-\""
 
 
 type AuthToken

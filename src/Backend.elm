@@ -268,6 +268,7 @@ init =
       , loadingDiscordChannels = SeqDict.empty
       , signupsEnabled = True
       , discordLinkingEnabled = True
+      , slackLinkingEnabled = True
       , exportState = Nothing
       , lastBackup = Nothing
       , discordLinkLimit = Nothing
@@ -6988,6 +6989,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         , Lamdera.sendToFrontend
                             clientId
                             (LinkDiscordResponse (Err (LinkDiscordHttpError (Discord.UnexpectedError "Discord account linking is disabled"))))
+                        )
+                )
+
+        LinkSlackRequest data ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    if model.slackLinkingEnabled then
+                        ( model
+                        , Debug.todo ""
+                        )
+
+                    else
+                        ( model
+                        , Lamdera.sendToFrontend
+                            clientId
+                            (LinkDiscordResponse (Err (LinkDiscordHttpError (Discord.UnexpectedError "Slack account linking is disabled"))))
                         )
                 )
 

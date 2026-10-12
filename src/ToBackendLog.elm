@@ -23,6 +23,7 @@ type ToBackendLog
     | ToBackendLog_ReloadDataRequest
     | ToBackendLog_LinkSlackOAuthCode
     | ToBackendLog_LinkDiscordRequest
+    | ToBackendLog_LinkSlackRequest
     | ToBackendLog_ProfilePictureEditorToBackend
     | ToBackendLog_AdminDataRequest
     | ToBackendLog_GetPublicGoMatchRequest
@@ -142,6 +143,9 @@ toBackendLogToString log =
 
         ToBackendLog_LinkDiscordRequest ->
             "LinkDiscordRequest"
+
+        ToBackendLog_LinkSlackRequest ->
+            "LinkSlackRequest"
 
         ToBackendLog_ProfilePictureEditorToBackend ->
             "ProfilePictureEditorToBackend"

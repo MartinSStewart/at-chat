@@ -137,7 +137,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing)
 import SheepGame
-import Slack
+import Slack exposing (SlackData)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
@@ -382,6 +382,8 @@ type alias UserOptionsModel =
     , -- What has been typed into the box that checks a private key. Cleared as soon as a
       -- whole key has been checked, so the key isn't left sitting in the model.
       privateKeyText : String
+    , slackCookie : String
+    , slackToken : String
     }
 
 
@@ -495,6 +497,7 @@ type alias BackendModel =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel DiscordChannelReload)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
+    , slackLinkingEnabled : Bool
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
     , discordLinkLimit : Maybe Int
@@ -754,6 +757,9 @@ type FrontendMsg_
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
     | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))))
+    | TypedSlackCookie String
+    | TypedSlackToken String
+    | PressedSubmitSlackData
 
 
 type alias NewChannelForm =
@@ -828,6 +834,7 @@ type ToBackend
     | ReloadDataRequest InitialLoadRequest
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
+    | LinkSlackRequest SlackData
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
     | GetPublicGoMatchRequest (SecretId GamePublicId)
