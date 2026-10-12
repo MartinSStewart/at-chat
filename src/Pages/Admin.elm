@@ -3968,6 +3968,23 @@ discordGuildsSection isMobile expandedSections expandedDiscordGuilds adminData =
                     Ui.text "No Discord guilds"
 
                 else
+                    let
+                        linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+                        linkedDiscordUsers =
+                            SeqDict.filter
+                                (\_ discordUser ->
+                                    case discordUser of
+                                        FullData_ForAdmin _ ->
+                                            True
+
+                                        NeedsAuthAgain_ForAdmin _ ->
+                                            True
+
+                                        BasicData_ForAdmin _ ->
+                                            False
+                                )
+                                discordUsers
+                    in
                     Ui.column
                         [ Ui.spacing 4 ]
                         (List.map
@@ -4024,6 +4041,16 @@ discordGuildsSection isMobile expandedSections expandedDiscordGuilds adminData =
                                             ]
                                         , Ui.text ("Channels: " ++ String.fromInt channelCount)
                                         , Ui.text ("Members: " ++ String.fromInt (SeqDict.size members))
+                                        , if LocalState.canViewDiscordGuild linkedDiscordUsers guild.membersAndOwner then
+                                            Ui.none
+
+                                          else
+                                            Ui.el
+                                                [ Ui.width Ui.shrink
+                                                , Ui.Font.color MyUi.errorColor
+                                                , MyUi.hoverText "No linked Discord user is in this guild. It gets deleted once an hourly update has found it orphaned twice in a row."
+                                                ]
+                                                (Ui.text "Orphaned")
                                         , MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
                                         ]
                                     , if isExpanded then

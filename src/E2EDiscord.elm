@@ -494,7 +494,46 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         else
                             Ok ()
                     )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordGuildsSection)
+                        , E2EHelper.hasExactText adminPage [ "Owner:" ]
+                        , E2EHelper.hasNotExactText adminPage [ "Orphaned" ]
+                        ]
+                    )
                 , admin.update 100 (Audio.userMsg (Types.PressedUnlinkDiscordUser E2EHelper.currentDiscordUserId))
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordGuildsSection)
+                        , E2EHelper.hasExactText adminPage [ "Orphaned" ]
+                        ]
+                    )
                 , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
                 , T.checkBackend
                     100
