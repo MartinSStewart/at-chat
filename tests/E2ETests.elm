@@ -18,6 +18,7 @@ import E2ELogin
 import E2EMedia
 import E2EMisc
 import E2ESheepGame
+import E2ESlack
 import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
@@ -428,6 +429,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
+    , E2ESlack.linkSlackLoadsChannelsTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.notificationClickOpensConversationTest normalConfig

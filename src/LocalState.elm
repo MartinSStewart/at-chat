@@ -8,6 +8,7 @@ module LocalState exposing
     , AdminData_DmChannel
     , AdminData_Guild
     , AdminData_GuildChannel
+    , AdminData_SlackWorkspace
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -211,6 +212,7 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing(..))
+import Slack
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
@@ -994,6 +996,7 @@ type alias AdminData =
             )
     , discordUsers : AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     , discordGuilds : AdminDataStatus (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild)
+    , slackWorkspaces : AdminDataStatus (SeqDict (Slack.Id Slack.TeamId) AdminData_SlackWorkspace)
     , guilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_Guild)
     , deletedGuilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_DeletedGuild)
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -1343,6 +1346,14 @@ type alias AdminData_DiscordGuild =
             , roles : SeqSet (Discord.Id Discord.RoleId)
             }
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    }
+
+
+type alias AdminData_SlackWorkspace =
+    { name : String
+    , domain : String
+    , channels : SeqDict (Slack.Id Slack.ChannelId) { name : ChannelName }
+    , linkedUsers : SeqDict (Slack.Id Slack.UserId) { name : String, linkedTo : Id UserId }
     }
 
 

@@ -9,6 +9,7 @@ module BackendExtra exposing
     , adminDmChannels
     , adminGuilds
     , adminSessions
+    , adminSlackWorkspaces
     , asAdmin
     , asDiscordDmUser
     , asDiscordDmUser_AllowUserThatNeedsAuthAgain
@@ -108,6 +109,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
@@ -1677,6 +1679,28 @@ adminDiscordGuilds model =
         model.discordGuilds
 
 
+adminSlackWorkspaces : BackendModel -> SeqDict (Slack.Id Slack.TeamId) LocalState.AdminData_SlackWorkspace
+adminSlackWorkspaces model =
+    SeqDict.map
+        (\teamId workspace ->
+            { name = workspace.name
+            , domain = workspace.domain
+            , channels = workspace.channels
+            , linkedUsers =
+                SeqDict.filterMap
+                    (\_ slackUser ->
+                        if slackUser.teamId == teamId then
+                            Just { name = slackUser.name, linkedTo = slackUser.linkedTo }
+
+                        else
+                            Nothing
+                    )
+                    model.slackUsers
+            }
+        )
+        model.slackWorkspaces
+
+
 adminDiscordDmChannels :
     BackendModel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) LocalState.AdminData_DiscordDmChannel
@@ -2665,6 +2689,9 @@ backendMsgLog msg =
 
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
+
+        GotSlackChannels _ _ _ ->
+            BackendMsgLog_GotSlackChannels
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_ReloadDiscordUserStep1

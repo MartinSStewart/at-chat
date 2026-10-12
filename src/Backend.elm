@@ -782,9 +782,22 @@ updateHelper msg model =
                         Ok { self, team } ->
                             { model2
                                 | slackWorkspaces =
-                                    SeqDict.insert
+                                    SeqDict.update
                                         team.id
-                                        { name = team.name, domain = team.domain, icon = team.icon }
+                                        (\maybeWorkspace ->
+                                            { name = team.name
+                                            , domain = team.domain
+                                            , icon = team.icon
+                                            , channels =
+                                                case maybeWorkspace of
+                                                    Just workspace ->
+                                                        workspace.channels
+
+                                                    Nothing ->
+                                                        SeqDict.empty
+                                            }
+                                                |> Just
+                                        )
                                         model2.slackWorkspaces
                                 , slackUsers =
                                     SeqDict.insert
@@ -804,11 +817,55 @@ updateHelper msg model =
                 )
                 model
                 results
-            , List.Nonempty.map (\( _, result ) -> Result.map (\{ team } -> team.name) result) results
-                |> LoadedSlackWorkspaces
-                |> LinkSlackResponse
-                |> Lamdera.sendToFrontend clientId
+            , Command.batch
+                [ List.Nonempty.map (\( _, result ) -> Result.map (\{ team } -> team.name) result) results
+                    |> LoadedSlackWorkspaces
+                    |> LinkSlackResponse
+                    |> Lamdera.sendToFrontend clientId
+                , List.Nonempty.toList results
+                    |> List.filterMap
+                        (\( token, result ) ->
+                            case result of
+                                Ok { team } ->
+                                    Slack.userChannels model.serverSecret cookie token
+                                        |> Task.attempt (GotSlackChannels linkedAt team.id)
+                                        |> Just
+
+                                Err _ ->
+                                    Nothing
+                        )
+                    |> Command.batch
+                ]
             )
+
+        GotSlackChannels time teamId result ->
+            case result of
+                Ok channels ->
+                    ( { model
+                        | slackWorkspaces =
+                            SeqDict.updateIfExists
+                                teamId
+                                (\workspace ->
+                                    { workspace
+                                        | channels =
+                                            SeqDict.union
+                                                (List.map
+                                                    (\channel ->
+                                                        ( channel.id, { name = ChannelName.fromStringLossy channel.name } )
+                                                    )
+                                                    channels
+                                                    |> SeqDict.fromList
+                                                )
+                                                workspace.channels
+                                    }
+                                )
+                                model.slackWorkspaces
+                      }
+                    , Command.none
+                    )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToLoadSlackChannels teamId error) model
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
             case ( SeqDict.get discordUserId model.discordUsers, result ) of
@@ -9169,6 +9226,14 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 (Pages.Admin.LoadDiscordGuilds (FilledInByBackend (BackendExtra.adminDiscordGuilds model)))
             )
 
+        Pages.Admin.LoadSlackWorkspaces _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadSlackWorkspaces (FilledInByBackend (BackendExtra.adminSlackWorkspaces model)))
+            )
+
         Pages.Admin.LoadDiscordDmChannels _ ->
             ( model
             , adminDataResponse
@@ -9329,6 +9394,19 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 model2 : BackendModel
                 model2 =
                     { model | discordGuilds = SeqDict.remove guildId model.discordGuilds }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.DeleteSlackWorkspace teamId ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | slackWorkspaces = SeqDict.remove teamId model.slackWorkspaces }
             in
             ( model2
             , Command.batch

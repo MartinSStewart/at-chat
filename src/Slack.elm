@@ -1,5 +1,7 @@
 module Slack exposing
-    ( HttpError(..)
+    ( Channel
+    , ChannelId
+    , HttpError(..)
     , Id(..)
     , SlackCookie
     , SlackData
@@ -9,16 +11,18 @@ module Slack exposing
     , UserBoot
     , UserId
     , httpErrorToString
+    , idToString
     , stringToSlackCookie
     , teamsJsonToSlackTokens
     , userBoot
+    , userChannels
     , validateSlackData
     )
 
 import Duration
 import Effect.Command exposing (BackendOnly)
 import Effect.Http as Http
-import Effect.Task exposing (Task)
+import Effect.Task as Task exposing (Task)
 import FileStatus
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
@@ -131,6 +135,15 @@ type TeamId
     = TeamId Never
 
 
+type ChannelId
+    = ChannelId Never
+
+
+idToString : Id a -> String
+idToString (Id id) =
+    id
+
+
 
 -- API
 
@@ -210,6 +223,73 @@ decodeTeam =
         (Decode.field "name" Decode.string)
         (Decode.field "domain" Decode.string)
         (Decode.at [ "icon", "image_132" ] Decode.string)
+
+
+type alias Channel =
+    { id : Id ChannelId
+    , name : String
+    }
+
+
+{-| Every public and private channel the user is in, archived ones left out. Slack hands these out
+a page at a time.
+-}
+userChannels : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError (List Channel)
+userChannels secretKey cookie token =
+    userChannelsHelper secretKey cookie token Nothing []
+
+
+userChannelsHelper :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Maybe String
+    -> List Channel
+    -> Task BackendOnly HttpError (List Channel)
+userChannelsHelper secretKey cookie token cursor channelsSoFar =
+    http
+        secretKey
+        cookie
+        token
+        "users.conversations"
+        ([ ( "types", "public_channel,private_channel" )
+         , ( "exclude_archived", "true" )
+         , ( "limit", "200" )
+         ]
+            ++ (case cursor of
+                    Just cursor2 ->
+                        [ ( "cursor", cursor2 ) ]
+
+                    Nothing ->
+                        []
+               )
+        )
+        (Decode.map2
+            Tuple.pair
+            (Decode.field
+                "channels"
+                (Decode.list
+                    (Decode.map2
+                        Channel
+                        (Decode.field "id" decodeId)
+                        (Decode.field "name" Decode.string)
+                    )
+                )
+            )
+            (Decode.oneOf
+                [ Decode.at [ "response_metadata", "next_cursor" ] Decode.string
+                , Decode.succeed ""
+                ]
+            )
+        )
+        |> Task.andThen
+            (\( channels, nextCursor ) ->
+                if nextCursor == "" then
+                    Task.succeed (channelsSoFar ++ channels)
+
+                else
+                    userChannelsHelper secretKey cookie token (Just nextCursor) (channelsSoFar ++ channels)
+            )
 
 
 {-| Goes through the Rust server since Slack needs the `d` cookie, and browsers and the Lamdera

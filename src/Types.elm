@@ -56,6 +56,7 @@ module Types exposing
     , RepliedToData(..)
     , RevealedSpoilers
     , ServerChange(..)
+    , SlackBackendChannel
     , SlackBackendWorkspace
     , SlackLinkedUser
     , ToBackend(..)
@@ -867,6 +868,7 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
+    | GotSlackChannels Time.Posix (Slack.Id Slack.TeamId) (Result Slack.HttpError (List Slack.Channel))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1010,6 +1012,12 @@ type alias SlackBackendWorkspace =
     { name : String
     , domain : String
     , icon : String
+    , channels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
+    }
+
+
+type alias SlackBackendChannel =
+    { name : ChannelName
     }
 
 

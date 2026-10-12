@@ -13,6 +13,7 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import Postmark
 import SeqDict exposing (SeqDict)
+import Slack
 import Sticker exposing (AnimationMode(..))
 import Time exposing (Month(..))
 import Ui exposing (Element)
@@ -52,6 +53,7 @@ type Log
     | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
+    | FailedToLoadSlackChannels (Slack.Id Slack.TeamId) Slack.HttpError
     | ReceivedTypeThatIsAlwaysInvalid
     | DeletedLog
 
@@ -144,6 +146,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToDeleteOrphanedFiles _ ->
+            Nothing
+
+        FailedToLoadSlackChannels _ _ ->
             Nothing
 
         ReceivedTypeThatIsAlwaysInvalid ->
@@ -550,6 +555,14 @@ logContent onPressCopy emojiData customEmojis log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Deleting orphaned files failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedToLoadSlackChannels teamId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Loading Slack channels failed"
+                , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
                 ]
 
         ReceivedTypeThatIsAlwaysInvalid ->

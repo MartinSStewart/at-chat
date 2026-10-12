@@ -71,6 +71,8 @@ module E2EHelper exposing
     , lastGuildChannel
     , lastGuildChannelMessage
     , lastGuildChannelMessageAt
+    , legitSlackCookie
+    , legitSlackToken
     , linkDiscordAndLogin
     , linkDiscordAndLoginSecondUser
     , linkDiscordUrl
@@ -2046,7 +2048,25 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
             ( "POST", [ "slack.com", "api", "client.userBoot" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    """{"ok":false,"error":"invalid_auth"}"""
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true,"self":{"id":"U09DJDQL1A8","name":"slack-admin"},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "users.conversations" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if not (isLegitSlackRequest headers body) then
+                        """{"ok":false,"error":"invalid_auth"}"""
+
+                     else if List.member "cursor=page2" (slackFormFields body) then
+                        """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":""}}"""
+
+                     else
+                        """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false},{"id":"C09DJDQUKKN","name":"social","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":"page2"}}"""
+                    )
 
             ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->
                 StringHttpResponse
@@ -2135,6 +2155,35 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 Debug.log "UnhandledHttpRequest" url
         in
         UnhandledHttpRequest
+
+
+isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
+isLegitSlackRequest headers body =
+    List.member ( "Cookie", "d=" ++ legitSlackCookie ) headers
+        && List.member ("token=" ++ legitSlackToken) (slackFormFields body)
+
+
+slackFormFields : Maybe Json.Decode.Value -> List String
+slackFormFields body =
+    case Maybe.map (Json.Decode.decodeValue Json.Decode.string) body of
+        Just (Ok text) ->
+            String.split "&" text
+
+        Just (Err _) ->
+            []
+
+        Nothing ->
+            []
+
+
+legitSlackCookie : String
+legitSlackCookie =
+    "xoxd-legit-cookie"
+
+
+legitSlackToken : String
+legitSlackToken =
+    "xoxc-legit-token"
 
 
 type alias CustomRequest =
