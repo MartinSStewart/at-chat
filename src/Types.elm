@@ -60,6 +60,7 @@ module Types exposing
     , SlackBackendWorkspace
     , SlackDmChannel
     , SlackLinkedUser
+    , SlackUserData(..)
     , ToBackend(..)
     , ToFrontend(..)
     , UploadBackupState
@@ -486,7 +487,7 @@ type alias BackendModel =
     , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
-    , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackLinkedUser
+    , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackUserData
     , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
     , files : SeqDict FileHash BackendFileData
     , orphanedFilesLastHour : SeqSet FileHash
@@ -870,7 +871,17 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
-    | GotSlackConversations Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError { channels : List Slack.Channel, dmChannels : List Slack.DmChannel })
+    | LinkSlackUserStep2
+        Time.Posix
+        (Slack.Id Slack.TeamId)
+        (Slack.Id Slack.UserId)
+        (Result
+            Slack.HttpError
+            { channels : List ( Slack.Channel, List Slack.Message )
+            , dmChannels : List ( Slack.DmChannel, List Slack.Message )
+            , users : List Slack.User
+            }
+        )
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1026,20 +1037,28 @@ type alias SlackBackendChannel =
     { name : ChannelName
     , isPrivate : Bool
     , linkedMembers : SeqSet (Slack.Id Slack.UserId)
+    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
     }
 
 
 type alias SlackDmChannel =
     { teamId : Slack.Id Slack.TeamId
     , members : NonemptySet (Slack.Id Slack.UserId)
+    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
     }
 
 
+type SlackUserData
+    = SlackBasicData Slack.User
+    | SlackFullData SlackLinkedUser
+
+
 type alias SlackLinkedUser =
-    { linkedTo : Id UserId
+    { user : Slack.User
+    , linkedTo : Id UserId
     , linkedAt : Time.Posix
-    , teamId : Slack.Id Slack.TeamId
-    , name : String
     , token : SlackToken
     , cookie : SlackCookie
     }

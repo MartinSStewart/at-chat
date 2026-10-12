@@ -3,12 +3,47 @@ module E2ESlack exposing (linkSlackLoadsChannelsTest)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Effect.Time as Time
+import Id exposing (ChannelMessageId)
+import IdArray
+import Message exposing (Message(..))
 import NonemptySet
 import Pages.Admin
+import PersonName
+import RichText
 import SeqDict
 import SeqSet
 import Slack
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+
+
+messageToString : Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> String
+messageToString message =
+    case message of
+        UserTextMessage data ->
+            Slack.idToString data.createdBy
+                ++ ": "
+                ++ RichText.toString
+                    Time.utc
+                    False
+                    (SeqDict.fromList [ ( Slack.Id "U09DK3NCPMG", { name = PersonName.fromStringLossy "zig" } ) ])
+                    (SeqDict.fromList [ ( ( Slack.Id "C09DJDQUKKN", Nothing ), { name = "social" } ) ])
+                    data.content.content
+
+        UserJoinedMessage _ userId _ _ ->
+            Slack.idToString userId ++ " joined"
+
+        EncryptedUserTextMessage _ ->
+            "Encrypted"
+
+        DeletedMessage _ ->
+            "Deleted"
+
+        CallStarted _ ->
+            "Call"
+
+        GameStarted _ ->
+            "Game"
 
 
 linkSlackLoadsChannelsTest :
@@ -16,7 +51,7 @@ linkSlackLoadsChannelsTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 linkSlackLoadsChannelsTest config =
     E2EHelper.startTest
-        "Linking Slack loads each workspace's channels and DMs and the admin page lists them"
+        "Linking Slack loads each workspace's channels, DMs, messages and users and the admin page lists them"
         E2EHelper.startTime
         config
         [ T.connectFrontend
@@ -94,6 +129,68 @@ linkSlackLoadsChannelsTest config =
                             dmChannels ->
                                 Err ("Expected the two DMs and the group DM with their members, got " ++ String.join " | " dmChannels)
                     )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        let
+                            channelMessages : List String
+                            channelMessages =
+                                SeqDict.values (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                    |> List.filterMap (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                    |> List.concatMap (\channel -> IdArray.toList channel.messages)
+                                    |> List.map messageToString
+                        in
+                        if
+                            channelMessages
+                                == [ "U09DJDQL1A8: Plain <old> message"
+                                   , "U09DK3NCPMG joined"
+                                   , "U09DJDQL1A8: 👋 Hello @zig see [at-chat](https://at-chat.app/) in #social *_now_*"
+                                   , "U09DJDQL1A8: Run `make`\n```elm make src/Main.elm```"
+                                   , "U09DK3NCPMG: Before\n> Quoted\n* First item\n* Second item"
+                                   ]
+                        then
+                            Ok ()
+
+                        else
+                            Err ("Unexpected messages in #all-test-slack: " ++ String.join " | " channelMessages)
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case
+                            SeqDict.values (E2EHelper.unwrapBackend backend).slackDmChannels
+                                |> List.map (\dmChannel -> IdArray.toList dmChannel.messages |> List.map messageToString)
+                        of
+                            [ [ "U09DK3NCPMG: 🌞 Good a~~fternoon!~~" ], [], [] ] ->
+                                Ok ()
+
+                            dmMessages ->
+                                Err ("Unexpected DM messages: " ++ String.join " | " (List.map (String.join ", ") dmMessages))
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case
+                            SeqDict.toList (E2EHelper.unwrapBackend backend).slackUsers
+                                |> List.map
+                                    (\( slackUserId, slackUser ) ->
+                                        Slack.idToString slackUserId
+                                            ++ (case slackUser of
+                                                    Types.SlackFullData _ ->
+                                                        " linked"
+
+                                                    Types.SlackBasicData _ ->
+                                                        ""
+                                               )
+                                    )
+                                |> List.sort
+                        of
+                            [ "U09DFEXKH9T", "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
+                                Ok ()
+
+                            slackUsers ->
+                                Err ("Unexpected Slack users: " ++ String.join ", " slackUsers)
+                    )
                 , admin.input
                     100
                     (Dom.id "userOptions_slackTeamsJson")
@@ -125,14 +222,14 @@ linkSlackLoadsChannelsTest config =
                     )
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackWorkspacesSection)
-                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "slack-admin", "ziggler" ]
+                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 4", "slack-admin", "ziggler" ]
                 , E2EHelper.hasNotExactText admin [ "#social" ]
                 , admin.click 100 (Pages.Admin.expandSlackWorkspaceButtonId (Slack.Id "T09DJDQL18U"))
-                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:" ]
+                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 5" ]
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackDmChannelsSection)
-                , E2EHelper.hasExactText admin [ "D09DK3P5RPC", "C0AMPIM1234", "U0THIRD" ]
+                , E2EHelper.hasExactText admin [ "D09DK3P5RPC", "C0AMPIM1234", "third", "Messages: 1" ]
                 , admin.click 100 (Pages.Admin.deleteSlackDmChannelButtonId (Slack.Id "C0AMPIM1234"))
-                , E2EHelper.hasNotExactText admin [ "U0THIRD" ]
+                , E2EHelper.hasNotExactText admin [ "third" ]
                 , T.checkBackend
                     100
                     (\backend ->

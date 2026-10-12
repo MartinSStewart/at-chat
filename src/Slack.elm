@@ -5,26 +5,37 @@ module Slack exposing
     , DmChannelId
     , HttpError(..)
     , Id(..)
+    , Message
+    , MessageContent(..)
+    , MessageId
+    , RichTextElement(..)
+    , RichTextInline(..)
     , SlackCookie
     , SlackData
     , SlackToken
+    , Style
     , Team
     , TeamId
+    , User
     , UserBoot
     , UserId
     , httpErrorToString
     , idToString
+    , newestMessages
     , stringToSlackCookie
     , teamsJsonToSlackTokens
     , userBoot
     , userConversations
+    , users
     , validateSlackData
     )
 
 import Duration
 import Effect.Command exposing (BackendOnly)
 import Effect.Http as Http
+import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
+import Effect.Time as Time
 import FileStatus
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
@@ -146,6 +157,12 @@ type DmChannelId
     = DmChannelId Never
 
 
+{-| A message's `ts`, which only identifies it within its channel.
+-}
+type MessageId
+    = MessageId Never
+
+
 idToString : Id a -> String
 idToString (Id id) =
     id
@@ -157,6 +174,7 @@ idToString (Id id) =
 
 type HttpError
     = SlackError String
+    | RateLimited
     | BadStatus Int String
     | BadBody String
     | Timeout
@@ -169,6 +187,9 @@ httpErrorToString error =
     case error of
         SlackError text ->
             "Slack said " ++ text
+
+        RateLimited ->
+            "Rate limited"
 
         BadStatus status body ->
             "Status " ++ String.fromInt status ++ ": " ++ String.left 200 body
@@ -195,9 +216,22 @@ type alias Team =
 
 
 type alias UserBoot =
-    { self : { id : Id UserId, name : String }
+    { self : User
     , team : Team
     }
+
+
+type alias User =
+    { id : Id UserId
+    , teamId : Id TeamId
+    , name : String
+    , realName : String
+    , displayName : String
+    , image : String
+    , isBot : Bool
+    , deleted : Bool
+    }
+
 
 
 userBoot : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError UserBoot
@@ -210,16 +244,66 @@ userBoot secretKey cookie token =
         []
         (Decode.map2
             UserBoot
-            (Decode.field
-                "self"
-                (Decode.map2
-                    (\id name -> { id = id, name = name })
-                    (Decode.field "id" decodeId)
-                    (Decode.field "name" Decode.string)
-                )
-            )
+            (Decode.field "self" decodeUser)
             (Decode.field "team" decodeTeam)
         )
+
+
+decodeUser : Decoder User
+decodeUser =
+    Decode.map8
+        User
+        (Decode.field "id" decodeId)
+        (Decode.field "team_id" decodeId)
+        (Decode.field "name" Decode.string)
+        (optionalString [ "profile", "real_name" ])
+        (optionalString [ "profile", "display_name" ])
+        (optionalString [ "profile", "image_72" ])
+        (optionalBool "is_bot")
+        (optionalBool "deleted")
+
+
+optionalString : List String -> Decoder String
+optionalString path =
+    Decode.oneOf [ Decode.at path Decode.string, Decode.succeed "" ]
+
+
+{-| Everyone in the workspace, deleted users included since they can still have written messages.
+-}
+users : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError (List User)
+users secretKey cookie token =
+    usersHelper secretKey cookie token Nothing []
+
+
+usersHelper :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Maybe String
+    -> List User
+    -> Task BackendOnly HttpError (List User)
+usersHelper secretKey cookie token cursor usersSoFar =
+    http
+        secretKey
+        cookie
+        token
+        "users.list"
+        (( "limit", "200" ) :: cursorParameter cursor)
+        (Decode.map2
+            Tuple.pair
+            (Decode.field "members" (Decode.list decodeUser))
+            decodeNextCursor
+        )
+        |> retryWhenRateLimited
+        |> Task.andThen
+            (\( users2, nextCursor ) ->
+                case nextCursor of
+                    Just nextCursor2 ->
+                        usersHelper secretKey cookie token (Just nextCursor2) (usersSoFar ++ users2)
+
+                    Nothing ->
+                        Task.succeed (usersSoFar ++ users2)
+            )
 
 
 decodeTeam : Decoder Team
@@ -230,6 +314,217 @@ decodeTeam =
         (Decode.field "name" Decode.string)
         (Decode.field "domain" Decode.string)
         (Decode.at [ "icon", "image_132" ] Decode.string)
+
+
+type alias Message =
+    { id : Id MessageId
+    , createdAt : Time.Posix
+    , user : Id UserId
+    , content : MessageContent
+    }
+
+
+type MessageContent
+    = TextMessage { text : String, blocks : List RichTextElement }
+    | JoinedChannel
+
+
+type RichTextElement
+    = RichTextSection (List RichTextInline)
+    | RichTextPreformatted (List RichTextInline)
+    | RichTextQuote (List RichTextInline)
+    | RichTextList (List (List RichTextInline))
+
+
+type RichTextInline
+    = RichText_Text { text : String, style : Style }
+    | RichText_Link { url : String, text : String, style : Style }
+    | RichText_Emoji { name : String, unicode : String, style : Style }
+    | RichText_User (Id UserId)
+    | RichText_Channel (Id ChannelId)
+    | RichText_Broadcast String
+
+
+type alias Style =
+    { bold : Bool
+    , italic : Bool
+    , strike : Bool
+    , code : Bool
+    }
+
+
+{-| The newest messages first. Messages Slack hides on the free plan are included, and anything that
+fails to load gives an empty list rather than failing everything else being loaded.
+-}
+newestMessages :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Int
+    -> Id channelId
+    -> Task BackendOnly x (List Message)
+newestMessages secretKey cookie token limit channelId =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.history"
+        [ ( "channel", idToString channelId )
+        , ( "limit", String.fromInt limit )
+        , ( "include_free_team_extra_messages", "true" )
+        ]
+        (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
+            |> Decode.map (List.filterMap identity)
+        )
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
+{-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
+show for fail to decode.
+-}
+decodeMessage : Decoder Message
+decodeMessage =
+    Decode.map4
+        Message
+        (Decode.field "ts" decodeId)
+        (Decode.field "ts" decodeTimestamp)
+        (Decode.field "user" decodeId)
+        (Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
+            |> Decode.andThen
+                (\subtype ->
+                    if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
+                        Decode.map2
+                            (\text blocks -> TextMessage { text = text, blocks = blocks })
+                            (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
+                            (Decode.oneOf
+                                [ Decode.field "blocks" (Decode.list decodeBlock) |> Decode.map List.concat
+                                , Decode.succeed []
+                                ]
+                            )
+
+                    else if subtype == "channel_join" then
+                        Decode.succeed JoinedChannel
+
+                    else
+                        Decode.fail ("Unsupported subtype " ++ subtype)
+                )
+        )
+
+
+decodeTimestamp : Decoder Time.Posix
+decodeTimestamp =
+    Decode.string
+        |> Decode.andThen
+            (\text ->
+                case String.toFloat text of
+                    Just seconds ->
+                        Time.millisToPosix (round (seconds * 1000)) |> Decode.succeed
+
+                    Nothing ->
+                        Decode.fail ("Invalid timestamp " ++ text)
+            )
+
+
+{-| Only rich\_text blocks are kept, they are what people's messages are written in.
+-}
+decodeBlock : Decoder (List RichTextElement)
+decodeBlock =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\blockType ->
+                if blockType == "rich_text" then
+                    Decode.field "elements" (Decode.list (Decode.maybe decodeRichTextElement))
+                        |> Decode.map (List.filterMap identity)
+
+                else
+                    Decode.succeed []
+            )
+
+
+decodeRichTextElement : Decoder RichTextElement
+decodeRichTextElement =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\elementType ->
+                case elementType of
+                    "rich_text_section" ->
+                        Decode.map RichTextSection decodeInlines
+
+                    "rich_text_preformatted" ->
+                        Decode.map RichTextPreformatted decodeInlines
+
+                    "rich_text_quote" ->
+                        Decode.map RichTextQuote decodeInlines
+
+                    "rich_text_list" ->
+                        Decode.field "elements" (Decode.list decodeInlines) |> Decode.map RichTextList
+
+                    _ ->
+                        Decode.fail ("Unsupported rich text element " ++ elementType)
+            )
+
+
+decodeInlines : Decoder (List RichTextInline)
+decodeInlines =
+    Decode.field "elements" (Decode.list (Decode.maybe decodeInline))
+        |> Decode.map (List.filterMap identity)
+
+
+decodeInline : Decoder RichTextInline
+decodeInline =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\inlineType ->
+                case inlineType of
+                    "text" ->
+                        Decode.map2
+                            (\text style -> RichText_Text { text = text, style = style })
+                            (Decode.field "text" Decode.string)
+                            decodeStyle
+
+                    "link" ->
+                        Decode.map3
+                            (\url text style -> RichText_Link { url = url, text = text, style = style })
+                            (Decode.field "url" Decode.string)
+                            (optionalString [ "text" ])
+                            decodeStyle
+
+                    "emoji" ->
+                        Decode.map3
+                            (\name unicode style -> RichText_Emoji { name = name, unicode = unicode, style = style })
+                            (Decode.field "name" Decode.string)
+                            (optionalString [ "unicode" ])
+                            decodeStyle
+
+                    "user" ->
+                        Decode.map RichText_User (Decode.field "user_id" decodeId)
+
+                    "channel" ->
+                        Decode.map RichText_Channel (Decode.field "channel_id" decodeId)
+
+                    "broadcast" ->
+                        Decode.map RichText_Broadcast (Decode.field "range" Decode.string)
+
+                    _ ->
+                        Decode.fail ("Unsupported rich text inline " ++ inlineType)
+            )
+
+
+decodeStyle : Decoder Style
+decodeStyle =
+    Decode.oneOf
+        [ Decode.field
+            "style"
+            (Decode.map4
+                Style
+                (optionalBool "bold")
+                (optionalBool "italic")
+                (optionalBool "strike")
+                (optionalBool "code")
+            )
+        , Decode.succeed { bold = False, italic = False, strike = False, code = False }
+        ]
 
 
 type alias Channel =
@@ -326,6 +621,7 @@ userConversationsHelper secretKey cookie token cursor conversationsSoFar =
             (Decode.field "channels" (Decode.list decodeConversation))
             decodeNextCursor
         )
+        |> retryWhenRateLimited
         |> Task.andThen
             (\( conversations, nextCursor ) ->
                 case nextCursor of
@@ -362,6 +658,7 @@ groupDmMembersHelper secretKey cookie token channelId cursor membersSoFar =
             (Decode.field "members" (Decode.list decodeId))
             decodeNextCursor
         )
+        |> retryWhenRateLimited
         |> Task.andThen
             (\( members, nextCursor ) ->
                 case nextCursor of
@@ -432,6 +729,48 @@ decodeNextCursor =
         ]
 
 
+{-| The Rust server doesn't pass Slack's Retry-After header back, so this waits long enough for
+Slack's per minute limits to reset.
+-}
+retryWhenRateLimited : Task BackendOnly HttpError a -> Task BackendOnly HttpError a
+retryWhenRateLimited task =
+    retryWhenRateLimitedHelper 3 task
+
+
+retryWhenRateLimitedHelper : Int -> Task BackendOnly HttpError a -> Task BackendOnly HttpError a
+retryWhenRateLimitedHelper retriesLeft task =
+    Task.onError
+        (\error ->
+            case error of
+                RateLimited ->
+                    if retriesLeft > 0 then
+                        Process.sleep (Duration.seconds 30)
+                            |> Task.andThen (\() -> retryWhenRateLimitedHelper (retriesLeft - 1) task)
+
+                    else
+                        Task.fail error
+
+                SlackError _ ->
+                    Task.fail error
+
+                BadStatus _ _ ->
+                    Task.fail error
+
+                BadBody _ ->
+                    Task.fail error
+
+                Timeout ->
+                    Task.fail error
+
+                NetworkError ->
+                    Task.fail error
+
+                BadUrl _ ->
+                    Task.fail error
+        )
+        task
+
+
 {-| Goes through the Rust server since Slack needs the `d` cookie, and browsers and the Lamdera
 backend won't send one.
 -}
@@ -487,7 +826,11 @@ http secretKey (SlackCookie cookie) (SlackToken token) method parameters decoder
                             Err NetworkError
 
                         Http.BadStatus_ metadata body ->
-                            Err (BadStatus metadata.statusCode body)
+                            if metadata.statusCode == 429 then
+                                Err RateLimited
+
+                            else
+                                Err (BadStatus metadata.statusCode body)
 
                         Http.GoodStatus_ _ body ->
                             case Decode.decodeString (decodeResponse decoder) body of

@@ -1360,14 +1360,19 @@ type alias AdminData_SlackWorkspace =
             { name : ChannelName
             , isPrivate : Bool
             , linkedMembers : SeqSet (Slack.Id Slack.UserId)
+            , messageCount : Int
+            , firstMessage : Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
             }
     , linkedUsers : SeqDict (Slack.Id Slack.UserId) { name : String, linkedTo : Id UserId }
+    , userCount : Int
     }
 
 
 type alias AdminData_SlackDmChannel =
     { teamId : Slack.Id Slack.TeamId
-    , members : NonemptySet (Slack.Id Slack.UserId)
+    , members : List { id : Slack.Id Slack.UserId, name : String }
+    , messageCount : Int
+    , firstMessage : Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     }
 
 

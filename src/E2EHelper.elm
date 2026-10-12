@@ -2051,10 +2051,10 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                     (if isLegitSlackRequest headers body then
-                        """{"ok":true,"self":{"id":"U09DJDQL1A8","name":"slack-admin"},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else if isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
-                        """{"ok":true,"self":{"id":"U09DK3NCPMG","name":"ziggler"},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2077,6 +2077,32 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 
                      else
                         """{"ok":true,"channels":[{"id":"C09DJDQSWLU","name":"all-test-slack","is_channel":true,"is_private":false,"is_archived":false},{"id":"C09DJDQUKKN","name":"social","is_channel":true,"is_private":false,"is_archived":false}],"response_metadata":{"next_cursor":"page2"}}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "conversations.history" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if not (isLegitSlackRequest headers body || isSecondSlackUserRequest headers body) then
+                        """{"ok":false,"error":"invalid_auth"}"""
+
+                     else if List.member "channel=C09DJDQSWLU" (slackFormFields body) then
+                        slackChannelHistory
+
+                     else if List.member "channel=D09DK3P5RPC" (slackFormFields body) then
+                        """{"ok":true,"messages":[{"user":"U09DK3NCPMG","type":"message","ts":"1757115193.688809","text":":sun_with_face: Good a~fternoon!~","blocks":[{"type":"rich_text","block_id":"w6EFQ","elements":[{"type":"rich_text_section","elements":[{"type":"emoji","name":"sun_with_face","unicode":"1f31e"},{"type":"text","text":" Good a"},{"type":"text","text":"fternoon!","style":{"strike":true}}]}]}]}],"has_more":false}"""
+
+                     else
+                        """{"ok":true,"messages":[],"has_more":false}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "users.list" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body || isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
+                        """{"ok":true,"members":[{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":"","image_72":""}},{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}],"response_metadata":{"next_cursor":""}}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
                     )
 
             ( "POST", [ "slack.com", "api", "conversations.members" ] ) ->
@@ -2176,6 +2202,22 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 Debug.log "UnhandledHttpRequest" url
         in
         UnhandledHttpRequest
+
+
+{-| The newest message first, the way Slack sends them. Besides the messages people wrote it has
+one from an integration (no user) and one with only a file, which are both left out.
+-}
+slackChannelHistory : String
+slackChannelHistory =
+    """{"ok":true,"messages":[
+{"type":"message","subtype":"bot_message","bot_id":"B0BOT","text":"Deploy finished","ts":"1791638800.000100"},
+{"type":"message","user":"U09DJDQL1A8","text":"","files":[{"id":"F0C845B861K","name":"photo.jpg"}],"upload":false,"ts":"1791638790.000100"},
+{"type":"message","user":"U09DK3NCPMG","text":"quote and list","ts":"1791638780.000100","blocks":[{"type":"rich_text","block_id":"a1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Before\\n"}]},{"type":"rich_text_quote","elements":[{"type":"text","text":"Quoted"}]},{"type":"rich_text_list","style":"bullet","indent":0,"elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"First item"}]},{"type":"rich_text_section","elements":[{"type":"text","text":"Second item"}]}]}]}]},
+{"type":"message","user":"U09DJDQL1A8","text":"code","ts":"1791638770.000100","blocks":[{"type":"rich_text","block_id":"a2","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Run "},{"type":"text","text":"make","style":{"code":true}},{"type":"text","text":"\\n"}]},{"type":"rich_text_preformatted","elements":[{"type":"text","text":"elm make src/Main.elm"}],"border":0}]}]},
+{"type":"message","user":"U09DJDQL1A8","text":"Hello <@U09DK3NCPMG>","ts":"1791638760.000100","blocks":[{"type":"rich_text","block_id":"a3","elements":[{"type":"rich_text_section","elements":[{"type":"emoji","name":"wave","unicode":"1f44b"},{"type":"text","text":" Hello "},{"type":"user","user_id":"U09DK3NCPMG"},{"type":"text","text":" see "},{"type":"link","url":"https://at-chat.app","text":"at-chat"},{"type":"text","text":" in "},{"type":"channel","channel_id":"C09DJDQUKKN"},{"type":"text","text":" "},{"type":"text","text":"now","style":{"bold":true,"italic":true}}]}]}]},
+{"type":"message","subtype":"channel_join","user":"U09DK3NCPMG","text":"<@U09DK3NCPMG> has joined the channel","ts":"1791638750.000100"},
+{"type":"message","user":"U09DJDQL1A8","text":"Plain &lt;old&gt; message","ts":"1757024114.823749","is_beyond_free_limit":true}
+],"has_more":false,"is_limited":true}"""
 
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool

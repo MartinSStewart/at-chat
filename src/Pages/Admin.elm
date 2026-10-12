@@ -87,7 +87,6 @@ import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -4187,6 +4186,7 @@ slackWorkspacesSection isMobile expandedSections expandedSlackWorkspaces adminDa
                                         , Ui.text workspace.name
                                         , Ui.text workspace.domain
                                         , Ui.text ("Channels: " ++ String.fromInt (SeqDict.size workspace.channels))
+                                        , Ui.text ("Users: " ++ String.fromInt workspace.userCount)
                                         , Ui.row
                                             [ Ui.spacing 8 ]
                                             (Ui.text "Linked:"
@@ -4223,6 +4223,8 @@ slackWorkspacesSection isMobile expandedSections expandedSlackWorkspaces adminDa
 
                                                           else
                                                             Ui.none
+                                                        , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                        , firstMessageView channel
                                                         , Ui.row
                                                             [ Ui.spacing 8 ]
                                                             (Ui.text "Visible to:"
@@ -4269,19 +4271,6 @@ slackDmChannelsSection isMobile expandedSections adminData =
                     Ui.text "No Slack DM channels"
 
                 else
-                    let
-                        linkedUserNames : SeqDict (Slack.Id Slack.UserId) String
-                        linkedUserNames =
-                            SeqDict.foldl
-                                (\_ workspace dict ->
-                                    SeqDict.foldl
-                                        (\slackUserId slackUser dict2 -> SeqDict.insert slackUserId slackUser.name dict2)
-                                        dict
-                                        workspace.linkedUsers
-                                )
-                                SeqDict.empty
-                                slackWorkspaces
-                    in
                     Ui.column
                         [ Ui.spacing 4 ]
                         (List.map
@@ -4299,16 +4288,11 @@ slackDmChannelsSection isMobile expandedSections adminData =
                                         [ Ui.spacing 8 ]
                                         (Ui.text "Members:"
                                             :: List.map
-                                                (\slackUserId ->
-                                                    case SeqDict.get slackUserId linkedUserNames of
-                                                        Just name ->
-                                                            Ui.text name
-
-                                                        Nothing ->
-                                                            Ui.text (Slack.idToString slackUserId)
-                                                )
-                                                (NonemptySet.toList channel.members)
+                                                (\member -> Ui.el [ MyUi.hoverText (Slack.idToString member.id) ] (Ui.text member.name))
+                                                channel.members
                                         )
+                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    , firstMessageView channel
                                     , MyUi.deleteButton (deleteSlackDmChannelButtonId channelId) (PressedDeleteSlackDmChannel channelId)
                                     ]
                             )

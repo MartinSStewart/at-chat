@@ -36,7 +36,7 @@ type BackendMsgLog
     | BackendMsgLog_GotVapidKeys
     | BackendMsgLog_LinkDiscordUserStep1
     | BackendMsgLog_LinkSlackUserStep1
-    | BackendMsgLog_GotSlackConversations
+    | BackendMsgLog_LinkSlackUserStep2
     | BackendMsgLog_ReloadDiscordUserStep1
     | BackendMsgLog_HandleReadyDataStep2
     | BackendMsgLog_WebsocketCreatedHandleForUser
@@ -163,8 +163,8 @@ backendMsgLogToString log =
         BackendMsgLog_LinkSlackUserStep1 ->
             "LinkSlackUserStep1"
 
-        BackendMsgLog_GotSlackConversations ->
-            "GotSlackConversations"
+        BackendMsgLog_LinkSlackUserStep2 ->
+            "LinkSlackUserStep2"
 
         BackendMsgLog_ReloadDiscordUserStep1 ->
             "ReloadDiscordUserStep1"

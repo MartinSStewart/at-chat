@@ -78,14 +78,15 @@ import Set exposing (Set)
 import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
-import Slack exposing (SlackToken)
+import Slack exposing (SlackCookie, SlackToken)
+import SlackSync
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
@@ -803,13 +804,14 @@ updateHelper msg model =
                                 , slackUsers =
                                     SeqDict.insert
                                         self.id
-                                        { linkedTo = userId
-                                        , linkedAt = linkedAt
-                                        , teamId = team.id
-                                        , name = self.name
-                                        , token = token
-                                        , cookie = cookie
-                                        }
+                                        (SlackFullData
+                                            { user = self
+                                            , linkedTo = userId
+                                            , linkedAt = linkedAt
+                                            , token = token
+                                            , cookie = cookie
+                                            }
+                                        )
                                         model2.slackUsers
                             }
 
@@ -828,8 +830,8 @@ updateHelper msg model =
                         (\( token, result ) ->
                             case result of
                                 Ok { self, team } ->
-                                    Slack.userConversations model.serverSecret cookie token self.id
-                                        |> Task.attempt (GotSlackConversations linkedAt team.id self.id)
+                                    loadSlackWorkspaceData model cookie token self.id team.id
+                                        |> Task.attempt (LinkSlackUserStep2 linkedAt team.id self.id)
                                         |> Just
 
                                 Err _ ->
@@ -839,9 +841,9 @@ updateHelper msg model =
                 ]
             )
 
-        GotSlackConversations time teamId slackUserId result ->
+        LinkSlackUserStep2 time teamId slackUserId result ->
             case result of
-                Ok { channels, dmChannels } ->
+                Ok { channels, dmChannels, users } ->
                     ( { model
                         | slackWorkspaces =
                             SeqDict.updateIfExists
@@ -850,19 +852,29 @@ updateHelper msg model =
                                     { workspace
                                         | channels =
                                             List.foldl
-                                                (\channel dict ->
+                                                (\( channel, messages ) dict ->
                                                     SeqDict.insert
                                                         channel.id
-                                                        { name = ChannelName.fromStringLossy channel.name
-                                                        , isPrivate = channel.isPrivate
-                                                        , linkedMembers =
-                                                            case SeqDict.get channel.id dict of
-                                                                Just existing ->
-                                                                    SeqSet.insert slackUserId existing.linkedMembers
+                                                        (case SeqDict.get channel.id dict of
+                                                            Just existing ->
+                                                                { existing
+                                                                    | name = ChannelName.fromStringLossy channel.name
+                                                                    , isPrivate = channel.isPrivate
+                                                                    , linkedMembers = SeqSet.insert slackUserId existing.linkedMembers
+                                                                }
 
-                                                                Nothing ->
-                                                                    SeqSet.singleton slackUserId
-                                                        }
+                                                            Nothing ->
+                                                                let
+                                                                    ( messages2, linkedMessageIds ) =
+                                                                        SlackSync.messagesAndLinks (List.reverse messages)
+                                                                in
+                                                                { name = ChannelName.fromStringLossy channel.name
+                                                                , isPrivate = channel.isPrivate
+                                                                , linkedMembers = SeqSet.singleton slackUserId
+                                                                , messages = messages2
+                                                                , linkedMessageIds = linkedMessageIds
+                                                                }
+                                                        )
                                                         dict
                                                 )
                                                 (SeqDict.map
@@ -874,13 +886,48 @@ updateHelper msg model =
                                 )
                                 model.slackWorkspaces
                         , slackDmChannels =
-                            SeqDict.union
-                                (List.map
-                                    (\dmChannel -> ( dmChannel.id, { teamId = teamId, members = dmChannel.members } ))
-                                    dmChannels
-                                    |> SeqDict.fromList
+                            List.foldl
+                                (\( dmChannel, messages ) dict ->
+                                    SeqDict.insert
+                                        dmChannel.id
+                                        (case SeqDict.get dmChannel.id dict of
+                                            Just existing ->
+                                                { existing | members = dmChannel.members }
+
+                                            Nothing ->
+                                                let
+                                                    ( messages2, linkedMessageIds ) =
+                                                        SlackSync.messagesAndLinks (List.reverse messages)
+                                                in
+                                                { teamId = teamId
+                                                , members = dmChannel.members
+                                                , messages = messages2
+                                                , linkedMessageIds = linkedMessageIds
+                                                }
+                                        )
+                                        dict
                                 )
                                 model.slackDmChannels
+                                dmChannels
+                        , slackUsers =
+                            List.foldl
+                                (\user dict ->
+                                    SeqDict.insert
+                                        user.id
+                                        (case SeqDict.get user.id dict of
+                                            Just (SlackFullData linkedUser) ->
+                                                SlackFullData { linkedUser | user = user }
+
+                                            Just (SlackBasicData _) ->
+                                                SlackBasicData user
+
+                                            Nothing ->
+                                                SlackBasicData user
+                                        )
+                                        dict
+                                )
+                                model.slackUsers
+                                users
                       }
                     , Command.none
                     )
@@ -2400,6 +2447,71 @@ addDiscordGuildData discordUserId data guild =
     , roles = Pages.Admin.rolesToDict data.guild.roles
     , lastTypedAt = guild.lastTypedAt
     }
+
+
+{-| Loads every channel, DM and user the linked Slack user can see, along with the newest messages of
+the channels and DMs we didn't have before.
+-}
+loadSlackWorkspaceData :
+    BackendModel
+    -> SlackCookie
+    -> SlackToken
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    ->
+        Task
+            BackendOnly
+            Slack.HttpError
+            { channels : List ( Slack.Channel, List Slack.Message )
+            , dmChannels : List ( Slack.DmChannel, List Slack.Message )
+            , users : List Slack.User
+            }
+loadSlackWorkspaceData model cookie token slackUserId teamId =
+    let
+        existingChannels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
+        existingChannels =
+            case SeqDict.get teamId model.slackWorkspaces of
+                Just workspace ->
+                    workspace.channels
+
+                Nothing ->
+                    SeqDict.empty
+
+        newestMessages : Slack.Id channelId -> Task BackendOnly Slack.HttpError (List Slack.Message)
+        newestMessages channelId =
+            Slack.newestMessages model.serverSecret cookie token SlackSync.newChannelMaxMessages channelId
+    in
+    Slack.userConversations model.serverSecret cookie token slackUserId
+        |> Task.andThen
+            (\{ channels, dmChannels } ->
+                Task.map3
+                    (\channels2 dmChannels2 users ->
+                        { channels = channels2, dmChannels = dmChannels2, users = users }
+                    )
+                    (List.map
+                        (\channel ->
+                            if SeqDict.member channel.id existingChannels then
+                                Task.succeed ( channel, [] )
+
+                            else
+                                newestMessages channel.id |> Task.map (Tuple.pair channel)
+                        )
+                        channels
+                        |> Task.sequence
+                    )
+                    (List.map
+                        (\dmChannel ->
+                            if SeqDict.member dmChannel.id model.slackDmChannels then
+                                Task.succeed ( dmChannel, [] )
+
+                            else
+                                newestMessages dmChannel.id |> Task.map (Tuple.pair dmChannel)
+                        )
+                        dmChannels
+                        |> Task.sequence
+                    )
+                    (Slack.users model.serverSecret cookie token)
+            )
 
 
 {-| Fills in the messages loaded for a Discord guild's channels, leaving alone the channels it

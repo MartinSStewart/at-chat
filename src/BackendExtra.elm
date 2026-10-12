@@ -99,6 +99,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pagination exposing (PageId)
 import Postmark
@@ -114,7 +115,7 @@ import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), SlackUserData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -1682,7 +1683,31 @@ adminDiscordGuilds model =
 
 adminSlackDmChannels : BackendModel -> SeqDict (Slack.Id Slack.DmChannelId) LocalState.AdminData_SlackDmChannel
 adminSlackDmChannels model =
-    SeqDict.map (\_ dmChannel -> { teamId = dmChannel.teamId, members = dmChannel.members }) model.slackDmChannels
+    SeqDict.map
+        (\_ dmChannel ->
+            { teamId = dmChannel.teamId
+            , members =
+                List.map
+                    (\slackUserId ->
+                        { id = slackUserId
+                        , name =
+                            case SeqDict.get slackUserId model.slackUsers of
+                                Just (SlackFullData linkedUser) ->
+                                    linkedUser.user.name
+
+                                Just (SlackBasicData user) ->
+                                    user.name
+
+                                Nothing ->
+                                    Slack.idToString slackUserId
+                        }
+                    )
+                    (NonemptySet.toList dmChannel.members)
+            , messageCount = IdArray.length dmChannel.messages
+            , firstMessage = IdArray.get (Id.fromInt 0) dmChannel.messages
+            }
+        )
+        model.slackDmChannels
 
 
 adminSlackWorkspaces : BackendModel -> SeqDict (Slack.Id Slack.TeamId) LocalState.AdminData_SlackWorkspace
@@ -1691,16 +1716,51 @@ adminSlackWorkspaces model =
         (\teamId workspace ->
             { name = workspace.name
             , domain = workspace.domain
-            , channels = workspace.channels
+            , channels =
+                SeqDict.map
+                    (\_ channel ->
+                        { name = channel.name
+                        , isPrivate = channel.isPrivate
+                        , linkedMembers = channel.linkedMembers
+                        , messageCount = IdArray.length channel.messages
+                        , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
+                        }
+                    )
+                    workspace.channels
             , linkedUsers =
                 SeqDict.filterMap
                     (\_ slackUser ->
-                        if slackUser.teamId == teamId then
-                            Just { name = slackUser.name, linkedTo = slackUser.linkedTo }
+                        case slackUser of
+                            SlackFullData linkedUser ->
+                                if linkedUser.user.teamId == teamId then
+                                    Just { name = linkedUser.user.name, linkedTo = linkedUser.linkedTo }
 
-                        else
-                            Nothing
+                                else
+                                    Nothing
+
+                            SlackBasicData _ ->
+                                Nothing
                     )
+                    model.slackUsers
+            , userCount =
+                SeqDict.foldl
+                    (\_ slackUser count ->
+                        case slackUser of
+                            SlackFullData linkedUser ->
+                                if linkedUser.user.teamId == teamId then
+                                    count + 1
+
+                                else
+                                    count
+
+                            SlackBasicData user ->
+                                if user.teamId == teamId then
+                                    count + 1
+
+                                else
+                                    count
+                    )
+                    0
                     model.slackUsers
             }
         )
@@ -2696,8 +2756,8 @@ backendMsgLog msg =
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 
-        GotSlackConversations _ _ _ _ ->
-            BackendMsgLog_GotSlackConversations
+        LinkSlackUserStep2 _ _ _ _ ->
+            BackendMsgLog_LinkSlackUserStep2
 
         ReloadDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_ReloadDiscordUserStep1
