@@ -2571,6 +2571,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
+                        Discord.UserOutMsg_ChannelDeleted channel ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleChannelDeleted channel model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
                         Discord.UserOutMsg_GuildUpdate guildUpdate ->
                             let
                                 ( model3, cmd2 ) =
@@ -2724,6 +2731,38 @@ handleChannelUpdated channel model =
                 (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic newOverwrites |> ServerChange)
                 model2
             )
+
+
+{-| A DM getting closed in Discord also comes through as a CHANNEL\_DELETE, but that only hides it
+from that user's DM list, so DMs are left alone.
+-}
+handleChannelDeleted : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelDeleted channel model =
+    case channel.guildId of
+        Missing ->
+            ( model, Command.none )
+
+        Included guildId ->
+            case LocalState.getDiscordGuildAndChannel guildId channel.id model of
+                Just ( guild, _ ) ->
+                    ( { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                guildId
+                                { guild | channels = SeqDict.remove channel.id guild.channels }
+                                model.discordGuilds
+                      }
+                      -- This has to happen before the channel is removed, otherwise there's nobody
+                      -- left to send it to.
+                    , Broadcast.toDiscordGuildChannel
+                        guildId
+                        channel.id
+                        (Server_DiscordChannelDeleted guildId channel.id |> ServerChange)
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 {-| One of our linked Discord accounts left a guild, was removed from it, or the guild

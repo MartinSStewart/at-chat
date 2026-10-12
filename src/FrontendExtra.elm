@@ -5783,6 +5783,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
+                Server_DiscordChannelDeleted guildId channelId ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | channels = SeqDict.remove channelId guild.channels })
+                                local.discordGuilds
+                    }
+
                 Server_DiscordUpdateGuild guildId name icon roles ->
                     { local
                         | discordGuilds =

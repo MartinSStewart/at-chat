@@ -3163,6 +3163,67 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord channel deleted via CHANNEL_DELETE disappears"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelCreateEvent
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , admin.click 100 (Dom.id ("guild_openChannel_" ++ Discord.idToString E2EHelper.regularDiscordChannelId))
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "regular-channel" ])
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"t":"CHANNEL_DELETE","s":92,"op":0,"d":{"id":"1500000000000000778","type":0,"guild_id":"705745250815311942","name":"regular-channel","position":11,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"1024","deny":"0"}]}}"""
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "regular-channel" ])
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend backend).discordGuilds of
+                                    Just guild ->
+                                        if SeqDict.member E2EHelper.regularDiscordChannelId guild.channels then
+                                            Err "The deleted channel is still on the backend"
+
+                                        else
+                                            Ok ()
+
+                                    Nothing ->
+                                        Err "The backend doesn't have the Bot Test guild"
+                            )
+                        , -- Closing a DM in Discord sends a CHANNEL_DELETE too, but that only hides it
+                          -- from the DM list there
+                          T.websocketSendString
+                            100
+                            connection
+                            """{"t":"CHANNEL_DELETE","s":93,"op":0,"d":{"type":1,"id":"222087308516524036","flags":0,"recipients":[{"username":"kess","id":"168547048902098944","discriminator":"0","avatar":null}],"last_message_id":"1533200000000000003"}}"""
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if
+                                    SeqDict.member
+                                        kessDmChannelId
+                                        (E2EHelper.unwrapBackend backend).discordDmChannels
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Closing a DM in Discord deleted it"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
         E2EHelper.startTime
         normalConfig

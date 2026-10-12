@@ -2869,6 +2869,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordUpdateChannel _ _ _ _ _ ->
                             True
 
+                        Types.Server_DiscordChannelDeleted _ _ ->
+                            True
+
                         Types.Server_DiscordUpdateGuild _ _ _ _ ->
                             True
 
