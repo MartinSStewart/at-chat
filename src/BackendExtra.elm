@@ -2905,6 +2905,21 @@ backendMsgLog msg =
         SentSlackMessage _ _ _ _ _ _ _ _ ->
             BackendMsgLog_SentSlackMessage
 
+        SlackWebsocketCreatedHandle _ _ ->
+            BackendMsgLog_SlackWebsocketCreatedHandle
+
+        SlackWebsocketClosedByBackend ->
+            BackendMsgLog_SlackWebsocketClosedByBackend
+
+        SlackWebsocketMsg _ _ ->
+            BackendMsgLog_SlackWebsocketMsg
+
+        SlackWebsocketSentData _ _ ->
+            BackendMsgLog_SlackWebsocketSentData
+
+        SlackWebsocketReconnect _ ->
+            BackendMsgLog_SlackWebsocketReconnect
+
 
 toBackendLog : ToBackend -> ToBackendLog
 toBackendLog toBackend =

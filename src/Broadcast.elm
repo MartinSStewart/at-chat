@@ -34,6 +34,7 @@ module Broadcast exposing
     , toGuildExcludingOne
     , toOtherAdmins
     , toSession
+    , toSlack
     , toSlackExcludingOne
     , toUser
     , toUserAlt
@@ -285,6 +286,14 @@ slackConnections guildOrDmId model =
                     (\( _, clientIds ) -> List.Nonempty.toList clientIds)
                     (userConnections linkedTo model)
             )
+
+
+toSlack : SlackGuildOrDmId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toSlack guildOrDmId msg model =
+    List.map
+        (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
+        (slackConnections guildOrDmId model)
+        |> Command.batch
 
 
 toSlackExcludingOne : ClientId -> SlackGuildOrDmId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg

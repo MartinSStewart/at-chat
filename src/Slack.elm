@@ -19,10 +19,12 @@ module Slack exposing
     , User
     , UserBoot
     , UserId
+    , WebsocketEvent(..)
     , httpErrorToString
     , idToString
     , newestMessages
     , noStyle
+    , parseWebsocketEvent
     , postMessage
     , stringToSlackCookie
     , teamsJsonToSlackTokens
@@ -30,6 +32,8 @@ module Slack exposing
     , userConversations
     , users
     , validateSlackData
+    , websocketRelayRequest
+    , websocketRelayUrl
     )
 
 import Duration
@@ -552,6 +556,122 @@ decodeMessage =
                         Decode.fail ("Unsupported subtype " ++ subtype)
                 )
         )
+
+
+
+-- WEBSOCKET
+
+
+{-| Slack's websocket refuses connections that don't carry the d cookie and Effect.Websocket can't
+set headers, so the backend connects to a relay on the Rust server instead
+(rust-server/src/websocket\_relay.rs). The relay says it's ready, is sent websocketRelayRequest, and
+from then on passes every message between the backend and Slack unchanged.
+-}
+websocketRelayUrl : String
+websocketRelayUrl =
+    (if String.startsWith "https://" rustServerDomain then
+        "wss://" ++ String.dropLeft 8 rustServerDomain
+
+     else
+        "ws://" ++ String.dropLeft 7 rustServerDomain
+    )
+        ++ "/file/websocket-relay"
+
+
+websocketRelayRequest : SecretId ServerSecret -> SlackCookie -> SlackToken -> String
+websocketRelayRequest secretKey (SlackCookie cookie) (SlackToken token) =
+    Json.Encode.object
+        [ ( "secretKey", Json.Encode.string (SecretId.toString secretKey) )
+        , ( "url", Json.Encode.string ("wss://wss-primary.slack.com/?token=" ++ Url.percentEncode token) )
+        , ( "headers"
+          , Json.Encode.list
+                (\( key, value ) -> Json.Encode.list Json.Encode.string [ key, value ])
+                [ ( "Cookie", "d=" ++ cookie )
+                , ( "Origin", "https://app.slack.com" )
+                ]
+          )
+        ]
+        |> Json.Encode.encode 0
+
+
+{-| The channel is a String since it can be a channel or a DM.
+-}
+type WebsocketEvent
+    = WebsocketRelayReady
+    | WebsocketMessageCreated String Message
+    | WebsocketMessageChanged String Message Time.Posix
+    | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
+    | WebsocketOtherEvent
+
+
+parseWebsocketEvent : String -> WebsocketEvent
+parseWebsocketEvent text =
+    if text == "relay_ready" then
+        WebsocketRelayReady
+
+    else
+        case Decode.decodeString decodeWebsocketEvent text of
+            Ok event ->
+                event
+
+            Err _ ->
+                WebsocketOtherEvent
+
+
+{-| Thread replies are left out since threads aren't supported yet.
+-}
+decodeWebsocketEvent : Decoder WebsocketEvent
+decodeWebsocketEvent =
+    Decode.map2 Tuple.pair
+        (Decode.field "type" Decode.string)
+        (Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ])
+        |> Decode.andThen
+            (\( eventType, subtype ) ->
+                if eventType /= "message" then
+                    Decode.succeed WebsocketOtherEvent
+
+                else if subtype == "message_changed" then
+                    Decode.map3
+                        WebsocketMessageChanged
+                        (Decode.field "channel" Decode.string)
+                        (Decode.field "message" decodeMessage)
+                        (Decode.oneOf
+                            [ Decode.at [ "message", "edited", "ts" ] decodeTimestamp
+                            , Decode.field "event_ts" decodeTimestamp
+                            ]
+                        )
+
+                else if subtype == "message_deleted" then
+                    Decode.map3
+                        WebsocketMessageDeleted
+                        (Decode.field "channel" Decode.string)
+                        (Decode.at [ "previous_message", "user" ] decodeId)
+                        (Decode.field "deleted_ts" decodeId)
+
+                else
+                    Decode.map3
+                        (\channel message isThreadReply ->
+                            if isThreadReply then
+                                WebsocketOtherEvent
+
+                            else
+                                WebsocketMessageCreated channel message
+                        )
+                        (Decode.field "channel" Decode.string)
+                        decodeMessage
+                        (Decode.map2
+                            (\ts maybeThreadTs ->
+                                case maybeThreadTs of
+                                    Just threadTs ->
+                                        threadTs /= ts && subtype /= "thread_broadcast"
+
+                                    Nothing ->
+                                        False
+                            )
+                            (Decode.field "ts" Decode.string)
+                            (Decode.maybe (Decode.field "thread_ts" Decode.string))
+                        )
+            )
 
 
 decodeTimestamp : Decoder Time.Posix

@@ -29,15 +29,13 @@ serde_json = "1.0.143"
 sha2 = "0.10.9"
 subtle = "2.6.1"
 tokio = { version = "1.47.1", features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "time"] }
+# The client side of the Slack relay in websocket_relay.rs, and of the tests. The
+# server side comes from axum. The version matches the one axum builds on, so it
+# is not compiled twice.
+tokio-tungstenite = { version = "0.26.2", features = ["native-tls"] }
 vapid = "0.6.0"
 web-push = "0.11.0"
 webpage = { version = "2.0.1", features = ["serde"] }
-
-# Only used by the tests, which need a WebSocket client to talk to the
-# endpoints with. The server itself gets its WebSocket support from axum. The
-# version here matches the one axum builds on, so it is not compiled twice.
-[dev-dependencies]
-tokio-tungstenite = "0.26.2"
 
 
 

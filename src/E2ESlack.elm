@@ -1,5 +1,6 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, slackWebsocketTest, viewAndWriteInSlackTest)
 
+import Array
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -381,6 +382,140 @@ viewAndWriteInSlackTest config =
                     )
                 , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
                 , E2EHelper.hasExactText admin [ "This is the start of #social" ]
+                ]
+            )
+        ]
+
+
+slackMessageEvent : { user : String, ts : String, text : String } -> String
+slackMessageEvent { user, ts, text } =
+    """{"type":"message","channel":"C09DJDQSWLU","text":\""""
+        ++ text
+        ++ """","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":\""""
+        ++ text
+        ++ """"}]}]}],"user":\""""
+        ++ user
+        ++ """","team":"T09DJDQL18U","event_ts":\""""
+        ++ ts
+        ++ """","ts":\""""
+        ++ ts
+        ++ "\"}"
+
+
+allTestSlackMessageCount : E2EHelper.BackendModel2 -> Int
+allTestSlackMessageCount backend =
+    SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+        |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+        |> Maybe.map (\channel -> List.length (IdArray.toList channel.messages))
+        |> Maybe.withDefault 0
+
+
+slackWebsocketTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackWebsocketTest config =
+    E2EHelper.startTest
+        "Slack messages created, edited and deleted elsewhere show up live"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , E2EHelper.andThenWebsocket
+                            100
+                            (\_ websocketState ->
+                                [ T.checkState
+                                    0
+                                    (\_ ->
+                                        case Array.toList websocketState.dataSent |> List.map .data of
+                                            [ "relay_ready", handshake ] ->
+                                                if
+                                                    String.contains "\"url\":\"wss://wss-primary.slack.com/?token=xoxc-legit-token\"" handshake
+                                                        && String.contains "[\"Cookie\",\"d=xoxd-legit-cookie\"]" handshake
+                                                then
+                                                    Ok ()
+
+                                                else
+                                                    Err ("Unexpected relay handshake: " ++ handshake)
+
+                                            _ ->
+                                                Err "Expected the backend to answer relay_ready with one message"
+                                    )
+                                ]
+                            )
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "Live from Slack" })
+                        , E2EHelper.hasExactText admin [ "Live from Slack" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"message_changed","channel":"C09DJDQSWLU","message":{"user":"U09DK3NCPMG","type":"message","edited":{"user":"U09DK3NCPMG","ts":"1791640010.000000"},"text":"Edited in Slack","blocks":[{"type":"rich_text","block_id":"abc","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Edited in Slack"}]}]}],"ts":"1791640000.000100"},"event_ts":"1791640010.000200","ts":"1791640010.000200"}"""
+                        , E2EHelper.hasExactText admin [ "Edited in Slack" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"message_deleted","previous_message":{"user":"U09DK3NCPMG","type":"message","ts":"1791640000.000100","text":"Edited in Slack"},"channel":"C09DJDQSWLU","hidden":true,"deleted_ts":"1791640000.000100","event_ts":"1791640020.000400","ts":"1791640020.000400"}"""
+                        , E2EHelper.hasNotExactText admin [ "Edited in Slack" ]
+                        , E2EHelper.writeMessage admin 100 "Sent from at-chat"
+                        , E2EHelper.hasExactText admin [ "Sent from at-chat" ]
+                        , T.andThen
+                            100
+                            (\data ->
+                                let
+                                    countBefore : Int
+                                    countBefore =
+                                        allTestSlackMessageCount data.backend
+                                in
+                                [ -- Slack also sends at-chat's own messages back over the websocket
+                                  T.websocketSendString
+                                    100
+                                    connection
+                                    (slackMessageEvent { user = "U09DJDQL1A8", ts = "1791638900.000100", text = "Sent from at-chat" })
+                                , T.checkBackend
+                                    100
+                                    (\backend ->
+                                        if allTestSlackMessageCount backend == countBefore then
+                                            Ok ()
+
+                                        else
+                                            Err "The echo of a message at-chat sent was added a second time"
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
                 ]
             )
         ]

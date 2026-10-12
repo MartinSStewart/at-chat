@@ -3,6 +3,7 @@ module SlackSync exposing
     , linkedUsers
     , messagesAndLinks
     , newChannelMaxMessages
+    , toMessage
     , usersToFrontend
     , workspacesToFrontend
     )
@@ -46,35 +47,33 @@ messagesAndLinks messages =
         converted : List ( Slack.Id Slack.MessageId, Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
         converted =
             List.filterMap
-                (\message ->
-                    case message.content of
-                        Slack.TextMessage { text, blocks } ->
-                            RichText.fromSlack text blocks
-                                |> Maybe.map
-                                    (\content ->
-                                        ( message.id
-                                        , Message.userTextMessageNoEmbeds
-                                            message.createdAt
-                                            message.user
-                                            content
-                                            SeqDict.empty
-                                            NoReply
-                                            SeqDict.empty
-                                            |> UserTextMessage
-                                        )
-                                    )
-
-                        Slack.JoinedChannel ->
-                            Just
-                                ( message.id
-                                , UserJoinedMessage message.createdAt message.user SeqDict.empty Drawing.emptyDrawing
-                                )
-                )
+                (\message -> toMessage message |> Maybe.map (Tuple.pair message.id))
                 messages
     in
     ( IdArray.fromList (List.map Tuple.second converted)
     , List.indexedMap (\index ( slackId, _ ) -> ( slackId, Id.fromInt index )) converted |> OneToOne.fromList
     )
+
+
+toMessage : Slack.Message -> Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+toMessage message =
+    case message.content of
+        Slack.TextMessage { text, blocks } ->
+            RichText.fromSlack text blocks
+                |> Maybe.map
+                    (\content ->
+                        Message.userTextMessageNoEmbeds
+                            message.createdAt
+                            message.user
+                            content
+                            SeqDict.empty
+                            NoReply
+                            SeqDict.empty
+                            |> UserTextMessage
+                    )
+
+        Slack.JoinedChannel ->
+            UserJoinedMessage message.createdAt message.user SeqDict.empty Drawing.emptyDrawing |> Just
 
 
 {-| The Slack accounts an at-chat user has linked, and the workspace each one is in.

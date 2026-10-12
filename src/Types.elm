@@ -525,6 +525,7 @@ type alias BackendModel =
     , wordSpellingGameEnglish : WordList
     , wordSpellingGameSwedish : WordList
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
+    , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
     }
 
 
@@ -858,6 +859,11 @@ type BackendMsg
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Result Slack.HttpError (Slack.Id Slack.MessageId))
+    | SlackWebsocketCreatedHandle (Slack.Id Slack.UserId) Websocket.Connection
+    | SlackWebsocketClosedByBackend
+    | SlackWebsocketMsg (Slack.Id Slack.UserId) (Result ( Websocket.CloseEventCode, String ) String)
+    | SlackWebsocketSentData (Slack.Id Slack.UserId) (Result Websocket.SendError ())
+    | SlackWebsocketReconnect (Slack.Id Slack.UserId)
     | DeletedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | DeletedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
@@ -1062,6 +1068,7 @@ type alias SlackLinkedUser =
     , linkedAt : Time.Posix
     , token : SlackToken
     , cookie : SlackCookie
+    , websocket : Maybe Websocket.Connection
     }
 
 
@@ -1188,6 +1195,8 @@ type ServerChange
         , repliedToData : RepliedToData
         }
     | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId (Id ChannelMessageId) (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_DeleteMessage SlackGuildOrDmId (Id ChannelMessageId)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel

@@ -24,6 +24,7 @@ use webpage::HTML;
 mod content_types;
 mod video;
 mod websocket;
+mod websocket_relay;
 use futures_util::StreamExt;
 use rand::RngExt;
 use std::sync::Arc;
@@ -91,6 +92,10 @@ async fn main() {
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
                 .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
+                .route(
+                    "/file/websocket-relay",
+                    get(websocket_relay::relay_endpoint),
+                )
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(axum::Extension(rooms))

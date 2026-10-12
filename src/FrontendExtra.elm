@@ -4919,6 +4919,49 @@ changeUpdate localMsg local =
                 Server_Slack_SendMessage createdAt guildOrDmId content ->
                     slackSendMessage createdAt guildOrDmId content local
 
+                Server_Slack_EditMessage editedAt guildOrDmId messageId content ->
+                    let
+                        edit :
+                            Slack.Id Slack.UserId
+                            -> { a | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) }
+                            -> { a | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) }
+                        edit editedBy channel =
+                            LocalState.editMessageFrontendHelperNoThread editedAt editedBy content DoNotChangeAttachments messageId channel
+                                |> Result.withDefault channel
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel (edit currentUserId) channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                            { local | slackDmChannels = SeqDict.updateIfExists channelId (edit currentUserId) local.slackDmChannels }
+
+                Server_Slack_DeleteMessage guildOrDmId messageId ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel (LocalState.deleteMessageFrontendNoThread messageId) channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            { local
+                                | slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        channelId
+                                        (LocalState.deleteMessageFrontendNoThread messageId)
+                                        local.slackDmChannels
+                            }
+
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->

@@ -28,10 +28,11 @@ import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, Disc
 import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing
-import Duration
+import Duration exposing (Duration)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
@@ -288,6 +289,7 @@ init =
       , wordSpellingGameEnglish = WordList_NotLoaded
       , wordSpellingGameSwedish = WordList_NotLoaded
       , pendingGatewayReconnects = SeqDict.empty
+      , pendingSlackSends = SeqDict.empty
       }
     , Command.none
     )
@@ -327,6 +329,24 @@ subscriptions model =
                         Nothing
             )
             (SeqDict.toList model.discordUsers)
+            |> Subscription.batch
+        , List.filterMap
+            (\( slackUserId, data ) ->
+                case data of
+                    SlackFullData linkedUser ->
+                        case linkedUser.websocket of
+                            Just connection ->
+                                Websocket.listen connection Ok (\closed -> Err ( closed.code, closed.reason ))
+                                    |> Subscription.map (SlackWebsocketMsg slackUserId)
+                                    |> Just
+
+                            Nothing ->
+                                Nothing
+
+                    SlackBasicData _ ->
+                        Nothing
+            )
+            (SeqDict.toList model.slackUsers)
             |> Subscription.batch
         , case model.exportState of
             Just _ ->
@@ -570,6 +590,28 @@ updateHelper msg model =
                         (BackendExtra.invalidChangeResponse changeId clientId)
 
         SentSlackMessage time changeId clientId timezone guildOrDmId text richText result ->
+            let
+                model1 : BackendModel
+                model1 =
+                    { model
+                        | pendingSlackSends =
+                            SeqDict.update
+                                (slackPendingSendKey guildOrDmId)
+                                (\maybeCount ->
+                                    case maybeCount of
+                                        Just count ->
+                                            if count > 1 then
+                                                Just (count - 1)
+
+                                            else
+                                                Nothing
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                model.pendingSlackSends
+                    }
+            in
             case result of
                 Ok slackMessageId ->
                     let
@@ -600,21 +642,21 @@ updateHelper msg model =
                         model2 =
                             case guildOrDmId of
                                 SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
-                                    { model
+                                    { model1
                                         | slackWorkspaces =
                                             SeqDict.updateIfExists
                                                 teamId
                                                 (LocalState.updateChannel (\channel -> addMessage channel currentUserId) channelId)
-                                                model.slackWorkspaces
+                                                model1.slackWorkspaces
                                     }
 
                                 SlackGuildOrDmId_Dm { currentUserId, channelId } ->
-                                    { model
+                                    { model1
                                         | slackDmChannels =
                                             SeqDict.updateIfExists
                                                 channelId
                                                 (\channel -> addMessage channel currentUserId)
-                                                model.slackDmChannels
+                                                model1.slackDmChannels
                                     }
                     in
                     ( model2
@@ -634,7 +676,7 @@ updateHelper msg model =
                     BackendExtra.addLogWithCmd
                         time
                         (Log.FailedToSendSlackMessage guildOrDmId error)
-                        model
+                        model1
                         (BackendExtra.invalidChangeResponse changeId clientId)
 
         SentDiscordDmMessage time changeId _ clientId channelId discordUserId result ->
@@ -878,6 +920,16 @@ updateHelper msg model =
                                             , linkedAt = linkedAt
                                             , token = token
                                             , cookie = cookie
+                                            , websocket =
+                                                case SeqDict.get self.id model2.slackUsers of
+                                                    Just (SlackFullData existing) ->
+                                                        existing.websocket
+
+                                                    Just (SlackBasicData _) ->
+                                                        Nothing
+
+                                                    Nothing ->
+                                                        Nothing
                                             }
                                         )
                                         model2.slackUsers
@@ -997,11 +1049,83 @@ updateHelper msg model =
                                 model.slackUsers
                                 users
                       }
-                    , Command.none
+                    , Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
                     )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadSlackConversations teamId error) model
+
+        SlackWebsocketCreatedHandle slackUserId connection ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    ( { model
+                        | slackUsers =
+                            SeqDict.insert
+                                slackUserId
+                                (SlackFullData { linkedUser | websocket = Just connection })
+                                model.slackUsers
+                      }
+                    , case linkedUser.websocket of
+                        Just oldConnection ->
+                            Websocket.close oldConnection |> Task.perform (\() -> SlackWebsocketClosedByBackend)
+
+                        Nothing ->
+                            Command.none
+                    )
+
+                _ ->
+                    ( model, Websocket.close connection |> Task.perform (\() -> SlackWebsocketClosedByBackend) )
+
+        SlackWebsocketClosedByBackend ->
+            ( model, Command.none )
+
+        SlackWebsocketMsg slackUserId result ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    case result of
+                        Ok text ->
+                            handleSlackWebsocketEvent linkedUser (Slack.parseWebsocketEvent text) model
+
+                        Err ( code, reason ) ->
+                            let
+                                _ =
+                                    Debug.log "Slack websocket closed" ( slackUserId, DiscordSync.closeEventCodeToInt code, reason )
+                            in
+                            ( { model
+                                | slackUsers =
+                                    SeqDict.insert slackUserId (SlackFullData { linkedUser | websocket = Nothing }) model.slackUsers
+                              }
+                            , Process.sleep slackWebsocketReconnectDelay
+                                |> Task.perform (\() -> SlackWebsocketReconnect slackUserId)
+                            )
+
+                _ ->
+                    ( model, Command.none )
+
+        SlackWebsocketSentData slackUserId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err Websocket.ConnectionClosed ->
+                    let
+                        _ =
+                            Debug.log "SlackWebsocketSentData" ( slackUserId, "ConnectionClosed" )
+                    in
+                    ( model, Command.none )
+
+        SlackWebsocketReconnect slackUserId ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    case linkedUser.websocket of
+                        Just _ ->
+                            ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl )
+
+                _ ->
+                    ( model, Command.none )
 
         ReloadDiscordUserStep1 time clientId userId discordUserId result ->
             case ( SeqDict.get discordUserId model.discordUsers, result ) of
@@ -1300,7 +1424,7 @@ updateHelper msg model =
                     SeqDict.foldl
                         (\discordUserId reconnect ( waiting, reopen ) ->
                             let
-                                remaining : Duration.Duration
+                                remaining : Duration
                                 remaining =
                                     Quantity.minus DiscordSync.gatewayReconnectTickInterval reconnect.delay
                             in
@@ -5757,7 +5881,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         richText =
                                             RichText.fromNonemptyString timezone workspaceUsers channelMentions text
                                     in
-                                    ( { model | sendMessageRateLimits = sendMessageRateLimits }
+                                    ( { model
+                                        | sendMessageRateLimits = sendMessageRateLimits
+                                        , pendingSlackSends =
+                                            SeqDict.update
+                                                (slackPendingSendKey guildOrDmId)
+                                                (\maybeCount -> Maybe.withDefault 0 maybeCount + 1 |> Just)
+                                                model.pendingSlackSends
+                                      }
                                     , Slack.postMessage
                                         model.serverSecret
                                         slackUser.cookie
@@ -10274,3 +10405,295 @@ handleExportBackendStep exportState =
                                                 )
                                     in
                                     ExportFinished exportedBytes
+
+
+slackPendingSendKey : SlackGuildOrDmId -> ( Slack.Id Slack.UserId, String )
+slackPendingSendKey guildOrDmId =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { currentUserId, channelId } ->
+            ( currentUserId, Slack.idToString channelId )
+
+        SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+            ( currentUserId, Slack.idToString channelId )
+
+
+slackWebsocketReconnectDelay : Duration
+slackWebsocketReconnectDelay =
+    Duration.seconds 10
+
+
+{-| Slack doesn't say which channels are DMs in its websocket events, so the channel ID is
+looked up in the linked user's workspace first and then among the DMs.
+-}
+slackChannelFromWebsocket : SlackLinkedUser -> Slack.Id Slack.UserId -> String -> BackendModel -> Maybe SlackGuildOrDmId
+slackChannelFromWebsocket linkedUser author channelString model =
+    let
+        channelId : Slack.Id Slack.ChannelId
+        channelId =
+            Slack.Id channelString
+
+        dmChannelId : Slack.Id Slack.DmChannelId
+        dmChannelId =
+            Slack.Id channelString
+    in
+    case LocalState.getSlackWorkspaceAndChannel linkedUser.user.teamId channelId model of
+        Just _ ->
+            SlackGuildOrDmId_Workspace { currentUserId = author, teamId = linkedUser.user.teamId, channelId = channelId }
+                |> Just
+
+        Nothing ->
+            if SeqDict.member dmChannelId model.slackDmChannels then
+                SlackGuildOrDmId_Dm { currentUserId = author, channelId = dmChannelId } |> Just
+
+            else
+                Nothing
+
+
+handleSlackWebsocketEvent :
+    SlackLinkedUser
+    -> Slack.WebsocketEvent
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleSlackWebsocketEvent linkedUser event model =
+    case event of
+        Slack.WebsocketRelayReady ->
+            case linkedUser.websocket of
+                Just connection ->
+                    ( model
+                    , Websocket.sendString
+                        connection
+                        (Slack.websocketRelayRequest model.serverSecret linkedUser.cookie linkedUser.token)
+                        |> Task.attempt (SlackWebsocketSentData linkedUser.user.id)
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Slack.WebsocketMessageCreated channelString message ->
+            case
+                ( slackChannelFromWebsocket linkedUser message.user channelString model
+                , SlackSync.toMessage message
+                )
+            of
+                ( Just guildOrDmId, Just (UserTextMessage data) ) ->
+                    let
+                        addMessage :
+                            { a
+                                | messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+                            }
+                            ->
+                                Maybe
+                                    { a
+                                        | messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                        , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
+                                    }
+                        addMessage channel =
+                            if OneToOne.memberFirst message.id channel.linkedMessageIds then
+                                Nothing
+
+                            else
+                                { channel
+                                    | messages = IdArray.push (UserTextMessage data) channel.messages
+                                    , linkedMessageIds =
+                                        OneToOne.insert message.id (IdArray.nextId channel.messages) channel.linkedMessageIds
+                                }
+                                    |> Just
+
+                        maybeModel2 : Maybe BackendModel
+                        maybeModel2 =
+                            if SeqDict.member (slackPendingSendKey guildOrDmId) model.pendingSlackSends then
+                                -- Probably the message at-chat is sending right now. SentSlackMessage adds it instead.
+                                Nothing
+
+                            else
+                                case guildOrDmId of
+                                    SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                                        LocalState.getSlackWorkspaceAndChannel teamId channelId model
+                                            |> Maybe.andThen
+                                                (\( workspace, channel ) ->
+                                                    addMessage channel
+                                                        |> Maybe.map
+                                                            (\channel2 ->
+                                                                { model
+                                                                    | slackWorkspaces =
+                                                                        SeqDict.insert
+                                                                            teamId
+                                                                            { workspace | channels = SeqDict.insert channelId channel2 workspace.channels }
+                                                                            model.slackWorkspaces
+                                                                }
+                                                            )
+                                                )
+
+                                    SlackGuildOrDmId_Dm { channelId } ->
+                                        SeqDict.get channelId model.slackDmChannels
+                                            |> Maybe.andThen addMessage
+                                            |> Maybe.map
+                                                (\channel2 ->
+                                                    { model | slackDmChannels = SeqDict.insert channelId channel2 model.slackDmChannels }
+                                                )
+                    in
+                    case maybeModel2 of
+                        Just model2 ->
+                            ( model2
+                            , Broadcast.toSlack
+                                guildOrDmId
+                                (Server_Slack_SendMessage message.createdAt guildOrDmId data.content.content |> ServerChange)
+                                model2
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        Slack.WebsocketMessageChanged channelString message editedAt ->
+            case
+                ( slackChannelFromWebsocket linkedUser message.user channelString model
+                , SlackSync.toMessage message
+                )
+            of
+                ( Just guildOrDmId, Just (UserTextMessage data) ) ->
+                    let
+                        content : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                        content =
+                            data.content.content
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            case LocalState.getSlackWorkspaceAndChannel teamId channelId model of
+                                Just ( workspace, channel ) ->
+                                    case OneToOne.second message.id channel.linkedMessageIds of
+                                        Just messageId ->
+                                            case LocalState.editMessageHelperNoThread editedAt message.user content DoNotChangeAttachments messageId channel of
+                                                Ok channel2 ->
+                                                    let
+                                                        model2 : BackendModel
+                                                        model2 =
+                                                            { model
+                                                                | slackWorkspaces =
+                                                                    SeqDict.insert
+                                                                        teamId
+                                                                        { workspace | channels = SeqDict.insert channelId channel2 workspace.channels }
+                                                                        model.slackWorkspaces
+                                                            }
+                                                    in
+                                                    ( model2
+                                                    , Broadcast.toSlack
+                                                        guildOrDmId
+                                                        (Server_Slack_EditMessage editedAt guildOrDmId messageId content |> ServerChange)
+                                                        model2
+                                                    )
+
+                                                Err () ->
+                                                    ( model, Command.none )
+
+                                        Nothing ->
+                                            ( model, Command.none )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            case SeqDict.get channelId model.slackDmChannels of
+                                Just channel ->
+                                    case OneToOne.second message.id channel.linkedMessageIds of
+                                        Just messageId ->
+                                            case LocalState.editMessageHelperNoThread editedAt message.user content DoNotChangeAttachments messageId channel of
+                                                Ok channel2 ->
+                                                    let
+                                                        model2 : BackendModel
+                                                        model2 =
+                                                            { model | slackDmChannels = SeqDict.insert channelId channel2 model.slackDmChannels }
+                                                    in
+                                                    ( model2
+                                                    , Broadcast.toSlack
+                                                        guildOrDmId
+                                                        (Server_Slack_EditMessage editedAt guildOrDmId messageId content |> ServerChange)
+                                                        model2
+                                                    )
+
+                                                Err () ->
+                                                    ( model, Command.none )
+
+                                        Nothing ->
+                                            ( model, Command.none )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        Slack.WebsocketMessageDeleted channelString author slackMessageId ->
+            case slackChannelFromWebsocket linkedUser author channelString model of
+                Just guildOrDmId ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            case LocalState.getSlackWorkspaceAndChannel teamId channelId model of
+                                Just ( workspace, channel ) ->
+                                    case OneToOne.second slackMessageId channel.linkedMessageIds of
+                                        Just messageId ->
+                                            case LocalState.deleteMessageBackendHelperNoThread author messageId channel of
+                                                Ok channel2 ->
+                                                    let
+                                                        model2 : BackendModel
+                                                        model2 =
+                                                            { model
+                                                                | slackWorkspaces =
+                                                                    SeqDict.insert
+                                                                        teamId
+                                                                        { workspace | channels = SeqDict.insert channelId channel2 workspace.channels }
+                                                                        model.slackWorkspaces
+                                                            }
+                                                    in
+                                                    ( model2
+                                                    , Broadcast.toSlack
+                                                        guildOrDmId
+                                                        (Server_Slack_DeleteMessage guildOrDmId messageId |> ServerChange)
+                                                        model2
+                                                    )
+
+                                                Err () ->
+                                                    ( model, Command.none )
+
+                                        Nothing ->
+                                            ( model, Command.none )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            case SeqDict.get channelId model.slackDmChannels of
+                                Just channel ->
+                                    case OneToOne.second slackMessageId channel.linkedMessageIds of
+                                        Just messageId ->
+                                            case LocalState.deleteMessageBackendHelperNoThread author messageId channel of
+                                                Ok channel2 ->
+                                                    let
+                                                        model2 : BackendModel
+                                                        model2 =
+                                                            { model | slackDmChannels = SeqDict.insert channelId channel2 model.slackDmChannels }
+                                                    in
+                                                    ( model2
+                                                    , Broadcast.toSlack
+                                                        guildOrDmId
+                                                        (Server_Slack_DeleteMessage guildOrDmId messageId |> ServerChange)
+                                                        model2
+                                                    )
+
+                                                Err () ->
+                                                    ( model, Command.none )
+
+                                        Nothing ->
+                                            ( model, Command.none )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Slack.WebsocketOtherEvent ->
+            ( model, Command.none )

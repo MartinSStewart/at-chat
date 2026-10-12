@@ -2847,6 +2847,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Slack_SendMessage _ _ _ ->
                             True
 
+                        Types.Server_Slack_EditMessage _ _ _ _ ->
+                            True
+
+                        Types.Server_Slack_DeleteMessage _ _ ->
+                            True
+
                         Types.Server_NewChannel _ _ _ _ ->
                             True
 
