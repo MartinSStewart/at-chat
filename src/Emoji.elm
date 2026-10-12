@@ -413,36 +413,44 @@ inputTextView size maybeEmojiData text =
 
 splitOnEmoji : CachedEmojiData -> String -> List TextOrEmoji
 splitOnEmoji emojiData text =
-    splitOnEmojiHelper emojiData (String.toList text) [] [] |> List.reverse
+    splitOnEmojiHelper emojiData text (String.length text) 0 0 [] |> List.reverse
 
 
-splitOnEmojiHelper : CachedEmojiData -> List Char -> List Char -> List TextOrEmoji -> List TextOrEmoji
-splitOnEmojiHelper emojiData chars revText output =
-    case chars of
-        [] ->
-            flushPlainText revText output
+{-| Indices count UTF-16 code units, so stepping by one can land in the middle of a surrogate
+pair. Nothing starts with the second half of one, so that step finds no emoji and moves on.
+-}
+splitOnEmojiHelper : CachedEmojiData -> String -> Int -> Int -> Int -> List TextOrEmoji -> List TextOrEmoji
+splitOnEmojiHelper emojiData text length textStart index output =
+    if index >= length then
+        flushPlainText text textStart index output
 
-        char :: rest ->
-            case artStartingWith emojiData (List.take maxEmojiLength chars |> String.fromList) of
-                Just art ->
-                    splitOnEmojiHelper
-                        emojiData
-                        (List.drop (String.foldl (\_ total -> total + 1) 0 art.sequence) chars)
-                        []
-                        (EmojiArtwork art :: flushPlainText revText output)
+    else
+        case artStartingWith emojiData (String.slice index (index + 2 * maxEmojiLength) text) of
+            Just art ->
+                let
+                    next : Int
+                    next =
+                        index + String.length art.sequence
+                in
+                splitOnEmojiHelper
+                    emojiData
+                    text
+                    length
+                    next
+                    next
+                    (EmojiArtwork art :: flushPlainText text textStart index output)
 
-                Nothing ->
-                    splitOnEmojiHelper emojiData rest (char :: revText) output
+            Nothing ->
+                splitOnEmojiHelper emojiData text length textStart (index + 1) output
 
 
-flushPlainText : List Char -> List TextOrEmoji -> List TextOrEmoji
-flushPlainText revText output =
-    case revText of
-        [] ->
-            output
+flushPlainText : String -> Int -> Int -> List TextOrEmoji -> List TextOrEmoji
+flushPlainText text start end output =
+    if start < end then
+        PlainText (String.slice start end text) :: output
 
-        _ ->
-            PlainText (List.reverse revText |> String.fromList) :: output
+    else
+        output
 
 
 {-| A skin tone's variations are one sprite covering every category, because someone picks
