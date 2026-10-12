@@ -51,7 +51,7 @@ editMessageText =
 
 width : number
 width =
-    216
+    240
 
 
 close : LoadedFrontend -> LoggedIn2 -> LoggedIn2
