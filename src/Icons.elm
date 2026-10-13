@@ -810,12 +810,12 @@ discord =
         ]
 
 
-slack : Html msg
-slack =
+slack : Int -> Html msg
+slack size =
     Svg.svg
         [ Svg.Attributes.enableBackground "new 0 0 2447.6 2452.5"
         , Svg.Attributes.viewBox "0 0 2447.6 2452.5"
-        , Svg.Attributes.width "16"
+        , Svg.Attributes.width (String.fromInt size)
         ]
         [ Svg.g
             [ Svg.Attributes.clipRule "evenodd"

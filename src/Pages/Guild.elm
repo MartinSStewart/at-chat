@@ -13622,7 +13622,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
             [ MyUi.hoverText workspace.name
             , Ui.spacing 6
             ]
-            [ Ui.html Icons.slack
+            [ Ui.html (Icons.slack 16)
             , Ui.text workspace.name
             ]
         ]

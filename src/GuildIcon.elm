@@ -197,8 +197,10 @@ slackNotificationView xOffset yOffset borderColor notification =
                 , Ui.contentCenterY
                 , Ui.Accessibility.description "Slack"
                 , MyUi.noPointerEvents
+                , Ui.background (Ui.rgb 230 230 230)
+                , Ui.rounded 99
                 ]
-                (Ui.html Icons.slack)
+                (Ui.html (Icons.slack 13))
                 |> Ui.inFront
 
         NewMessage count ->
