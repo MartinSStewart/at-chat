@@ -1000,6 +1000,7 @@ slackThreadsTest config =
                 , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                 , admin.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , E2EHelper.hasExactText admin [ "First reply", "Second reply" ]
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_C09DJDQSWLU_2" ])
                 , E2EHelper.writeMessage admin 100 "Reply from at-chat"
                 , E2EHelper.hasExactText admin [ "Reply from at-chat" ]
                 , T.checkState
@@ -1047,7 +1048,8 @@ slackThreadsTest config =
                             100
                             connection
                             (slackThreadReplyEvent { ts = "1791640001.000100", text = "Thread news" })
-                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , hasNotificationCount admin "guild_viewThread_C09DJDQSWLU_2" (Just "1")
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
                         , T.checkBackend
                             100
                             (\backend ->
@@ -1060,8 +1062,7 @@ slackThreadsTest config =
                                 else
                                     Ok ()
                             )
-                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
-                        , admin.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                        , admin.click 100 (Dom.id "guild_viewThread_C09DJDQSWLU_2")
                         , E2EHelper.hasExactText admin [ "Thread news " ]
                         , T.checkBackend
                             100
