@@ -13617,7 +13617,15 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ Ui.el [ MyUi.hoverText workspace.name ] (Ui.text workspace.name) ]
+        [ --Ui.el [ MyUi.hoverText workspace.name ] (Ui.text workspace.name)
+          Ui.row
+            [ MyUi.hoverText workspace.name
+            , Ui.spacing 6
+            ]
+            [ Ui.html Icons.slack
+            , Ui.text workspace.name
+            ]
+        ]
         Ui.none
         (Ui.column
             [ MyUi.scrollable canScroll2
