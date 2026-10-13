@@ -2052,10 +2052,10 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                     (if isLegitSlackRequest headers body then
-                        """{"ok":true,"self":{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","profile":{"real_name":"Slack Admin","display_name":"","avatar_hash":"g3c2057c0c87"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else if isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
-                        """{"ok":true,"self":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zig","avatar_hash":"g5c945c6010c"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2337,11 +2337,11 @@ slackEdgeRequest body =
 slackTestUsers : Dict.Dict String String
 slackTestUsers =
     Dict.fromList
-        [ ( "U09DJDQL1A8", """{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}}""" )
-        , ( "U09DK3NCPMG", """{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}}""" )
-        , ( "U0THIRD", """{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":"","image_72":""}}""" )
+        [ ( "U09DJDQL1A8", """{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","avatar_hash":"g3c2057c0c87"}}""" )
+        , ( "U09DK3NCPMG", """{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","avatar_hash":"g5c945c6010c"}}""" )
+        , ( "U0THIRD", """{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":""}}""" )
         , ( "U09DFEXKH9T", """{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}""" )
-        , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":"","image_72":""}}""" )
+        , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":""}}""" )
         ]
 
 

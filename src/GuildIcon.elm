@@ -11,6 +11,7 @@ module GuildIcon exposing
     , iconFontColor
     , notificationView
     , showFriendsButton
+    , slackNotificationView
     , slackView
     , userView
     , view
@@ -178,6 +179,33 @@ discordNotificationView xOffset yOffset notification =
 
         NewMessageForUser count ->
             notificationHelper MyUi.alertColor MyUi.white discordBlurpleDark xOffset yOffset count
+
+
+{-| Stands in for `notificationView` on users that come from Slack. Like
+`discordNotificationView`, the logo gives the corner up whenever there is a count to show.
+-}
+slackNotificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
+slackNotificationView xOffset yOffset borderColor notification =
+    case notification of
+        NoNotification ->
+            Ui.el
+                [ Ui.width (Ui.px notificationHeight)
+                , Ui.height (Ui.px notificationHeight)
+                , Ui.move { x = xOffset, y = yOffset, z = 0 }
+                , Ui.alignRight
+                , Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.Accessibility.description "Slack"
+                , MyUi.noPointerEvents
+                ]
+                (Ui.html Icons.slack)
+                |> Ui.inFront
+
+        NewMessage count ->
+            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
+
+        NewMessageForUser count ->
+            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg

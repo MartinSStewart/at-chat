@@ -14063,7 +14063,7 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             Nothing ->
                                 NoNotification
                       )
-                        |> GuildIcon.notificationView 4 -3 MyUi.background2
+                        |> GuildIcon.slackNotificationView 4 -3 MyUi.background2
                     , Ui.width Ui.shrink
                     ]
                     (User.profileImage (List.head members |> Maybe.andThen (\userId -> SeqDict.get userId localUser.slackUsers)))

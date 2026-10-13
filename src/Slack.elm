@@ -281,16 +281,33 @@ userBoot secretKey cookie token =
 
 decodeUser : Decoder User
 decodeUser =
-    Decode.map8
-        User
-        (Decode.field "id" decodeId)
-        (Decode.field "team_id" decodeId)
+    Decode.map2 Tuple.pair (Decode.field "id" decodeId) (Decode.field "team_id" decodeId)
+        |> Decode.andThen (\( userId, teamId ) -> decodeUserHelper userId teamId)
+
+
+decodeUserHelper : Id UserId -> Id TeamId -> Decoder User
+decodeUserHelper userId teamId =
+    Decode.map6
+        (User userId teamId)
         (Decode.field "name" Decode.string)
         (optionalString [ "profile", "real_name" ])
         (optionalString [ "profile", "display_name" ])
-        (optionalString [ "profile", "image_72" ])
+        (decodeUserImage userId teamId)
         (optionalBool "is_bot")
         (optionalBool "deleted")
+
+
+{-| client.userBoot and the edge API leave out the image\_ urls but give an avatar\_hash, which
+Slack's avatar CDN serves the picture from.
+-}
+decodeUserImage : Id UserId -> Id TeamId -> Decoder String
+decodeUserImage (Id userId) (Id teamId) =
+    Decode.oneOf
+        [ Decode.at [ "profile", "image_192" ] Decode.string
+        , Decode.at [ "profile", "avatar_hash" ] Decode.string
+            |> Decode.map (\hash -> "https://ca.slack-edge.com/" ++ teamId ++ "-" ++ userId ++ "-" ++ hash ++ "-192")
+        , Decode.succeed ""
+        ]
 
 
 optionalString : List String -> Decoder String
@@ -392,16 +409,11 @@ edgeUsersInfo secretKey (SlackCookie cookie) (SlackToken token) teamId userIds =
 -}
 decodeEdgeUser : Id TeamId -> Decoder User
 decodeEdgeUser teamId =
-    Decode.map8
-        User
+    Decode.map2
+        Tuple.pair
         (Decode.field "id" decodeId)
         (Decode.oneOf [ Decode.field "team_id" decodeId, Decode.succeed teamId ])
-        (Decode.field "name" Decode.string)
-        (optionalString [ "profile", "real_name" ])
-        (optionalString [ "profile", "display_name" ])
-        (optionalString [ "profile", "image_72" ])
-        (optionalBool "is_bot")
-        (optionalBool "deleted")
+        |> Decode.andThen (\( userId, teamId2 ) -> decodeUserHelper userId teamId2)
 
 
 {-| Who wrote the message and everyone it mentions.

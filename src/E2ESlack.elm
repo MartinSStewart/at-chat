@@ -1507,10 +1507,10 @@ slackFilesTest config =
                         then
                             Err "Expected the workspace icon to be copied"
 
-                        else if slackUserIcon "U09DJDQL1A8" backend /= Just (FileStatus.fileHash "https://avatars.slack-edge.com/admin_72.png") then
+                        else if slackUserIcon "U09DJDQL1A8" backend /= Just (FileStatus.fileHash "https://ca.slack-edge.com/T09DJDQL18U-U09DJDQL1A8-g3c2057c0c87-192") then
                             Err "Expected the linked user's profile picture to be copied"
 
-                        else if slackUserIcon "U09DK3NCPMG" backend /= Just (FileStatus.fileHash "https://avatars.slack-edge.com/ziggler_72.png") then
+                        else if slackUserIcon "U09DK3NCPMG" backend /= Just (FileStatus.fileHash "https://ca.slack-edge.com/T09DJDQL18U-U09DK3NCPMG-g5c945c6010c-192") then
                             Err "Expected other users' profile pictures to be copied"
 
                         else if slackUserIcon "U0THIRD" backend /= Nothing then
@@ -1543,7 +1543,7 @@ slackFilesTest config =
                     (Test.Html.Query.has
                         [ Test.Html.Selector.attribute
                             (Html.Attributes.src
-                                (FileStatus.fileUrl FileStatus.pngContent (FileStatus.fileHash "https://avatars.slack-edge.com/ziggler_72.png"))
+                                (FileStatus.fileUrl FileStatus.pngContent (FileStatus.fileHash "https://ca.slack-edge.com/T09DJDQL18U-U09DK3NCPMG-g5c945c6010c-192"))
                             )
                         ]
                     )

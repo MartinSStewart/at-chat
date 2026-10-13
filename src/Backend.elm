@@ -2922,8 +2922,25 @@ loadSlackWorkspaceData model cookie token self team =
                             |> SeqSet.fromList
                             |> SeqSet.filter (\userId -> not (SeqDict.member userId model.slackUsers))
                             |> SeqSet.toList
+
+                    usersWithoutIcon : List (Slack.Id Slack.UserId)
+                    usersWithoutIcon =
+                        SeqDict.toList model.slackUsers
+                            |> List.filterMap
+                                (\( userId, userData ) ->
+                                    case userData of
+                                        SlackBasicData { user, icon } ->
+                                            if user.teamId == teamId && icon == Nothing then
+                                                Just userId
+
+                                            else
+                                                Nothing
+
+                                        SlackFullData _ ->
+                                            Nothing
+                                )
                 in
-                Slack.usersById model.serverSecret cookie token teamId unknownUserIds
+                Slack.usersById model.serverSecret cookie token teamId (unknownUserIds ++ usersWithoutIcon)
                     |> Task.map (\users -> { channels = channels, dmChannels = dmChannels, users = users })
             )
         |> Task.andThen
