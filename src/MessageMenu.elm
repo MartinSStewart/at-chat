@@ -460,8 +460,7 @@ editMessageTextInputId =
 
 
 type alias MenuItemsData =
-    { canEdit : Bool
-    , canDelete : Bool
+    { canEditAndDelete : Bool
     , canReply : Bool
     , text : String
     , messageCustomEmojiIdsList : List (Id CustomEmojiId)
@@ -486,26 +485,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
         helper guildOrDmId2 isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
-                    { canEdit =
-                        case message of
-                            UserTextMessage data ->
-                                data.createdBy == local.localUser.session.userId
-
-                            EncryptedUserTextMessage data ->
-                                data.createdBy == local.localUser.session.userId
-
-                            UserJoinedMessage _ _ _ _ ->
-                                False
-
-                            DeletedMessage _ ->
-                                False
-
-                            CallStarted _ ->
-                                False
-
-                            GameStarted _ ->
-                                False
-                    , canDelete =
+                    { canEditAndDelete =
                         case message of
                             UserTextMessage data ->
                                 data.createdBy == local.localUser.session.userId
@@ -588,14 +568,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 GameStarted data ->
                                     Just data.startedBy
                     in
-                    { canEdit =
-                        case message of
-                            UserTextMessage data ->
-                                LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers
-
-                            _ ->
-                                False
-                    , canDelete =
+                    { canEditAndDelete =
                         case message of
                             UserTextMessage data ->
                                 LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers
@@ -634,32 +607,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
         slackHelper guildOrDmId2 currentUserId messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
-                    { canEdit =
+                    { canEditAndDelete =
                         case message of
                             UserTextMessage data ->
                                 data.createdBy == currentUserId
 
                             EncryptedUserTextMessage _ ->
                                 False
-
-                            UserJoinedMessage _ _ _ _ ->
-                                False
-
-                            DeletedMessage _ ->
-                                False
-
-                            CallStarted _ ->
-                                False
-
-                            GameStarted _ ->
-                                False
-                    , canDelete =
-                        case message of
-                            UserTextMessage data ->
-                                data.createdBy == currentUserId
-
-                            EncryptedUserTextMessage data ->
-                                data.createdBy == currentUserId
 
                             UserJoinedMessage _ _ _ _ ->
                                 False
@@ -799,7 +753,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             Nothing
     in
     case maybeData of
-        Just { canEdit, canDelete, canReply, text, messageCustomEmojiIdsList, openDm } ->
+        Just { canEditAndDelete, canReply, text, messageCustomEmojiIdsList, openDm } ->
             let
                 newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
                 newCustomEmojiIds =
@@ -854,7 +808,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     Ui.none
                 ]
                 |> ButtonItem
-            , if canEdit then
+            , if canEditAndDelete then
                 button
                     isMobile
                     (Dom.id "messageMenu_editMessage")
@@ -950,7 +904,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
-            , if canDelete then
+            , if canEditAndDelete then
                 GroupItem
                     [ HorizontalLineItem
                     , Ui.el
