@@ -1,12 +1,14 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
+import Audio
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
 import Effect.Websocket as Websocket
+import Expect
 import Html.Attributes
 import Id exposing (ChannelMessageId)
 import IdArray
@@ -1038,6 +1040,101 @@ slackThreadsTest config =
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackWorkspaceAndDmCount : E2EHelper.BackendModel2 -> ( Int, Int )
+slackWorkspaceAndDmCount backend =
+    ( SeqDict.size (E2EHelper.unwrapBackend backend).slackWorkspaces
+    , SeqDict.size (E2EHelper.unwrapBackend backend).slackDmChannels
+    )
+
+
+openSlackAdminSections : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
+openSlackAdminSections adminPage =
+    [ T.andThen
+        10
+        (\data ->
+            [ adminPage.portEvent
+                10
+                "load_startup_data_from_js"
+                (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+            ]
+        )
+    , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackWorkspacesSection)
+    , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackDmChannelsSection)
+    , E2EHelper.hasExactText adminPage [ "test-slack", "Members:" ]
+    ]
+
+
+orphanedSlackWorkspacesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+orphanedSlackWorkspacesTest config =
+    E2EHelper.startTest
+        "Hourly update deletes Slack workspaces and DMs that no linked Slack user stayed in for an hour"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if slackWorkspaceAndDmCount backend == ( 1, 3 ) then
+                            Ok ()
+
+                        else
+                            Err "Slack workspaces and DMs with a linked member should be kept"
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage -> openSlackAdminSections adminPage ++ [ E2EHelper.hasNotExactText adminPage [ "Orphaned" ] ])
+                , admin.update 100 (Audio.userMsg (Types.PressedUnlinkSlackUser adminSlackUserId))
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        openSlackAdminSections adminPage
+                            ++ [ adminPage.checkView
+                                    100
+                                    (\html -> Test.Html.Query.findAll [ Test.Html.Selector.exactText "Orphaned" ] html |> Test.Html.Query.count (Expect.equal 4))
+                               ]
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if slackWorkspaceAndDmCount backend == ( 1, 3 ) then
+                            Ok ()
+
+                        else
+                            Err "Slack workspaces and DMs orphaned since the last hourly update should be kept for another hour"
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if slackWorkspaceAndDmCount backend == ( 0, 0 ) then
+                            Ok ()
+
+                        else
+                            Err "Slack workspaces and DMs orphaned over two hourly updates should be deleted"
+                    )
                 ]
             )
         ]

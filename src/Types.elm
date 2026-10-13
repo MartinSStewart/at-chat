@@ -490,6 +490,8 @@ type alias BackendModel =
     , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackUserData
     , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
+    , orphanedSlackWorkspacesLastHour : SeqSet (Slack.Id Slack.TeamId)
+    , orphanedSlackDmChannelsLastHour : SeqSet (Slack.Id Slack.DmChannelId)
     , files : SeqDict FileHash BackendFileData
     , orphanedFilesLastHour : SeqSet FileHash
     , privateVapidKey : PrivateVapidKey

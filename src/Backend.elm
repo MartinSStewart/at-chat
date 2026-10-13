@@ -245,6 +245,8 @@ init =
       , files = SeqDict.empty
       , orphanedFilesLastHour = SeqSet.empty
       , orphanedDiscordGuildsLastHour = SeqSet.empty
+      , orphanedSlackWorkspacesLastHour = SeqSet.empty
+      , orphanedSlackDmChannelsLastHour = SeqSet.empty
       , publicVapidKey =
             if Env.isProduction then
                 ""
@@ -2317,6 +2319,22 @@ updateHelper msg model =
                 discordGuildsToDelete =
                     SeqSet.intersect model.orphanedDiscordGuildsLastHour orphanedDiscordGuilds
 
+                orphanedSlackWorkspaces : SeqSet (Slack.Id Slack.TeamId)
+                orphanedSlackWorkspaces =
+                    DeleteUserAndFiles.orphanedSlackWorkspaces model
+
+                slackWorkspacesToDelete : SeqSet (Slack.Id Slack.TeamId)
+                slackWorkspacesToDelete =
+                    SeqSet.intersect model.orphanedSlackWorkspacesLastHour orphanedSlackWorkspaces
+
+                orphanedSlackDmChannels : SeqSet (Slack.Id Slack.DmChannelId)
+                orphanedSlackDmChannels =
+                    DeleteUserAndFiles.orphanedSlackDmChannels model
+
+                slackDmChannelsToDelete : SeqSet (Slack.Id Slack.DmChannelId)
+                slackDmChannelsToDelete =
+                    SeqSet.intersect model.orphanedSlackDmChannelsLastHour orphanedSlackDmChannels
+
                 shouldExport : Bool
                 shouldExport =
                     case model.lastScheduledExportTime of
@@ -2350,6 +2368,10 @@ updateHelper msg model =
                             | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete
                             , orphanedDiscordGuildsLastHour = SeqSet.diff orphanedDiscordGuilds discordGuildsToDelete
                             , discordGuilds = SeqSet.foldl SeqDict.remove model.discordGuilds discordGuildsToDelete
+                            , orphanedSlackWorkspacesLastHour = SeqSet.diff orphanedSlackWorkspaces slackWorkspacesToDelete
+                            , slackWorkspaces = SeqSet.foldl SeqDict.remove model.slackWorkspaces slackWorkspacesToDelete
+                            , orphanedSlackDmChannelsLastHour = SeqSet.diff orphanedSlackDmChannels slackDmChannelsToDelete
+                            , slackDmChannels = SeqSet.foldl SeqDict.remove model.slackDmChannels slackDmChannelsToDelete
                             , logs = deleteOldLogs time model.logs
                         }
             in

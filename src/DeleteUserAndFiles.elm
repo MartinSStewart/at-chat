@@ -1,4 +1,4 @@
-module DeleteUserAndFiles exposing (deleteAccounts, deleteFiles, orphanedDiscordGuilds, orphanedFiles, removeDeletedFiles)
+module DeleteUserAndFiles exposing (deleteAccounts, deleteFiles, orphanedDiscordGuilds, orphanedFiles, orphanedSlackDmChannels, orphanedSlackWorkspaces, removeDeletedFiles)
 
 import Array
 import Codec
@@ -22,14 +22,16 @@ import Maybe.Extra
 import Message exposing (Message(..))
 import MessageArray exposing (MessageArray)
 import NonemptyDict
+import NonemptySet
 import Pages.Home
 import PersonName
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SheepGame
+import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
-import Types exposing (BackendModel, BackendMsg(..), LoginData, ToFrontend)
+import Types exposing (BackendModel, BackendMsg(..), LoginData, SlackUserData(..), ToFrontend)
 import User exposing (BackendUserStatus(..))
 import UserAgent
 import UserSession exposing (UserSession)
@@ -221,6 +223,59 @@ orphanedDiscordGuilds model =
         )
         SeqSet.empty
         model.discordGuilds
+
+
+orphanedSlackWorkspaces : BackendModel -> SeqSet (Slack.Id Slack.TeamId)
+orphanedSlackWorkspaces model =
+    let
+        linkedTeams : SeqSet (Slack.Id Slack.TeamId)
+        linkedTeams =
+            SeqDict.values (linkedSlackUsers model) |> SeqSet.fromList
+    in
+    SeqDict.foldl
+        (\teamId _ set ->
+            if SeqSet.member teamId linkedTeams then
+                set
+
+            else
+                SeqSet.insert teamId set
+        )
+        SeqSet.empty
+        model.slackWorkspaces
+
+
+orphanedSlackDmChannels : BackendModel -> SeqSet (Slack.Id Slack.DmChannelId)
+orphanedSlackDmChannels model =
+    let
+        linked : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linked =
+            linkedSlackUsers model
+    in
+    SeqDict.foldl
+        (\channelId dmChannel set ->
+            if List.any (\slackUserId -> SeqDict.member slackUserId linked) (NonemptySet.toList dmChannel.members) then
+                set
+
+            else
+                SeqSet.insert channelId set
+        )
+        SeqSet.empty
+        model.slackDmChannels
+
+
+linkedSlackUsers : BackendModel -> SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+linkedSlackUsers model =
+    SeqDict.foldl
+        (\slackUserId slackUser dict ->
+            case slackUser of
+                SlackFullData linkedUser ->
+                    SeqDict.insert slackUserId linkedUser.user.teamId dict
+
+                SlackBasicData _ ->
+                    dict
+        )
+        SeqDict.empty
+        model.slackUsers
 
 
 deleteFiles : SecretId ServerSecret -> List FileHash -> Task BackendOnly Http.Error ()
