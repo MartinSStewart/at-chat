@@ -13,21 +13,25 @@ module SlackSync exposing
 import DmChannel
 import Drawing
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import FileName
+import FileStatus exposing (FileData, FileHash, FileId, IsEncrypted(..))
 import Id exposing (ChannelMessageId, Id, UserId)
 import IdArray exposing (IdArray)
+import List.Nonempty
 import LocalState exposing (SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Message exposing (Message(..), RepliedTo(..))
 import NonemptyDict exposing (NonemptyDict)
+import NonemptyExtra
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
-import RichText
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
 import SlackEmoji
 import Thread exposing (SlackBackendThread)
-import Types exposing (SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackUserData(..))
+import Types exposing (SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackFileData, SlackUserData(..))
 import User exposing (BackendUser)
 import UserSession exposing (SlackFrontendUser)
 import VisibleMessages
@@ -38,21 +42,21 @@ newChannelMaxMessages =
     50
 
 
-{-| Takes messages oldest first. Messages with nothing at-chat can show (only files for now) are
-left out.
+{-| Takes messages oldest first. Messages with nothing at-chat can show are left out.
 -}
 messagesAndLinks :
-    List Slack.Message
+    SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> List Slack.Message
     ->
         ( IdArray messageId (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
         , OneToOne (Slack.Id Slack.MessageId) (Id messageId)
         )
-messagesAndLinks messages =
+messagesAndLinks slackFiles messages =
     let
         converted : List ( Slack.Id Slack.MessageId, Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
         converted =
             List.filterMap
-                (\message -> toMessage message |> Maybe.map (Tuple.pair message.id))
+                (\message -> toMessage slackFiles message |> Maybe.map (Tuple.pair message.id))
                 messages
     in
     ( IdArray.fromList (List.map Tuple.second converted)
@@ -63,16 +67,17 @@ messagesAndLinks messages =
 {-| A conversation built from its history, newest first as Slack gives it.
 -}
 conversationFromHistory :
-    Slack.History
+    SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> Slack.History
     ->
         { messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
         , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
         , threads : SeqDict (Id ChannelMessageId) SlackBackendThread
         }
-conversationFromHistory history =
+conversationFromHistory slackFiles history =
     let
         ( messages, linkedMessageIds ) =
-            messagesAndLinks (List.reverse history.messages)
+            messagesAndLinks slackFiles (List.reverse history.messages)
     in
     { messages = messages
     , linkedMessageIds = linkedMessageIds
@@ -83,7 +88,7 @@ conversationFromHistory history =
                     Just threadId ->
                         let
                             ( threadMessages, threadLinks ) =
-                                messagesAndLinks replies
+                                messagesAndLinks slackFiles replies
                         in
                         if IdArray.length threadMessages > 0 then
                             SeqDict.insert threadId { messages = threadMessages, linkedMessageIds = threadLinks } dict
@@ -99,11 +104,35 @@ conversationFromHistory history =
     }
 
 
-toMessage : Slack.Message -> Maybe (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-toMessage message =
+{-| Files that haven't been copied to at-chat are left out.
+-}
+toMessage :
+    SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> Slack.Message
+    -> Maybe (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+toMessage slackFiles message =
     case message.content of
-        Slack.TextMessage { text, blocks } ->
-            RichText.fromSlack text blocks
+        Slack.TextMessage { text, blocks, files } ->
+            let
+                attachedFiles : SeqDict (Id FileId) FileData
+                attachedFiles =
+                    List.filterMap
+                        (\file -> SeqDict.get file.id slackFiles |> Maybe.map (fileData file))
+                        files
+                        |> List.indexedMap (\index fileData2 -> ( Id.fromInt (index + 1), fileData2 ))
+                        |> SeqDict.fromList
+
+                attachedFileNodes : List (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                attachedFileNodes =
+                    List.map RichText.AttachedFile (SeqDict.keys attachedFiles)
+            in
+            (case RichText.fromSlack text blocks of
+                Just content ->
+                    NonemptyExtra.appendList content attachedFileNodes |> Just
+
+                Nothing ->
+                    List.Nonempty.fromList attachedFileNodes
+            )
                 |> Maybe.map
                     (\content ->
                         Message.userTextMessageNoEmbeds
@@ -112,12 +141,23 @@ toMessage message =
                             content
                             (reactions message.reactions)
                             NoReply
-                            SeqDict.empty
+                            attachedFiles
                             |> UserTextMessage
                     )
 
         Slack.JoinedChannel ->
             UserJoinedMessage message.createdAt message.user (reactions message.reactions) Drawing.emptyDrawing |> Just
+
+
+fileData : Slack.File -> SlackFileData -> FileData
+fileData file { fileHash, metadata } =
+    { fileName = FileName.fromString file.name
+    , fileSize = file.size
+    , metadata = metadata
+    , contentType = FileStatus.contentType file.mimetype
+    , fileHash = fileHash
+    , isEncrypted = IsNotEncrypted
+    }
 
 
 {-| Slack's custom emoji aren't in at-chat so reactions with them are left out.
@@ -173,6 +213,7 @@ workspacesToFrontend linked workspaces =
         (\teamId workspace ->
             if List.member teamId (SeqDict.values linked) then
                 { name = workspace.name
+                , icon = workspace.icon
                 , channels = SeqDict.filterMap (\_ channel -> channelToFrontend linked channel) workspace.channels
                 }
                     |> Just
@@ -236,9 +277,9 @@ usersToFrontend users linked slackUsers =
     SeqDict.filterMap
         (\_ userData ->
             case userData of
-                SlackBasicData user ->
+                SlackBasicData { user, icon } ->
                     if List.member user.teamId teams then
-                        Just (basicUserToFrontend user)
+                        Just (basicUserToFrontend user icon)
 
                     else
                         Nothing
@@ -246,7 +287,7 @@ usersToFrontend users linked slackUsers =
                 SlackFullData linkedUser ->
                     if List.member linkedUser.user.teamId teams then
                         { name = userName linkedUser.user
-                        , icon = Nothing
+                        , icon = linkedUser.icon
                         , color =
                             case NonemptyDict.get linkedUser.linkedTo users of
                                 Just user ->
@@ -263,9 +304,9 @@ usersToFrontend users linked slackUsers =
         slackUsers
 
 
-basicUserToFrontend : Slack.User -> SlackFrontendUser
-basicUserToFrontend user =
-    { name = userName user, icon = Nothing, color = RichText.defaultColor }
+basicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
+basicUserToFrontend user icon =
+    { name = userName user, icon = icon, color = RichText.defaultColor }
 
 
 userName : Slack.User -> PersonName
@@ -288,5 +329,5 @@ userDataName userData =
         SlackFullData linkedUser ->
             userName linkedUser.user |> PersonName.toString
 
-        SlackBasicData user ->
+        SlackBasicData { user } ->
             userName user |> PersonName.toString

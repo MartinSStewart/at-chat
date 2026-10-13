@@ -71,7 +71,7 @@ import Random
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -88,7 +88,7 @@ import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread, SlackBackendThread)
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SlackFrontendUser, ToBeFilledInByBackend(..), UserSession, Viewing)
@@ -242,6 +242,7 @@ init =
       , discordDmChannels = SeqDict.empty
       , slackWorkspaces = SeqDict.empty
       , slackUsers = SeqDict.empty
+      , slackFiles = SeqDict.empty
       , slackDmChannels = SeqDict.empty
       , files = SeqDict.empty
       , orphanedFilesLastHour = SeqSet.empty
@@ -895,7 +896,13 @@ updateHelper msg model =
                                         (\maybeWorkspace ->
                                             { name = team.name
                                             , domain = team.domain
-                                            , icon = team.icon
+                                            , icon =
+                                                case maybeWorkspace of
+                                                    Just workspace ->
+                                                        workspace.icon
+
+                                                    Nothing ->
+                                                        Nothing
                                             , channels =
                                                 case maybeWorkspace of
                                                     Just workspace ->
@@ -912,6 +919,16 @@ updateHelper msg model =
                                         self.id
                                         (SlackFullData
                                             { user = self
+                                            , icon =
+                                                case SeqDict.get self.id model2.slackUsers of
+                                                    Just (SlackFullData existing) ->
+                                                        existing.icon
+
+                                                    Just (SlackBasicData existing) ->
+                                                        existing.icon
+
+                                                    Nothing ->
+                                                        Nothing
                                             , linkedTo = userId
                                             , linkedAt = linkedAt
                                             , token = token
@@ -956,7 +973,7 @@ updateHelper msg model =
                         (\( token, result ) ->
                             case result of
                                 Ok { self, team } ->
-                                    loadSlackWorkspaceData model cookie token self.id team.id
+                                    loadSlackWorkspaceData model cookie token self team
                                         |> Task.attempt (LinkSlackUserStep2 linkedAt team.id self.id)
                                         |> Just
 
@@ -999,16 +1016,16 @@ updateHelper msg model =
                     { model | pendingSlackUserLookups = SeqSet.remove slackUserId model.pendingSlackUserLookups }
             in
             case ( result, SeqDict.get slackUserId model2.slackUsers ) of
-                ( Ok user, Nothing ) ->
+                ( Ok ( user, icon ), Nothing ) ->
                     let
                         model3 : BackendModel
                         model3 =
-                            { model2 | slackUsers = SeqDict.insert slackUserId (SlackBasicData user) model2.slackUsers }
+                            { model2 | slackUsers = SeqDict.insert slackUserId (SlackBasicData { user = user, icon = icon }) model2.slackUsers }
                     in
                     ( model3
                     , Broadcast.toSlackTeam
                         user.teamId
-                        (Server_Slack_UserLoaded slackUserId (SlackSync.basicUserToFrontend user) |> ServerChange)
+                        (Server_Slack_UserLoaded slackUserId (SlackSync.basicUserToFrontend user icon) |> ServerChange)
                         model3
                     )
 
@@ -1023,14 +1040,21 @@ updateHelper msg model =
 
         LinkSlackUserStep2 time teamId slackUserId result ->
             case result of
-                Ok { channels, dmChannels, users } ->
+                Ok { channels, dmChannels, users, selfIcon, workspaceIcon, files } ->
+                    let
+                        slackFiles : SeqDict (Slack.Id Slack.FileId) SlackFileData
+                        slackFiles =
+                            SeqDict.union files model.slackFiles
+                    in
                     ( { model
-                        | slackWorkspaces =
+                        | slackFiles = slackFiles
+                        , slackWorkspaces =
                             SeqDict.updateIfExists
                                 teamId
                                 (\workspace ->
                                     { workspace
-                                        | channels =
+                                        | icon = workspaceIcon
+                                        , channels =
                                             List.foldl
                                                 (\( channel, channelHistory ) dict ->
                                                     SeqDict.insert
@@ -1046,7 +1070,7 @@ updateHelper msg model =
                                                             Nothing ->
                                                                 let
                                                                     conversation =
-                                                                        SlackSync.conversationFromHistory channelHistory
+                                                                        SlackSync.conversationFromHistory slackFiles channelHistory
                                                                 in
                                                                 { name = ChannelName.fromStringLossy channel.name
                                                                 , isPrivate = channel.isPrivate
@@ -1078,7 +1102,7 @@ updateHelper msg model =
                                             Nothing ->
                                                 let
                                                     conversation =
-                                                        SlackSync.conversationFromHistory dmHistory
+                                                        SlackSync.conversationFromHistory slackFiles dmHistory
                                                 in
                                                 { teamId = teamId
                                                 , members = dmChannel.members
@@ -1093,22 +1117,33 @@ updateHelper msg model =
                                 dmChannels
                         , slackUsers =
                             List.foldl
-                                (\user dict ->
+                                (\( user, icon ) dict ->
                                     SeqDict.insert
                                         user.id
                                         (case SeqDict.get user.id dict of
                                             Just (SlackFullData linkedUser) ->
-                                                SlackFullData { linkedUser | user = user }
+                                                SlackFullData { linkedUser | user = user, icon = icon }
 
                                             Just (SlackBasicData _) ->
-                                                SlackBasicData user
+                                                SlackBasicData { user = user, icon = icon }
 
                                             Nothing ->
-                                                SlackBasicData user
+                                                SlackBasicData { user = user, icon = icon }
                                         )
                                         dict
                                 )
-                                model.slackUsers
+                                (SeqDict.updateIfExists
+                                    slackUserId
+                                    (\userData ->
+                                        case userData of
+                                            SlackFullData linkedUser ->
+                                                SlackFullData { linkedUser | icon = selfIcon }
+
+                                            SlackBasicData basicData ->
+                                                SlackBasicData { basicData | icon = selfIcon }
+                                    )
+                                    model.slackUsers
+                                )
                                 users
                       }
                         |> markNewSlackConversationsAsViewed
@@ -1146,6 +1181,22 @@ updateHelper msg model =
         SlackWebsocketClosedByBackend ->
             ( model, Command.none )
 
+        SlackMessageFilesUploaded slackUserId event files ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | slackFiles = SeqDict.union files model.slackFiles }
+            in
+            case SeqDict.get slackUserId model2.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    handleSlackWebsocketEvent linkedUser event model2
+
+                Just (SlackBasicData _) ->
+                    ( model2, Command.none )
+
+                Nothing ->
+                    ( model2, Command.none )
+
         SlackWebsocketMsg slackUserId result ->
             case SeqDict.get slackUserId model.slackUsers of
                 Just (SlackFullData linkedUser) ->
@@ -1158,11 +1209,23 @@ updateHelper msg model =
 
                                 ( model2, lookUpCmd ) =
                                     lookUpUnknownSlackUsers linkedUser (websocketEventUserIds event) model
-
-                                ( model3, cmd ) =
-                                    handleSlackWebsocketEvent linkedUser event model2
                             in
-                            ( model3, Command.batch [ cmd, lookUpCmd ] )
+                            case List.filter (\file -> not (SeqDict.member file.id model2.slackFiles)) (websocketEventFiles event) of
+                                [] ->
+                                    let
+                                        ( model3, cmd ) =
+                                            handleSlackWebsocketEvent linkedUser event model2
+                                    in
+                                    ( model3, Command.batch [ cmd, lookUpCmd ] )
+
+                                newFiles ->
+                                    ( model2
+                                    , Command.batch
+                                        [ uploadSlackFiles model2.serverSecret linkedUser.cookie linkedUser.token newFiles
+                                            |> Task.perform (SlackMessageFilesUploaded slackUserId event)
+                                        , lookUpCmd
+                                        ]
+                                    )
 
                         Err ( code, reason ) ->
                             let
@@ -2778,18 +2841,25 @@ loadSlackWorkspaceData :
     BackendModel
     -> SlackCookie
     -> SlackToken
-    -> Slack.Id Slack.UserId
-    -> Slack.Id Slack.TeamId
+    -> Slack.User
+    -> Slack.Team
     ->
         Task
             BackendOnly
             Slack.HttpError
             { channels : List ( Slack.Channel, Slack.History )
             , dmChannels : List ( Slack.DmChannel, Slack.History )
-            , users : List Slack.User
+            , users : List ( Slack.User, Maybe FileHash )
+            , selfIcon : Maybe FileHash
+            , workspaceIcon : Maybe FileHash
+            , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
             }
-loadSlackWorkspaceData model cookie token slackUserId teamId =
+loadSlackWorkspaceData model cookie token self team =
     let
+        teamId : Slack.Id Slack.TeamId
+        teamId =
+            team.id
+
         existingChannels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
         existingChannels =
             case SeqDict.get teamId model.slackWorkspaces of
@@ -2807,7 +2877,7 @@ loadSlackWorkspaceData model cookie token slackUserId teamId =
         noHistory =
             { messages = [], replies = SeqDict.empty }
     in
-    Slack.userConversations model.serverSecret cookie token slackUserId
+    Slack.userConversations model.serverSecret cookie token self.id
         |> Task.andThen
             (\{ channels, dmChannels } ->
                 Task.map2
@@ -2855,6 +2925,43 @@ loadSlackWorkspaceData model cookie token slackUserId teamId =
                 in
                 Slack.usersById model.serverSecret cookie token teamId unknownUserIds
                     |> Task.map (\users -> { channels = channels, dmChannels = dmChannels, users = users })
+            )
+        |> Task.andThen
+            (\{ channels, dmChannels, users } ->
+                let
+                    historyFiles : Slack.History -> List Slack.File
+                    historyFiles history2 =
+                        List.concatMap Slack.messageFiles history2.messages
+                            ++ List.concatMap (List.concatMap Slack.messageFiles) (SeqDict.values history2.replies)
+                in
+                Task.map4
+                    (\users2 selfIcon workspaceIcon files ->
+                        { channels = channels
+                        , dmChannels = dmChannels
+                        , users = users2
+                        , selfIcon = selfIcon
+                        , workspaceIcon = workspaceIcon
+                        , files = files
+                        }
+                    )
+                    (List.map
+                        (\user -> uploadSlackImage model.serverSecret user.image |> Task.map (Tuple.pair user))
+                        users
+                        |> Task.sequence
+                    )
+                    (uploadSlackImage model.serverSecret self.image)
+                    (case team.icon of
+                        Just icon ->
+                            uploadSlackImage model.serverSecret icon
+
+                        Nothing ->
+                            Task.succeed Nothing
+                    )
+                    (List.concatMap (\( _, channelHistory ) -> historyFiles channelHistory) channels
+                        ++ List.concatMap (\( _, dmHistory ) -> historyFiles dmHistory) dmChannels
+                        |> List.filter (\file -> not (SeqDict.member file.id model.slackFiles))
+                        |> uploadSlackFiles model.serverSecret cookie token
+                    )
             )
 
 
@@ -6336,7 +6443,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             model2 : BackendModel
                                             model2 =
                                                 { model
-                                                    | slackUsers = SeqDict.insert slackUserId (SlackBasicData linkedUser.user) model.slackUsers
+                                                    | slackUsers =
+                                                        SeqDict.insert
+                                                            slackUserId
+                                                            (SlackBasicData { user = linkedUser.user, icon = linkedUser.icon })
+                                                            model.slackUsers
                                                     , slackWorkspaces =
                                                         SeqDict.updateIfExists
                                                             linkedUser.user.teamId
@@ -11046,11 +11157,80 @@ lookUpUnknownSlackUsers linkedUser userIds model =
     , List.map
         (\userId ->
             Slack.userInfo model.serverSecret linkedUser.cookie linkedUser.token userId
+                |> Task.andThen (\user -> uploadSlackImage model.serverSecret user.image |> Task.map (Tuple.pair user))
                 |> Task.attempt (GotSlackUser userId)
         )
         unknown
         |> Command.batch
     )
+
+
+websocketEventFiles : Slack.WebsocketEvent -> List Slack.File
+websocketEventFiles event =
+    case event of
+        Slack.WebsocketMessageCreated _ message ->
+            Slack.messageFiles message
+
+        Slack.WebsocketMessageChanged _ message _ ->
+            Slack.messageFiles message
+
+        Slack.WebsocketMessageDeleted _ _ _ ->
+            []
+
+        Slack.WebsocketReactionAdded _ ->
+            []
+
+        Slack.WebsocketReactionRemoved _ ->
+            []
+
+        Slack.WebsocketRelayReady ->
+            []
+
+        Slack.WebsocketHello ->
+            []
+
+        Slack.WebsocketOtherEvent ->
+            []
+
+
+{-| Copies the files to at-chat. A file that fails to copy is left out, so its message shows
+without it.
+-}
+uploadSlackFiles :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> List Slack.File
+    -> Task BackendOnly x (SeqDict (Slack.Id Slack.FileId) SlackFileData)
+uploadSlackFiles secretKey cookie token files =
+    List.map
+        (\file ->
+            FileStatus.uploadUrl secretKey file.url (Slack.fileHeaders cookie token)
+                |> Task.map
+                    (\uploadResponse ->
+                        Just
+                            ( file.id
+                            , { fileHash = uploadResponse.fileHash, metadata = FileStatus.uploadResponseMetadata uploadResponse }
+                            )
+                    )
+                |> Task.onError (\_ -> Task.succeed Nothing)
+        )
+        (List.Extra.uniqueBy (\file -> Slack.idToString file.id) files)
+        |> Task.sequence
+        |> Task.map (\results -> List.filterMap identity results |> SeqDict.fromList)
+
+
+{-| Profile pictures and workspace icons don't need credentials to download.
+-}
+uploadSlackImage : SecretId ServerSecret -> String -> Task BackendOnly x (Maybe FileHash)
+uploadSlackImage secretKey url =
+    if url == "" then
+        Task.succeed Nothing
+
+    else
+        FileStatus.uploadUrl secretKey url []
+            |> Task.map (\uploadResponse -> Just uploadResponse.fileHash)
+            |> Task.onError (\_ -> Task.succeed Nothing)
 
 
 handleSlackWebsocketEvent :
@@ -11076,7 +11256,7 @@ handleSlackWebsocketEvent linkedUser event model =
         Slack.WebsocketMessageCreated channelString message ->
             case
                 ( slackChannelFromWebsocket linkedUser message.user channelString model
-                , ( SlackSync.toMessage message, SlackSync.toMessage message )
+                , ( SlackSync.toMessage model.slackFiles message, SlackSync.toMessage model.slackFiles message )
                 )
             of
                 ( Just guildOrDmId, ( Just (UserTextMessage data), Just threadMessage ) ) ->
@@ -11145,7 +11325,7 @@ handleSlackWebsocketEvent linkedUser event model =
         Slack.WebsocketMessageChanged channelString message editedAt ->
             case
                 ( slackChannelFromWebsocket linkedUser message.user channelString model
-                , SlackSync.toMessage message
+                , SlackSync.toMessage model.slackFiles message
                 )
             of
                 ( Just guildOrDmId, Just (UserTextMessage data) ) ->

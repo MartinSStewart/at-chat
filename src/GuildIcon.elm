@@ -199,8 +199,8 @@ view mode guild =
         (guildIcon guild mode (GuildName.toString guild.name))
 
 
-slackView : Mode -> String -> Element msg
-slackView mode name =
+slackView : Mode -> String -> Maybe FileHash -> Element msg
+slackView mode name icon =
     Ui.el
         (notificationView
             -4
@@ -213,9 +213,9 @@ slackView mode name =
                 Normal notification ->
                     notification
             )
-            :: selectedEdgeCurves mode Nothing
+            :: selectedEdgeCurves mode icon
         )
-        (guildIcon { icon = Nothing } mode name)
+        (guildIcon { icon = icon } mode name)
 
 
 guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg

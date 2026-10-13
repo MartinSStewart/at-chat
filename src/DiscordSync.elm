@@ -3158,7 +3158,7 @@ loadMessageAttachment :
     -> Discord.Attachment
     -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
 loadMessageAttachment secretKey attachment =
-    FileStatus.uploadUrl secretKey attachment.url
+    FileStatus.uploadUrl secretKey attachment.url []
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
         |> Task.onError (\error -> Task.succeed (Err error))
 
@@ -3476,6 +3476,7 @@ handleStickers secretKey stickersToCheck state =
                                 (FileStatus.uploadUrl
                                     secretKey
                                     (Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id)
+                                    []
                                     |> taskResult
                                     |> Task.map (\result -> ( stickerId, result ))
                                 )
@@ -3529,6 +3530,7 @@ handleCustomEmojis secretKey emojisToCheck state =
                                 Nothing
                                 (Discord.idToUInt64 emoji.id |> Discord.idFromUInt64)
                             )
+                            []
                             |> taskResult
                             |> Task.map (\result -> ( customEmojiId, result ))
                         )
@@ -3889,7 +3891,7 @@ uploadAttachmentsForMessages model messages =
         |> SeqDict.toList
         |> List.map
             (\( _, attachment ) ->
-                FileStatus.uploadUrl model.serverSecret attachment.url
+                FileStatus.uploadUrl model.serverSecret attachment.url []
                     |> Task.map (\uploadResponse -> Ok ( DiscordAttachmentId.fromUrl attachment.url, uploadResponse ))
                     |> Task.onError (\error -> Task.succeed (Err error))
             )

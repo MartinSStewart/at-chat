@@ -1719,7 +1719,7 @@ adminSlackDmChannels model =
                                 Just (SlackFullData linkedUser) ->
                                     linkedUser.user.name
 
-                                Just (SlackBasicData user) ->
+                                Just (SlackBasicData { user }) ->
                                     user.name
 
                                 Nothing ->
@@ -1777,7 +1777,7 @@ adminSlackWorkspaces model =
                                 else
                                     count
 
-                            SlackBasicData user ->
+                            SlackBasicData { user } ->
                                 if user.teamId == teamId then
                                     count + 1
 
@@ -2788,6 +2788,9 @@ backendMsgLog msg =
 
         SlackDeletedMessage _ _ _ ->
             BackendMsgLog_SlackDeletedMessage
+
+        SlackMessageFilesUploaded _ _ _ ->
+            BackendMsgLog_SlackMessageFilesUploaded
 
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1

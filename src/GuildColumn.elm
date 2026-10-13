@@ -170,6 +170,7 @@ slackWorkspaceIcons route localUser teamId workspace =
                             GuildIcon.Normal (slackWorkspaceHasNotifications routeData.currentSlackUserId localUser.user teamId workspace)
                     )
                     workspace.name
+                    workspace.icon
                 )
 
         Nothing ->

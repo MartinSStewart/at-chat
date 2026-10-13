@@ -58,7 +58,9 @@ module Types exposing
     , ServerChange(..)
     , SlackBackendChannel
     , SlackBackendWorkspace
+    , SlackBasicUserData
     , SlackDmChannel
+    , SlackFileData
     , SlackLinkedUser
     , SlackUserData(..)
     , ToBackend(..)
@@ -489,6 +491,7 @@ type alias BackendModel =
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackUserData
+    , slackFiles : SeqDict (Slack.Id Slack.FileId) SlackFileData
     , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
     , orphanedSlackWorkspacesLastHour : SeqSet (Slack.Id Slack.TeamId)
     , orphanedSlackDmChannelsLastHour : SeqSet (Slack.Id Slack.DmChannelId)
@@ -884,7 +887,8 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
-    | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.User)
+    | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError ( Slack.User, Maybe FileHash ))
+    | SlackMessageFilesUploaded (Slack.Id Slack.UserId) Slack.WebsocketEvent (SeqDict (Slack.Id Slack.FileId) SlackFileData)
     | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
@@ -896,7 +900,10 @@ type BackendMsg
             Slack.HttpError
             { channels : List ( Slack.Channel, Slack.History )
             , dmChannels : List ( Slack.DmChannel, Slack.History )
-            , users : List Slack.User
+            , users : List ( Slack.User, Maybe FileHash )
+            , selfIcon : Maybe FileHash
+            , workspaceIcon : Maybe FileHash
+            , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
             }
         )
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
@@ -1041,7 +1048,7 @@ type LinkSlackResult
 type alias SlackBackendWorkspace =
     { name : String
     , domain : String
-    , icon : String
+    , icon : Maybe FileHash
     , channels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
     }
 
@@ -1070,12 +1077,24 @@ type alias SlackDmChannel =
 
 
 type SlackUserData
-    = SlackBasicData Slack.User
+    = SlackBasicData SlackBasicUserData
     | SlackFullData SlackLinkedUser
+
+
+type alias SlackBasicUserData =
+    { user : Slack.User, icon : Maybe FileHash }
+
+
+{-| A file attached to a Slack message, once it's been copied to at-chat. The rest of what's shown
+about the file comes from the message itself.
+-}
+type alias SlackFileData =
+    { fileHash : FileHash, metadata : Maybe FileStatus.FileMetadata }
 
 
 type alias SlackLinkedUser =
     { user : Slack.User
+    , icon : Maybe FileHash
     , linkedTo : Id UserId
     , linkedAt : Time.Posix
     , token : SlackToken

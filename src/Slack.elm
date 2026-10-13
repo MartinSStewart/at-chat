@@ -3,6 +3,8 @@ module Slack exposing
     , ChannelId
     , DmChannel
     , DmChannelId
+    , File
+    , FileId
     , History
     , HttpError(..)
     , Id(..)
@@ -25,9 +27,11 @@ module Slack exposing
     , WebsocketEvent(..)
     , addReaction
     , deleteMessage
+    , fileHeaders
     , history
     , httpErrorToString
     , idToString
+    , messageFiles
     , messageUserIds
     , noStyle
     , parseWebsocketEvent
@@ -183,6 +187,10 @@ type MessageId
     = MessageId Never
 
 
+type FileId
+    = FileId Never
+
+
 idToString : Id a -> String
 idToString (Id id) =
     id
@@ -227,11 +235,14 @@ httpErrorToString error =
             "Bad url " ++ url
 
 
+{-| The icon is left out when the workspace hasn't picked one and Slack would show a generic
+picture.
+-}
 type alias Team =
     { id : Id TeamId
     , name : String
     , domain : String
-    , icon : String
+    , icon : Maybe String
     }
 
 
@@ -457,7 +468,17 @@ decodeTeam =
         (Decode.field "id" decodeId)
         (Decode.field "name" Decode.string)
         (Decode.field "domain" Decode.string)
-        (Decode.at [ "icon", "image_132" ] Decode.string)
+        (Decode.map2
+            (\isDefault url ->
+                if isDefault then
+                    Nothing
+
+                else
+                    Just url
+            )
+            (Decode.oneOf [ Decode.at [ "icon", "image_default" ] Decode.bool, Decode.succeed False ])
+            (Decode.at [ "icon", "image_132" ] Decode.string)
+        )
 
 
 type alias Message =
@@ -497,7 +518,7 @@ type alias History =
 
 
 type MessageContent
-    = TextMessage { text : String, blocks : List RichTextElement }
+    = TextMessage { text : String, blocks : List RichTextElement, files : List File }
     | JoinedChannel
 
 
@@ -813,6 +834,46 @@ noStyle =
     { bold = False, italic = False, strike = False, code = False }
 
 
+{-| A file attached to a message. Files that have been deleted, or that a free workspace hides
+once they're too old, come without a url and are left out.
+-}
+type alias File =
+    { id : Id FileId
+    , name : String
+    , mimetype : String
+    , size : Int
+    , url : String
+    }
+
+
+decodeFile : Decoder File
+decodeFile =
+    Decode.map5
+        File
+        (Decode.field "id" decodeId)
+        (Decode.field "name" Decode.string)
+        (Decode.oneOf [ Decode.field "mimetype" Decode.string, Decode.succeed "" ])
+        (Decode.oneOf [ Decode.field "size" Decode.int, Decode.succeed 0 ])
+        (Decode.field "url_private" Decode.string)
+
+
+messageFiles : Message -> List File
+messageFiles message =
+    case message.content of
+        TextMessage { files } ->
+            files
+
+        JoinedChannel ->
+            []
+
+
+{-| Downloading a file from files.slack.com needs the same credentials as the API.
+-}
+fileHeaders : SlackCookie -> SlackToken -> List ( String, String )
+fileHeaders (SlackCookie cookie) (SlackToken token) =
+    [ ( "Cookie", "d=" ++ cookie ), ( "Authorization", "Bearer " ++ token ) ]
+
+
 {-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
 show for fail to decode.
 -}
@@ -827,11 +888,17 @@ decodeMessage =
                     (Decode.field "ts" decodeTimestamp)
                     (Decode.field "user" decodeId)
                     (if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
-                        Decode.map2
-                            (\text blocks -> TextMessage { text = text, blocks = blocks })
+                        Decode.map3
+                            (\text blocks files -> TextMessage { text = text, blocks = blocks, files = files })
                             (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
                             (Decode.oneOf
                                 [ Decode.field "blocks" (Decode.list decodeBlock) |> Decode.map List.concat
+                                , Decode.succeed []
+                                ]
+                            )
+                            (Decode.oneOf
+                                [ Decode.field "files" (Decode.list (Decode.maybe decodeFile))
+                                    |> Decode.map (List.filterMap identity)
                                 , Decode.succeed []
                                 ]
                             )

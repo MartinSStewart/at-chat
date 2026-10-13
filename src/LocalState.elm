@@ -454,6 +454,7 @@ type alias FrontendChannel =
 
 type alias SlackFrontendWorkspace =
     { name : String
+    , icon : Maybe FileHash
     , channels : SeqDict (Slack.Id Slack.ChannelId) SlackFrontendChannel
     }
 

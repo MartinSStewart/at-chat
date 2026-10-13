@@ -2294,7 +2294,7 @@ slackChannelHistory : String
 slackChannelHistory =
     """{"ok":true,"messages":[
 {"type":"message","subtype":"bot_message","bot_id":"B0BOT","text":"Deploy finished","ts":"1791638800.000100"},
-{"type":"message","user":"U09DJDQL1A8","text":"","files":[{"id":"F0C845B861K","name":"photo.jpg"}],"upload":false,"ts":"1791638790.000100"},
+{"type":"message","user":"U09DJDQL1A8","text":"","files":[{"id":"F0C845B861K","name":"photo.jpg","mimetype":"image/jpeg","size":605547,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0C845B861K/photo.jpg"},{"id":"F0GONE","mode":"tombstone"}],"upload":false,"ts":"1791638790.000100"},
 {"type":"message","user":"U09DK3NCPMG","text":"quote and list","ts":"1791638780.000100","blocks":[{"type":"rich_text","block_id":"a1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Before\\n"}]},{"type":"rich_text_quote","elements":[{"type":"text","text":"Quoted"}]},{"type":"rich_text_list","style":"bullet","indent":0,"elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"First item"}]},{"type":"rich_text_section","elements":[{"type":"text","text":"Second item"}]}]}]}]},
 {"type":"message","user":"U09DJDQL1A8","text":"code","ts":"1791638770.000100","reactions":[{"name":"+1","users":["U09DK3NCPMG"],"count":1},{"name":"wave::skin-tone-3","users":["U09DK3NCPMG","U09DJDQL1A8"],"count":2},{"name":"partyparrot","users":["U09DK3NCPMG"],"count":1}],"blocks":[{"type":"rich_text","block_id":"a2","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Run "},{"type":"text","text":"make","style":{"code":true}},{"type":"text","text":"\\n"}]},{"type":"rich_text_preformatted","elements":[{"type":"text","text":"elm make src/Main.elm"}],"border":0}]}]},
 {"type":"message","user":"U09DJDQL1A8","text":"Hello <@U09DK3NCPMG>","ts":"1791638760.000100","thread_ts":"1791638760.000100","reply_count":2,"blocks":[{"type":"rich_text","block_id":"a3","elements":[{"type":"rich_text_section","elements":[{"type":"emoji","name":"wave","unicode":"1f44b"},{"type":"text","text":" Hello "},{"type":"user","user_id":"U09DK3NCPMG"},{"type":"text","text":" see "},{"type":"link","url":"https://at-chat.app","text":"at-chat"},{"type":"text","text":" in "},{"type":"channel","channel_id":"C09DJDQUKKN"},{"type":"text","text":" "},{"type":"text","text":"now","style":{"bold":true,"italic":true}}]}]}]},
@@ -2459,6 +2459,17 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                                 -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
                                 if String.contains "796138864933863456" request.url then
                                     UnhandledHttpRequest
+
+                                else if
+                                    String.startsWith "https://files.slack.com/" request.url
+                                        && not
+                                            (List.member { key = "Cookie", value = "d=" ++ legitSlackCookie } request.headers
+                                                && List.any
+                                                    (\token -> List.member { key = "Authorization", value = "Bearer " ++ token } request.headers)
+                                                    [ legitSlackToken, secondSlackToken ]
+                                            )
+                                then
+                                    httpBasic currentRequest.url 401 "Invalid permissions 2"
 
                                 else
                                     httpBasic

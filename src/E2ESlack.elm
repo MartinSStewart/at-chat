@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackFilesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -10,6 +10,8 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji
 import Expect
+import FileName
+import FileStatus
 import Html.Attributes
 import Id exposing (ChannelMessageId)
 import IdArray
@@ -162,6 +164,7 @@ linkSlackLoadsChannelsTest config =
                                    , "U09DJDQL1A8: 👋 Hello @zig see [at-chat](https://at-chat.app/) in #social *_now_*"
                                    , "U09DJDQL1A8: Run `make`\n```elm make src/Main.elm```"
                                    , "U09DK3NCPMG: Before\n> Quoted\n* First item\n* Second item"
+                                   , "U09DJDQL1A8: [!1]"
                                    ]
                         then
                             Ok ()
@@ -258,7 +261,7 @@ linkSlackLoadsChannelsTest config =
                 , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 3", "slack-admin", "ziggler" ]
                 , E2EHelper.hasNotExactText admin [ "#social" ]
                 , admin.click 100 (Pages.Admin.expandSlackWorkspaceButtonId (Slack.Id "T09DJDQL18U"))
-                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 5" ]
+                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 6" ]
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackDmChannelsSection)
                 , E2EHelper.hasExactText admin [ "D09DK3P5RPC", "C0AMPIM1234", "third", "Messages: 1" ]
                 , admin.click 100 (Pages.Admin.deleteSlackDmChannelButtonId (Slack.Id "C0AMPIM1234"))
@@ -1428,6 +1431,146 @@ slackReactionsAndNewThreadTest config =
                     (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copy" ])
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_deleteMessage" ])
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackUserIcon : String -> E2EHelper.BackendModel2 -> Maybe FileStatus.FileHash
+slackUserIcon slackUserId backend =
+    case SeqDict.get (Slack.Id slackUserId) (E2EHelper.unwrapBackend backend).slackUsers of
+        Just (Types.SlackFullData linkedUser) ->
+            linkedUser.icon
+
+        Just (Types.SlackBasicData basicData) ->
+            basicData.icon
+
+        Nothing ->
+            Nothing
+
+
+allTestSlackAttachedFiles : Int -> E2EHelper.BackendModel2 -> List ( String, FileStatus.FileHash )
+allTestSlackAttachedFiles messageIndex backend =
+    case
+        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt messageIndex) channel.messages)
+    of
+        Just (UserTextMessage data) ->
+            SeqDict.values data.content.attachedFiles
+                |> List.map (\fileData -> ( FileName.toString fileData.fileName, fileData.fileHash ))
+
+        _ ->
+            []
+
+
+slackFilesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackFilesTest config =
+    E2EHelper.startTest
+        "Slack workspace icons, profile pictures and attached files are copied to at-chat"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if
+                            Maybe.andThen .icon (SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces)
+                                /= Just (FileStatus.fileHash "https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png")
+                        then
+                            Err "Expected the workspace icon to be copied"
+
+                        else if slackUserIcon "U09DJDQL1A8" backend /= Just (FileStatus.fileHash "https://avatars.slack-edge.com/admin_72.png") then
+                            Err "Expected the linked user's profile picture to be copied"
+
+                        else if slackUserIcon "U09DK3NCPMG" backend /= Just (FileStatus.fileHash "https://avatars.slack-edge.com/ziggler_72.png") then
+                            Err "Expected other users' profile pictures to be copied"
+
+                        else if slackUserIcon "U0THIRD" backend /= Nothing then
+                            Err "Expected a user without a profile picture to have none"
+
+                        else if
+                            allTestSlackAttachedFiles 5 backend
+                                /= [ ( "photo.jpg", FileStatus.fileHash "https://files.slack.com/files-pri/T09DJDQL18U-F0C845B861K/photo.jpg" ) ]
+                        then
+                            Err "Expected the attached file to be copied and the deleted one left out"
+
+                        else
+                            Ok ()
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.attribute
+                            (Html.Attributes.src
+                                (FileStatus.fileUrl
+                                    FileStatus.pngContent
+                                    (FileStatus.fileHash "https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png")
+                                )
+                            )
+                        ]
+                    )
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.attribute
+                            (Html.Attributes.src
+                                (FileStatus.fileUrl FileStatus.pngContent (FileStatus.fileHash "https://avatars.slack-edge.com/ziggler_72.png"))
+                            )
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
+                        , E2EHelper.hasExactText admin [ "Look at this" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if
+                                    allTestSlackAttachedFiles 6 backend
+                                        == [ ( "new.png", FileStatus.fileHash "https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png" ) ]
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the file in the new message to be copied"
+                            )
+                        ]
+                    )
                 , E2EHelper.checkNoErrorLogs
                 ]
             )

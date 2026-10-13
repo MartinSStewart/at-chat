@@ -323,6 +323,10 @@ removeDeletedFiles deleted model =
             SeqDict.filter
                 (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
                 model.discordAttachments
+        , slackFiles =
+            SeqDict.filter
+                (\_ file -> not (SeqSet.member file.fileHash deletedSet))
+                model.slackFiles
     }
 
 
@@ -346,15 +350,17 @@ usedFiles model =
         , SeqDict.values model.discordGuilds |> List.concatMap discordGuildFiles
         , SeqDict.values model.dmChannels |> List.concatMap dmChannelFiles
         , SeqDict.values model.discordDmChannels |> List.concatMap (\dmChannel -> messagesFiles dmChannel.messages)
+        , SeqDict.values model.slackUsers |> List.filterMap slackUserIcon
         , SeqDict.values model.slackWorkspaces
             |> List.concatMap
                 (\workspace ->
-                    SeqDict.values workspace.channels
-                        |> List.concatMap
+                    Maybe.Extra.toList workspace.icon
+                        ++ List.concatMap
                             (\channel ->
                                 messagesFiles channel.messages
                                     ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
                             )
+                            (SeqDict.values workspace.channels)
                 )
         , SeqDict.values model.slackDmChannels
             |> List.concatMap
@@ -369,6 +375,16 @@ usedFiles model =
         , SeqDict.values previewLoginData.discordGuilds |> List.filterMap .icon
         , Maybe.Extra.toList previewLoginData.user.icon ++ List.filterMap .icon (SeqDict.values previewLoginData.otherUsers)
         ]
+
+
+slackUserIcon : SlackUserData -> Maybe FileHash
+slackUserIcon userData =
+    case userData of
+        SlackBasicData basicData ->
+            basicData.icon
+
+        SlackFullData linkedUser ->
+            linkedUser.icon
 
 
 guildFiles : BackendGuild -> List FileHash
