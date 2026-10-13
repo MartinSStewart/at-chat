@@ -12813,6 +12813,8 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
                                     channels
                                     local.localUser
                                     Nothing
+                                    True
+                                    (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) (NoThreadWithMessage threadId) loggedIn model)
                                     threadId
                                     message
                                     |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) (NoThreadWithMessage threadId))
@@ -12951,6 +12953,7 @@ slackThreadConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmId
                             currentSlackUserId
                             channels
                             local.localUser
+                            (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
                             messageId
                             message
                             |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -12986,13 +12989,14 @@ slackThreadMessageView :
     -> Slack.Id Slack.UserId
     -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> LocalUser
+    -> IsHovered
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     -> Element MessageViewMsg
-slackThreadMessageView time containerWidth revealedSpoilers highlight currentUserId channels localUser messageId message =
+slackThreadMessageView time containerWidth revealedSpoilers highlight currentUserId channels localUser isHovered messageId message =
     case message of
         UserTextMessage data ->
-            threadMessageContainer
+            slackThreadMessageContainer
                 containerWidth
                 (case highlight of
                     NoHighlight ->
@@ -13006,15 +13010,13 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
                         highlight
                 )
                 messageId
-                False
                 currentUserId
                 localUser.user
                 data.reactions
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
-                IsNotHovered
+                isHovered
                 (slackUserTextMessageContent
                     time
                     containerWidth
@@ -13030,19 +13032,17 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
             Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
-            threadMessageContainer
+            slackThreadMessageContainer
                 containerWidth
                 highlight
                 messageId
-                False
                 currentUserId
                 localUser.user
                 reactions
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
-                IsNotHovered
+                isHovered
                 (Ui.row
                     []
                     [ userJoinedContent userId localUser.slackUsers
@@ -13057,19 +13057,17 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
                 )
 
         DeletedMessage createdAt ->
-            threadMessageContainer
+            slackThreadMessageContainer
                 containerWidth
                 highlight
                 messageId
-                False
                 currentUserId
                 localUser.user
                 SeqDict.empty
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
-                IsNotHovered
+                isHovered
                 (deletedMessageContent messageId False createdAt localUser.timezone)
 
         CallStarted _ ->
@@ -13172,6 +13170,8 @@ slackConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmIdNoThre
                             channels
                             local.localUser
                             (SeqDict.get messageId channel.threads)
+                            False
+                            (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
                             messageId
                             message
                             |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -13208,18 +13208,19 @@ slackMessageView :
     -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> LocalUser
     -> Maybe SlackFrontendThread
+    -> Bool
+    -> IsHovered
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     -> Element MessageViewMsg
-slackMessageView time containerWidth revealedSpoilers highlight currentUserId channels localUser maybeThread messageId message =
+slackMessageView time containerWidth revealedSpoilers highlight currentUserId channels localUser maybeThread isThreadStarter isHovered messageId message =
     case message of
         UserTextMessage data ->
-            messageContainer
+            slackMessageContainer
                 containerWidth
-                False
+                isThreadStarter
                 localUser.timezone
                 time
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
@@ -13236,13 +13237,11 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
                         highlight
                 )
                 messageId
-                False
                 currentUserId
                 localUser.user
                 data.reactions
                 maybeThread
-                SeqDict.empty
-                IsNotHovered
+                isHovered
                 (slackUserTextMessageContent
                     time
                     containerWidth
@@ -13258,25 +13257,22 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
             Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
-            messageContainer
+            slackMessageContainer
                 containerWidth
-                False
+                isThreadStarter
                 localUser.timezone
                 time
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
                 channels
                 highlight
                 messageId
-                False
                 currentUserId
                 localUser.user
                 reactions
                 maybeThread
-                SeqDict.empty
-                IsNotHovered
+                isHovered
                 (Ui.row
                     []
                     [ userJoinedContent userId localUser.slackUsers
@@ -13291,25 +13287,22 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
                 )
 
         DeletedMessage createdAt ->
-            messageContainer
+            slackMessageContainer
                 containerWidth
-                False
+                isThreadStarter
                 localUser.timezone
                 time
-                SeqSet.empty
                 localUser.customEmojis
                 localUser.emojiData
                 localUser.slackUsers
                 channels
                 highlight
                 messageId
-                False
                 currentUserId
                 localUser.user
                 SeqDict.empty
                 maybeThread
-                SeqDict.empty
-                IsNotHovered
+                isHovered
                 (deletedMessageContent messageId False createdAt localUser.timezone)
 
         CallStarted _ ->
@@ -13317,6 +13310,175 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
 
         GameStarted _ ->
             Ui.none
+
+
+slackMessageContainer :
+    Int
+    -> Bool
+    -> Time.Zone
+    -> Time.Posix
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Maybe CachedEmojiData
+    -> SeqDict (Slack.Id Slack.UserId) { a | name : PersonName }
+    -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+    -> HighlightMessage
+    -> Id ChannelMessageId
+    -> Slack.Id Slack.UserId
+    -> FrontendCurrentUser
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet (Slack.Id Slack.UserId))
+    -> Maybe SlackFrontendThread
+    -> IsHovered
+    -> Element MessageViewMsg
+    -> Element MessageViewMsg
+slackMessageContainer containerWidth isThreadStarter timezone currentTime customEmojis emojiData allUsers channels highlight messageIndex currentUserId currentUser reactions maybeThread isHovered messageContent =
+    let
+        maybeReactions : Maybe (Element MessageViewMsg)
+        maybeReactions =
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+    in
+    Ui.column
+        ([ Ui.Font.color MyUi.font1
+         , Ui.Events.onMouseEnter MessageView_MouseEnteredMessage
+         , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
+         , Ui.Events.on
+            "touchstart"
+            (Json.Decode.map2
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.reactionIndex)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl reactionIndex ->
+                        MessageView_TouchStart time isThreadStarter imageUrl linkUrl reactionIndex touches
+                    )
+                )
+                decodeEventTarget
+            )
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
+         , Ui.paddingWith
+            { left = messagePaddingX
+            , right = messagePaddingX
+            , top = 4
+            , bottom =
+                if maybeReactions == Nothing then
+                    8
+
+                else
+                    4
+            }
+         , Ui.spacing 4
+         , channelMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
+         ]
+            ++ (case isHovered of
+                    IsNotHovered ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsHovered ->
+                        [ MyUi.hoverHighlightLayer
+                        , MessageView.slackMiniView currentUser isThreadStarter emojiData customEmojis |> Ui.inFront
+                        ]
+
+                    IsHoveredButNoMenu ->
+                        [ MyUi.hoverHighlightLayer ]
+
+                    IsHoveredReactionsOnly ->
+                        [ MyUi.hoverHighlightLayer
+                        , MessageView.reactionsMiniView currentUser SeqSet.empty emojiData customEmojis |> Ui.inFront
+                        ]
+
+                    IsHoveredWhileSelectingAnchor ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsReactionLongPressed _ ->
+                        [ Ui.behindContent Ui.none ]
+               )
+            ++ [ highlightLayer highlight ]
+        )
+        (messageContent
+            :: Maybe.Extra.toList maybeReactions
+            ++ (case maybeThread of
+                    Just thread ->
+                        [ previewThreadLastMessage timezone currentTime emojiData customEmojis allUsers channels SeqDict.empty messageIndex thread
+                        ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+slackThreadMessageContainer :
+    Int
+    -> HighlightMessage
+    -> Id ThreadMessageId
+    -> Slack.Id Slack.UserId
+    -> FrontendCurrentUser
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet (Slack.Id Slack.UserId))
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Maybe CachedEmojiData
+    -> SeqDict (Slack.Id Slack.UserId) { a | name : PersonName }
+    -> IsHovered
+    -> Element MessageViewMsg
+    -> Element MessageViewMsg
+slackThreadMessageContainer containerWidth highlight messageIndex currentUserId currentUser reactions customEmojis emojiData allUsers isHovered messageContent =
+    let
+        maybeReactions : Maybe (Element MessageViewMsg)
+        maybeReactions =
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+    in
+    Ui.column
+        ([ Ui.Font.color MyUi.font1
+         , Ui.Events.onMouseEnter MessageView_MouseEnteredMessage
+         , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
+         , Ui.Events.on
+            "touchstart"
+            (Json.Decode.map2
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.reactionIndex)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl reactionIndex ->
+                        MessageView_TouchStart time False imageUrl linkUrl reactionIndex touches
+                    )
+                )
+                decodeEventTarget
+            )
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
+         , Ui.paddingWith
+            { left = messagePaddingX
+            , right = messagePaddingX
+            , top = 4
+            , bottom =
+                if maybeReactions == Nothing then
+                    8
+
+                else
+                    4
+            }
+         , Ui.spacing 4
+         , threadMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
+         ]
+            ++ (case isHovered of
+                    IsNotHovered ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsHovered ->
+                        [ MyUi.hoverHighlightLayer
+                        , MessageView.slackThreadMiniView currentUser emojiData customEmojis |> Ui.inFront
+                        ]
+
+                    IsHoveredButNoMenu ->
+                        [ MyUi.hoverHighlightLayer ]
+
+                    IsHoveredReactionsOnly ->
+                        [ MyUi.hoverHighlightLayer
+                        , MessageView.reactionsMiniView currentUser SeqSet.empty emojiData customEmojis |> Ui.inFront
+                        ]
+
+                    IsHoveredWhileSelectingAnchor ->
+                        [ Ui.behindContent Ui.none ]
+
+                    IsReactionLongPressed _ ->
+                        [ Ui.behindContent Ui.none ]
+               )
+            ++ [ highlightLayer highlight ]
+        )
+        (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
 slackUserTextMessageContent :

@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, slackMiniView, slackThreadMiniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -194,6 +194,54 @@ miniView user isThreadStarter canEdit availableCustomEmojis emojiData customEmoj
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")
                     (MessageViewMsg_PressedShowFullMenu isThreadStarter)
+                    Icons.dotDotDot
+               ]
+        )
+
+
+{-| Slack has no replies to a single message, so the reply button opens the message's thread instead,
+the way Slack's own "Reply in thread" does. Editing from at-chat isn't supported yet.
+-}
+slackMiniView : FrontendCurrentUser -> Bool -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+slackMiniView user isThreadStarter emojiData customEmojis =
+    miniViewContainer
+        -48
+        (recentEmojiButtons user SeqSet.empty emojiData customEmojis
+            ++ [ miniButton
+                    (Dom.id "miniView_showReactionEmojiSelector")
+                    MessageViewMsg_PressedShowReactionEmojiSelector
+                    "Add reaction"
+                    Icons.smile
+               , if isThreadStarter then
+                    Ui.none
+
+                 else
+                    miniButton
+                        (Dom.id "miniView_replyInThread")
+                        MessageView_PressedViewThreadLink
+                        "Reply in thread"
+                        Icons.hashtag
+               , miniButtonWithPosition
+                    (Dom.id "miniView_showFullMenu")
+                    (MessageViewMsg_PressedShowFullMenu isThreadStarter)
+                    Icons.dotDotDot
+               ]
+        )
+
+
+slackThreadMiniView : FrontendCurrentUser -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+slackThreadMiniView user emojiData customEmojis =
+    miniViewContainer
+        -48
+        (recentEmojiButtons user SeqSet.empty emojiData customEmojis
+            ++ [ miniButton
+                    (Dom.id "miniView_showReactionEmojiSelector")
+                    MessageViewMsg_PressedShowReactionEmojiSelector
+                    "Add reaction"
+                    Icons.smile
+               , miniButtonWithPosition
+                    (Dom.id "miniView_showFullMenu")
+                    (MessageViewMsg_PressedShowFullMenu False)
                     Icons.dotDotDot
                ]
         )

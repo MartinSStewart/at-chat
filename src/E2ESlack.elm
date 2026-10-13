@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -8,6 +8,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
 import Effect.Websocket as Websocket
+import Emoji
 import Expect
 import Html.Attributes
 import Id exposing (ChannelMessageId)
@@ -25,6 +26,7 @@ import RichText
 import SeqDict
 import SeqSet
 import Slack
+import SlackEmoji
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -1181,6 +1183,210 @@ orphanedSlackWorkspacesTest config =
                         else
                             Err "Slack workspaces and DMs orphaned over two hourly updates should be deleted"
                     )
+                ]
+            )
+        ]
+
+
+{-| The form fields of each request to a Slack endpoint, leaving out the token.
+-}
+slackRequestsTo : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> List (List String)
+slackRequestsTo endpoint data =
+    List.filterMap
+        (\request ->
+            case E2EHelper.decodeCustomRequest request of
+                Just customRequest ->
+                    if String.endsWith endpoint customRequest.url then
+                        E2EHelper.slackFormFields customRequest.body
+                            |> List.filter (\field -> not (String.startsWith "token=" field))
+                            |> Just
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+        )
+        data.httpRequests
+
+
+{-| Who reacted with each emoji to the "code" message in #all-test-slack, by Slack emoji name.
+-}
+codeMessageReactions : E2EHelper.BackendModel2 -> List ( String, List String )
+codeMessageReactions backend =
+    case
+        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
+    of
+        Just (UserTextMessage data) ->
+            SeqDict.toList data.reactions
+                |> List.map
+                    (\( emoji, users ) ->
+                        ( case emoji of
+                            Emoji.EmojiOrCustomEmoji_Emoji unicodeEmoji ->
+                                SlackEmoji.toSlackName unicodeEmoji |> Maybe.withDefault "unknown"
+
+                            Emoji.EmojiOrCustomEmoji_CustomEmoji _ ->
+                                "custom"
+                        , NonemptySet.toList users |> List.map Slack.idToString |> List.sort
+                        )
+                    )
+                |> List.sortBy Tuple.first
+
+        _ ->
+            []
+
+
+slackReactionEvent : String -> String -> String
+slackReactionEvent eventType reaction =
+    """{"type":\""""
+        ++ eventType
+        ++ """","user":"U09DK3NCPMG","reaction":\""""
+        ++ reaction
+        ++ """","item_user":"U09DJDQL1A8","item":{"type":"message","channel":"C09DJDQSWLU","ts":"1791638770.000100"},"event_ts":"1791640100.000100"}"""
+
+
+slackReactionsAndNewThreadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackReactionsAndNewThreadTest config =
+    E2EHelper.startTest
+        "Slack reactions can be added and removed both ways, and a Slack message can start a thread"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if
+                            codeMessageReactions backend
+                                == [ ( "+1", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                        then
+                            Ok ()
+
+                        else
+                            Err "Expected the reactions from Slack's history without the custom emoji"
+                    )
+                , E2EHelper.hasExactText admin [ "👍", "👋🏼" ]
+                , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_editMessage" ])
+                , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                , T.checkState
+                    100
+                    (\data ->
+                        if slackRequestsTo "reactions.add" data /= [ [ "channel=C09DJDQSWLU", "timestamp=1791638770.000100", "name=heart" ] ] then
+                            Err "Expected the reaction to be sent to Slack"
+
+                        else if not (List.member ( "heart", [ "U09DJDQL1A8" ] ) (codeMessageReactions data.backend)) then
+                            Err "Expected the reaction to be stored"
+
+                        else
+                            Ok ()
+                    )
+                , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                , T.checkState
+                    100
+                    (\data ->
+                        if slackRequestsTo "reactions.remove" data /= [ [ "channel=C09DJDQSWLU", "timestamp=1791638770.000100", "name=heart" ] ] then
+                            Err "Expected the reaction to be removed on Slack"
+
+                        else if List.any (\( name, _ ) -> name == "heart") (codeMessageReactions data.backend) then
+                            Err "Expected the reaction to be removed"
+
+                        else
+                            Ok ()
+                    )
+                , admin.mouseLeave 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString 100 connection (slackReactionEvent "reaction_added" "tada")
+                        , E2EHelper.hasExactText admin [ "🎉" ]
+                        , T.websocketSendString 100 connection (slackReactionEvent "reaction_removed" "+1")
+                        , E2EHelper.hasNotExactText admin [ "👍" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if
+                                    codeMessageReactions backend
+                                        == [ ( "tada", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Expected reactions from Slack's websocket to be stored"
+                            )
+                        ]
+                    )
+                , E2EHelper.createThread admin (Id.fromInt 3)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_C09DJDQSWLU_3" ])
+                , E2EHelper.writeMessage admin 100 "Starting a thread"
+                , E2EHelper.hasExactText admin [ "Starting a thread" ]
+                , T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.filter
+                                (List.member "thread_ts=1791638770.000100")
+                                (slackRequestsTo "chat.postMessage" data)
+                                |> List.length
+                                |> (/=) 1
+                        then
+                            Err "Expected the reply to be posted to Slack in a new thread"
+
+                        else if
+                            SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend data.backend).slackWorkspaces
+                                |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                |> Maybe.andThen (\channel -> SeqDict.get (Id.fromInt 3) channel.threads)
+                                |> Maybe.map (\thread -> IdArray.length thread.messages)
+                                |> (/=) (Just 1)
+                        then
+                            Err "Expected the new thread to be stored"
+
+                        else
+                            Ok ()
+                    )
+                , admin.mouseEnter 100 (Dom.id "thread_message_0") ( 10, 10 ) []
+                , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                , T.checkState
+                    100
+                    (\data ->
+                        if List.member [ "channel=C09DJDQSWLU", "timestamp=1791638900.000100", "name=heart" ] (slackRequestsTo "reactions.add" data) then
+                            Ok ()
+
+                        else
+                            Err "Expected reacting to a thread reply to be sent to Slack"
+                    )
+                , E2EHelper.checkNoErrorLogs
                 ]
             )
         ]

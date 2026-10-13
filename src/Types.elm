@@ -885,6 +885,7 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.User)
+    | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2
         Time.Posix
@@ -1210,6 +1211,8 @@ type ServerChange
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
+    | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel

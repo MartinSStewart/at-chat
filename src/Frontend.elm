@@ -1700,6 +1700,26 @@ updateLoaded msg model =
                 ( DiscordDmRoute _, LoggedIn _ ) ->
                     ( model, Command.none )
 
+                ( SlackWorkspaceRoute routeData, LoggedIn loggedIn ) ->
+                    case routeData.threadRoute of
+                        NoThreadWithMaybeMessage _ ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                                (SlackWorkspaceRoute { routeData | threadRoute = ViewThreadWithMaybeMessage messageIndex Nothing })
+
+                        ViewThreadWithMaybeMessage _ _ ->
+                            ( model, Command.none )
+
+                ( SlackDmRoute routeData, LoggedIn loggedIn ) ->
+                    case routeData.threadRoute of
+                        NoThreadWithMaybeMessage _ ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                                (SlackDmRoute { routeData | threadRoute = ViewThreadWithMaybeMessage messageIndex Nothing })
+
+                        ViewThreadWithMaybeMessage _ _ ->
+                            ( model, Command.none )
+
                 _ ->
                     ( model, Command.none )
 
@@ -7024,8 +7044,31 @@ messageHasReaction emoji guildOrDmId threadRoute local =
                 Nothing ->
                     False
 
-        SlackGuildOrDmId _ ->
-            False
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId }) ->
+            case SeqDict.get teamId local.slackWorkspaces |> Maybe.andThen (\workspace -> SeqDict.get channelId workspace.channels) of
+                Just channel ->
+                    case LocalState.messageReactionsHelper channel threadRoute |> SeqDict.get emoji of
+                        Just reactions ->
+                            NonemptySet.member currentUserId reactions
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId, channelId }) ->
+            case SeqDict.get channelId local.slackDmChannels of
+                Just channel ->
+                    case LocalState.messageReactionsHelper channel threadRoute |> SeqDict.get emoji of
+                        Just reactions ->
+                            NonemptySet.member currentUserId reactions
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
 
 
 scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_

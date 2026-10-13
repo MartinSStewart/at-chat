@@ -5393,6 +5393,46 @@ changeUpdate localMsg local =
                         SlackGuildOrDmId_Dm { currentUserId, channelId } ->
                             { local | slackDmChannels = SeqDict.updateIfExists channelId (edit currentUserId) local.slackDmChannels }
 
+                Server_Slack_AddReactionEmoji slackUserId guildOrDmId threadRoute emoji ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel (LocalState.addReactionEmojiFrontend emoji slackUserId threadRoute) channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            { local
+                                | slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        channelId
+                                        (LocalState.addReactionEmojiFrontend emoji slackUserId threadRoute)
+                                        local.slackDmChannels
+                            }
+
+                Server_Slack_RemoveReactionEmoji slackUserId guildOrDmId threadRoute emoji ->
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists
+                                        teamId
+                                        (LocalState.updateChannel (LocalState.removeReactionEmojiFrontend emoji slackUserId threadRoute) channelId)
+                                        local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            { local
+                                | slackDmChannels =
+                                    SeqDict.updateIfExists
+                                        channelId
+                                        (LocalState.removeReactionEmojiFrontend emoji slackUserId threadRoute)
+                                        local.slackDmChannels
+                            }
+
                 Server_Slack_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
                         SlackGuildOrDmId_Workspace { teamId, channelId } ->
@@ -7701,8 +7741,25 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         , localUser = localUser2
                     }
 
-        SlackGuildOrDmId _ ->
-            local
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId }) ->
+            { local
+                | slackWorkspaces =
+                    SeqDict.updateIfExists
+                        teamId
+                        (LocalState.updateChannel (LocalState.addReactionEmojiFrontend emoji currentUserId threadRoute) channelId)
+                        local.slackWorkspaces
+                , localUser = localUser2
+            }
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId, channelId }) ->
+            { local
+                | slackDmChannels =
+                    SeqDict.updateIfExists
+                        channelId
+                        (LocalState.addReactionEmojiFrontend emoji currentUserId threadRoute)
+                        local.slackDmChannels
+                , localUser = localUser2
+            }
 
 
 removeReactionEmoji :
@@ -7761,8 +7818,23 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                                 local.discordDmChannels
                     }
 
-        SlackGuildOrDmId _ ->
-            local
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId }) ->
+            { local
+                | slackWorkspaces =
+                    SeqDict.updateIfExists
+                        teamId
+                        (LocalState.updateChannel (LocalState.removeReactionEmojiFrontend emoji currentUserId threadRoute) channelId)
+                        local.slackWorkspaces
+            }
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId, channelId }) ->
+            { local
+                | slackDmChannels =
+                    SeqDict.updateIfExists
+                        channelId
+                        (LocalState.removeReactionEmojiFrontend emoji currentUserId threadRoute)
+                        local.slackDmChannels
+            }
 
 
 memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState

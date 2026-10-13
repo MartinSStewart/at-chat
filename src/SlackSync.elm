@@ -11,18 +11,20 @@ module SlackSync exposing
     )
 
 import Drawing
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Id exposing (ChannelMessageId, Id, UserId)
 import IdArray exposing (IdArray)
 import LocalState exposing (SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Message exposing (Message(..), RepliedTo(..))
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
+import SlackEmoji
 import Thread exposing (SlackBackendThread)
 import Types exposing (SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackUserData(..))
 import User exposing (BackendUser)
@@ -107,14 +109,37 @@ toMessage message =
                             message.createdAt
                             message.user
                             content
-                            SeqDict.empty
+                            (reactions message.reactions)
                             NoReply
                             SeqDict.empty
                             |> UserTextMessage
                     )
 
         Slack.JoinedChannel ->
-            UserJoinedMessage message.createdAt message.user SeqDict.empty Drawing.emptyDrawing |> Just
+            UserJoinedMessage message.createdAt message.user (reactions message.reactions) Drawing.emptyDrawing |> Just
+
+
+{-| Slack's custom emoji aren't in at-chat so reactions with them are left out.
+-}
+reactions : List Slack.Reaction -> SeqDict EmojiOrCustomEmoji (NonemptySet (Slack.Id Slack.UserId))
+reactions slackReactions =
+    List.foldl
+        (\reaction dict ->
+            case ( SlackEmoji.fromSlackName reaction.name, NonemptySet.fromList reaction.users ) of
+                ( Just emoji, Just users ) ->
+                    SeqDict.insert (EmojiOrCustomEmoji_Emoji emoji) users dict
+
+                ( Just _, Nothing ) ->
+                    dict
+
+                ( Nothing, Just _ ) ->
+                    dict
+
+                ( Nothing, Nothing ) ->
+                    dict
+        )
+        SeqDict.empty
+        slackReactions
 
 
 {-| The Slack accounts an at-chat user has linked, and the workspace each one is in.

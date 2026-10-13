@@ -1,6 +1,5 @@
 module GuildColumn exposing
     ( canChangeUnreadNotificationCount
-    , channelNewMessageCount
     , channelOrThreadHasNotifications
     , discordDmCurrentUserId
     , discordDmHasNotifications

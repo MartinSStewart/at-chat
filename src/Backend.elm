@@ -80,6 +80,7 @@ import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
 import Slack exposing (SlackCookie, SlackToken)
+import SlackEmoji
 import SlackSync
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -965,6 +966,20 @@ updateHelper msg model =
                     |> Command.batch
                 ]
             )
+
+        SlackChangedReaction time guildOrDmId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err (Slack.SlackError "already_reacted") ->
+                    ( model, Command.none )
+
+                Err (Slack.SlackError "no_reaction") ->
+                    ( model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToChangeSlackReaction guildOrDmId error) model
 
         GotSlackUser slackUserId result ->
             let
@@ -4592,8 +4607,51 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                        SlackGuildOrDmId _ ->
-                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        SlackGuildOrDmId slackGuildOrDmId ->
+                            asSlackConversationUser
+                                model
+                                sessionId
+                                slackGuildOrDmId
+                                (\session slackUser slackChannelId ->
+                                    case
+                                        ( slackReactionName emoji
+                                        , updateSlackConversation
+                                            slackGuildOrDmId
+                                            (\conversation ->
+                                                slackMessageTs threadRoute conversation
+                                                    |> Maybe.map (\ts -> ( LocalState.addReactionEmoji emoji slackUser.user.id threadRoute conversation, ts ))
+                                            )
+                                            model
+                                        )
+                                    of
+                                        ( Just name, Just ( model2, ts ) ) ->
+                                            let
+                                                model3 : BackendModel
+                                                model3 =
+                                                    { model2 | users = NonemptyDict.updateIfExists session.userId (User.addRecentlyUsedEmoji emoji) model2.users }
+                                            in
+                                            ( model3
+                                            , Command.batch
+                                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toSlackExcludingOne
+                                                    clientId
+                                                    slackGuildOrDmId
+                                                    (Server_Slack_AddReactionEmoji slackUser.user.id slackGuildOrDmId threadRoute emoji |> ServerChange)
+                                                    model3
+                                                , Slack.addReaction model3.serverSecret slackUser.cookie slackUser.token slackChannelId ts name
+                                                    |> Task.attempt (SlackChangedReaction time slackGuildOrDmId)
+                                                ]
+                                            )
+
+                                        ( Just _, Nothing ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        ( Nothing, Just _ ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        ( Nothing, Nothing ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
@@ -4781,8 +4839,46 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                        SlackGuildOrDmId _ ->
-                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        SlackGuildOrDmId slackGuildOrDmId ->
+                            asSlackConversationUser
+                                model
+                                sessionId
+                                slackGuildOrDmId
+                                (\_ slackUser slackChannelId ->
+                                    case
+                                        ( slackReactionName emoji
+                                        , updateSlackConversation
+                                            slackGuildOrDmId
+                                            (\conversation ->
+                                                slackMessageTs threadRoute conversation
+                                                    |> Maybe.map (\ts -> ( LocalState.removeReactionEmoji emoji slackUser.user.id threadRoute conversation, ts ))
+                                            )
+                                            model
+                                        )
+                                    of
+                                        ( Just name, Just ( model2, ts ) ) ->
+                                            ( model2
+                                            , Command.batch
+                                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toSlackExcludingOne
+                                                    clientId
+                                                    slackGuildOrDmId
+                                                    (Server_Slack_RemoveReactionEmoji slackUser.user.id slackGuildOrDmId threadRoute emoji |> ServerChange)
+                                                    model2
+                                                , Slack.removeReaction model2.serverSecret slackUser.cookie slackUser.token slackChannelId ts name
+                                                    |> Task.attempt (SlackChangedReaction time slackGuildOrDmId)
+                                                ]
+                                            )
+
+                                        ( Just _, Nothing ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        ( Nothing, Just _ ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        ( Nothing, Nothing ) ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_SendEditMessage _ timezone guildOrDmId threadRoute newContent attachedFiles ->
                     if String.Nonempty.length newContent > RichText.maxLength then
@@ -10857,6 +10953,12 @@ websocketEventUserIds event =
         Slack.WebsocketMessageDeleted _ _ _ ->
             []
 
+        Slack.WebsocketReactionAdded { user } ->
+            [ user ]
+
+        Slack.WebsocketReactionRemoved { user } ->
+            [ user ]
+
         Slack.WebsocketRelayReady ->
             []
 
@@ -11075,6 +11177,98 @@ handleSlackWebsocketEvent linkedUser event model =
                             ( model, Command.none )
 
                 Nothing ->
+                    ( model, Command.none )
+
+        Slack.WebsocketReactionAdded { user, reaction, channel, messageId } ->
+            case ( slackChannelFromWebsocket linkedUser user channel model, SlackEmoji.fromSlackName reaction ) of
+                ( Just guildOrDmId, Just unicodeEmoji ) ->
+                    let
+                        emoji : EmojiOrCustomEmoji
+                        emoji =
+                            EmojiOrCustomEmoji_Emoji unicodeEmoji
+                    in
+                    case
+                        updateSlackConversation
+                            guildOrDmId
+                            (\conversation ->
+                                let
+                                    locations : List ThreadRouteWithMessage
+                                    locations =
+                                        slackMessageLocations messageId conversation
+                                in
+                                ( List.foldl (LocalState.addReactionEmoji emoji user) conversation locations, locations ) |> Just
+                            )
+                            model
+                    of
+                        Just ( model2, locations ) ->
+                            ( model2
+                            , List.map
+                                (\threadRoute ->
+                                    Broadcast.toSlack
+                                        guildOrDmId
+                                        (Server_Slack_AddReactionEmoji user guildOrDmId threadRoute emoji |> ServerChange)
+                                        model2
+                                )
+                                locations
+                                |> Command.batch
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                ( Just _, Nothing ) ->
+                    ( model, Command.none )
+
+                ( Nothing, Just _ ) ->
+                    ( model, Command.none )
+
+                ( Nothing, Nothing ) ->
+                    ( model, Command.none )
+
+        Slack.WebsocketReactionRemoved { user, reaction, channel, messageId } ->
+            case ( slackChannelFromWebsocket linkedUser user channel model, SlackEmoji.fromSlackName reaction ) of
+                ( Just guildOrDmId, Just unicodeEmoji ) ->
+                    let
+                        emoji : EmojiOrCustomEmoji
+                        emoji =
+                            EmojiOrCustomEmoji_Emoji unicodeEmoji
+                    in
+                    case
+                        updateSlackConversation
+                            guildOrDmId
+                            (\conversation ->
+                                let
+                                    locations : List ThreadRouteWithMessage
+                                    locations =
+                                        slackMessageLocations messageId conversation
+                                in
+                                ( List.foldl (LocalState.removeReactionEmoji emoji user) conversation locations, locations ) |> Just
+                            )
+                            model
+                    of
+                        Just ( model2, locations ) ->
+                            ( model2
+                            , List.map
+                                (\threadRoute ->
+                                    Broadcast.toSlack
+                                        guildOrDmId
+                                        (Server_Slack_RemoveReactionEmoji user guildOrDmId threadRoute emoji |> ServerChange)
+                                        model2
+                                )
+                                locations
+                                |> Command.batch
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                ( Just _, Nothing ) ->
+                    ( model, Command.none )
+
+                ( Nothing, Just _ ) ->
+                    ( model, Command.none )
+
+                ( Nothing, Nothing ) ->
                     ( model, Command.none )
 
         Slack.WebsocketHello ->
@@ -11328,6 +11522,44 @@ addToSlackConversation threadRoute slackMessageId channelMessage threadMessage c
                 , ViewThreadWithMessage threadId messageId
                 )
                     |> Just
+
+
+{-| Slack has no way to tell which of its custom emojis an at-chat custom emoji is.
+-}
+slackReactionName : EmojiOrCustomEmoji -> Maybe String
+slackReactionName emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji unicodeEmoji ->
+            SlackEmoji.toSlackName unicodeEmoji
+
+        EmojiOrCustomEmoji_CustomEmoji _ ->
+            Nothing
+
+
+slackMessageTs : ThreadRouteWithMessage -> SlackConversation -> Maybe (Slack.Id Slack.MessageId)
+slackMessageTs threadRoute conversation =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            OneToOne.first messageId conversation.linkedMessageIds
+
+        ViewThreadWithMessage threadId messageId ->
+            SeqDict.get threadId conversation.threads |> Maybe.andThen (\thread -> OneToOne.first messageId thread.linkedMessageIds)
+
+
+asSlackConversationUser :
+    BackendModel
+    -> SessionId
+    -> SlackGuildOrDmId
+    -> (UserSession -> SlackLinkedUser -> Slack.Id Slack.ChannelId -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asSlackConversationUser model sessionId guildOrDmId func =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace id ->
+            BackendExtra.asSlackChannelMember model sessionId id (\session slackUser _ _ -> func session slackUser id.channelId)
+
+        SlackGuildOrDmId_Dm data ->
+            -- Slack's API takes a DM's id wherever it takes a channel's
+            BackendExtra.asSlackDmUser model sessionId data (\session slackUser _ -> func session slackUser (Slack.Id (Slack.idToString data.channelId)))
 
 
 {-| A reply that was also sent to the channel is in two places.

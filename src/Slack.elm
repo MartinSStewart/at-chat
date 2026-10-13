@@ -10,6 +10,7 @@ module Slack exposing
     , Message
     , MessageContent(..)
     , MessageId
+    , Reaction
     , RichTextElement(..)
     , RichTextInline(..)
     , SlackCookie(..)
@@ -22,6 +23,7 @@ module Slack exposing
     , UserBoot
     , UserId
     , WebsocketEvent(..)
+    , addReaction
     , history
     , httpErrorToString
     , idToString
@@ -29,6 +31,7 @@ module Slack exposing
     , noStyle
     , parseWebsocketEvent
     , postMessage
+    , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
     , userBoot
@@ -463,6 +466,15 @@ type alias Message =
     , content : MessageContent
     , inThread : InThread
     , replyCount : Int
+    , reactions : List Reaction
+    }
+
+
+{-| Slack names the emoji rather than sending it.
+-}
+type alias Reaction =
+    { name : String
+    , users : List (Id UserId)
     }
 
 
@@ -637,6 +649,44 @@ postMessage secretKey cookie token channelId maybeThreadId text blocks =
         (Decode.field "ts" decodeId)
 
 
+addReaction :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> Task BackendOnly HttpError ()
+addReaction secretKey cookie token channelId messageId name =
+    http
+        secretKey
+        cookie
+        token
+        "reactions.add"
+        [ ( "channel", idToString channelId ), ( "timestamp", idToString messageId ), ( "name", name ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+removeReaction :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> Task BackendOnly HttpError ()
+removeReaction secretKey cookie token channelId messageId name =
+    http
+        secretKey
+        cookie
+        token
+        "reactions.remove"
+        [ ( "channel", idToString channelId ), ( "timestamp", idToString messageId ), ( "name", name ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
 encodeRichTextElement : RichTextElement -> Json.Encode.Value
 encodeRichTextElement element =
     case element of
@@ -752,7 +802,7 @@ decodeMessage =
     Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
         |> Decode.andThen
             (\subtype ->
-                Decode.map6
+                Decode.map7
                     Message
                     (Decode.field "ts" decodeId)
                     (Decode.field "ts" decodeTimestamp)
@@ -793,6 +843,19 @@ decodeMessage =
                         (Decode.maybe (Decode.field "thread_ts" Decode.string))
                     )
                     (Decode.oneOf [ Decode.field "reply_count" Decode.int, Decode.succeed 0 ])
+                    (Decode.oneOf
+                        [ Decode.field
+                            "reactions"
+                            (Decode.list
+                                (Decode.map2
+                                    Reaction
+                                    (Decode.field "name" Decode.string)
+                                    (Decode.field "users" (Decode.list decodeId))
+                                )
+                            )
+                        , Decode.succeed []
+                        ]
+                    )
             )
 
 
@@ -840,6 +903,8 @@ type WebsocketEvent
     | WebsocketMessageCreated String Message
     | WebsocketMessageChanged String Message Time.Posix
     | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
+    | WebsocketReactionAdded { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+    | WebsocketReactionRemoved { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
     | WebsocketOtherEvent
 
 
@@ -867,6 +932,12 @@ decodeWebsocketEvent =
                 if eventType == "hello" then
                     Decode.succeed WebsocketHello
 
+                else if eventType == "reaction_added" then
+                    decodeReactionEvent |> Decode.map WebsocketReactionAdded
+
+                else if eventType == "reaction_removed" then
+                    decodeReactionEvent |> Decode.map WebsocketReactionRemoved
+
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent
 
@@ -893,6 +964,26 @@ decodeWebsocketEvent =
                         WebsocketMessageCreated
                         (Decode.field "channel" Decode.string)
                         decodeMessage
+            )
+
+
+{-| Reactions can also be on files, which at-chat doesn't show.
+-}
+decodeReactionEvent : Decoder { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+decodeReactionEvent =
+    Decode.at [ "item", "type" ] Decode.string
+        |> Decode.andThen
+            (\itemType ->
+                if itemType == "message" then
+                    Decode.map4
+                        (\user reaction channel messageId -> { user = user, reaction = reaction, channel = channel, messageId = messageId })
+                        (Decode.field "user" decodeId)
+                        (Decode.field "reaction" Decode.string)
+                        (Decode.at [ "item", "channel" ] Decode.string)
+                        (Decode.at [ "item", "ts" ] decodeId)
+
+                else
+                    Decode.fail "Not a reaction to a message"
             )
 
 

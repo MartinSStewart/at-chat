@@ -19,7 +19,7 @@ import Env
 import FileStatus
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadRouteWithMessage(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
@@ -36,6 +36,7 @@ import Quantity exposing (Quantity, Rate)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Slack
 import String.Nonempty
 import Types exposing (EditMessage, FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
@@ -446,6 +447,7 @@ editMessageTextInputId =
 
 type alias MenuItemsData =
     { canEditAndDelete : Bool
+    , canReply : Bool
     , text : String
     , messageCustomEmojiIdsList : List (Id CustomEmojiId)
     , openDm : Maybe FrontendMsg_
@@ -488,6 +490,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                             GameStarted _ ->
                                 False
+                    , canReply = True
                     , text =
                         LocalState.messageToString
                             local.localUser.timezone
@@ -558,6 +561,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                             _ ->
                                 False
+                    , canReply = True
                     , text =
                         LocalState.messageToString
                             local.localUser.timezone
@@ -582,6 +586,29 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         |> Just
 
                 _ ->
+                    Nothing
+
+        -- Slack has no replies to a message, only threads. Editing and deleting from at-chat isn't
+        -- supported yet.
+        slackHelper : SlackGuildOrDmId -> Id messageId -> { a | messages : MessageArray messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) } -> Maybe MenuItemsData
+        slackHelper guildOrDmId2 messageId thread =
+            case MessageArray.get messageId thread.messages of
+                Just message ->
+                    { canEditAndDelete = False
+                    , canReply = False
+                    , text =
+                        LocalState.messageToString
+                            local.localUser.timezone
+                            local.localUser.slackUsers
+                            (LocalState.slackChannelMentions guildOrDmId2 local)
+                            SeqDict.empty
+                            message
+                    , messageCustomEmojiIdsList = []
+                    , openDm = Nothing
+                    }
+                        |> Just
+
+                Nothing ->
                     Nothing
 
         maybeData : Maybe MenuItemsData
@@ -658,11 +685,44 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                SlackGuildOrDmId _ ->
-                    Nothing
+                SlackGuildOrDmId ((SlackGuildOrDmId_Workspace id) as guildOrDmId2) ->
+                    case SeqDict.get id.teamId local.slackWorkspaces |> Maybe.andThen (\workspace -> SeqDict.get id.channelId workspace.channels) of
+                        Just channel ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex channel.threads of
+                                        Just thread ->
+                                            slackHelper guildOrDmId2 messageId thread
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    slackHelper guildOrDmId2 messageId channel
+
+                        Nothing ->
+                            Nothing
+
+                SlackGuildOrDmId ((SlackGuildOrDmId_Dm id) as guildOrDmId2) ->
+                    case SeqDict.get id.channelId local.slackDmChannels of
+                        Just channel ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex channel.threads of
+                                        Just thread ->
+                                            slackHelper guildOrDmId2 messageId thread
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    slackHelper guildOrDmId2 messageId channel
+
+                        Nothing ->
+                            Nothing
     in
     case maybeData of
-        Just { canEditAndDelete, text, messageCustomEmojiIdsList, openDm } ->
+        Just { canEditAndDelete, canReply, text, messageCustomEmojiIdsList, openDm } ->
             let
                 newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
                 newCustomEmojiIds =
@@ -728,7 +788,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
               else
                 NoItem
-            , if isThreadStarter then
+            , if isThreadStarter || not canReply then
                 NoItem
 
               else
