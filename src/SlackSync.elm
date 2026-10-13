@@ -1,5 +1,6 @@
 module SlackSync exposing
-    ( conversationFromHistory
+    ( basicUserToFrontend
+    , conversationFromHistory
     , dmChannelsToFrontend
     , linkedUsers
     , newChannelMaxMessages
@@ -211,7 +212,7 @@ usersToFrontend users linked slackUsers =
             case userData of
                 SlackBasicData user ->
                     if List.member user.teamId teams then
-                        Just { name = userName user, icon = Nothing, color = RichText.defaultColor }
+                        Just (basicUserToFrontend user)
 
                     else
                         Nothing
@@ -234,6 +235,11 @@ usersToFrontend users linked slackUsers =
                         Nothing
         )
         slackUsers
+
+
+basicUserToFrontend : Slack.User -> SlackFrontendUser
+basicUserToFrontend user =
+    { name = userName user, icon = Nothing, color = RichText.defaultColor }
 
 
 userName : Slack.User -> PersonName

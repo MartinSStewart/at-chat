@@ -292,6 +292,7 @@ init =
       , wordSpellingGameSwedish = WordList_NotLoaded
       , pendingGatewayReconnects = SeqDict.empty
       , pendingSlackSends = SeqDict.empty
+      , pendingSlackUserLookups = SeqSet.empty
       , pendingSlackReconnects = SeqDict.empty
       , dummyField = 123
       }
@@ -965,6 +966,35 @@ updateHelper msg model =
                 ]
             )
 
+        GotSlackUser slackUserId result ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | pendingSlackUserLookups = SeqSet.remove slackUserId model.pendingSlackUserLookups }
+            in
+            case ( result, SeqDict.get slackUserId model2.slackUsers ) of
+                ( Ok user, Nothing ) ->
+                    let
+                        model3 : BackendModel
+                        model3 =
+                            { model2 | slackUsers = SeqDict.insert slackUserId (SlackBasicData user) model2.slackUsers }
+                    in
+                    ( model3
+                    , Broadcast.toSlackTeam
+                        user.teamId
+                        (Server_Slack_UserLoaded slackUserId (SlackSync.basicUserToFrontend user) |> ServerChange)
+                        model3
+                    )
+
+                ( Ok _, Just _ ) ->
+                    ( model2, Command.none )
+
+                ( Err _, Just _ ) ->
+                    ( model2, Command.none )
+
+                ( Err _, Nothing ) ->
+                    ( model2, Command.none )
+
         LinkSlackUserStep2 time teamId slackUserId result ->
             case result of
                 Ok { channels, dmChannels, users } ->
@@ -1095,7 +1125,18 @@ updateHelper msg model =
                 Just (SlackFullData linkedUser) ->
                     case result of
                         Ok text ->
-                            handleSlackWebsocketEvent linkedUser (Slack.parseWebsocketEvent text) model
+                            let
+                                event : Slack.WebsocketEvent
+                                event =
+                                    Slack.parseWebsocketEvent text
+
+                                ( model2, lookUpCmd ) =
+                                    lookUpUnknownSlackUsers linkedUser (websocketEventUserIds event) model
+
+                                ( model3, cmd ) =
+                                    handleSlackWebsocketEvent linkedUser event model2
+                            in
+                            ( model3, Command.batch [ cmd, lookUpCmd ] )
 
                         Err ( code, reason ) ->
                             let
@@ -2704,8 +2745,8 @@ addDiscordGuildData discordUserId data guild =
     }
 
 
-{-| Loads every channel, DM and user the linked Slack user can see, along with the newest messages of
-the channels and DMs we didn't have before.
+{-| Loads every channel and DM the linked Slack user can see, along with the newest messages of
+the channels and DMs we didn't have before, and the users in those we haven't seen yet.
 -}
 loadSlackWorkspaceData :
     BackendModel
@@ -2743,10 +2784,8 @@ loadSlackWorkspaceData model cookie token slackUserId teamId =
     Slack.userConversations model.serverSecret cookie token slackUserId
         |> Task.andThen
             (\{ channels, dmChannels } ->
-                Task.map3
-                    (\channels2 dmChannels2 users ->
-                        { channels = channels2, dmChannels = dmChannels2, users = users }
-                    )
+                Task.map2
+                    (\channels2 dmChannels2 -> { channels = channels2, dmChannels = dmChannels2 })
                     (List.map
                         (\channel ->
                             if SeqDict.member channel.id existingChannels then
@@ -2769,7 +2808,27 @@ loadSlackWorkspaceData model cookie token slackUserId teamId =
                         dmChannels
                         |> Task.sequence
                     )
-                    (Slack.users model.serverSecret cookie token)
+            )
+        |> Task.andThen
+            (\{ channels, dmChannels } ->
+                let
+                    historyUserIds : Slack.History -> List (Slack.Id Slack.UserId)
+                    historyUserIds history2 =
+                        List.concatMap Slack.messageUserIds history2.messages
+                            ++ List.concatMap (List.concatMap Slack.messageUserIds) (SeqDict.values history2.replies)
+
+                    unknownUserIds : List (Slack.Id Slack.UserId)
+                    unknownUserIds =
+                        List.concatMap (\( _, channelHistory ) -> historyUserIds channelHistory) channels
+                            ++ List.concatMap
+                                (\( dmChannel, dmHistory ) -> NonemptySet.toList dmChannel.members ++ historyUserIds dmHistory)
+                                dmChannels
+                            |> SeqSet.fromList
+                            |> SeqSet.filter (\userId -> not (SeqDict.member userId model.slackUsers))
+                            |> SeqSet.toList
+                in
+                Slack.usersById model.serverSecret cookie token teamId unknownUserIds
+                    |> Task.map (\users -> { channels = channels, dmChannels = dmChannels, users = users })
             )
 
 
@@ -10784,6 +10843,58 @@ slackChannelFromWebsocket linkedUser author channelString model =
 
             else
                 Nothing
+
+
+websocketEventUserIds : Slack.WebsocketEvent -> List (Slack.Id Slack.UserId)
+websocketEventUserIds event =
+    case event of
+        Slack.WebsocketMessageCreated _ message ->
+            Slack.messageUserIds message
+
+        Slack.WebsocketMessageChanged _ message _ ->
+            Slack.messageUserIds message
+
+        Slack.WebsocketMessageDeleted _ _ _ ->
+            []
+
+        Slack.WebsocketRelayReady ->
+            []
+
+        Slack.WebsocketHello ->
+            []
+
+        Slack.WebsocketOtherEvent ->
+            []
+
+
+{-| Linking only loads the users in the messages it loaded, so anyone else is looked up the first
+time they show up.
+-}
+lookUpUnknownSlackUsers :
+    SlackLinkedUser
+    -> List (Slack.Id Slack.UserId)
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+lookUpUnknownSlackUsers linkedUser userIds model =
+    let
+        unknown : List (Slack.Id Slack.UserId)
+        unknown =
+            SeqSet.fromList userIds
+                |> SeqSet.filter
+                    (\userId ->
+                        not (SeqDict.member userId model.slackUsers || SeqSet.member userId model.pendingSlackUserLookups)
+                    )
+                |> SeqSet.toList
+    in
+    ( { model | pendingSlackUserLookups = List.foldl SeqSet.insert model.pendingSlackUserLookups unknown }
+    , List.map
+        (\userId ->
+            Slack.userInfo model.serverSecret linkedUser.cookie linkedUser.token userId
+                |> Task.attempt (GotSlackUser userId)
+        )
+        unknown
+        |> Command.batch
+    )
 
 
 handleSlackWebsocketEvent :

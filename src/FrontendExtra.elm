@@ -6094,6 +6094,14 @@ changeUpdate localMsg local =
                 Server_Slack_UnlinkUser slackUserId ->
                     unlinkSlackUser slackUserId local
 
+                Server_Slack_UserLoaded slackUserId user ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | slackUsers = SeqDict.insert slackUserId user localUser.slackUsers } }
+
                 Server_UnlinkDiscordUser userId ->
                     let
                         localUser =

@@ -529,6 +529,7 @@ type alias BackendModel =
     , wordSpellingGameSwedish : WordList
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
     , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
+    , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
     , dummyField : Int
     }
@@ -883,6 +884,7 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
+    | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.User)
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2
         Time.Posix
@@ -1207,6 +1209,7 @@ type ServerChange
     | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
+    | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel

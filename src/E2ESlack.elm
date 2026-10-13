@@ -198,11 +198,29 @@ linkSlackLoadsChannelsTest config =
                                     )
                                 |> List.sort
                         of
-                            [ "U09DFEXKH9T", "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
+                            -- Only users found in the loaded conversations, so not the deleted bot U09DFEXKH9T
+                            [ "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
                                 Ok ()
 
                             slackUsers ->
                                 Err ("Unexpected Slack users: " ++ String.join ", " slackUsers)
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        let
+                            urls : List String
+                            urls =
+                                List.filterMap (\request -> E2EHelper.decodeCustomRequest request |> Maybe.map .url) data.httpRequests
+                        in
+                        if List.any (String.endsWith "users.list") urls then
+                            Err "Linking shouldn't load every user in the workspace"
+
+                        else if List.member "https://edgeapi.slack.com/cache/T09DJDQL18U/users/info" urls then
+                            Ok ()
+
+                        else
+                            Err "Expected the users to be loaded in a batch"
                     )
                 , admin.input
                     100
@@ -235,7 +253,7 @@ linkSlackLoadsChannelsTest config =
                     )
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackWorkspacesSection)
-                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 4", "slack-admin", "ziggler" ]
+                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 3", "slack-admin", "ziggler" ]
                 , E2EHelper.hasNotExactText admin [ "#social" ]
                 , admin.click 100 (Pages.Admin.expandSlackWorkspaceButtonId (Slack.Id "T09DJDQL18U"))
                 , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 5" ]
@@ -496,6 +514,33 @@ slackWebsocketTest config =
                             connection
                             """{"type":"message","subtype":"message_deleted","previous_message":{"user":"U09DK3NCPMG","type":"message","ts":"1791640000.000100","text":"Edited in Slack"},"channel":"C09DJDQSWLU","hidden":true,"deleted_ts":"1791640000.000100","event_ts":"1791640020.000400","ts":"1791640020.000400"}"""
                         , E2EHelper.hasNotExactText admin [ "Edited in Slack" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U0NEWCOMER", ts = "1791640030.000100", text = "First post" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U0NEWCOMER", ts = "1791640031.000100", text = "Second post" })
+                        , E2EHelper.hasExactText admin [ "New Comer", "First post", "Second post" ]
+                        , T.checkState
+                            100
+                            (\data ->
+                                let
+                                    lookups : List E2EHelper.CustomRequest
+                                    lookups =
+                                        List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                                            |> List.filter (\request -> String.endsWith "users.info" request.url)
+                                in
+                                if List.length lookups /= 1 then
+                                    Err ("Expected the new Slack user to be looked up once, got " ++ String.fromInt (List.length lookups))
+
+                                else if SeqDict.member (Slack.Id "U0NEWCOMER") (E2EHelper.unwrapBackend data.backend).slackUsers then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the new Slack user to be stored"
+                            )
                         , E2EHelper.writeMessage admin 100 "Sent from at-chat"
                         , E2EHelper.hasExactText admin [ "Sent from at-chat" ]
                         , T.andThen

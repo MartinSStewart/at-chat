@@ -2780,6 +2780,9 @@ backendMsgLog msg =
         LinkDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkDiscordUserStep1
 
+        GotSlackUser _ _ ->
+            BackendMsgLog_GotSlackUser
+
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 

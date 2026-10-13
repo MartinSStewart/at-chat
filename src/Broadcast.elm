@@ -37,6 +37,7 @@ module Broadcast exposing
     , toSession
     , toSlack
     , toSlackExcludingOne
+    , toSlackTeam
     , toUser
     , toUserAlt
     , userGetAllConnections
@@ -297,6 +298,36 @@ toSlack guildOrDmId msg model =
     List.map
         (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
         (slackConnections guildOrDmId model)
+        |> Command.batch
+
+
+{-| Everyone who has linked a Slack account in the workspace.
+-}
+toSlackTeam : Slack.Id Slack.TeamId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toSlackTeam teamId msg model =
+    SeqDict.foldl
+        (\_ slackUser set ->
+            case slackUser of
+                SlackFullData linkedUser ->
+                    if linkedUser.user.teamId == teamId then
+                        SeqSet.insert linkedUser.linkedTo set
+
+                    else
+                        set
+
+                SlackBasicData _ ->
+                    set
+        )
+        SeqSet.empty
+        model.slackUsers
+        |> SeqSet.toList
+        |> List.concatMap
+            (\linkedTo ->
+                List.concatMap
+                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                    (userConnections linkedTo model)
+            )
+        |> List.map (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
         |> Command.batch
 
 

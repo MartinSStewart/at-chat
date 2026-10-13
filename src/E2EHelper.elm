@@ -2109,11 +2109,40 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":true,"messages":[],"has_more":false}"""
                     )
 
-            ( "POST", [ "slack.com", "api", "users.list" ] ) ->
+            ( "POST", [ "edgeapi.slack.com", "cache", "T09DJDQL18U", "users", "info" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    (if isLegitSlackRequest headers body || isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
-                        """{"ok":true,"members":[{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":"","image_72":""}},{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}],"response_metadata":{"next_cursor":""}}"""
+                    (case slackEdgeRequest body of
+                        Just ( token, userIds ) ->
+                            if
+                                List.member ( "Cookie", "d=" ++ legitSlackCookie ) headers
+                                    && List.member token [ legitSlackToken, secondSlackToken, secondSlackTokenAfterLeaving ]
+                            then
+                                """{"ok":true,"results":["""
+                                    ++ String.join "," (List.filterMap (\userId -> Dict.get userId slackTestUsers) userIds)
+                                    ++ """],"failed_ids":[]}"""
+
+                            else
+                                """{"ok":false,"error":"invalid_auth"}"""
+
+                        Nothing ->
+                            """{"ok":false,"error":"invalid_arguments"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "users.info" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body || isSecondSlackUserRequest headers body then
+                        case
+                            List.filterMap
+                                (\field -> String.split "=" field |> List.drop 1 |> List.head |> Maybe.andThen (\userId -> Dict.get userId slackTestUsers))
+                                (List.filter (String.startsWith "user=") (slackFormFields body))
+                        of
+                            user :: _ ->
+                                """{"ok":true,"user":""" ++ user ++ "}"
+
+                            [] ->
+                                """{"ok":false,"error":"user_not_found"}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2253,6 +2282,37 @@ slackThreadReplies =
 {"type":"message","user":"U09DK3NCPMG","text":"First reply","ts":"1791638761.000100","thread_ts":"1791638760.000100","parent_user_id":"U09DJDQL1A8"},
 {"type":"message","user":"U09DJDQL1A8","text":"Second reply","ts":"1791638762.000100","thread_ts":"1791638760.000100","parent_user_id":"U09DJDQL1A8"}
 ],"has_more":false}"""
+
+
+slackEdgeRequest : Maybe Json.Decode.Value -> Maybe ( String, List String )
+slackEdgeRequest body =
+    case Maybe.map (Json.Decode.decodeValue Json.Decode.string) body of
+        Just (Ok text) ->
+            Json.Decode.decodeString
+                (Json.Decode.map2
+                    Tuple.pair
+                    (Json.Decode.field "token" Json.Decode.string)
+                    (Json.Decode.field "updated_ids" (Json.Decode.keyValuePairs Json.Decode.int) |> Json.Decode.map (List.map Tuple.first))
+                )
+                text
+                |> Result.toMaybe
+
+        Just (Err _) ->
+            Nothing
+
+        Nothing ->
+            Nothing
+
+
+slackTestUsers : Dict.Dict String String
+slackTestUsers =
+    Dict.fromList
+        [ ( "U09DJDQL1A8", """{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}}""" )
+        , ( "U09DK3NCPMG", """{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}}""" )
+        , ( "U0THIRD", """{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":"","image_72":""}}""" )
+        , ( "U09DFEXKH9T", """{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}""" )
+        , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":"","image_72":""}}""" )
+        ]
 
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
@@ -2897,6 +2957,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_Slack_UnlinkUser _ ->
+                            True
+
+                        Types.Server_Slack_UserLoaded _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ _ ->

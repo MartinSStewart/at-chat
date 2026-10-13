@@ -25,6 +25,7 @@ module Slack exposing
     , history
     , httpErrorToString
     , idToString
+    , messageUserIds
     , noStyle
     , parseWebsocketEvent
     , postMessage
@@ -32,7 +33,8 @@ module Slack exposing
     , teamsJsonToSlackTokens
     , userBoot
     , userConversations
-    , users
+    , userInfo
+    , usersById
     , validateSlackData
     , websocketRelayRequest
     , websocketRelayUrl
@@ -47,6 +49,7 @@ import Effect.Time as Time
 import Env
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
@@ -280,42 +283,167 @@ optionalString path =
     Decode.oneOf [ Decode.at path Decode.string, Decode.succeed "" ]
 
 
-{-| Everyone in the workspace, deleted users included since they can still have written messages.
--}
-users : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError (List User)
-users secretKey cookie token =
-    usersHelper secretKey cookie token Nothing []
-
-
-usersHelper :
-    SecretId ServerSecret
-    -> SlackCookie
-    -> SlackToken
-    -> Maybe String
-    -> List User
-    -> Task BackendOnly HttpError (List User)
-usersHelper secretKey cookie token cursor usersSoFar =
+userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id UserId -> Task BackendOnly HttpError User
+userInfo secretKey cookie token userId =
     http
         secretKey
         cookie
         token
-        "users.list"
-        (( "limit", "200" ) :: cursorParameter cursor)
-        (Decode.map2
-            Tuple.pair
-            (Decode.field "members" (Decode.list decodeUser))
-            decodeNextCursor
-        )
+        "users.info"
+        [ ( "user", idToString userId ) ]
+        (Decode.field "user" decodeUser)
         |> retryWhenRateLimited
-        |> Task.andThen
-            (\( users2, nextCursor ) ->
-                case nextCursor of
-                    Just nextCursor2 ->
-                        usersHelper secretKey cookie token (Just nextCursor2) (usersSoFar ++ users2)
 
-                    Nothing ->
-                        Task.succeed (usersSoFar ++ users2)
+
+{-| Loads many users at once through the edge API Slack's web client uses. It isn't documented, so
+if a batch fails we look its users up one at a time with users.info instead. Users that can't be
+loaded either way are left out.
+-}
+usersById :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id TeamId
+    -> List (Id UserId)
+    -> Task BackendOnly x (List User)
+usersById secretKey cookie token teamId userIds =
+    List.Extra.greedyGroupsOf 100 userIds
+        |> List.map
+            (\batch ->
+                edgeUsersInfo secretKey cookie token teamId batch
+                    |> Task.onError
+                        (\_ ->
+                            List.map
+                                (\userId ->
+                                    userInfo secretKey cookie token userId
+                                        |> Task.map Just
+                                        |> Task.onError (\_ -> Task.succeed Nothing)
+                                )
+                                batch
+                                |> Task.sequence
+                                |> Task.map (List.filterMap identity)
+                        )
             )
+        |> Task.sequence
+        |> Task.map List.concat
+
+
+edgeUsersInfo :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id TeamId
+    -> List (Id UserId)
+    -> Task BackendOnly HttpError (List User)
+edgeUsersInfo secretKey (SlackCookie cookie) (SlackToken token) teamId userIds =
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "x-secret-key" (SecretId.toString secretKey) ]
+        , url = rustServerDomain ++ "/file/internal/custom-request"
+        , body =
+            Json.Encode.object
+                [ ( "method", Json.Encode.string "POST" )
+                , ( "url", Json.Encode.string ("https://edgeapi.slack.com/cache/" ++ idToString teamId ++ "/users/info") )
+                , ( "headers"
+                  , Json.Encode.list
+                        (\( key, value ) ->
+                            Json.Encode.object
+                                [ ( "key", Json.Encode.string key )
+                                , ( "value", Json.Encode.string value )
+                                ]
+                        )
+                        [ ( "Content-Type", "application/json" )
+                        , ( "Cookie", "d=" ++ cookie )
+                        ]
+                  )
+                , ( "body"
+                  , Json.Encode.object
+                        [ ( "token", Json.Encode.string token )
+                        , ( "check_interaction", Json.Encode.bool True )
+                        , ( "updated_ids", Json.Encode.object (List.map (\userId -> ( idToString userId, Json.Encode.int 0 )) userIds) )
+                        ]
+                        |> Json.Encode.encode 0
+                        |> Json.Encode.string
+                  )
+                ]
+                |> Http.jsonBody
+        , resolver = Http.stringResolver (resolveResponse (Decode.field "results" (Decode.list (decodeEdgeUser teamId)) |> Decode.map Ok))
+        , timeout = Just Duration.minute
+        }
+        |> retryWhenRateLimited
+
+
+{-| Same as decodeUser except the edge API might leave out team\_id.
+-}
+decodeEdgeUser : Id TeamId -> Decoder User
+decodeEdgeUser teamId =
+    Decode.map8
+        User
+        (Decode.field "id" decodeId)
+        (Decode.oneOf [ Decode.field "team_id" decodeId, Decode.succeed teamId ])
+        (Decode.field "name" Decode.string)
+        (optionalString [ "profile", "real_name" ])
+        (optionalString [ "profile", "display_name" ])
+        (optionalString [ "profile", "image_72" ])
+        (optionalBool "is_bot")
+        (optionalBool "deleted")
+
+
+{-| Who wrote the message and everyone it mentions.
+-}
+messageUserIds : Message -> List (Id UserId)
+messageUserIds message =
+    case message.content of
+        TextMessage { blocks } ->
+            message.user
+                :: List.concatMap
+                    (\element ->
+                        case element of
+                            RichTextSection inlines ->
+                                inlineUserIds inlines
+
+                            RichTextPreformatted inlines ->
+                                inlineUserIds inlines
+
+                            RichTextQuote inlines ->
+                                inlineUserIds inlines
+
+                            RichTextList items ->
+                                List.concatMap inlineUserIds items
+                    )
+                    blocks
+
+        JoinedChannel ->
+            [ message.user ]
+
+
+inlineUserIds : List RichTextInline -> List (Id UserId)
+inlineUserIds inlines =
+    List.filterMap
+        (\inline ->
+            case inline of
+                RichText_User userId ->
+                    Just userId
+
+                RichText_Text _ ->
+                    Nothing
+
+                RichText_Link _ ->
+                    Nothing
+
+                RichText_Emoji _ ->
+                    Nothing
+
+                RichText_Channel _ ->
+                    Nothing
+
+                RichText_Broadcast _ ->
+                    Nothing
+
+                RichText_Date _ ->
+                    Nothing
+        )
+        inlines
 
 
 decodeTeam : Decoder Team
@@ -1174,36 +1302,37 @@ http secretKey (SlackCookie cookie) (SlackToken token) method parameters decoder
                   )
                 ]
                 |> Http.jsonBody
-        , resolver =
-            Http.stringResolver
-                (\response ->
-                    case response of
-                        Http.BadUrl_ url ->
-                            Err (BadUrl url)
-
-                        Http.Timeout_ ->
-                            Err Timeout
-
-                        Http.NetworkError_ ->
-                            Err NetworkError
-
-                        Http.BadStatus_ metadata body ->
-                            if metadata.statusCode == 429 then
-                                Err RateLimited
-
-                            else
-                                Err (BadStatus metadata.statusCode body)
-
-                        Http.GoodStatus_ _ body ->
-                            case Decode.decodeString (decodeResponse decoder) body of
-                                Ok result ->
-                                    result
-
-                                Err error ->
-                                    Err (BadBody (Decode.errorToString error))
-                )
+        , resolver = Http.stringResolver (resolveResponse (decodeResponse decoder))
         , timeout = Just Duration.minute
         }
+
+
+resolveResponse : Decoder (Result HttpError a) -> Http.Response String -> Result HttpError a
+resolveResponse decoder response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            if metadata.statusCode == 429 then
+                Err RateLimited
+
+            else
+                Err (BadStatus metadata.statusCode body)
+
+        Http.GoodStatus_ _ body ->
+            case Decode.decodeString decoder body of
+                Ok result ->
+                    result
+
+                Err error ->
+                    Err (BadBody (Decode.errorToString error))
 
 
 decodeResponse : Decoder a -> Decoder (Result HttpError a)
