@@ -1252,7 +1252,7 @@ slackReactionsAndNewThreadTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 slackReactionsAndNewThreadTest config =
     E2EHelper.startTest
-        "Slack reactions can be added and removed both ways, and a Slack message can start a thread"
+        "Slack reactions can be added and removed both ways, a Slack message can start a thread, and your own Slack messages can be deleted"
         E2EHelper.startTime
         config
         [ T.connectFrontend
@@ -1347,7 +1347,14 @@ slackReactionsAndNewThreadTest config =
                             )
                         ]
                     )
-                , E2EHelper.createThread admin (Id.fromInt 3)
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_3")
+                    "contextmenu"
+                    (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_deleteMessage" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_editMessage" ])
+                , admin.click 100 (Dom.id "messageMenu_openThread")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_C09DJDQSWLU_3" ])
                 , E2EHelper.writeMessage admin 100 "Starting a thread"
                 , E2EHelper.hasExactText admin [ "Starting a thread" ]
@@ -1386,6 +1393,41 @@ slackReactionsAndNewThreadTest config =
                         else
                             Err "Expected reacting to a thread reply to be sent to Slack"
                     )
+                , admin.mouseLeave 100 (Dom.id "thread_message_0") ( 10, 10 ) []
+                , admin.custom
+                    100
+                    (Dom.id "thread_message_0")
+                    "contextmenu"
+                    (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
+                , admin.click 100 (Dom.id "messageMenu_deleteMessage")
+                , E2EHelper.hasNotExactText admin [ "Starting a thread" ]
+                , T.checkState
+                    100
+                    (\data ->
+                        if slackRequestsTo "chat.delete" data /= [ [ "channel=C09DJDQSWLU", "ts=1791638900.000100" ] ] then
+                            Err "Expected the message to be deleted on Slack"
+
+                        else
+                            case
+                                SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend data.backend).slackWorkspaces
+                                    |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                    |> Maybe.andThen (\channel -> SeqDict.get (Id.fromInt 3) channel.threads)
+                                    |> Maybe.andThen (\thread -> IdArray.get (Id.fromInt 0) thread.messages)
+                            of
+                                Just (DeletedMessage _) ->
+                                    Ok ()
+
+                                _ ->
+                                    Err "Expected the message to be deleted"
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_4")
+                    "contextmenu"
+                    (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copy" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_deleteMessage" ])
                 , E2EHelper.checkNoErrorLogs
                 ]
             )

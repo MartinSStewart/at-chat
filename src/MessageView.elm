@@ -199,8 +199,7 @@ miniView user isThreadStarter canEdit availableCustomEmojis emojiData customEmoj
         )
 
 
-{-| Slack has no replies to a single message, so the reply button opens the message's thread instead,
-the way Slack's own "Reply in thread" does. Editing from at-chat isn't supported yet.
+{-| Slack has no replies to a single message, so there's a button for starting a thread in its place.
 -}
 slackMiniView : FrontendCurrentUser -> Bool -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
 slackMiniView user isThreadStarter emojiData customEmojis =
@@ -217,9 +216,9 @@ slackMiniView user isThreadStarter emojiData customEmojis =
 
                  else
                     miniButton
-                        (Dom.id "miniView_replyInThread")
+                        (Dom.id "miniView_startThread")
                         MessageView_PressedViewThreadLink
-                        "Reply in thread"
+                        "Start thread"
                         Icons.hashtag
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")

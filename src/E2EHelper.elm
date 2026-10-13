@@ -2168,6 +2168,16 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":false,"error":"invalid_auth"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "chat.delete" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "reactions.remove" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2967,7 +2977,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_SendMessage _ _ _ _ ->
+                        Types.Server_Slack_SendMessage _ _ _ _ _ ->
                             True
 
                         Types.Server_Slack_EditMessage _ _ _ _ ->

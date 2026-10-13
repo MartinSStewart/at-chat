@@ -11602,11 +11602,14 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         slackFriendLabelNotMobile
                                     )
                                     currentTime
-                                    (case dmChannelSelection of
-                                        SelectedSlackDmChannel routeData ->
-                                            routeData.channelId == channelId
+                                    (case threadRoute of
+                                        Just (NoThreadWithMaybeMessage _) ->
+                                            True
 
-                                        _ ->
+                                        Just (ViewThreadWithMaybeMessage _ _) ->
+                                            False
+
+                                        Nothing ->
                                             False
                                     )
                                     channelId
@@ -13783,7 +13786,12 @@ slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
-            routeData.channelId == channelId
+            case routeData.threadRoute of
+                NoThreadWithMaybeMessage _ ->
+                    routeData.channelId == channelId
+
+                ViewThreadWithMaybeMessage _ _ ->
+                    False
     in
     GuildColumn.rowLinkButton
         (Dom.id ("guild_openSlackChannel_" ++ Slack.idToString channelId))

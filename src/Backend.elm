@@ -660,7 +660,7 @@ updateHelper msg model =
                                 , Broadcast.toSlackExcludingOne
                                     clientId
                                     guildOrDmId
-                                    (Server_Slack_SendMessage time guildOrDmId threadRoute richText |> ServerChange)
+                                    (Server_Slack_SendMessage time guildOrDmId threadRoute richText (slackThreadStarter guildOrDmId threadRoute model3) |> ServerChange)
                                     model3
                                 ]
                             )
@@ -980,6 +980,17 @@ updateHelper msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToChangeSlackReaction guildOrDmId error) model
+
+        SlackDeletedMessage time guildOrDmId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err (Slack.SlackError "message_not_found") ->
+                    ( model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToDeleteSlackMessage guildOrDmId error) model
 
         GotSlackUser slackUserId result ->
             let
@@ -5539,8 +5550,51 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                        SlackGuildOrDmId _ ->
-                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        SlackGuildOrDmId slackGuildOrDmId ->
+                            asSlackConversationUser
+                                model
+                                sessionId
+                                slackGuildOrDmId
+                                (\_ slackUser slackChannelId ->
+                                    case
+                                        updateSlackConversation
+                                            slackGuildOrDmId
+                                            (\conversation ->
+                                                case slackMessageTs threadRoute conversation of
+                                                    Just ts ->
+                                                        case deleteSlackMessage slackUser.user.id ts conversation of
+                                                            ( _, [] ) ->
+                                                                Nothing
+
+                                                            ( conversation2, deleted ) ->
+                                                                Just ( conversation2, ( ts, deleted ) )
+
+                                                    Nothing ->
+                                                        Nothing
+                                            )
+                                            model
+                                    of
+                                        Just ( model2, ( ts, deleted ) ) ->
+                                            ( model2
+                                            , Command.batch
+                                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                                , List.map
+                                                    (\threadRoute2 ->
+                                                        Broadcast.toSlack
+                                                            slackGuildOrDmId
+                                                            (Server_Slack_DeleteMessage slackGuildOrDmId threadRoute2 |> ServerChange)
+                                                            model2
+                                                    )
+                                                    deleted
+                                                    |> Command.batch
+                                                , Slack.deleteMessage model2.serverSecret slackUser.cookie slackUser.token slackChannelId ts
+                                                    |> Task.attempt (SlackDeletedMessage time slackGuildOrDmId)
+                                                ]
+                                            )
+
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
@@ -11072,7 +11126,7 @@ handleSlackWebsocketEvent linkedUser event model =
                                         ( model4
                                         , Broadcast.toSlack
                                             guildOrDmId
-                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data.content.content |> ServerChange)
+                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data.content.content (slackThreadStarter guildOrDmId threadRoute model4) |> ServerChange)
                                             model4
                                             :: notificationCmds
                                             ++ cmds
@@ -11144,20 +11198,7 @@ handleSlackWebsocketEvent linkedUser event model =
                     case
                         updateSlackConversation
                             guildOrDmId
-                            (\conversation ->
-                                List.foldl
-                                    (\threadRoute ( conversation2, deleted ) ->
-                                        case LocalState.deleteMessageBackendHelper author threadRoute conversation2 of
-                                            Ok conversation3 ->
-                                                ( conversation3, threadRoute :: deleted )
-
-                                            Err () ->
-                                                ( conversation2, deleted )
-                                    )
-                                    ( conversation, [] )
-                                    (slackMessageLocations slackMessageId conversation)
-                                    |> Just
-                            )
+                            (\conversation -> deleteSlackMessage author slackMessageId conversation |> Just)
                             model
                     of
                         Just ( model2, deleted ) ->
@@ -11387,6 +11428,19 @@ type alias SlackConversation =
     }
 
 
+{-| Sent along with a thread reply, since the message the thread started from may be too old for the
+frontend to have loaded, and the thread is named after it.
+-}
+slackThreadStarter : SlackGuildOrDmId -> ThreadRoute -> BackendModel -> Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackThreadStarter guildOrDmId threadRoute model =
+    case threadRoute of
+        ViewThread threadId ->
+            getSlackConversation guildOrDmId model |> Maybe.andThen (\conversation -> IdArray.get threadId conversation.messages)
+
+        NoThread ->
+            Nothing
+
+
 getSlackConversation : SlackGuildOrDmId -> BackendModel -> Maybe SlackConversation
 getSlackConversation guildOrDmId model =
     case guildOrDmId of
@@ -11560,6 +11614,24 @@ asSlackConversationUser model sessionId guildOrDmId func =
         SlackGuildOrDmId_Dm data ->
             -- Slack's API takes a DM's id wherever it takes a channel's
             BackendExtra.asSlackDmUser model sessionId data (\session slackUser _ -> func session slackUser (Slack.Id (Slack.idToString data.channelId)))
+
+
+{-| Deletes the message from every place it is in, as long as it's by the given author, and returns
+where it was deleted from.
+-}
+deleteSlackMessage : Slack.Id Slack.UserId -> Slack.Id Slack.MessageId -> SlackConversation -> ( SlackConversation, List ThreadRouteWithMessage )
+deleteSlackMessage author slackMessageId conversation =
+    List.foldl
+        (\threadRoute ( conversation2, deleted ) ->
+            case LocalState.deleteMessageBackendHelper author threadRoute conversation2 of
+                Ok conversation3 ->
+                    ( conversation3, threadRoute :: deleted )
+
+                Err () ->
+                    ( conversation2, deleted )
+        )
+        ( conversation, [] )
+        (slackMessageLocations slackMessageId conversation)
 
 
 {-| A reply that was also sent to the channel is in two places.

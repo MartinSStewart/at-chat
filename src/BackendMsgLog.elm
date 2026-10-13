@@ -37,6 +37,7 @@ type BackendMsgLog
     | BackendMsgLog_LinkDiscordUserStep1
     | BackendMsgLog_GotSlackUser
     | BackendMsgLog_SlackChangedReaction
+    | BackendMsgLog_SlackDeletedMessage
     | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_LinkSlackUserStep2
     | BackendMsgLog_SentSlackMessage
@@ -173,6 +174,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_SlackChangedReaction ->
             "SlackChangedReaction"
+
+        BackendMsgLog_SlackDeletedMessage ->
+            "SlackDeletedMessage"
 
         BackendMsgLog_LinkSlackUserStep1 ->
             "LinkSlackUserStep1"

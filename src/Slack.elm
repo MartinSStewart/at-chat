@@ -24,6 +24,7 @@ module Slack exposing
     , UserId
     , WebsocketEvent(..)
     , addReaction
+    , deleteMessage
     , history
     , httpErrorToString
     , idToString
@@ -664,6 +665,24 @@ addReaction secretKey cookie token channelId messageId name =
         token
         "reactions.add"
         [ ( "channel", idToString channelId ), ( "timestamp", idToString messageId ), ( "name", name ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+deleteMessage :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly HttpError ()
+deleteMessage secretKey cookie token channelId messageId =
+    http
+        secretKey
+        cookie
+        token
+        "chat.delete"
+        [ ( "channel", idToString channelId ), ( "ts", idToString messageId ) ]
         (Decode.succeed ())
         |> retryWhenRateLimited
 

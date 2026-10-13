@@ -9190,7 +9190,7 @@ updateLoadedFromBackend msg model =
                                                             Command.none
                                             )
 
-                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content ->
+                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content _ ->
                                             let
                                                 scrollsToBottom : Bool
                                                 scrollsToBottom =

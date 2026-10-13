@@ -2786,6 +2786,9 @@ backendMsgLog msg =
         SlackChangedReaction _ _ _ ->
             BackendMsgLog_SlackChangedReaction
 
+        SlackDeletedMessage _ _ _ ->
+            BackendMsgLog_SlackDeletedMessage
+
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 

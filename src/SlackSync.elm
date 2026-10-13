@@ -10,6 +10,7 @@ module SlackSync exposing
     , workspacesToFrontend
     )
 
+import DmChannel
 import Drawing
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Id exposing (ChannelMessageId, Id, UserId)
@@ -187,7 +188,7 @@ channelToFrontend linked channel =
     if List.any (\slackUserId -> SeqSet.member slackUserId channel.linkedMembers) (SeqDict.keys linked) then
         { name = channel.name
         , isPrivate = channel.isPrivate
-        , messages = Thread.loadMessages False channel.messages
+        , messages = DmChannel.loadThreadStarters channel.threads channel.messages (Thread.loadMessages False channel.messages)
         , visibleMessages = VisibleMessages.init False (IdArray.length channel.messages)
         , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) channel.threads
         }
@@ -207,7 +208,7 @@ dmChannelsToFrontend linked dmChannels =
             if List.any (\slackUserId -> NonemptySet.member slackUserId dmChannel.members) (SeqDict.keys linked) then
                 { teamId = dmChannel.teamId
                 , members = dmChannel.members
-                , messages = Thread.loadMessages False dmChannel.messages
+                , messages = DmChannel.loadThreadStarters dmChannel.threads dmChannel.messages (Thread.loadMessages False dmChannel.messages)
                 , visibleMessages = VisibleMessages.init False (IdArray.length dmChannel.messages)
                 , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) dmChannel.threads
                 }

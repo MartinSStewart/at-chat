@@ -886,6 +886,7 @@ type BackendMsg
     | GotVapidKeys (Result Http.Error String)
     | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.User)
     | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
+    | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2
         Time.Posix
@@ -1206,7 +1207,7 @@ type ServerChange
         , stickers : SeqDict (Id StickerId) StickerData
         , repliedToData : RepliedToData
         }
-    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
