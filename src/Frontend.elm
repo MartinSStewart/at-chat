@@ -4571,8 +4571,39 @@ updateLoaded msg model =
                                                                 _ ->
                                                                     Nothing
 
-                                                        SlackGuildOrDmId _ ->
-                                                            Nothing
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            case
+                                                                ( String.Nonempty.fromString edit.text
+                                                                , LocalState.slackGuildOrDmIdToMessage
+                                                                    guildOrDmId2
+                                                                    (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                                    local
+                                                                )
+                                                            of
+                                                                ( Just nonempty, Just message ) ->
+                                                                    let
+                                                                        richText : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                                                        richText =
+                                                                            RichText.fromNonemptyString
+                                                                                local.localUser.timezone
+                                                                                local.localUser.slackUsers
+                                                                                (LocalState.slackChannelMentions guildOrDmId2 local)
+                                                                                nonempty
+                                                                    in
+                                                                    if message.content.content == richText then
+                                                                        Nothing
+
+                                                                    else
+                                                                        Local_Slack_SendEditMessage
+                                                                            model.time
+                                                                            model.timezone
+                                                                            guildOrDmId2
+                                                                            (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                                            nonempty
+                                                                            |> Just
+
+                                                                _ ->
+                                                                    Nothing
                                                     )
                                                     (if MyUi.isMobile model then
                                                         MessageMenu.close model loggedIn
@@ -7783,8 +7814,21 @@ pressedEditMessage guildOrDmId threadRoute model =
                                 Nothing ->
                                     Nothing
 
-                        SlackGuildOrDmId _ ->
-                            Nothing
+                        SlackGuildOrDmId guildOrDmId2 ->
+                            case LocalState.slackGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
+                                Just message ->
+                                    ( RichText.toString
+                                        local.localUser.timezone
+                                        False
+                                        local.localUser.slackUsers
+                                        (LocalState.slackChannelMentions guildOrDmId2 local)
+                                        message.content.content
+                                    , message.content.attachedFiles
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
             in
             ( case maybeContentAndFiles of
                 Just ( content, attachedFiles ) ->

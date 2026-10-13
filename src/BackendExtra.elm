@@ -2789,6 +2789,9 @@ backendMsgLog msg =
         SlackDeletedMessage _ _ _ ->
             BackendMsgLog_SlackDeletedMessage
 
+        SlackEditedMessage _ _ _ ->
+            BackendMsgLog_SlackEditedMessage
+
         SlackMessageFilesUploaded _ _ _ ->
             BackendMsgLog_SlackMessageFilesUploaded
 
@@ -3178,6 +3181,9 @@ toBackendLog toBackend =
 
                 Local_Slack_SendMessage _ _ _ _ _ ->
                     ToBackendLog_Local_Slack_SendMessage
+
+                Local_Slack_SendEditMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_Slack_SendEditMessage
 
                 Local_Slack_UnlinkUser _ ->
                     ToBackendLog_Local_Slack_UnlinkUser

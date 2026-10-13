@@ -12919,6 +12919,18 @@ slackThreadConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmId
         channels : SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
             LocalState.slackChannelMentions guildOrDmIdNoThread local
+
+        guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+        guildOrDmId =
+            ( SlackGuildOrDmId guildOrDmIdNoThread, ViewThread threadId )
+
+        maybeEditing : Maybe EditMessage
+        maybeEditing =
+            SeqDict.get guildOrDmId loggedIn.editMessage
+
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile model
     in
     MessageArray.foldr
         (\messageId maybeMessage ( maybeLastDate, list ) ->
@@ -12948,18 +12960,66 @@ slackThreadConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmId
                     in
                     ( Just date
                     , ( String.fromInt index
-                      , slackThreadMessageView
-                            model.time
-                            containerWidth
-                            revealedSpoilers
-                            highlight
-                            currentSlackUserId
-                            channels
-                            local.localUser
-                            (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
-                            messageId
-                            message
-                            |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+                      , case maybeEditing of
+                            Just editing ->
+                                if editing.messageIndex == Id.changeType messageId && not isMobile then
+                                    let
+                                        editRichText : Maybe (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString editing.text of
+                                                Just nonempty ->
+                                                    RichText.fromNonemptyString local.localUser.timezone local.localUser.slackUsers channels nonempty |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
+                                    threadMessageEditingView
+                                        containerWidth
+                                        model.time
+                                        isMobile
+                                        guildOrDmId
+                                        threadId
+                                        messageId
+                                        message
+                                        Nothing
+                                        revealedSpoilers
+                                        (RichText.maxLength - String.length editing.text)
+                                        editing
+                                        editRichText
+                                        loggedIn
+                                        SeqDict.empty
+                                        currentSlackUserId
+                                        local.localUser.slackUsers
+                                        channels
+                                        local
+
+                                else
+                                    slackThreadMessageView
+                                        model.time
+                                        containerWidth
+                                        revealedSpoilers
+                                        highlight
+                                        currentSlackUserId
+                                        channels
+                                        local.localUser
+                                        (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
+                                        messageId
+                                        message
+                                        |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                            Nothing ->
+                                slackThreadMessageView
+                                    model.time
+                                    containerWidth
+                                    revealedSpoilers
+                                    highlight
+                                    currentSlackUserId
+                                    channels
+                                    local.localUser
+                                    (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
+                                    messageId
+                                    message
+                                    |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
@@ -13001,6 +13061,7 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
         UserTextMessage data ->
             slackThreadMessageContainer
                 containerWidth
+                (data.createdBy == currentUserId)
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
@@ -13037,6 +13098,7 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
         UserJoinedMessage joinedAt userId reactions drawings ->
             slackThreadMessageContainer
                 containerWidth
+                False
                 highlight
                 messageId
                 currentUserId
@@ -13062,6 +13124,7 @@ slackThreadMessageView time containerWidth revealedSpoilers highlight currentUse
         DeletedMessage createdAt ->
             slackThreadMessageContainer
                 containerWidth
+                False
                 highlight
                 messageId
                 currentUserId
@@ -13135,6 +13198,18 @@ slackConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmIdNoThre
         channels : SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
             LocalState.slackChannelMentions guildOrDmIdNoThread local
+
+        guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+        guildOrDmId =
+            ( SlackGuildOrDmId guildOrDmIdNoThread, NoThread )
+
+        maybeEditing : Maybe EditMessage
+        maybeEditing =
+            SeqDict.get guildOrDmId loggedIn.editMessage
+
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile model
     in
     MessageArray.foldr
         (\messageId maybeMessage ( maybeLastDate, list ) ->
@@ -13164,20 +13239,70 @@ slackConversationViewHelper lastViewedIndex currentSlackUserId guildOrDmIdNoThre
                     in
                     ( Just date
                     , ( String.fromInt index
-                      , slackMessageView
-                            model.time
-                            containerWidth
-                            revealedSpoilers
-                            highlight
-                            currentSlackUserId
-                            channels
-                            local.localUser
-                            (SeqDict.get messageId channel.threads)
-                            False
-                            (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
-                            messageId
-                            message
-                            |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+                      , case maybeEditing of
+                            Just editing ->
+                                if editing.messageIndex == messageId && not isMobile then
+                                    let
+                                        editRichText : Maybe (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString editing.text of
+                                                Just nonempty ->
+                                                    RichText.fromNonemptyString local.localUser.timezone local.localUser.slackUsers channels nonempty |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
+                                    messageEditingView
+                                        containerWidth
+                                        model.time
+                                        isMobile
+                                        guildOrDmId
+                                        threadRoute2
+                                        message
+                                        Nothing
+                                        (SeqDict.get messageId channel.threads)
+                                        revealedSpoilers
+                                        (RichText.maxLength - String.length editing.text)
+                                        editing
+                                        editRichText
+                                        loggedIn
+                                        SeqDict.empty
+                                        currentSlackUserId
+                                        local.localUser.slackUsers
+                                        channels
+                                        local
+
+                                else
+                                    slackMessageView
+                                        model.time
+                                        containerWidth
+                                        revealedSpoilers
+                                        highlight
+                                        currentSlackUserId
+                                        channels
+                                        local.localUser
+                                        (SeqDict.get messageId channel.threads)
+                                        False
+                                        (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
+                                        messageId
+                                        message
+                                        |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                            Nothing ->
+                                slackMessageView
+                                    model.time
+                                    containerWidth
+                                    revealedSpoilers
+                                    highlight
+                                    currentSlackUserId
+                                    channels
+                                    local.localUser
+                                    (SeqDict.get messageId channel.threads)
+                                    False
+                                    (messageHover (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn model)
+                                    messageId
+                                    message
+                                    |> Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (SlackGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
@@ -13221,6 +13346,7 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
         UserTextMessage data ->
             slackMessageContainer
                 containerWidth
+                (data.createdBy == currentUserId)
                 isThreadStarter
                 localUser.timezone
                 time
@@ -13262,6 +13388,7 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
         UserJoinedMessage joinedAt userId reactions drawings ->
             slackMessageContainer
                 containerWidth
+                False
                 isThreadStarter
                 localUser.timezone
                 time
@@ -13292,6 +13419,7 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
         DeletedMessage createdAt ->
             slackMessageContainer
                 containerWidth
+                False
                 isThreadStarter
                 localUser.timezone
                 time
@@ -13318,6 +13446,7 @@ slackMessageView time containerWidth revealedSpoilers highlight currentUserId ch
 slackMessageContainer :
     Int
     -> Bool
+    -> Bool
     -> Time.Zone
     -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -13333,7 +13462,7 @@ slackMessageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-slackMessageContainer containerWidth isThreadStarter timezone currentTime customEmojis emojiData allUsers channels highlight messageIndex currentUserId currentUser reactions maybeThread isHovered messageContent =
+slackMessageContainer containerWidth canEdit isThreadStarter timezone currentTime customEmojis emojiData allUsers channels highlight messageIndex currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -13375,7 +13504,7 @@ slackMessageContainer containerWidth isThreadStarter timezone currentTime custom
 
                     IsHovered ->
                         [ MyUi.hoverHighlightLayer
-                        , MessageView.slackMiniView currentUser isThreadStarter emojiData customEmojis |> Ui.inFront
+                        , MessageView.slackMiniView currentUser isThreadStarter canEdit emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -13409,6 +13538,7 @@ slackMessageContainer containerWidth isThreadStarter timezone currentTime custom
 
 slackThreadMessageContainer :
     Int
+    -> Bool
     -> HighlightMessage
     -> Id ThreadMessageId
     -> Slack.Id Slack.UserId
@@ -13420,7 +13550,7 @@ slackThreadMessageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-slackThreadMessageContainer containerWidth highlight messageIndex currentUserId currentUser reactions customEmojis emojiData allUsers isHovered messageContent =
+slackThreadMessageContainer containerWidth canEdit highlight messageIndex currentUserId currentUser reactions customEmojis emojiData allUsers isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -13462,7 +13592,7 @@ slackThreadMessageContainer containerWidth highlight messageIndex currentUserId 
 
                     IsHovered ->
                         [ MyUi.hoverHighlightLayer
-                        , MessageView.slackThreadMiniView currentUser emojiData customEmojis |> Ui.inFront
+                        , MessageView.slackThreadMiniView currentUser canEdit emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->

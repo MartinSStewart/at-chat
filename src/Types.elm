@@ -891,6 +891,7 @@ type BackendMsg
     | SlackMessageFilesUploaded (Slack.Id Slack.UserId) Slack.WebsocketEvent (SeqDict (Slack.Id Slack.FileId) SlackFileData)
     | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
+    | SlackEditedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2
         Time.Posix
@@ -1227,7 +1228,7 @@ type ServerChange
         , repliedToData : RepliedToData
         }
     | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
-    | Server_Slack_EditMessage Time.Posix SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_EditMessage Time.Posix (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
@@ -1357,6 +1358,7 @@ type LocalChange
     | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString
+    | Local_Slack_SendEditMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRouteWithMessage NonemptyString
     | Local_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription

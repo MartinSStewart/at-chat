@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackFilesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -1299,7 +1299,6 @@ slackReactionsAndNewThreadTest config =
                 , E2EHelper.hasExactText admin [ "👍", "👋🏼" ]
                 , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_editMessage" ])
                 , admin.click 100 (Dom.id "miniView_emojiReact_0")
                 , T.checkState
                     100
@@ -1356,7 +1355,6 @@ slackReactionsAndNewThreadTest config =
                     "contextmenu"
                     (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_deleteMessage" ])
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_editMessage" ])
                 , admin.click 100 (Dom.id "messageMenu_openThread")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_C09DJDQSWLU_3" ])
                 , E2EHelper.writeMessage admin 100 "Starting a thread"
@@ -1570,6 +1568,100 @@ slackFilesTest config =
                                     Err "Expected the file in the new message to be copied"
                             )
                         ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackEditMessageTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackEditMessageTest config =
+    E2EHelper.startTest
+        "Your own Slack messages can be edited from at-chat, in channels and in threads"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "miniView_editMessage" ])
+                , admin.mouseLeave 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , admin.mouseEnter 100 (Dom.id "guild_message_4") ( 10, 10 ) []
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_editMessage" ])
+                , admin.mouseLeave 100 (Dom.id "guild_message_4") ( 10, 10 ) []
+                , E2EHelper.writeMessage admin 100 "Written in at-chat"
+                , E2EHelper.editMostRecentMessageViaArrowUp admin "Written in at-chat" "Edited in at-chat"
+                , T.checkState
+                    100
+                    (\data ->
+                        case slackRequestsTo "chat.update" data of
+                            [ fields ] ->
+                                if
+                                    List.member "channel=C09DJDQSWLU" fields
+                                        && List.member "ts=1791638900.000100" fields
+                                        && List.member "text=Edited%20in%20at-chat" fields
+                                then
+                                    case
+                                        lastSlackMessage
+                                            data.backend
+                                            (\backend ->
+                                                SeqDict.get (Slack.Id "T09DJDQL18U") backend.slackWorkspaces
+                                                    |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                            )
+                                    of
+                                        Ok ( "U09DJDQL1A8: Edited in at-chat", True ) ->
+                                            Ok ()
+
+                                        _ ->
+                                            Err "Expected the edit to be stored"
+
+                                else
+                                    Err ("Expected the edit to be sent to Slack, got " ++ String.join ", " fields)
+
+                            _ ->
+                                Err "Expected one chat.update request"
+                    )
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                , E2EHelper.hasExactText admin [ "First reply", "Second reply" ]
+                , E2EHelper.editMostRecentMessageViaArrowUp admin "Second reply" "Second reply, edited"
+                , T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.any
+                                (\fields -> List.member "ts=1791638762.000100" fields && List.member "text=Second%20reply%2C%20edited" fields)
+                                (slackRequestsTo "chat.update" data)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Expected the thread reply's edit to be sent to Slack"
                     )
                 , E2EHelper.checkNoErrorLogs
                 ]

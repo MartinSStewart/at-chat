@@ -39,6 +39,7 @@ module Slack exposing
     , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
+    , updateMessage
     , userBoot
     , userConversations
     , userInfo
@@ -716,6 +717,39 @@ deleteMessage secretKey cookie token channelId messageId =
         token
         "chat.delete"
         [ ( "channel", idToString channelId ), ( "ts", idToString messageId ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+updateMessage :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> List RichTextElement
+    -> Task BackendOnly HttpError ()
+updateMessage secretKey cookie token channelId messageId text blocks =
+    http
+        secretKey
+        cookie
+        token
+        "chat.update"
+        [ ( "channel", idToString channelId )
+        , ( "ts", idToString messageId )
+        , ( "text", text )
+        , ( "blocks"
+          , Json.Encode.list
+                identity
+                [ Json.Encode.object
+                    [ ( "type", Json.Encode.string "rich_text" )
+                    , ( "elements", Json.Encode.list encodeRichTextElement blocks )
+                    ]
+                ]
+                |> Json.Encode.encode 0
+          )
+        ]
         (Decode.succeed ())
         |> retryWhenRateLimited
 

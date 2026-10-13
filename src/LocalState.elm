@@ -165,6 +165,8 @@ module LocalState exposing
     , sentEnoughDiscordDmMessages
     , setDmE2ee
     , slackChannelMentions
+    , slackGuildOrDmIdToLatestMessages
+    , slackGuildOrDmIdToMessage
     , typingIn
     , updateAdminData
     , updateChannel
@@ -3408,6 +3410,65 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
+slackGuildOrDmIdToMessage :
+    SlackGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> LocalState
+    -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackGuildOrDmIdToMessage guildOrDmId threadRoute local =
+    let
+        helper : { a | messages : MessageArray messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) } -> Id messageId -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        helper thread messageId =
+            case MessageArray.get messageId thread.messages of
+                Just (UserTextMessage data) ->
+                    { createdAt = data.createdAt
+                    , createdBy = data.createdBy
+                    , content = data.content
+                    , reactions = data.reactions
+                    , editedAt = data.editedAt
+                    }
+                        |> Just
+
+                Just (EncryptedUserTextMessage _) ->
+                    Nothing
+
+                Just (UserJoinedMessage _ _ _ _) ->
+                    Nothing
+
+                Just (DeletedMessage _) ->
+                    Nothing
+
+                Just (CallStarted _) ->
+                    Nothing
+
+                Just (GameStarted _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        conversationHelper :
+            { a
+                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+            }
+            -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        conversationHelper conversation =
+            case threadRoute of
+                ViewThreadWithMessage threadId messageId ->
+                    SeqDict.get threadId conversation.threads |> Maybe.andThen (\thread -> helper thread messageId)
+
+                NoThreadWithMessage messageId ->
+                    helper conversation messageId
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            getSlackWorkspaceAndChannel teamId channelId local |> Maybe.andThen (\( _, channel ) -> conversationHelper channel)
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            SeqDict.get channelId local.slackDmChannels |> Maybe.andThen conversationHelper
+
+
 getSlackWorkspaceAndChannel :
     Slack.Id Slack.TeamId
     -> Slack.Id Slack.ChannelId
@@ -4390,6 +4451,36 @@ discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+
+slackGuildOrDmIdToLatestMessages :
+    Int
+    -> SlackGuildOrDmId
+    -> ThreadRoute
+    -> LocalState
+    -> Maybe (List ( Int, MessageNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+slackGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
+    let
+        helper :
+            { a
+                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+            }
+            -> Maybe (List ( Int, MessageNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+        helper conversation =
+            case threadRoute of
+                ViewThread threadMessageIndex ->
+                    SeqDict.get threadMessageIndex conversation.threads |> Maybe.map (latestMessagesHelper count)
+
+                NoThread ->
+                    latestMessagesHelper count conversation |> Just
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            getSlackWorkspaceAndChannel teamId channelId local |> Maybe.andThen (\( _, channel ) -> helper channel)
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            SeqDict.get channelId local.slackDmChannels |> Maybe.andThen helper
 
 
 guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int

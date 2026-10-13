@@ -38,6 +38,7 @@ type BackendMsgLog
     | BackendMsgLog_GotSlackUser
     | BackendMsgLog_SlackChangedReaction
     | BackendMsgLog_SlackDeletedMessage
+    | BackendMsgLog_SlackEditedMessage
     | BackendMsgLog_SlackMessageFilesUploaded
     | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_LinkSlackUserStep2
@@ -178,6 +179,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_SlackDeletedMessage ->
             "SlackDeletedMessage"
+
+        BackendMsgLog_SlackEditedMessage ->
+            "SlackEditedMessage"
 
         BackendMsgLog_SlackMessageFilesUploaded ->
             "SlackMessageFilesUploaded"

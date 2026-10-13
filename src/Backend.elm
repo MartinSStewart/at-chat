@@ -1009,6 +1009,17 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToDeleteSlackMessage guildOrDmId error) model
 
+        SlackEditedMessage time guildOrDmId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err (Slack.SlackError "message_not_found") ->
+                    ( model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToEditSlackMessage guildOrDmId error) model
+
         GotSlackUser slackUserId result ->
             let
                 model2 : BackendModel
@@ -6589,6 +6600,99 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 data
                                 (\_ slackUser dmChannel -> send slackUser SeqDict.empty data.channelId dmChannel.linkedMessageIds)
 
+                Local_Slack_SendEditMessage _ timezone guildOrDmId threadRoute text ->
+                    let
+                        edit :
+                            SlackLinkedUser
+                            -> SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+                            -> Slack.Id channelId
+                            -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+                        edit slackUser channelMentions slackChannelId =
+                            let
+                                workspaceUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+                                workspaceUsers =
+                                    SlackSync.usersToFrontend
+                                        model.users
+                                        (SeqDict.singleton slackUser.user.id slackUser.user.teamId)
+                                        model.slackUsers
+
+                                richText : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+                                richText =
+                                    RichText.fromNonemptyString timezone workspaceUsers channelMentions text
+                            in
+                            case
+                                updateSlackConversation
+                                    guildOrDmId
+                                    (\conversation ->
+                                        case slackMessageTs threadRoute conversation of
+                                            Just ts ->
+                                                case editSlackMessage time slackUser.user.id richText ts conversation of
+                                                    ( _, [] ) ->
+                                                        Nothing
+
+                                                    ( conversation2, edited ) ->
+                                                        Just ( conversation2, ( ts, edited ) )
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    model
+                            of
+                                Just ( model2, ( ts, edited ) ) ->
+                                    ( model2
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , List.map
+                                            (\threadRoute2 ->
+                                                Broadcast.toSlackExcludingOne
+                                                    clientId
+                                                    guildOrDmId
+                                                    (Server_Slack_EditMessage time slackUser.user.id guildOrDmId threadRoute2 richText |> ServerChange)
+                                                    model2
+                                            )
+                                            edited
+                                            |> Command.batch
+                                        , Slack.updateMessage
+                                            model2.serverSecret
+                                            slackUser.cookie
+                                            slackUser.token
+                                            slackChannelId
+                                            ts
+                                            (RichText.toString timezone False workspaceUsers channelMentions richText)
+                                            (RichText.toSlack richText)
+                                            |> Task.attempt (SlackEditedMessage time guildOrDmId)
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace id ->
+                            BackendExtra.asSlackChannelMember
+                                model
+                                sessionId
+                                id
+                                (\_ slackUser workspace _ ->
+                                    edit
+                                        slackUser
+                                        (SeqDict.foldl
+                                            (\channelId channel dict ->
+                                                SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict
+                                            )
+                                            SeqDict.empty
+                                            workspace.channels
+                                        )
+                                        id.channelId
+                                )
+
+                        SlackGuildOrDmId_Dm data ->
+                            BackendExtra.asSlackDmUser
+                                model
+                                sessionId
+                                data
+                                (\_ slackUser _ -> edit slackUser SeqDict.empty data.channelId)
+
                 Local_Discord_LoadChannelMessages guildOrDmId pageRequest _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild id ->
@@ -11354,20 +11458,7 @@ handleSlackWebsocketEvent linkedUser event model =
                     case
                         updateSlackConversation
                             guildOrDmId
-                            (\conversation ->
-                                List.foldl
-                                    (\threadRoute ( conversation2, edited ) ->
-                                        case LocalState.editMessageHelper editedAt message.user content DoNotChangeAttachments threadRoute conversation2 of
-                                            Ok conversation3 ->
-                                                ( conversation3, threadRoute :: edited )
-
-                                            Err () ->
-                                                ( conversation2, edited )
-                                    )
-                                    ( conversation, [] )
-                                    (slackMessageLocations message.id conversation)
-                                    |> Just
-                            )
+                            (\conversation -> editSlackMessage editedAt message.user content message.id conversation |> Just)
                             model
                     of
                         Just ( model2, edited ) ->
@@ -11376,7 +11467,7 @@ handleSlackWebsocketEvent linkedUser event model =
                                 (\threadRoute ->
                                     Broadcast.toSlack
                                         guildOrDmId
-                                        (Server_Slack_EditMessage editedAt guildOrDmId threadRoute content |> ServerChange)
+                                        (Server_Slack_EditMessage editedAt message.user guildOrDmId threadRoute content |> ServerChange)
                                         model2
                                 )
                                 edited
@@ -11811,6 +11902,30 @@ asSlackConversationUser model sessionId guildOrDmId func =
         SlackGuildOrDmId_Dm data ->
             -- Slack's API takes a DM's id wherever it takes a channel's
             BackendExtra.asSlackDmUser model sessionId data (\session slackUser _ -> func session slackUser (Slack.Id (Slack.idToString data.channelId)))
+
+
+{-| Edits the message in every place it is in, as long as it's by the given author, and returns
+where it was edited.
+-}
+editSlackMessage :
+    Time.Posix
+    -> Slack.Id Slack.UserId
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> Slack.Id Slack.MessageId
+    -> SlackConversation
+    -> ( SlackConversation, List ThreadRouteWithMessage )
+editSlackMessage editedAt author content slackMessageId conversation =
+    List.foldl
+        (\threadRoute ( conversation2, edited ) ->
+            case LocalState.editMessageHelper editedAt author content DoNotChangeAttachments threadRoute conversation2 of
+                Ok conversation3 ->
+                    ( conversation3, threadRoute :: edited )
+
+                Err () ->
+                    ( conversation2, edited )
+        )
+        ( conversation, [] )
+        (slackMessageLocations slackMessageId conversation)
 
 
 {-| Deletes the message from every place it is in, as long as it's by the given author, and returns

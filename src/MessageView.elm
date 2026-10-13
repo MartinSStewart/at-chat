@@ -201,8 +201,8 @@ miniView user isThreadStarter canEdit availableCustomEmojis emojiData customEmoj
 
 {-| Slack has no replies to a single message, so there's a button for starting a thread in its place.
 -}
-slackMiniView : FrontendCurrentUser -> Bool -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
-slackMiniView user isThreadStarter emojiData customEmojis =
+slackMiniView : FrontendCurrentUser -> Bool -> Bool -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+slackMiniView user isThreadStarter canEdit emojiData customEmojis =
     miniViewContainer
         -48
         (recentEmojiButtons user SeqSet.empty emojiData customEmojis
@@ -211,6 +211,15 @@ slackMiniView user isThreadStarter emojiData customEmojis =
                     MessageViewMsg_PressedShowReactionEmojiSelector
                     "Add reaction"
                     Icons.smile
+               , if canEdit then
+                    miniButton
+                        (Dom.id "miniView_editMessage")
+                        MessageViewMsg_PressedEditMessage
+                        "Edit message"
+                        Icons.pencil
+
+                 else
+                    Ui.none
                , if isThreadStarter then
                     Ui.none
 
@@ -228,8 +237,8 @@ slackMiniView user isThreadStarter emojiData customEmojis =
         )
 
 
-slackThreadMiniView : FrontendCurrentUser -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
-slackThreadMiniView user emojiData customEmojis =
+slackThreadMiniView : FrontendCurrentUser -> Bool -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+slackThreadMiniView user canEdit emojiData customEmojis =
     miniViewContainer
         -48
         (recentEmojiButtons user SeqSet.empty emojiData customEmojis
@@ -238,6 +247,15 @@ slackThreadMiniView user emojiData customEmojis =
                     MessageViewMsg_PressedShowReactionEmojiSelector
                     "Add reaction"
                     Icons.smile
+               , if canEdit then
+                    miniButton
+                        (Dom.id "miniView_editMessage")
+                        MessageViewMsg_PressedEditMessage
+                        "Edit message"
+                        Icons.pencil
+
+                 else
+                    Ui.none
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")
                     (MessageViewMsg_PressedShowFullMenu False)

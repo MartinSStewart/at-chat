@@ -355,8 +355,22 @@ viewMobile offset extraOptions loggedIn local model =
                                     allUsers
                                     channels
 
-                            SlackGuildOrDmId _ ->
-                                Ui.none
+                            SlackGuildOrDmId guildOrDmId ->
+                                let
+                                    channels : SeqDict ( Slack.Id Slack.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+                                    channels =
+                                        LocalState.slackChannelMentions guildOrDmId local
+
+                                    richText : Maybe (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+                                    richText =
+                                        case String.Nonempty.fromString edit.text of
+                                            Just nonempty ->
+                                                RichText.fromNonemptyString local.localUser.timezone local.localUser.slackUsers channels nonempty |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                in
+                                editView (RichText.maxLength - String.length edit.text) richText local.localUser.slackUsers channels
                           )
                             |> Ui.map
                                 (EditMessage_MessageInputMsg
@@ -615,12 +629,30 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        -- Slack has no replies to a message, only threads. Editing from at-chat isn't supported yet.
+        -- Slack has no replies to a message, only threads.
         slackHelper : SlackGuildOrDmId -> Slack.Id Slack.UserId -> Id messageId -> { a | messages : MessageArray messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) } -> Maybe MenuItemsData
         slackHelper guildOrDmId2 currentUserId messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
-                    { canEdit = False
+                    { canEdit =
+                        case message of
+                            UserTextMessage data ->
+                                data.createdBy == currentUserId
+
+                            EncryptedUserTextMessage _ ->
+                                False
+
+                            UserJoinedMessage _ _ _ _ ->
+                                False
+
+                            DeletedMessage _ ->
+                                False
+
+                            CallStarted _ ->
+                                False
+
+                            GameStarted _ ->
+                                False
                     , canDelete =
                         case message of
                             UserTextMessage data ->

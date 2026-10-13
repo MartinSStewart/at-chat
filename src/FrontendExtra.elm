@@ -204,6 +204,9 @@ pendingChangesText localChange =
         Local_Slack_SendMessage _ _ _ _ _ ->
             Just "Sent a message"
 
+        Local_Slack_SendEditMessage _ _ _ _ _ ->
+            Just "Edit message"
+
         Local_Slack_UnlinkUser _ ->
             Just "Unlink Slack user"
 
@@ -4851,6 +4854,26 @@ changeUpdate localMsg local =
                         SlackGuildOrDmId_Dm data ->
                             { local | slackDmChannels = SeqDict.updateIfExists data.channelId loadThreadPage local.slackDmChannels }
 
+                Local_Slack_SendEditMessage editedAt _ guildOrDmId threadRoute text ->
+                    slackEditMessage
+                        editedAt
+                        (case guildOrDmId of
+                            SlackGuildOrDmId_Workspace { currentUserId } ->
+                                currentUserId
+
+                            SlackGuildOrDmId_Dm { currentUserId } ->
+                                currentUserId
+                        )
+                        guildOrDmId
+                        threadRoute
+                        (RichText.fromNonemptyString
+                            local.localUser.timezone
+                            local.localUser.slackUsers
+                            (LocalState.slackChannelMentions guildOrDmId local)
+                            text
+                        )
+                        local
+
                 Local_Slack_SendMessage createdAt _ guildOrDmId threadRoute text ->
                     slackSendMessage
                         createdAt
@@ -5384,36 +5407,8 @@ changeUpdate localMsg local =
                 Server_Slack_SendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter ->
                     slackSendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter local
 
-                Server_Slack_EditMessage editedAt guildOrDmId threadRoute content ->
-                    let
-                        edit :
-                            Slack.Id Slack.UserId
-                            ->
-                                { a
-                                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
-                                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
-                                }
-                            ->
-                                { a
-                                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
-                                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
-                                }
-                        edit editedBy channel =
-                            LocalState.editMessageFrontendHelper editedAt editedBy content DoNotChangeAttachments threadRoute channel
-                                |> Result.withDefault channel
-                    in
-                    case guildOrDmId of
-                        SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
-                            { local
-                                | slackWorkspaces =
-                                    SeqDict.updateIfExists
-                                        teamId
-                                        (LocalState.updateChannel (edit currentUserId) channelId)
-                                        local.slackWorkspaces
-                            }
-
-                        SlackGuildOrDmId_Dm { currentUserId, channelId } ->
-                            { local | slackDmChannels = SeqDict.updateIfExists channelId (edit currentUserId) local.slackDmChannels }
+                Server_Slack_EditMessage editedAt editedBy guildOrDmId threadRoute content ->
+                    slackEditMessage editedAt editedBy guildOrDmId threadRoute content local
 
                 Server_Slack_AddReactionEmoji slackUserId guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
@@ -8724,8 +8719,84 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                         Nothing ->
                             ( loggedIn, Command.none )
 
-                SlackGuildOrDmId _ ->
-                    ( loggedIn, Command.none )
+                SlackGuildOrDmId guildOrDmId2 ->
+                    let
+                        maybeMessages : Maybe (List ( Int, MessageNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+                        maybeMessages =
+                            LocalState.slackGuildOrDmIdToLatestMessages
+                                editPreviousMessageLookback
+                                guildOrDmId2
+                                threadRoute
+                                local
+                    in
+                    case maybeMessages of
+                        Just messages ->
+                            let
+                                currentUserId : Slack.Id Slack.UserId
+                                currentUserId =
+                                    case guildOrDmId2 of
+                                        SlackGuildOrDmId_Workspace id ->
+                                            id.currentUserId
+
+                                        SlackGuildOrDmId_Dm data ->
+                                            data.currentUserId
+
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
+                                mostRecentMessage =
+                                    List.reverse messages
+                                        |> List.Extra.findMap
+                                            (\( index, message ) ->
+                                                case message of
+                                                    UserTextMessage_NoReply data ->
+                                                        if currentUserId == data.createdBy then
+                                                            Just ( Id.fromInt index, data )
+
+                                                        else
+                                                            Nothing
+
+                                                    EncryptedUserTextMessage_NoReply _ ->
+                                                        Nothing
+
+                                                    UserJoinedMessage_NoReply _ _ _ ->
+                                                        Nothing
+
+                                                    DeletedMessage_NoReply _ ->
+                                                        Nothing
+
+                                                    CallStarted_NoReply _ _ _ ->
+                                                        Nothing
+
+                                                    GoMatchStarted_NoReply _ _ ->
+                                                        Nothing
+                                            )
+                            in
+                            case mostRecentMessage of
+                                Just ( index, message ) ->
+                                    ( { loggedIn
+                                        | editMessage =
+                                            SeqDict.insert
+                                                ( SlackGuildOrDmId guildOrDmId2, threadRoute )
+                                                { messageIndex = index
+                                                , text =
+                                                    RichText.toString
+                                                        local.localUser.timezone
+                                                        False
+                                                        local.localUser.slackUsers
+                                                        (LocalState.slackChannelMentions guildOrDmId2 local)
+                                                        message.content.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
+                                                }
+                                                loggedIn.editMessage
+                                      }
+                                    , setFocus model MessageMenu.editMessageTextInputId
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
         )
         model
 
@@ -9708,3 +9779,41 @@ unlinkSlackUser slackUserId local =
                 )
                 local.slackDmChannels
     }
+
+
+slackEditMessage :
+    Time.Posix
+    -> Slack.Id Slack.UserId
+    -> SlackGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> LocalState
+    -> LocalState
+slackEditMessage editedAt editedBy guildOrDmId threadRoute content local =
+    let
+        edit :
+            { a
+                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+            }
+            ->
+                { a
+                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+                }
+        edit channel =
+            LocalState.editMessageFrontendHelper editedAt editedBy content DoNotChangeAttachments threadRoute channel
+                |> Result.withDefault channel
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            { local
+                | slackWorkspaces =
+                    SeqDict.updateIfExists
+                        teamId
+                        (LocalState.updateChannel edit channelId)
+                        local.slackWorkspaces
+            }
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            { local | slackDmChannels = SeqDict.updateIfExists channelId edit local.slackDmChannels }

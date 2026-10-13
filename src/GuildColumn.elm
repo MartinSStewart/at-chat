@@ -985,6 +985,9 @@ canChangeUnreadNotificationCount change =
         Local_Discord_SendEditDmMessage _ _ _ _ _ ->
             False
 
+        Local_Slack_SendEditMessage _ _ _ _ _ ->
+            False
+
         Local_MemberEditTyping _ _ _ ->
             False
 

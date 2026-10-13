@@ -2168,6 +2168,16 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":false,"error":"invalid_auth"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "chat.update" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true,"channel":"C09DJDQSWLU","ts":"1791638900.000100"}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "chat.delete" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2730,6 +2740,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Slack_SendMessage _ _ _ _ _ ->
                     True
 
+                Local_Slack_SendEditMessage _ _ _ _ _ ->
+                    True
+
                 Local_Slack_UnlinkUser _ ->
                     True
 
@@ -2991,7 +3004,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Slack_SendMessage _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_EditMessage _ _ _ _ ->
+                        Types.Server_Slack_EditMessage _ _ _ _ _ ->
                             True
 
                         Types.Server_Slack_DeleteMessage _ _ ->
@@ -3469,6 +3482,8 @@ allAttackerLocalChanges =
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText
     , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText
+    , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_workspace threadRouteWithMessage normalText
+    , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_dm threadRouteWithMessage normalText
     , Local_Slack_LoadThreadMessages slackGuildOrDmId_workspace (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Slack_LoadThreadMessages slackGuildOrDmId_dm (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_CurrentlyViewing
