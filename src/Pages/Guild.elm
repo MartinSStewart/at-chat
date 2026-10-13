@@ -14066,7 +14066,9 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         |> GuildIcon.slackNotificationView 4 -3 MyUi.background2
                     , Ui.width Ui.shrink
                     ]
-                    (User.profileImage (List.head members |> Maybe.andThen (\userId -> SeqDict.get userId localUser.slackUsers)))
+                    (List.filterMap (\userId -> SeqDict.get userId localUser.slackUsers) members
+                        |> User.multipleSlackProfileImages
+                    )
                 , Ui.column
                     []
                     [ List.map (\userId -> User.toString userId localUser.slackUsers) members
