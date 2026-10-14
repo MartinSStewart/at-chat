@@ -162,10 +162,17 @@ config =
             , "discordGuilds.channels.threads.messages.EncryptedUserTextMessage.fileHashes"
             , "discordGuilds.channels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
             , "discordGuilds.icon"
+            , "slackUsers.SlackBasicData.icon"
+            , "slackUsers.SlackFullData.icon"
+            , "slackWorkspaces.icon"
             , "slackDmChannels.messages.EncryptedUserTextMessage.fileHashes"
             , "slackDmChannels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "slackDmChannels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "slackDmChannels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
             , "slackWorkspaces.channels.messages.EncryptedUserTextMessage.fileHashes"
             , "slackWorkspaces.channels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "slackWorkspaces.channels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "slackWorkspaces.channels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
             , "discordUsers.BasicData.icon"
             , "discordUsers.FullData.icon"
             , "discordUsers.NeedsAuthAgain.icon"
@@ -200,6 +207,9 @@ config =
 
             -- Only remembers which Discord attachments have already been uploaded
             , "discordAttachments"
+
+            -- Only remembers which Slack files have already been uploaded
+            , "slackFiles"
 
             -- Copies of channels taken while an export is running
             , "exportState"

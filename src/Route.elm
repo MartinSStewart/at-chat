@@ -39,7 +39,7 @@ import Dict
 import Discord
 import DmChannelId exposing (DmChannelId)
 import Effect.Time as Time
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import Message
 import Pagination
 import SecretId exposing (SecretId)
@@ -99,7 +99,7 @@ type alias SlackWorkspaceRouteData =
     { currentSlackUserId : Slack.Id Slack.UserId
     , teamId : Slack.Id Slack.TeamId
     , channelId : Slack.Id Slack.ChannelId
-    , viewingMessage : Maybe (Id ChannelMessageId)
+    , threadRoute : ThreadRouteWithMaybeMessage
     , channelsVisible : ChannelsVisibleOnMobile
     , overlay : Maybe Overlay
     }
@@ -108,7 +108,7 @@ type alias SlackWorkspaceRouteData =
 type alias SlackDmRouteData =
     { currentSlackUserId : Slack.Id Slack.UserId
     , channelId : Slack.Id Slack.DmChannelId
-    , viewingMessage : Maybe (Id ChannelMessageId)
+    , threadRoute : ThreadRouteWithMaybeMessage
     , channelsVisible : ChannelsVisibleOnMobile
     , overlay : Maybe Overlay
     }
@@ -462,7 +462,7 @@ decode url =
                 { currentSlackUserId = Slack.Id userId
                 , teamId = Slack.Id teamId
                 , channelId = Slack.Id channelId
-                , viewingMessage = viewingMessageFromPath rest
+                , threadRoute = slackThreadRouteFromPath rest
                 , channelsVisible = channelsVisible
                 , overlay = overlay
                 }
@@ -471,7 +471,7 @@ decode url =
             SlackDmRoute
                 { currentSlackUserId = Slack.Id userId
                 , channelId = Slack.Id channelId
-                , viewingMessage = viewingMessageFromPath rest
+                , threadRoute = slackThreadRouteFromPath rest
                 , channelsVisible = channelsVisible
                 , overlay = overlay
                 }
@@ -508,14 +508,40 @@ decode url =
             HomePageRoute overlay
 
 
-viewingMessageFromPath : List String -> Maybe (Id ChannelMessageId)
-viewingMessageFromPath rest =
+slackThreadRouteFromPath : List String -> ThreadRouteWithMaybeMessage
+slackThreadRouteFromPath rest =
     case rest of
         [ "m", messageIndex ] ->
-            Id.fromString messageIndex
+            NoThreadWithMaybeMessage (Id.fromString messageIndex)
+
+        [ "t", threadId, "m", messageIndex ] ->
+            case Id.fromString threadId of
+                Just threadId2 ->
+                    ViewThreadWithMaybeMessage threadId2 (Id.fromString messageIndex)
+
+                Nothing ->
+                    NoThreadWithMaybeMessage Nothing
+
+        [ "t", threadId ] ->
+            case Id.fromString threadId of
+                Just threadId2 ->
+                    ViewThreadWithMaybeMessage threadId2 Nothing
+
+                Nothing ->
+                    NoThreadWithMaybeMessage Nothing
 
         _ ->
-            Nothing
+            NoThreadWithMaybeMessage Nothing
+
+
+slackThreadRouteToPath : ThreadRouteWithMaybeMessage -> List String
+slackThreadRouteToPath threadRoute =
+    case threadRoute of
+        NoThreadWithMaybeMessage maybeMessageId ->
+            maybeMessageIdToString maybeMessageId
+
+        ViewThreadWithMaybeMessage threadId maybeMessageId ->
+            [ "t", Id.toString threadId ] ++ maybeMessageIdToString maybeMessageId
 
 
 decodeChannelHeaderTab : AppUrl -> Maybe ChannelHeaderTab
@@ -1208,20 +1234,20 @@ encode route =
                         ++ encodeOverlay overlay
                     )
 
-                SlackWorkspaceRoute { currentSlackUserId, teamId, channelId, viewingMessage, channelsVisible, overlay } ->
+                SlackWorkspaceRoute { currentSlackUserId, teamId, channelId, threadRoute, channelsVisible, overlay } ->
                     ( [ "sw"
                       , Slack.idToString currentSlackUserId
                       , Slack.idToString teamId
                       , "c"
                       , Slack.idToString channelId
                       ]
-                        ++ maybeMessageIdToString viewingMessage
+                        ++ slackThreadRouteToPath threadRoute
                     , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                     )
 
-                SlackDmRoute { currentSlackUserId, channelId, viewingMessage, channelsVisible, overlay } ->
+                SlackDmRoute { currentSlackUserId, channelId, threadRoute, channelsVisible, overlay } ->
                     ( [ "sd", Slack.idToString currentSlackUserId, Slack.idToString channelId ]
-                        ++ maybeMessageIdToString viewingMessage
+                        ++ slackThreadRouteToPath threadRoute
                     , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                     )
 
@@ -1448,11 +1474,13 @@ sameConversation old new =
             (oldData.currentSlackUserId == newData.currentSlackUserId)
                 && (oldData.teamId == newData.teamId)
                 && (oldData.channelId == newData.channelId)
+                && (Id.threadRouteWithoutMaybeMessage oldData.threadRoute == Id.threadRouteWithoutMaybeMessage newData.threadRoute)
                 && (oldData.channelsVisible == newData.channelsVisible)
 
         ( SlackDmRoute oldData, SlackDmRoute newData ) ->
             (oldData.currentSlackUserId == newData.currentSlackUserId)
                 && (oldData.channelId == newData.channelId)
+                && (Id.threadRouteWithoutMaybeMessage oldData.threadRoute == Id.threadRouteWithoutMaybeMessage newData.threadRoute)
                 && (oldData.channelsVisible == newData.channelsVisible)
 
         _ ->
@@ -1537,14 +1565,14 @@ toGuildOrDmId userId route =
                 , channelId = data.channelId
                 }
                 |> SlackGuildOrDmId
-            , NoThread
+            , Id.threadRouteWithoutMaybeMessage data.threadRoute
             )
                 |> Just
 
         SlackDmRoute data ->
             ( SlackGuildOrDmId_Dm { currentUserId = data.currentSlackUserId, channelId = data.channelId }
                 |> SlackGuildOrDmId
-            , NoThread
+            , Id.threadRouteWithoutMaybeMessage data.threadRoute
             )
                 |> Just
 

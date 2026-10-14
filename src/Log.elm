@@ -55,6 +55,9 @@ type Log
     | FailedToDeleteOrphanedFiles Http.Error
     | FailedToLoadSlackConversations (Slack.Id Slack.TeamId) Slack.HttpError
     | FailedToSendSlackMessage SlackGuildOrDmId Slack.HttpError
+    | FailedToChangeSlackReaction SlackGuildOrDmId Slack.HttpError
+    | FailedToDeleteSlackMessage SlackGuildOrDmId Slack.HttpError
+    | FailedToEditSlackMessage SlackGuildOrDmId Slack.HttpError
     | ReceivedTypeThatIsAlwaysInvalid
     | DeletedLog
 
@@ -153,6 +156,15 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToSendSlackMessage _ _ ->
+            Nothing
+
+        FailedToChangeSlackReaction _ _ ->
+            Nothing
+
+        FailedToDeleteSlackMessage _ _ ->
+            Nothing
+
+        FailedToEditSlackMessage _ _ ->
             Nothing
 
         ReceivedTypeThatIsAlwaysInvalid ->
@@ -573,6 +585,72 @@ logContent onPressCopy emojiData customEmojis log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Sending Slack message failed"
+                , case guildOrDmId of
+                    SlackGuildOrDmId_Workspace { teamId, channelId, currentUserId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                            , fieldRow "Channel" (Ui.text (Slack.idToString channelId))
+                            ]
+
+                    SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "DM" (Ui.text (Slack.idToString channelId))
+                            ]
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
+                ]
+
+        FailedToChangeSlackReaction guildOrDmId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Adding or removing a Slack reaction failed"
+                , case guildOrDmId of
+                    SlackGuildOrDmId_Workspace { teamId, channelId, currentUserId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                            , fieldRow "Channel" (Ui.text (Slack.idToString channelId))
+                            ]
+
+                    SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "DM" (Ui.text (Slack.idToString channelId))
+                            ]
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
+                ]
+
+        FailedToDeleteSlackMessage guildOrDmId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Deleting a Slack message failed"
+                , case guildOrDmId of
+                    SlackGuildOrDmId_Workspace { teamId, channelId, currentUserId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                            , fieldRow "Channel" (Ui.text (Slack.idToString channelId))
+                            ]
+
+                    SlackGuildOrDmId_Dm { currentUserId, channelId } ->
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ fieldRow "User" (Ui.text (Slack.idToString currentUserId))
+                            , fieldRow "DM" (Ui.text (Slack.idToString channelId))
+                            ]
+                , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
+                ]
+
+        FailedToEditSlackMessage guildOrDmId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Editing a Slack message failed"
                 , case guildOrDmId of
                     SlackGuildOrDmId_Workspace { teamId, channelId, currentUserId } ->
                         Ui.column

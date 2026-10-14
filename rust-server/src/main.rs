@@ -1329,11 +1329,18 @@ async fn store_encrypted_upload(hash: &str, thumbnail: &Bytes, file: &Bytes) -> 
 /// this runs.
 async fn upload_url_endpoint(
     State(state): State<Arc<Mutex<AppState>>>,
-    Json(UploadUrl { url }): Json<UploadUrl>,
+    Json(UploadUrl { url, headers }): Json<UploadUrl>,
 ) -> Response<String> {
     let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
 
-    match http_client().get(url).send().await {
+    let headers2 = match vec_to_headermap(headers) {
+        Ok(ok) => ok,
+        Err(error) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, format!("Error 1: {error:?}"));
+        }
+    };
+
+    match http_client().get(url).headers(headers2).send().await {
         Ok(response) => match response.bytes().await {
             Ok(bytes) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
             Err(_) => response_with_headers(
@@ -2173,6 +2180,9 @@ pub struct Header {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadUrl {
     pub url: String,
+    /// Slack's files can only be downloaded with the user's credentials.
+    #[serde(default)]
+    pub headers: Vec<Header>,
 }
 
 #[cfg(test)]

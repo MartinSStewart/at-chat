@@ -26,6 +26,8 @@
 * Trying to join a guild and failing should tell the user what the error was
 * Adding a reaction to a word spelling game causes the moves to scroll to the bottom even if the user wasn't scrolled to
   the bottom before
+* For Discord guilds, the delete message button appears for any message you have a linked account for. But it will
+  silently fail if you try to delete a message from a user that isn't the currentDiscordUser
 
 Won't do:
 

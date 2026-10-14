@@ -104,6 +104,7 @@ module E2EHelper exposing
     , sessionId4
     , sessionIdAttacker
     , setIphone14SafeAreaInsets
+    , slackFormFields
     , startTest
     , startTime
     , startupDataJson
@@ -2051,10 +2052,10 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                     (if isLegitSlackRequest headers body then
-                        """{"ok":true,"self":{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","profile":{"real_name":"Slack Admin","display_name":"","avatar_hash":"g3c2057c0c87"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else if isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
-                        """{"ok":true,"self":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
+                        """{"ok":true,"self":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zig","avatar_hash":"g5c945c6010c"}},"team":{"id":"T09DJDQL18U","name":"test-slack","domain":"testslack-kob3907","icon":{"image_132":"https://a.slack-edge.com/80588/img/avatars-teams/ava_0009-132.png"}}}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2095,11 +2096,53 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":true,"messages":[],"has_more":false}"""
                     )
 
-            ( "POST", [ "slack.com", "api", "users.list" ] ) ->
+            ( "POST", [ "slack.com", "api", "conversations.replies" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    (if isLegitSlackRequest headers body || isSecondSlackUserRequest headers body || isSlackRequestWithToken secondSlackTokenAfterLeaving headers body then
-                        """{"ok":true,"members":[{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","image_72":"https://avatars.slack-edge.com/admin_72.png"}},{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","image_72":"https://avatars.slack-edge.com/ziggler_72.png"}},{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":"","image_72":""}},{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}],"response_metadata":{"next_cursor":""}}"""
+                    (if not (isLegitSlackRequest headers body || isSecondSlackUserRequest headers body) then
+                        """{"ok":false,"error":"invalid_auth"}"""
+
+                     else if List.member "channel=C09DJDQSWLU" (slackFormFields body) && List.member "ts=1791638760.000100" (slackFormFields body) then
+                        slackThreadReplies
+
+                     else
+                        """{"ok":true,"messages":[],"has_more":false}"""
+                    )
+
+            ( "POST", [ "edgeapi.slack.com", "cache", "T09DJDQL18U", "users", "info" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (case slackEdgeRequest body of
+                        Just ( token, userIds ) ->
+                            if
+                                List.member ( "Cookie", "d=" ++ legitSlackCookie ) headers
+                                    && List.member token [ legitSlackToken, secondSlackToken, secondSlackTokenAfterLeaving ]
+                            then
+                                """{"ok":true,"results":["""
+                                    ++ String.join "," (List.filterMap (\userId -> Dict.get userId slackTestUsers) userIds)
+                                    ++ """],"failed_ids":[]}"""
+
+                            else
+                                """{"ok":false,"error":"invalid_auth"}"""
+
+                        Nothing ->
+                            """{"ok":false,"error":"invalid_arguments"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "users.info" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body || isSecondSlackUserRequest headers body then
+                        case
+                            List.filterMap
+                                (\field -> String.split "=" field |> List.drop 1 |> List.head |> Maybe.andThen (\userId -> Dict.get userId slackTestUsers))
+                                (List.filter (String.startsWith "user=") (slackFormFields body))
+                        of
+                            user :: _ ->
+                                """{"ok":true,"user":""" ++ user ++ "}"
+
+                            [] ->
+                                """{"ok":false,"error":"user_not_found"}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2110,6 +2153,46 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                     (if isLegitSlackRequest headers body then
                         """{"ok":true,"channel":"C09DJDQSWLU","ts":"1791638900.000100"}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "reactions.add" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "chat.update" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true,"channel":"C09DJDQSWLU","ts":"1791638900.000100"}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "chat.delete" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "reactions.remove" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        """{"ok":true}"""
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2221,13 +2304,55 @@ slackChannelHistory : String
 slackChannelHistory =
     """{"ok":true,"messages":[
 {"type":"message","subtype":"bot_message","bot_id":"B0BOT","text":"Deploy finished","ts":"1791638800.000100"},
-{"type":"message","user":"U09DJDQL1A8","text":"","files":[{"id":"F0C845B861K","name":"photo.jpg"}],"upload":false,"ts":"1791638790.000100"},
+{"type":"message","user":"U09DJDQL1A8","text":"","files":[{"id":"F0C845B861K","name":"photo.jpg","mimetype":"image/jpeg","size":605547,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0C845B861K/photo.jpg"},{"id":"F0GONE","mode":"tombstone"}],"upload":false,"ts":"1791638790.000100"},
 {"type":"message","user":"U09DK3NCPMG","text":"quote and list","ts":"1791638780.000100","blocks":[{"type":"rich_text","block_id":"a1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Before\\n"}]},{"type":"rich_text_quote","elements":[{"type":"text","text":"Quoted"}]},{"type":"rich_text_list","style":"bullet","indent":0,"elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"First item"}]},{"type":"rich_text_section","elements":[{"type":"text","text":"Second item"}]}]}]}]},
-{"type":"message","user":"U09DJDQL1A8","text":"code","ts":"1791638770.000100","blocks":[{"type":"rich_text","block_id":"a2","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Run "},{"type":"text","text":"make","style":{"code":true}},{"type":"text","text":"\\n"}]},{"type":"rich_text_preformatted","elements":[{"type":"text","text":"elm make src/Main.elm"}],"border":0}]}]},
-{"type":"message","user":"U09DJDQL1A8","text":"Hello <@U09DK3NCPMG>","ts":"1791638760.000100","blocks":[{"type":"rich_text","block_id":"a3","elements":[{"type":"rich_text_section","elements":[{"type":"emoji","name":"wave","unicode":"1f44b"},{"type":"text","text":" Hello "},{"type":"user","user_id":"U09DK3NCPMG"},{"type":"text","text":" see "},{"type":"link","url":"https://at-chat.app","text":"at-chat"},{"type":"text","text":" in "},{"type":"channel","channel_id":"C09DJDQUKKN"},{"type":"text","text":" "},{"type":"text","text":"now","style":{"bold":true,"italic":true}}]}]}]},
+{"type":"message","user":"U09DJDQL1A8","text":"code","ts":"1791638770.000100","reactions":[{"name":"+1","users":["U09DK3NCPMG"],"count":1},{"name":"wave::skin-tone-3","users":["U09DK3NCPMG","U09DJDQL1A8"],"count":2},{"name":"partyparrot","users":["U09DK3NCPMG"],"count":1}],"blocks":[{"type":"rich_text","block_id":"a2","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Run "},{"type":"text","text":"make","style":{"code":true}},{"type":"text","text":"\\n"}]},{"type":"rich_text_preformatted","elements":[{"type":"text","text":"elm make src/Main.elm"}],"border":0}]}]},
+{"type":"message","user":"U09DJDQL1A8","text":"Hello <@U09DK3NCPMG>","ts":"1791638760.000100","thread_ts":"1791638760.000100","reply_count":2,"blocks":[{"type":"rich_text","block_id":"a3","elements":[{"type":"rich_text_section","elements":[{"type":"emoji","name":"wave","unicode":"1f44b"},{"type":"text","text":" Hello "},{"type":"user","user_id":"U09DK3NCPMG"},{"type":"text","text":" see "},{"type":"link","url":"https://at-chat.app","text":"at-chat"},{"type":"text","text":" in "},{"type":"channel","channel_id":"C09DJDQUKKN"},{"type":"text","text":" "},{"type":"text","text":"now","style":{"bold":true,"italic":true}}]}]}]},
 {"type":"message","subtype":"channel_join","user":"U09DK3NCPMG","text":"<@U09DK3NCPMG> has joined the channel","ts":"1791638750.000100"},
 {"type":"message","user":"U09DJDQL1A8","text":"Plain &lt;old&gt; message","ts":"1757024114.823749","is_beyond_free_limit":true}
 ],"has_more":false,"is_limited":true}"""
+
+
+{-| Slack includes the parent as the first message.
+-}
+slackThreadReplies : String
+slackThreadReplies =
+    """{"ok":true,"messages":[
+{"type":"message","user":"U09DJDQL1A8","text":"Hello","ts":"1791638760.000100","thread_ts":"1791638760.000100","reply_count":2},
+{"type":"message","user":"U09DK3NCPMG","text":"First reply","ts":"1791638761.000100","thread_ts":"1791638760.000100","parent_user_id":"U09DJDQL1A8"},
+{"type":"message","user":"U09DJDQL1A8","text":"Second reply","ts":"1791638762.000100","thread_ts":"1791638760.000100","parent_user_id":"U09DJDQL1A8"}
+],"has_more":false}"""
+
+
+slackEdgeRequest : Maybe Json.Decode.Value -> Maybe ( String, List String )
+slackEdgeRequest body =
+    case Maybe.map (Json.Decode.decodeValue Json.Decode.string) body of
+        Just (Ok text) ->
+            Json.Decode.decodeString
+                (Json.Decode.map2
+                    Tuple.pair
+                    (Json.Decode.field "token" Json.Decode.string)
+                    (Json.Decode.field "updated_ids" (Json.Decode.keyValuePairs Json.Decode.int) |> Json.Decode.map (List.map Tuple.first))
+                )
+                text
+                |> Result.toMaybe
+
+        Just (Err _) ->
+            Nothing
+
+        Nothing ->
+            Nothing
+
+
+slackTestUsers : Dict.Dict String String
+slackTestUsers =
+    Dict.fromList
+        [ ( "U09DJDQL1A8", """{"id":"U09DJDQL1A8","team_id":"T09DJDQL18U","name":"slack-admin","deleted":false,"is_bot":false,"profile":{"real_name":"Slack Admin","display_name":"","avatar_hash":"g3c2057c0c87"}}""" )
+        , ( "U09DK3NCPMG", """{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","deleted":false,"is_bot":false,"profile":{"real_name":"Ziggler","display_name":"zig","avatar_hash":"g5c945c6010c"}}""" )
+        , ( "U0THIRD", """{"id":"U0THIRD","team_id":"T09DJDQL18U","name":"third","deleted":false,"is_bot":false,"profile":{"real_name":"Third Person","display_name":""}}""" )
+        , ( "U09DFEXKH9T", """{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}""" )
+        , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":""}}""" )
+        ]
 
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
@@ -2344,6 +2469,17 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                                 -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
                                 if String.contains "796138864933863456" request.url then
                                     UnhandledHttpRequest
+
+                                else if
+                                    String.startsWith "https://files.slack.com/" request.url
+                                        && not
+                                            (List.member { key = "Cookie", value = "d=" ++ legitSlackCookie } request.headers
+                                                && List.any
+                                                    (\token -> List.member { key = "Authorization", value = "Bearer " ++ token } request.headers)
+                                                    [ legitSlackToken, secondSlackToken ]
+                                            )
+                                then
+                                    httpBasic currentRequest.url 401 "Invalid permissions 2"
 
                                 else
                                     httpBasic
@@ -2601,13 +2737,19 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Discord_SendMessage _ _ _ _ _ _ ->
                     True
 
-                Local_Slack_SendMessage _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ ->
+                    True
+
+                Local_Slack_SendEditMessage _ _ _ _ _ ->
                     True
 
                 Local_Slack_UnlinkUser _ ->
                     True
 
                 Local_Slack_LoadChannelMessages _ _ _ ->
+                    True
+
+                Local_Slack_LoadThreadMessages _ _ _ _ ->
                     True
 
                 Local_NewChannel _ _ _ _ ->
@@ -2688,6 +2830,18 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         ViewDiscordChannelThread _ _ ->
+                            True
+
+                        ViewSlackChannel _ _ ->
+                            True
+
+                        ViewSlackDm _ _ ->
+                            True
+
+                        ViewSlackChannelThread _ _ ->
+                            True
+
+                        ViewSlackDmThread _ _ ->
                             True
 
                         StopViewingChannel ->
@@ -2847,16 +3001,25 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_SendMessage _ _ _ ->
+                        Types.Server_Slack_SendMessage _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_EditMessage _ _ _ _ ->
+                        Types.Server_Slack_EditMessage _ _ _ _ _ ->
                             True
 
                         Types.Server_Slack_DeleteMessage _ _ ->
                             True
 
                         Types.Server_Slack_UnlinkUser _ ->
+                            True
+
+                        Types.Server_Slack_UserLoaded _ _ ->
+                            True
+
+                        Types.Server_Slack_AddReactionEmoji _ _ _ _ ->
+                            True
+
+                        Types.Server_Slack_RemoveReactionEmoji _ _ _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ _ ->
@@ -3316,9 +3479,50 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_workspace (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace normalText
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText
+    , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_workspace threadRouteWithMessage normalText
+    , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_dm threadRouteWithMessage normalText
+    , Local_Slack_LoadThreadMessages slackGuildOrDmId_workspace (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_Slack_LoadThreadMessages slackGuildOrDmId_dm (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackChannelThread
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+            , threadId = Id.fromInt 0
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackDmThread
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", channelId = Slack.Id "D09DK3P5RPC" }
+            , threadId = Id.fromInt 0
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
     , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackChannel
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
+    , Local_CurrentlyViewing
+        { markMessagesAsViewed = True }
+        (ViewSlackDm
+            { id = { currentUserId = Slack.Id "U09DJDQL1A8", channelId = Slack.Id "D09DK3P5RPC" }
+            , previouslyLastViewedMessage = UserSession.DontCare
+            }
+            EmptyPlaceholder
+        )
+    , Local_SetLastViewed (SlackGuildOrDmId slackGuildOrDmId_workspace) (NoThreadWithMessage (Id.fromInt 0))
+    , Local_SetLastViewed (SlackGuildOrDmId slackGuildOrDmId_dm) (NoThreadWithMessage (Id.fromInt 0))
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_ExpandUserOptionSection UserSession.UserOption_Debug { collapseOthers = False }

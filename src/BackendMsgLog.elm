@@ -35,6 +35,11 @@ type BackendMsgLog
     | BackendMsgLog_SentNotification
     | BackendMsgLog_GotVapidKeys
     | BackendMsgLog_LinkDiscordUserStep1
+    | BackendMsgLog_GotSlackUser
+    | BackendMsgLog_SlackChangedReaction
+    | BackendMsgLog_SlackDeletedMessage
+    | BackendMsgLog_SlackEditedMessage
+    | BackendMsgLog_SlackMessageFilesUploaded
     | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_LinkSlackUserStep2
     | BackendMsgLog_SentSlackMessage
@@ -165,6 +170,21 @@ backendMsgLogToString log =
 
         BackendMsgLog_LinkDiscordUserStep1 ->
             "LinkDiscordUserStep1"
+
+        BackendMsgLog_GotSlackUser ->
+            "GotSlackUser"
+
+        BackendMsgLog_SlackChangedReaction ->
+            "SlackChangedReaction"
+
+        BackendMsgLog_SlackDeletedMessage ->
+            "SlackDeletedMessage"
+
+        BackendMsgLog_SlackEditedMessage ->
+            "SlackEditedMessage"
+
+        BackendMsgLog_SlackMessageFilesUploaded ->
+            "SlackMessageFilesUploaded"
 
         BackendMsgLog_LinkSlackUserStep1 ->
             "LinkSlackUserStep1"

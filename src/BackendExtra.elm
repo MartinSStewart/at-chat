@@ -1491,6 +1491,18 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
             UserSession.Viewing_DiscordDm _ ->
                 visibleDmUsers
 
+            UserSession.Viewing_SlackChannel _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_SlackDm _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_SlackChannelThread _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_SlackDmThread _ ->
+                visibleDmUsers
+
             UserSession.Viewing_None ->
                 visibleDmUsers
 
@@ -1707,7 +1719,7 @@ adminSlackDmChannels model =
                                 Just (SlackFullData linkedUser) ->
                                     linkedUser.user.name
 
-                                Just (SlackBasicData user) ->
+                                Just (SlackBasicData { user }) ->
                                     user.name
 
                                 Nothing ->
@@ -1765,7 +1777,7 @@ adminSlackWorkspaces model =
                                 else
                                     count
 
-                            SlackBasicData user ->
+                            SlackBasicData { user } ->
                                 if user.teamId == teamId then
                                     count + 1
 
@@ -2768,6 +2780,21 @@ backendMsgLog msg =
         LinkDiscordUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkDiscordUserStep1
 
+        GotSlackUser _ _ ->
+            BackendMsgLog_GotSlackUser
+
+        SlackChangedReaction _ _ _ ->
+            BackendMsgLog_SlackChangedReaction
+
+        SlackDeletedMessage _ _ _ ->
+            BackendMsgLog_SlackDeletedMessage
+
+        SlackEditedMessage _ _ _ ->
+            BackendMsgLog_SlackEditedMessage
+
+        SlackMessageFilesUploaded _ _ _ ->
+            BackendMsgLog_SlackMessageFilesUploaded
+
         LinkSlackUserStep1 _ _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep1
 
@@ -2903,7 +2930,7 @@ backendMsgLog msg =
         BackendMsgCompleted _ _ ->
             BackendMsgLog_BackendMsgCompleted
 
-        SentSlackMessage _ _ _ _ _ _ _ _ ->
+        SentSlackMessage _ _ _ _ _ _ _ _ _ ->
             BackendMsgLog_SentSlackMessage
 
         SlackWebsocketCreatedHandle _ _ ->
@@ -3152,14 +3179,20 @@ toBackendLog toBackend =
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedEditMessage
 
-                Local_Slack_SendMessage _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ ->
                     ToBackendLog_Local_Slack_SendMessage
+
+                Local_Slack_SendEditMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_Slack_SendEditMessage
 
                 Local_Slack_UnlinkUser _ ->
                     ToBackendLog_Local_Slack_UnlinkUser
 
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     ToBackendLog_Local_Slack_LoadChannelMessages
+
+                Local_Slack_LoadThreadMessages _ _ _ _ ->
+                    ToBackendLog_Local_Slack_LoadThreadMessages
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend

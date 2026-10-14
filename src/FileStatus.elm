@@ -848,15 +848,20 @@ secretKeyHeader secretKey =
 
 
 {-| Backend initiated, so there is no browser and no cookie. The server secret
-is what tells the Rust server this came from us.
+is what tells the Rust server this came from us. The Rust server downloads the file at the url,
+sending the given headers along with the request, and stores it.
 -}
-uploadUrl : SecretId ServerSecret -> String -> Task restriction Http.Error UploadResponse
-uploadUrl secretKey url =
+uploadUrl : SecretId ServerSecret -> String -> List ( String, String ) -> Task restriction Http.Error UploadResponse
+uploadUrl secretKey url headers =
     Http.task
         { method = "POST"
         , headers = [ secretKeyHeader secretKey ]
         , url = domain ++ "/file/internal/upload-url"
-        , body = Http.jsonBody (Codec.encodeToValue uploadUrlCodec { url = url })
+        , body =
+            Codec.encodeToValue
+                uploadUrlCodec
+                { url = url, headers = List.map (\( key, value ) -> { key = key, value = value }) headers }
+                |> Http.jsonBody
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }
@@ -883,13 +888,23 @@ discordStickerUrl stickerId format =
 
 
 type alias UploadUrlRequest =
-    { url : String }
+    { url : String, headers : List { key : String, value : String } }
 
 
 uploadUrlCodec : Codec UploadUrlRequest
 uploadUrlCodec =
     Codec.object UploadUrlRequest
         |> Codec.field "url" .url Codec.string
+        |> Codec.field
+            "headers"
+            .headers
+            (Codec.list
+                (Codec.object (\key value -> { key = key, value = value })
+                    |> Codec.field "key" .key Codec.string
+                    |> Codec.field "value" .value Codec.string
+                    |> Codec.buildObject
+                )
+            )
         |> Codec.buildObject
 
 

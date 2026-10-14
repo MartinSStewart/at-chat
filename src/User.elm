@@ -15,6 +15,7 @@ module User exposing
     , addNewStickers
     , addRecentlyUsedEmoji
     , addRecentlyUsedEmojis
+    , addSlackDirectMention
     , allUsers
     , backendToFrontendCurrent
     , backendToFrontendForUser
@@ -30,6 +31,7 @@ module User exposing
     , missingName
     , multipleDiscordProfileImages
     , multipleProfileImages
+    , multipleSlackProfileImages
     , privateKeyForAccount
     , profileImage
     , profileImageHtml
@@ -49,6 +51,7 @@ module User exposing
     , setLastDiscordChannelViewed
     , setLastDiscordDmViewed
     , setLastDmViewed
+    , setLastSlackChannelViewed
     , setLastViewedMessage
     , setName
     , slackUserColor
@@ -75,7 +78,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId, Viewing_SlackChannelId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import Message exposing (MessageContent)
@@ -128,6 +131,7 @@ type alias BackendUser =
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
@@ -301,6 +305,7 @@ type alias FrontendCurrentUser =
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
@@ -434,6 +439,7 @@ init createdAt name email userIsAdmin =
     , discordNotifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
+    , slackDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
@@ -481,6 +487,16 @@ addDiscordDirectMention :
     -> { a | discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater) }
 addDiscordDirectMention guildId channelId threadRoute user =
     { user | discordDirectMentions = addDirectMentionHelper guildId channelId threadRoute user.discordDirectMentions }
+
+
+addSlackDirectMention :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRoute
+    -> { a | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater) }
+addSlackDirectMention teamId channelId threadRoute user =
+    { user | slackDirectMentions = addDirectMentionHelper teamId channelId threadRoute user.slackDirectMentions }
 
 
 addDirectMentionHelper :
@@ -683,6 +699,73 @@ setLastDiscordChannelViewed id threadRoute user =
                 | lastViewedMessage =
                     SeqDict.insert
                         (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
+                        messageId
+                        user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
+
+
+setLastSlackChannelViewed :
+    Viewing_SlackChannelId
+    -> ThreadRouteWithMaybeMessage
+    ->
+        { a
+            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    ->
+        { a
+            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+setLastSlackChannelViewed id threadRoute user =
+    let
+        threadRouteNoMessage : ThreadRoute
+        threadRouteNoMessage =
+            case threadRoute of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        user2 =
+            { user
+                | slackDirectMentions =
+                    SeqDict.update
+                        id.teamId
+                        (Maybe.andThen
+                            (\dict ->
+                                NonemptyDict.toSeqDict dict
+                                    |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
+                                    |> NonemptyDict.fromSeqDict
+                            )
+                        )
+                        user.slackDirectMentions
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace id), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert
+                        (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id))
                         messageId
                         user2.lastViewedMessage
             }
@@ -943,6 +1026,7 @@ backendToFrontendCurrent email user =
     , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
+    , slackDirectMentions = user.slackDirectMentions
     , lastPushNotification = user.lastPushNotification
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
@@ -1348,6 +1432,72 @@ multipleDiscordProfileImages profileImages =
                 , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (discordSmallProfileImage three))
                 , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (discordSmallProfileImage two))
                 , Ui.inFront (discordSmallProfileImage one)
+                , Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 45, y = 15, z = 0 }
+                        , Ui.background MyUi.background1
+                        , Ui.width (Ui.px smallProfileImageSize)
+                        , Ui.height (Ui.px smallProfileImageSize)
+                        , Ui.Font.center
+                        , Ui.Font.bold
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.Font.size 14
+                        , Ui.contentCenterY
+                        , MyUi.htmlStyle "white-space" "pre"
+                        ]
+                        (Ui.text ("+" ++ String.fromInt (List.length rest)))
+                    )
+                ]
+                Ui.none
+
+
+multipleSlackProfileImages : List SlackFrontendUser -> Element msg
+multipleSlackProfileImages profileImages =
+    case profileImages of
+        [] ->
+            Ui.none
+
+        [ single ] ->
+            profileImage (Just single)
+
+        [ one, two ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                ]
+                Ui.none
+
+        [ one, two, three ] ->
+            Ui.el
+                [ Ui.width (Ui.px 55)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                ]
+                Ui.none
+
+        [ one, two, three, four ] ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = 15, z = 0 } ] (smallProfileImage False (Just four)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
+                ]
+                Ui.none
+
+        one :: two :: three :: rest ->
+            Ui.el
+                [ Ui.width (Ui.px 70)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage False (Just three)))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage False (Just two)))
+                , Ui.inFront (smallProfileImage False (Just one))
                 , Ui.inFront
                     (Ui.el
                         [ Ui.move { x = 45, y = 15, z = 0 }

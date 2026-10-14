@@ -3,11 +3,16 @@ module Slack exposing
     , ChannelId
     , DmChannel
     , DmChannelId
+    , File
+    , FileId
+    , History
     , HttpError(..)
     , Id(..)
+    , InThread(..)
     , Message
     , MessageContent(..)
     , MessageId
+    , Reaction
     , RichTextElement(..)
     , RichTextInline(..)
     , SlackCookie(..)
@@ -20,17 +25,25 @@ module Slack exposing
     , UserBoot
     , UserId
     , WebsocketEvent(..)
+    , addReaction
+    , deleteMessage
+    , fileHeaders
+    , history
     , httpErrorToString
     , idToString
-    , newestMessages
+    , messageFiles
+    , messageUserIds
     , noStyle
     , parseWebsocketEvent
     , postMessage
+    , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
+    , updateMessage
     , userBoot
     , userConversations
-    , users
+    , userInfo
+    , usersById
     , validateSlackData
     , websocketRelayRequest
     , websocketRelayUrl
@@ -45,9 +58,11 @@ import Effect.Time as Time
 import Env
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
+import SeqDict exposing (SeqDict)
 import Url
 
 
@@ -173,6 +188,10 @@ type MessageId
     = MessageId Never
 
 
+type FileId
+    = FileId Never
+
+
 idToString : Id a -> String
 idToString (Id id) =
     id
@@ -217,11 +236,14 @@ httpErrorToString error =
             "Bad url " ++ url
 
 
+{-| The icon is left out when the workspace hasn't picked one and Slack would show a generic
+picture.
+-}
 type alias Team =
     { id : Id TeamId
     , name : String
     , domain : String
-    , icon : String
+    , icon : Maybe String
     }
 
 
@@ -260,16 +282,33 @@ userBoot secretKey cookie token =
 
 decodeUser : Decoder User
 decodeUser =
-    Decode.map8
-        User
-        (Decode.field "id" decodeId)
-        (Decode.field "team_id" decodeId)
+    Decode.map2 Tuple.pair (Decode.field "id" decodeId) (Decode.field "team_id" decodeId)
+        |> Decode.andThen (\( userId, teamId ) -> decodeUserHelper userId teamId)
+
+
+decodeUserHelper : Id UserId -> Id TeamId -> Decoder User
+decodeUserHelper userId teamId =
+    Decode.map6
+        (User userId teamId)
         (Decode.field "name" Decode.string)
         (optionalString [ "profile", "real_name" ])
         (optionalString [ "profile", "display_name" ])
-        (optionalString [ "profile", "image_72" ])
+        (decodeUserImage userId teamId)
         (optionalBool "is_bot")
         (optionalBool "deleted")
+
+
+{-| client.userBoot and the edge API leave out the image\_ urls but give an avatar\_hash, which
+Slack's avatar CDN serves the picture from.
+-}
+decodeUserImage : Id UserId -> Id TeamId -> Decoder String
+decodeUserImage (Id userId) (Id teamId) =
+    Decode.oneOf
+        [ Decode.at [ "profile", "image_192" ] Decode.string
+        , Decode.at [ "profile", "avatar_hash" ] Decode.string
+            |> Decode.map (\hash -> "https://ca.slack-edge.com/" ++ teamId ++ "-" ++ userId ++ "-" ++ hash ++ "-192")
+        , Decode.succeed ""
+        ]
 
 
 optionalString : List String -> Decoder String
@@ -277,42 +316,162 @@ optionalString path =
     Decode.oneOf [ Decode.at path Decode.string, Decode.succeed "" ]
 
 
-{-| Everyone in the workspace, deleted users included since they can still have written messages.
--}
-users : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly HttpError (List User)
-users secretKey cookie token =
-    usersHelper secretKey cookie token Nothing []
-
-
-usersHelper :
-    SecretId ServerSecret
-    -> SlackCookie
-    -> SlackToken
-    -> Maybe String
-    -> List User
-    -> Task BackendOnly HttpError (List User)
-usersHelper secretKey cookie token cursor usersSoFar =
+userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id UserId -> Task BackendOnly HttpError User
+userInfo secretKey cookie token userId =
     http
         secretKey
         cookie
         token
-        "users.list"
-        (( "limit", "200" ) :: cursorParameter cursor)
-        (Decode.map2
-            Tuple.pair
-            (Decode.field "members" (Decode.list decodeUser))
-            decodeNextCursor
-        )
+        "users.info"
+        [ ( "user", idToString userId ) ]
+        (Decode.field "user" decodeUser)
         |> retryWhenRateLimited
-        |> Task.andThen
-            (\( users2, nextCursor ) ->
-                case nextCursor of
-                    Just nextCursor2 ->
-                        usersHelper secretKey cookie token (Just nextCursor2) (usersSoFar ++ users2)
 
-                    Nothing ->
-                        Task.succeed (usersSoFar ++ users2)
+
+{-| Loads many users at once through the edge API Slack's web client uses. It isn't documented, so
+if a batch fails we look its users up one at a time with users.info instead. Users that can't be
+loaded either way are left out.
+-}
+usersById :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id TeamId
+    -> List (Id UserId)
+    -> Task BackendOnly x (List User)
+usersById secretKey cookie token teamId userIds =
+    List.Extra.greedyGroupsOf 100 userIds
+        |> List.map
+            (\batch ->
+                edgeUsersInfo secretKey cookie token teamId batch
+                    |> Task.onError
+                        (\_ ->
+                            List.map
+                                (\userId ->
+                                    userInfo secretKey cookie token userId
+                                        |> Task.map Just
+                                        |> Task.onError (\_ -> Task.succeed Nothing)
+                                )
+                                batch
+                                |> Task.sequence
+                                |> Task.map (List.filterMap identity)
+                        )
             )
+        |> Task.sequence
+        |> Task.map List.concat
+
+
+edgeUsersInfo :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id TeamId
+    -> List (Id UserId)
+    -> Task BackendOnly HttpError (List User)
+edgeUsersInfo secretKey (SlackCookie cookie) (SlackToken token) teamId userIds =
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "x-secret-key" (SecretId.toString secretKey) ]
+        , url = rustServerDomain ++ "/file/internal/custom-request"
+        , body =
+            Json.Encode.object
+                [ ( "method", Json.Encode.string "POST" )
+                , ( "url", Json.Encode.string ("https://edgeapi.slack.com/cache/" ++ idToString teamId ++ "/users/info") )
+                , ( "headers"
+                  , Json.Encode.list
+                        (\( key, value ) ->
+                            Json.Encode.object
+                                [ ( "key", Json.Encode.string key )
+                                , ( "value", Json.Encode.string value )
+                                ]
+                        )
+                        [ ( "Content-Type", "application/json" )
+                        , ( "Cookie", "d=" ++ cookie )
+                        ]
+                  )
+                , ( "body"
+                  , Json.Encode.object
+                        [ ( "token", Json.Encode.string token )
+                        , ( "check_interaction", Json.Encode.bool True )
+                        , ( "updated_ids", Json.Encode.object (List.map (\userId -> ( idToString userId, Json.Encode.int 0 )) userIds) )
+                        ]
+                        |> Json.Encode.encode 0
+                        |> Json.Encode.string
+                  )
+                ]
+                |> Http.jsonBody
+        , resolver = Http.stringResolver (resolveResponse (Decode.field "results" (Decode.list (decodeEdgeUser teamId)) |> Decode.map Ok))
+        , timeout = Just Duration.minute
+        }
+        |> retryWhenRateLimited
+
+
+{-| Same as decodeUser except the edge API might leave out team\_id.
+-}
+decodeEdgeUser : Id TeamId -> Decoder User
+decodeEdgeUser teamId =
+    Decode.map2
+        Tuple.pair
+        (Decode.field "id" decodeId)
+        (Decode.oneOf [ Decode.field "team_id" decodeId, Decode.succeed teamId ])
+        |> Decode.andThen (\( userId, teamId2 ) -> decodeUserHelper userId teamId2)
+
+
+{-| Who wrote the message and everyone it mentions.
+-}
+messageUserIds : Message -> List (Id UserId)
+messageUserIds message =
+    case message.content of
+        TextMessage { blocks } ->
+            message.user
+                :: List.concatMap
+                    (\element ->
+                        case element of
+                            RichTextSection inlines ->
+                                inlineUserIds inlines
+
+                            RichTextPreformatted inlines ->
+                                inlineUserIds inlines
+
+                            RichTextQuote inlines ->
+                                inlineUserIds inlines
+
+                            RichTextList items ->
+                                List.concatMap inlineUserIds items
+                    )
+                    blocks
+
+        JoinedChannel ->
+            [ message.user ]
+
+
+inlineUserIds : List RichTextInline -> List (Id UserId)
+inlineUserIds inlines =
+    List.filterMap
+        (\inline ->
+            case inline of
+                RichText_User userId ->
+                    Just userId
+
+                RichText_Text _ ->
+                    Nothing
+
+                RichText_Link _ ->
+                    Nothing
+
+                RichText_Emoji _ ->
+                    Nothing
+
+                RichText_Channel _ ->
+                    Nothing
+
+                RichText_Broadcast _ ->
+                    Nothing
+
+                RichText_Date _ ->
+                    Nothing
+        )
+        inlines
 
 
 decodeTeam : Decoder Team
@@ -322,7 +481,17 @@ decodeTeam =
         (Decode.field "id" decodeId)
         (Decode.field "name" Decode.string)
         (Decode.field "domain" Decode.string)
-        (Decode.at [ "icon", "image_132" ] Decode.string)
+        (Decode.map2
+            (\isDefault url ->
+                if isDefault then
+                    Nothing
+
+                else
+                    Just url
+            )
+            (Decode.oneOf [ Decode.at [ "icon", "image_default" ] Decode.bool, Decode.succeed False ])
+            (Decode.at [ "icon", "image_132" ] Decode.string)
+        )
 
 
 type alias Message =
@@ -330,11 +499,39 @@ type alias Message =
     , createdAt : Time.Posix
     , user : Id UserId
     , content : MessageContent
+    , inThread : InThread
+    , replyCount : Int
+    , reactions : List Reaction
+    }
+
+
+{-| Slack names the emoji rather than sending it.
+-}
+type alias Reaction =
+    { name : String
+    , users : List (Id UserId)
+    }
+
+
+{-| A thread's parent isn't in it, only its replies are. A reply that was also sent to the channel
+shows up in both.
+-}
+type InThread
+    = NotAReply
+    | ReplyTo (Id MessageId)
+    | BroadcastReplyTo (Id MessageId)
+
+
+{-| A conversation's newest messages, and the replies of each of them that has a thread.
+-}
+type alias History =
+    { messages : List Message
+    , replies : SeqDict (Id MessageId) (List Message)
     }
 
 
 type MessageContent
-    = TextMessage { text : String, blocks : List RichTextElement }
+    = TextMessage { text : String, blocks : List RichTextElement, files : List File }
     | JoinedChannel
 
 
@@ -390,6 +587,61 @@ newestMessages secretKey cookie token limit channelId =
         |> Task.onError (\_ -> Task.succeed [])
 
 
+history :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Int
+    -> Id channelId
+    -> Task BackendOnly x History
+history secretKey cookie token limit channelId =
+    newestMessages secretKey cookie token limit channelId
+        |> Task.andThen
+            (\messages ->
+                List.filterMap
+                    (\message ->
+                        if message.replyCount > 0 then
+                            threadReplies secretKey cookie token channelId message.id
+                                |> Task.map (Tuple.pair message.id)
+                                |> Just
+
+                        else
+                            Nothing
+                    )
+                    messages
+                    |> Task.sequence
+                    |> Task.map (\replies -> { messages = messages, replies = SeqDict.fromList replies })
+            )
+
+
+{-| Oldest first. Slack includes the thread's parent, it's left out here.
+-}
+threadReplies :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly x (List Message)
+threadReplies secretKey cookie token channelId threadId =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.replies"
+        [ ( "channel", idToString channelId )
+        , ( "ts", idToString threadId )
+        , ( "limit", "1000" )
+        , ( "include_free_team_extra_messages", "true" )
+        ]
+        (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
+            |> Decode.map (List.filterMap identity)
+        )
+        |> retryWhenRateLimited
+        |> Task.map (List.filter (\message -> message.id /= threadId))
+        |> Task.onError (\_ -> Task.succeed [])
+
+
 {-| Returns the ts Slack gave the message, which is also its id. The text is only what notifications
 show, the blocks are what Slack displays.
 -}
@@ -398,16 +650,94 @@ postMessage :
     -> SlackCookie
     -> SlackToken
     -> Id channelId
+    -> Maybe (Id MessageId)
     -> String
     -> List RichTextElement
     -> Task BackendOnly HttpError (Id MessageId)
-postMessage secretKey cookie token channelId text blocks =
+postMessage secretKey cookie token channelId maybeThreadId text blocks =
     http
         secretKey
         cookie
         token
         "chat.postMessage"
+        ([ ( "channel", idToString channelId )
+         , ( "text", text )
+         , ( "blocks"
+           , Json.Encode.list
+                identity
+                [ Json.Encode.object
+                    [ ( "type", Json.Encode.string "rich_text" )
+                    , ( "elements", Json.Encode.list encodeRichTextElement blocks )
+                    ]
+                ]
+                |> Json.Encode.encode 0
+           )
+         ]
+            ++ (case maybeThreadId of
+                    Just threadId ->
+                        [ ( "thread_ts", idToString threadId ) ]
+
+                    Nothing ->
+                        []
+               )
+        )
+        (Decode.field "ts" decodeId)
+
+
+addReaction :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> Task BackendOnly HttpError ()
+addReaction secretKey cookie token channelId messageId name =
+    http
+        secretKey
+        cookie
+        token
+        "reactions.add"
+        [ ( "channel", idToString channelId ), ( "timestamp", idToString messageId ), ( "name", name ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+deleteMessage :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly HttpError ()
+deleteMessage secretKey cookie token channelId messageId =
+    http
+        secretKey
+        cookie
+        token
+        "chat.delete"
+        [ ( "channel", idToString channelId ), ( "ts", idToString messageId ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+updateMessage :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> List RichTextElement
+    -> Task BackendOnly HttpError ()
+updateMessage secretKey cookie token channelId messageId text blocks =
+    http
+        secretKey
+        cookie
+        token
+        "chat.update"
         [ ( "channel", idToString channelId )
+        , ( "ts", idToString messageId )
         , ( "text", text )
         , ( "blocks"
           , Json.Encode.list
@@ -420,7 +750,27 @@ postMessage secretKey cookie token channelId text blocks =
                 |> Json.Encode.encode 0
           )
         ]
-        (Decode.field "ts" decodeId)
+        (Decode.succeed ())
+        |> retryWhenRateLimited
+
+
+removeReaction :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> String
+    -> Task BackendOnly HttpError ()
+removeReaction secretKey cookie token channelId messageId name =
+    http
+        secretKey
+        cookie
+        token
+        "reactions.remove"
+        [ ( "channel", idToString channelId ), ( "timestamp", idToString messageId ), ( "name", name ) ]
+        (Decode.succeed ())
+        |> retryWhenRateLimited
 
 
 encodeRichTextElement : RichTextElement -> Json.Encode.Value
@@ -530,36 +880,115 @@ noStyle =
     { bold = False, italic = False, strike = False, code = False }
 
 
+{-| A file attached to a message. Files that have been deleted, or that a free workspace hides
+once they're too old, come without a url and are left out.
+-}
+type alias File =
+    { id : Id FileId
+    , name : String
+    , mimetype : String
+    , size : Int
+    , url : String
+    }
+
+
+decodeFile : Decoder File
+decodeFile =
+    Decode.map5
+        File
+        (Decode.field "id" decodeId)
+        (Decode.field "name" Decode.string)
+        (Decode.oneOf [ Decode.field "mimetype" Decode.string, Decode.succeed "" ])
+        (Decode.oneOf [ Decode.field "size" Decode.int, Decode.succeed 0 ])
+        (Decode.field "url_private" Decode.string)
+
+
+messageFiles : Message -> List File
+messageFiles message =
+    case message.content of
+        TextMessage { files } ->
+            files
+
+        JoinedChannel ->
+            []
+
+
+{-| Downloading a file from files.slack.com needs the same credentials as the API.
+-}
+fileHeaders : SlackCookie -> SlackToken -> List ( String, String )
+fileHeaders (SlackCookie cookie) (SlackToken token) =
+    [ ( "Cookie", "d=" ++ cookie ), ( "Authorization", "Bearer " ++ token ) ]
+
+
 {-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
 show for fail to decode.
 -}
 decodeMessage : Decoder Message
 decodeMessage =
-    Decode.map4
-        Message
-        (Decode.field "ts" decodeId)
-        (Decode.field "ts" decodeTimestamp)
-        (Decode.field "user" decodeId)
-        (Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
-            |> Decode.andThen
-                (\subtype ->
-                    if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
-                        Decode.map2
-                            (\text blocks -> TextMessage { text = text, blocks = blocks })
+    Decode.oneOf [ Decode.field "subtype" Decode.string, Decode.succeed "" ]
+        |> Decode.andThen
+            (\subtype ->
+                Decode.map7
+                    Message
+                    (Decode.field "ts" decodeId)
+                    (Decode.field "ts" decodeTimestamp)
+                    (Decode.field "user" decodeId)
+                    (if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
+                        Decode.map3
+                            (\text blocks files -> TextMessage { text = text, blocks = blocks, files = files })
                             (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
                             (Decode.oneOf
                                 [ Decode.field "blocks" (Decode.list decodeBlock) |> Decode.map List.concat
                                 , Decode.succeed []
                                 ]
                             )
+                            (Decode.oneOf
+                                [ Decode.field "files" (Decode.list (Decode.maybe decodeFile))
+                                    |> Decode.map (List.filterMap identity)
+                                , Decode.succeed []
+                                ]
+                            )
 
-                    else if subtype == "channel_join" then
+                     else if subtype == "channel_join" then
                         Decode.succeed JoinedChannel
 
-                    else
+                     else
                         Decode.fail ("Unsupported subtype " ++ subtype)
-                )
-        )
+                    )
+                    (Decode.map2
+                        (\ts maybeThreadTs ->
+                            case maybeThreadTs of
+                                Just threadTs ->
+                                    if threadTs == ts then
+                                        NotAReply
+
+                                    else if subtype == "thread_broadcast" then
+                                        BroadcastReplyTo (Id threadTs)
+
+                                    else
+                                        ReplyTo (Id threadTs)
+
+                                Nothing ->
+                                    NotAReply
+                        )
+                        (Decode.field "ts" Decode.string)
+                        (Decode.maybe (Decode.field "thread_ts" Decode.string))
+                    )
+                    (Decode.oneOf [ Decode.field "reply_count" Decode.int, Decode.succeed 0 ])
+                    (Decode.oneOf
+                        [ Decode.field
+                            "reactions"
+                            (Decode.list
+                                (Decode.map2
+                                    Reaction
+                                    (Decode.field "name" Decode.string)
+                                    (Decode.field "users" (Decode.list decodeId))
+                                )
+                            )
+                        , Decode.succeed []
+                        ]
+                    )
+            )
 
 
 
@@ -606,6 +1035,8 @@ type WebsocketEvent
     | WebsocketMessageCreated String Message
     | WebsocketMessageChanged String Message Time.Posix
     | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
+    | WebsocketReactionAdded { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+    | WebsocketReactionRemoved { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
     | WebsocketOtherEvent
 
 
@@ -623,8 +1054,6 @@ parseWebsocketEvent text =
                 WebsocketOtherEvent
 
 
-{-| Thread replies are left out since threads aren't supported yet.
--}
 decodeWebsocketEvent : Decoder WebsocketEvent
 decodeWebsocketEvent =
     Decode.map2 Tuple.pair
@@ -634,6 +1063,12 @@ decodeWebsocketEvent =
             (\( eventType, subtype ) ->
                 if eventType == "hello" then
                     Decode.succeed WebsocketHello
+
+                else if eventType == "reaction_added" then
+                    decodeReactionEvent |> Decode.map WebsocketReactionAdded
+
+                else if eventType == "reaction_removed" then
+                    decodeReactionEvent |> Decode.map WebsocketReactionRemoved
 
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent
@@ -657,28 +1092,30 @@ decodeWebsocketEvent =
                         (Decode.field "deleted_ts" decodeId)
 
                 else
-                    Decode.map3
-                        (\channel message isThreadReply ->
-                            if isThreadReply then
-                                WebsocketOtherEvent
-
-                            else
-                                WebsocketMessageCreated channel message
-                        )
+                    Decode.map2
+                        WebsocketMessageCreated
                         (Decode.field "channel" Decode.string)
                         decodeMessage
-                        (Decode.map2
-                            (\ts maybeThreadTs ->
-                                case maybeThreadTs of
-                                    Just threadTs ->
-                                        threadTs /= ts && subtype /= "thread_broadcast"
+            )
 
-                                    Nothing ->
-                                        False
-                            )
-                            (Decode.field "ts" Decode.string)
-                            (Decode.maybe (Decode.field "thread_ts" Decode.string))
-                        )
+
+{-| Reactions can also be on files, which at-chat doesn't show.
+-}
+decodeReactionEvent : Decoder { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+decodeReactionEvent =
+    Decode.at [ "item", "type" ] Decode.string
+        |> Decode.andThen
+            (\itemType ->
+                if itemType == "message" then
+                    Decode.map4
+                        (\user reaction channel messageId -> { user = user, reaction = reaction, channel = channel, messageId = messageId })
+                        (Decode.field "user" decodeId)
+                        (Decode.field "reaction" Decode.string)
+                        (Decode.at [ "item", "channel" ] Decode.string)
+                        (Decode.at [ "item", "ts" ] decodeId)
+
+                else
+                    Decode.fail "Not a reaction to a message"
             )
 
 
@@ -1088,36 +1525,37 @@ http secretKey (SlackCookie cookie) (SlackToken token) method parameters decoder
                   )
                 ]
                 |> Http.jsonBody
-        , resolver =
-            Http.stringResolver
-                (\response ->
-                    case response of
-                        Http.BadUrl_ url ->
-                            Err (BadUrl url)
-
-                        Http.Timeout_ ->
-                            Err Timeout
-
-                        Http.NetworkError_ ->
-                            Err NetworkError
-
-                        Http.BadStatus_ metadata body ->
-                            if metadata.statusCode == 429 then
-                                Err RateLimited
-
-                            else
-                                Err (BadStatus metadata.statusCode body)
-
-                        Http.GoodStatus_ _ body ->
-                            case Decode.decodeString (decodeResponse decoder) body of
-                                Ok result ->
-                                    result
-
-                                Err error ->
-                                    Err (BadBody (Decode.errorToString error))
-                )
+        , resolver = Http.stringResolver (resolveResponse (decodeResponse decoder))
         , timeout = Just Duration.minute
         }
+
+
+resolveResponse : Decoder (Result HttpError a) -> Http.Response String -> Result HttpError a
+resolveResponse decoder response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            if metadata.statusCode == 429 then
+                Err RateLimited
+
+            else
+                Err (BadStatus metadata.statusCode body)
+
+        Http.GoodStatus_ _ body ->
+            case Decode.decodeString decoder body of
+                Ok result ->
+                    result
+
+                Err error ->
+                    Err (BadBody (Decode.errorToString error))
 
 
 decodeResponse : Decoder a -> Decoder (Result HttpError a)

@@ -19,6 +19,7 @@ module DmChannel exposing
     , loadMessages
     , loadPage
     , loadRepliedToMatch
+    , loadThreadStarters
     , loadUnreadMessages
     , loadedMessages
     , toDiscordFrontendHelper

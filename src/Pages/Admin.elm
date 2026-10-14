@@ -2039,6 +2039,18 @@ viewingToString adminData viewing =
                 ++ ", thread "
                 ++ Id.toString data.id.threadId
 
+        Viewing_SlackChannel data ->
+            "Slack channel " ++ Slack.idToString data.id.channelId
+
+        Viewing_SlackDm data ->
+            "Slack DM " ++ Slack.idToString data.id.channelId
+
+        Viewing_SlackChannelThread data ->
+            "Slack channel " ++ Slack.idToString data.id.channelId ++ " thread " ++ Id.toString data.threadId
+
+        Viewing_SlackDmThread data ->
+            "Slack DM " ++ Slack.idToString data.id.channelId ++ " thread " ++ Id.toString data.threadId
+
         Viewing_None ->
             "Nothing"
 
@@ -4213,6 +4225,16 @@ slackWorkspacesSection isMobile expandedSections expandedSlackWorkspaces adminDa
                                                     )
                                                     (SeqDict.toList workspace.linkedUsers)
                                             )
+                                        , if SeqDict.isEmpty workspace.linkedUsers then
+                                            Ui.el
+                                                [ Ui.width Ui.shrink
+                                                , Ui.Font.color MyUi.errorColor
+                                                , MyUi.hoverText "No linked Slack user is in this workspace. It gets deleted once an hourly update has found it orphaned twice in a row."
+                                                ]
+                                                (Ui.text "Orphaned")
+
+                                          else
+                                            Ui.none
                                         , MyUi.deleteButton (deleteSlackWorkspaceButtonId teamId) (PressedDeleteSlackWorkspace teamId)
                                         ]
                                     , if isExpanded then
@@ -4299,6 +4321,27 @@ slackDmChannelsSection isMobile expandedSections adminData =
                                         )
                                     , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                                     , firstMessageView channel
+                                    , if
+                                        List.any
+                                            (\member ->
+                                                case SeqDict.get channel.teamId slackWorkspaces of
+                                                    Just workspace ->
+                                                        SeqDict.member member.id workspace.linkedUsers
+
+                                                    Nothing ->
+                                                        False
+                                            )
+                                            channel.members
+                                      then
+                                        Ui.none
+
+                                      else
+                                        Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.Font.color MyUi.errorColor
+                                            , MyUi.hoverText "No linked Slack user is in this DM. It gets deleted once an hourly update has found it orphaned twice in a row."
+                                            ]
+                                            (Ui.text "Orphaned")
                                     , MyUi.deleteButton (deleteSlackDmChannelButtonId channelId) (PressedDeleteSlackDmChannel channelId)
                                     ]
                             )

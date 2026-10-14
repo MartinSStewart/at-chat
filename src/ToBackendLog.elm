@@ -33,6 +33,7 @@ type ToBackendLog
     | ToBackendLog_Local_SendMessage
     | ToBackendLog_Local_Discord_SendMessage
     | ToBackendLog_Local_Slack_SendMessage
+    | ToBackendLog_Local_Slack_SendEditMessage
     | ToBackendLog_Local_Slack_UnlinkUser
     | ToBackendLog_Local_NewChannel
     | ToBackendLog_Local_EditChannel
@@ -59,6 +60,7 @@ type ToBackendLog
     | ToBackendLog_Local_LoadThreadMessages
     | ToBackendLog_Local_Discord_LoadChannelMessages
     | ToBackendLog_Local_Slack_LoadChannelMessages
+    | ToBackendLog_Local_Slack_LoadThreadMessages
     | ToBackendLog_Local_Discord_LoadThreadMessages
     | ToBackendLog_Local_SetGuildNotificationLevel
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
@@ -176,6 +178,9 @@ toBackendLogToString log =
         ToBackendLog_Local_Slack_SendMessage ->
             "Local_Slack_SendMessage"
 
+        ToBackendLog_Local_Slack_SendEditMessage ->
+            "Local_Slack_SendEditMessage"
+
         ToBackendLog_Local_Slack_UnlinkUser ->
             "Local_Slack_UnlinkUser"
 
@@ -253,6 +258,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Slack_LoadChannelMessages ->
             "Local_Slack_LoadChannelMessages"
+
+        ToBackendLog_Local_Slack_LoadThreadMessages ->
+            "Local_Slack_LoadThreadMessages"
 
         ToBackendLog_Local_Discord_LoadThreadMessages ->
             "Local_Discord_LoadThreadMessages"

@@ -165,6 +165,8 @@ module LocalState exposing
     , sentEnoughDiscordDmMessages
     , setDmE2ee
     , slackChannelMentions
+    , slackGuildOrDmIdToLatestMessages
+    , slackGuildOrDmIdToMessage
     , typingIn
     , updateAdminData
     , updateChannel
@@ -194,7 +196,7 @@ import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (BackendFileData, FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -220,7 +222,7 @@ import SessionIdHash exposing (SessionIdHash)
 import SetViewing exposing (SetViewing(..))
 import Slack
 import TextEditor
-import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
+import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt, SlackFrontendThread)
 import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
@@ -454,6 +456,7 @@ type alias FrontendChannel =
 
 type alias SlackFrontendWorkspace =
     { name : String
+    , icon : Maybe FileHash
     , channels : SeqDict (Slack.Id Slack.ChannelId) SlackFrontendChannel
     }
 
@@ -463,6 +466,7 @@ type alias SlackFrontendChannel =
     , isPrivate : Bool
     , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
+    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
     }
 
 
@@ -471,6 +475,7 @@ type alias SlackFrontendDmChannel =
     , members : NonemptySet (Slack.Id Slack.UserId)
     , messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
     , visibleMessages : VisibleMessages ChannelMessageId
+    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
     }
 
 
@@ -3405,6 +3410,65 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
+slackGuildOrDmIdToMessage :
+    SlackGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> LocalState
+    -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackGuildOrDmIdToMessage guildOrDmId threadRoute local =
+    let
+        helper : { a | messages : MessageArray messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) } -> Id messageId -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        helper thread messageId =
+            case MessageArray.get messageId thread.messages of
+                Just (UserTextMessage data) ->
+                    { createdAt = data.createdAt
+                    , createdBy = data.createdBy
+                    , content = data.content
+                    , reactions = data.reactions
+                    , editedAt = data.editedAt
+                    }
+                        |> Just
+
+                Just (EncryptedUserTextMessage _) ->
+                    Nothing
+
+                Just (UserJoinedMessage _ _ _ _) ->
+                    Nothing
+
+                Just (DeletedMessage _) ->
+                    Nothing
+
+                Just (CallStarted _) ->
+                    Nothing
+
+                Just (GameStarted _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        conversationHelper :
+            { a
+                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+            }
+            -> Maybe (UserTextMessageDataNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+        conversationHelper conversation =
+            case threadRoute of
+                ViewThreadWithMessage threadId messageId ->
+                    SeqDict.get threadId conversation.threads |> Maybe.andThen (\thread -> helper thread messageId)
+
+                NoThreadWithMessage messageId ->
+                    helper conversation messageId
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            getSlackWorkspaceAndChannel teamId channelId local |> Maybe.andThen (\( _, channel ) -> conversationHelper channel)
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            SeqDict.get channelId local.slackDmChannels |> Maybe.andThen conversationHelper
+
+
 getSlackWorkspaceAndChannel :
     Slack.Id Slack.TeamId
     -> Slack.Id Slack.ChannelId
@@ -3968,11 +4032,66 @@ routeToViewing isMobile route local =
         PublicGoMatchRoute _ ->
             StopViewingChannel
 
-        SlackWorkspaceRoute _ ->
-            StopViewingChannel
+        SlackWorkspaceRoute data ->
+            let
+                id : Viewing_SlackChannelId
+                id =
+                    { currentUserId = data.currentSlackUserId, teamId = data.teamId, channelId = data.channelId }
+            in
+            case getSlackWorkspaceAndChannel data.teamId data.channelId local of
+                Just _ ->
+                    if isMobile && data.channelsVisible == ChannelsVisibleOnMobile then
+                        StopViewingChannel
 
-        SlackDmRoute _ ->
-            StopViewingChannel
+                    else
+                        case data.threadRoute of
+                            NoThreadWithMaybeMessage _ ->
+                                ViewSlackChannel
+                                    { id = id
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
+                                    }
+                                    EmptyPlaceholder
+
+                            ViewThreadWithMaybeMessage threadId _ ->
+                                ViewSlackChannelThread
+                                    { id = id
+                                    , threadId = threadId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) threadId local
+                                    }
+                                    EmptyPlaceholder
+
+                Nothing ->
+                    StopViewingChannel
+
+        SlackDmRoute data ->
+            let
+                id : Viewing_SlackDmId
+                id =
+                    { currentUserId = data.currentSlackUserId, channelId = data.channelId }
+            in
+            if SeqDict.member data.channelId local.slackDmChannels && not (isMobile && data.channelsVisible == ChannelsVisibleOnMobile) then
+                case data.threadRoute of
+                    NoThreadWithMaybeMessage _ ->
+                        ViewSlackDm
+                            { id = id
+                            , previouslyLastViewedMessage =
+                                previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) local
+                            }
+                            EmptyPlaceholder
+
+                    ViewThreadWithMaybeMessage threadId _ ->
+                        ViewSlackDmThread
+                            { id = id
+                            , threadId = threadId
+                            , previouslyLastViewedMessage =
+                                previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Dm id)) threadId local
+                            }
+                            EmptyPlaceholder
+
+            else
+                StopViewingChannel
 
 
 guildOrDmIdToMessage :
@@ -4332,6 +4451,36 @@ discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+
+slackGuildOrDmIdToLatestMessages :
+    Int
+    -> SlackGuildOrDmId
+    -> ThreadRoute
+    -> LocalState
+    -> Maybe (List ( Int, MessageNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+slackGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
+    let
+        helper :
+            { a
+                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+            }
+            -> Maybe (List ( Int, MessageNoReply (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+        helper conversation =
+            case threadRoute of
+                ViewThread threadMessageIndex ->
+                    SeqDict.get threadMessageIndex conversation.threads |> Maybe.map (latestMessagesHelper count)
+
+                NoThread ->
+                    latestMessagesHelper count conversation |> Just
+    in
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            getSlackWorkspaceAndChannel teamId channelId local |> Maybe.andThen (\( _, channel ) -> helper channel)
+
+        SlackGuildOrDmId_Dm { channelId } ->
+            SeqDict.get channelId local.slackDmChannels |> Maybe.andThen helper
 
 
 guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
