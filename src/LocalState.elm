@@ -1068,6 +1068,7 @@ type alias AdminData =
     , sessions : AdminDataStatus (SeqDict SessionIdHash UserSession)
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
+    , seqDictWorks : List ( String, Int )
     }
 
 
