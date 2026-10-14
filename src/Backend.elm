@@ -291,6 +291,7 @@ init =
       , pendingGatewayReconnects = SeqDict.empty
       , pendingSlackSends = SeqDict.empty
       , pendingSlackReconnects = SeqDict.empty
+      , dummyField = 123
       }
     , Command.none
     )
