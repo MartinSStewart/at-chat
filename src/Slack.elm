@@ -10,9 +10,9 @@ module Slack exposing
     , MessageId
     , RichTextElement(..)
     , RichTextInline(..)
-    , SlackCookie
+    , SlackCookie(..)
     , SlackData
-    , SlackToken
+    , SlackToken(..)
     , Style
     , Team
     , TeamId
@@ -55,6 +55,8 @@ import Url
 -- AUTHENTICATION
 
 
+{-| OpaqueVariants
+-}
 type SlackToken
     = SlackToken String
 
@@ -64,6 +66,8 @@ w3_validate_SlackToken (SlackToken text) =
     stringToSlackToken text |> Result.map (\_ -> ())
 
 
+{-| OpaqueVariants
+-}
 type SlackCookie
     = SlackCookie String
 
