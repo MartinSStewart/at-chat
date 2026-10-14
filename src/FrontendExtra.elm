@@ -7048,6 +7048,7 @@ initAdminData adminData =
     , sessions = LocalState.AdminDataNotLoaded
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
+    , seqDictWorks = adminData.seqDictWorks
     }
 
 

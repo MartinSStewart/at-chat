@@ -354,6 +354,7 @@ type alias InitAdminData =
     , lastBackup : Maybe LastBackup
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
+    , seqDictWorks : List ( String, Int )
     }
 
 
@@ -3374,6 +3375,11 @@ exportSection isMobile timezone expandedSections adminData model =
                 (Ui.text "Send invalid type")
             , Ui.text "The backend should never receive this. If it does, an error gets logged."
             ]
+        , List.map
+            (\( key, value ) -> "(" ++ key ++ "," ++ String.fromInt value ++ ")")
+            adminData.seqDictWorks
+            |> String.join ", "
+            |> Ui.text
         ]
 
 

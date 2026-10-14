@@ -527,6 +527,7 @@ type alias BackendModel =
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
     , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
+    , dummyField : Int
     }
 
 

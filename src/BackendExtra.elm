@@ -1602,6 +1602,7 @@ adminData model lastLogPageViewed =
     , lastBackup = Maybe.map .backup model.lastBackup
     , wordSpellingGameEnglish = wordListStatus model.wordSpellingGameEnglish
     , wordSpellingGameSwedish = wordListStatus model.wordSpellingGameSwedish
+    , seqDictWorks = SeqDict.empty |> SeqDict.insert "698" 1 |> SeqDict.insert "237607" 2 |> SeqDict.insert "698" 3 |> SeqDict.toList
     }
 
 
