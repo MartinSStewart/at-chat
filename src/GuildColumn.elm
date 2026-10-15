@@ -11,10 +11,11 @@ module GuildColumn exposing
     , newMessageCount
     , rowLinkButton
     , slackDmHasNotifications
+    , slackWorkspaceCurrentUserId
+    , slackWorkspaceRoute
     , unreadNotificationCount
     )
 
-import ChannelName
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId
@@ -151,11 +152,11 @@ guildColumn isMobile route local canScroll2 =
 
 slackWorkspaceIcons : Route -> LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Element FrontendMsg_
 slackWorkspaceIcons route localUser teamId workspace =
-    case slackWorkspaceRoute localUser teamId workspace of
-        Just routeData ->
+    case slackWorkspaceCurrentUserId localUser teamId of
+        Just currentSlackUserId ->
             elLinkButton
                 (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
-                (SlackWorkspaceRoute routeData)
+                (slackWorkspaceRoute localUser currentSlackUserId teamId workspace)
                 []
                 (GuildIcon.slackView
                     (case route of
@@ -164,10 +165,10 @@ slackWorkspaceIcons route localUser teamId workspace =
                                 GuildIcon.IsSelected
 
                             else
-                                GuildIcon.Normal (slackWorkspaceHasNotifications routeData.currentSlackUserId localUser.user teamId workspace)
+                                GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
 
                         _ ->
-                            GuildIcon.Normal (slackWorkspaceHasNotifications routeData.currentSlackUserId localUser.user teamId workspace)
+                            GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
                     )
                     workspace.name
                     workspace.icon
@@ -294,29 +295,6 @@ slackWorkspaceCurrentUserId localUser teamId =
     SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) localUser.linkedSlackUsers |> SeqDict.keys |> List.head
 
 
-slackWorkspaceRoute : LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Maybe SlackWorkspaceRouteData
-slackWorkspaceRoute localUser teamId workspace =
-    case
-        ( slackWorkspaceCurrentUserId localUser teamId
-        , SeqDict.toList workspace.channels
-            |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
-            |> List.head
-        )
-    of
-        ( Just currentSlackUserId, Just ( channelId, _ ) ) ->
-            Just
-                { currentSlackUserId = currentSlackUserId
-                , teamId = teamId
-                , channelId = channelId
-                , threadRoute = NoThreadWithMaybeMessage Nothing
-                , channelsVisible = ChannelsVisibleOnMobile
-                , overlay = Nothing
-                }
-
-        _ ->
-            Nothing
-
-
 {-| Find the linked Discord user that is a member of this Discord guild (i.e. "us").
 -}
 discordGuildCurrentUserId : LocalUser -> DiscordFrontendGuild -> Maybe (Discord.Id Discord.UserId)
@@ -435,6 +413,34 @@ discordGuildRoute localUser discordUserId guildId guild =
     , overlay = Nothing
     }
         |> DiscordGuildRoute
+
+
+slackWorkspaceRoute : LocalUser -> Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Route
+slackWorkspaceRoute localUser slackUserId teamId workspace =
+    let
+        ( channelId2, threadRoute2 ) =
+            case SeqDict.get teamId localUser.user.lastSlackChannelViewed of
+                Just ( channelId, threadRoute ) ->
+                    ( channelId
+                    , case threadRoute of
+                        ViewThread threadId ->
+                            ViewThreadWithMaybeMessage threadId Nothing
+
+                        NoThread ->
+                            NoThreadWithMaybeMessage Nothing
+                    )
+
+                Nothing ->
+                    ( LocalState.slackAnnouncementChannel workspace, NoThreadWithMaybeMessage Nothing )
+    in
+    { currentSlackUserId = slackUserId
+    , teamId = teamId
+    , channelId = channelId2
+    , threadRoute = threadRoute2
+    , channelsVisible = ChannelsVisibleOnMobile
+    , overlay = Nothing
+    }
+        |> SlackWorkspaceRoute
 
 
 dmGuildIcon : Route -> LocalUser -> Id UserId -> FrontendDmChannel -> Element FrontendMsg_

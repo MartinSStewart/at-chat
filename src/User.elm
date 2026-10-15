@@ -126,6 +126,7 @@ type alias BackendUser =
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
@@ -300,6 +301,7 @@ type alias FrontendCurrentUser =
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
@@ -434,6 +436,7 @@ init createdAt name email userIsAdmin =
     , lastDmViewed = NoLastDmViewed
     , lastChannelViewed = SeqDict.empty
     , lastDiscordChannelViewed = SeqDict.empty
+    , lastSlackChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
     , discordNotifyOnAllMessages = SeqSet.empty
@@ -712,13 +715,15 @@ setLastSlackChannelViewed :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
+            , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
     ->
         { a
-            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
+            , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
@@ -735,7 +740,9 @@ setLastSlackChannelViewed id threadRoute user =
 
         user2 =
             { user
-                | slackDirectMentions =
+                | lastSlackChannelViewed =
+                    SeqDict.insert id.teamId ( id.channelId, threadRouteNoMessage ) user.lastSlackChannelViewed
+                , slackDirectMentions =
                     SeqDict.update
                         id.teamId
                         (Maybe.andThen
@@ -1021,6 +1028,7 @@ backendToFrontendCurrent email user =
     , lastDmViewed = user.lastDmViewed
     , lastChannelViewed = user.lastChannelViewed
     , lastDiscordChannelViewed = user.lastDiscordChannelViewed
+    , lastSlackChannelViewed = user.lastSlackChannelViewed
     , icon = user.icon
     , notifyOnAllMessages = user.notifyOnAllMessages
     , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages

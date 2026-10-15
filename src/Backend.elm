@@ -296,7 +296,6 @@ init =
       , pendingSlackSends = SeqDict.empty
       , pendingSlackUserLookups = SeqSet.empty
       , pendingSlackReconnects = SeqDict.empty
-      , dummyField = 123
       }
     , Command.none
     )

@@ -164,6 +164,7 @@ module LocalState exposing
     , routeToViewing
     , sentEnoughDiscordDmMessages
     , setDmE2ee
+    , slackAnnouncementChannel
     , slackChannelMentions
     , slackGuildOrDmIdToLatestMessages
     , slackGuildOrDmIdToMessage
@@ -2338,11 +2339,14 @@ announcementChannel guild =
     SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Id.fromInt 0)
 
 
-discordAnnouncementChannel :
-    { a | channels : SeqDict (Discord.Id Discord.ChannelId) b }
-    -> Discord.Id Discord.ChannelId
+discordAnnouncementChannel : { a | channels : SeqDict (Discord.Id Discord.ChannelId) b } -> Discord.Id Discord.ChannelId
 discordAnnouncementChannel guild =
     SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.idFromUInt64 (UInt64.fromInt 0))
+
+
+slackAnnouncementChannel : { a | channels : SeqDict (Slack.Id Slack.ChannelId) b } -> Slack.Id Slack.ChannelId
+slackAnnouncementChannel guild =
+    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Slack.Id "")
 
 
 addReactionEmoji :

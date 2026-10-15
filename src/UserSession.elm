@@ -51,6 +51,7 @@ import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 
@@ -72,6 +73,7 @@ type alias UserSession =
 type LastViewedGuild
     = LastViewedGuild (Id GuildId)
     | LastViewedDiscordGuild (Discord.Id Discord.GuildId)
+    | LastViewedSlackWorkspace (Slack.Id Slack.TeamId)
 
 
 type alias SheepGameQuestion =
@@ -536,14 +538,14 @@ setLastViewedGuild viewing session =
         Viewing_DiscordDm _ ->
             session
 
-        Viewing_SlackChannel _ ->
-            session
+        Viewing_SlackChannel data ->
+            { session | lastViewedGuild = Just (LastViewedSlackWorkspace data.id.teamId) }
 
         Viewing_SlackDm _ ->
             session
 
-        Viewing_SlackChannelThread _ ->
-            session
+        Viewing_SlackChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedSlackWorkspace data.id.teamId) }
 
         Viewing_SlackDmThread _ ->
             session

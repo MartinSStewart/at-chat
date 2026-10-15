@@ -619,6 +619,20 @@ startupRoute loading loggedIn =
                             Nothing ->
                                 loading.route
 
+                    Just (LastViewedSlackWorkspace teamId) ->
+                        case SeqDict.get teamId local.slackWorkspaces of
+                            Just workspace ->
+                                case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
+                                    Just slackUserId ->
+                                        GuildColumn.slackWorkspaceRoute local.localUser slackUserId teamId workspace
+                                            |> Route.setOverlay overlay
+
+                                    Nothing ->
+                                        loading.route
+
+                            Nothing ->
+                                loading.route
+
                     Nothing ->
                         loading.route
 

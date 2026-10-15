@@ -534,7 +534,6 @@ type alias BackendModel =
     , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
     , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
-    , dummyField : Int
     }
 
 
