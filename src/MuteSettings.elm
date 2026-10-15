@@ -16,6 +16,7 @@ module MuteSettings exposing
     , isDiscordThreadSpecificallyMuted
     , isDmMuted
     , isGuildSpecificallyMute
+    , isSlackChannelMuted
     , isThreadSpecificallyMuted
     , setMuteChannel
     , setMuteDiscordChannel
@@ -32,6 +33,7 @@ import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..), UserId)
 import MyUi
 import SeqDict exposing (SeqDict)
+import Slack
 import Ui exposing (Element)
 
 
@@ -453,3 +455,9 @@ isDiscordChannelMuted model guildId channelId threadRoute =
 
         Nothing ->
             IsNotMuted
+
+
+isSlackChannelMuted : Model -> Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> ThreadRoute -> IsMuted
+isSlackChannelMuted model guildId channelId threadRoute =
+    -- TODO
+    IsNotMuted

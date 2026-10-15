@@ -130,6 +130,7 @@ type alias BackendUser =
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
@@ -305,6 +306,7 @@ type alias FrontendCurrentUser =
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
@@ -440,6 +442,7 @@ init createdAt name email userIsAdmin =
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
     , discordNotifyOnAllMessages = SeqSet.empty
+    , slackNotifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
     , slackDirectMentions = SeqDict.empty
@@ -1032,6 +1035,7 @@ backendToFrontendCurrent email user =
     , icon = user.icon
     , notifyOnAllMessages = user.notifyOnAllMessages
     , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages
+    , slackNotifyOnAllMessages = user.slackNotifyOnAllMessages
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
     , slackDirectMentions = user.slackDirectMentions

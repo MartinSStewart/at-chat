@@ -13765,7 +13765,6 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
             , MyUi.bounceScroll isMobile
             ]
             (SeqDict.toList workspace.channels
-                |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
                 |> List.map
                     (\( channelId, channel ) ->
                         let
@@ -13776,7 +13775,48 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                         { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId }
                                     )
                         in
-                        Ui.column
+                        let
+                            channelMuted : IsMuted
+                            channelMuted =
+                                MuteSettings.isSlackChannelMuted
+                                    localUser.user.muteSettings
+                                    routeData.teamId
+                                    channelId
+                                    NoThread
+
+                            hasNotifications : ChannelNotificationType
+                            hasNotifications =
+                                GuildColumn.channelOrThreadHasNotifications
+                                    channelMuted
+                                    directMentions
+                                    (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
+                                    channelId
+                                    NoThread
+                                    (SeqDict.get (SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId })) localUser.user.lastViewedMessage)
+                                    channel
+
+                            threadNotifications : List ChannelNotificationType
+                            threadNotifications =
+                                SeqDict.toList channel.threads
+                                    |> List.map
+                                        (\( threadId, thread ) ->
+                                            GuildColumn.channelOrThreadHasNotifications
+                                                (MuteSettings.isSlackChannelMuted localUser.user.muteSettings routeData.teamId channelId (ViewThread threadId))
+                                                directMentions
+                                                (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
+                                                channelId
+                                                (ViewThread threadId)
+                                                (SeqDict.get
+                                                    ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId })
+                                                    , threadId
+                                                    )
+                                                    localUser.user.lastViewedThreadMessage
+                                                )
+                                                thread
+                                        )
+                        in
+                        ( channelSortName (hasNotifications :: threadNotifications) channel
+                        , Ui.column
                             []
                             [ slackChannelColumnRow
                                 isMobile
@@ -13816,7 +13856,10 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                         channel.threads
                                 )
                             ]
+                        )
                     )
+                |> List.sortBy Tuple.first
+                |> List.map Tuple.second
             )
         )
 
