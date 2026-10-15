@@ -287,7 +287,6 @@ type alias LoggedIn2 =
       newMessagesWhileNotScrolledToBottom : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
-    , channelSearch : String
     , searchOverlayQuery : String
     , searchOverlaySelection : Int
     , showNewPrivateKey : Maybe X25519.PrivateKey
@@ -753,8 +752,6 @@ type FrontendMsg_
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
     | TypedFriendsSearch String
     | PressedClearFriendsSearch
-    | TypedChannelSearch String
-    | PressedClearChannelSearch
     | TypedSearchOverlay String
     | PressedSearchOverlayArrowKey Int
     | PressedSearchOverlayEnter
