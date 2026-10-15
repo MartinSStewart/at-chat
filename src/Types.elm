@@ -286,7 +286,6 @@ type alias LoggedIn2 =
       -- the drawing tab held the scroll position
       newMessagesWhileNotScrolledToBottom : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
-    , friendsSearch : String
     , searchOverlayQuery : String
     , searchOverlaySelection : Int
     , showNewPrivateKey : Maybe X25519.PrivateKey
@@ -750,8 +749,7 @@ type FrontendMsg_
     | DrawingMsg Drawing.Msg
     | PressedNewMessagesWarning
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
-    | TypedFriendsSearch String
-    | PressedClearFriendsSearch
+    | PressedShowSearchOverlay
     | TypedSearchOverlay String
     | PressedSearchOverlayArrowKey Int
     | PressedSearchOverlayEnter

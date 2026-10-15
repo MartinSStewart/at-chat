@@ -5906,25 +5906,100 @@ updateLoaded msg model =
         LoadedPopSound result ->
             ( { model | popSound = result }, Command.none )
 
-        TypedFriendsSearch text ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | friendsSearch = text }, Command.none ))
-                model
+        PressedShowSearchOverlay ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case model.route of
+                        HomePageRoute _ ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
+                                (HomePageRoute (Just Route.SearchOverlay))
 
-        PressedClearFriendsSearch ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | friendsSearch = "" }, Command.none ))
-                model
+                        AdminRoute record ->
+                            ( model, Command.none )
 
-        TypedChannelSearch text ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | channelSearch = text }, Command.none ))
-                model
+                        NewGuildRoute ->
+                            ( model, Command.none )
 
-        PressedClearChannelSearch ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
-                model
+                        GuildRoute guildId channelRoute channelsVisibleOnMobile maybeOverlay ->
+                            FrontendExtra.routePush
+                                (case SeqDict.get guildId local.guilds of
+                                    Just guild ->
+                                        { model
+                                            | loginStatus =
+                                                LoggedIn { loggedIn | searchOverlayQuery = GuildName.toString guild.name ++ " " }
+                                        }
+
+                                    Nothing ->
+                                        model
+                                )
+                                (GuildRoute guildId channelRoute channelsVisibleOnMobile (Just Route.SearchOverlay))
+
+                        DiscordGuildRoute data ->
+                            FrontendExtra.routePush
+                                (case SeqDict.get data.guildId local.discordGuilds of
+                                    Just guild ->
+                                        { model
+                                            | loginStatus =
+                                                LoggedIn { loggedIn | searchOverlayQuery = GuildName.toString guild.name ++ " " }
+                                        }
+
+                                    Nothing ->
+                                        model
+                                )
+                                (DiscordGuildRoute { data | overlay = Just Route.SearchOverlay })
+
+                        DmRoute dmRouteData ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
+                                (HomePageRoute (Just Route.SearchOverlay))
+
+                        DiscordDmRoute discordDmRouteData ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
+                                (HomePageRoute (Just Route.SearchOverlay))
+
+                        SlackWorkspaceRoute data ->
+                            FrontendExtra.routePush
+                                (case SeqDict.get data.teamId local.slackWorkspaces of
+                                    Just workspace ->
+                                        { model
+                                            | loginStatus =
+                                                LoggedIn { loggedIn | searchOverlayQuery = workspace.name ++ " " }
+                                        }
+
+                                    Nothing ->
+                                        model
+                                )
+                                (SlackWorkspaceRoute { data | overlay = Just Route.SearchOverlay })
+
+                        SlackDmRoute data ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
+                                (HomePageRoute (Just Route.SearchOverlay))
+
+                        AiChatRoute ->
+                            ( model, Command.none )
+
+                        TextEditorRoute ->
+                            ( model, Command.none )
+
+                        PrivacyRoute ->
+                            ( model, Command.none )
+
+                        LinkDiscord result ->
+                            ( model, Command.none )
+
+                        PublicGoMatchRoute secretId ->
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         TypedSearchOverlay text ->
             FrontendExtra.updateLoggedIn
@@ -7951,9 +8026,11 @@ addWordSpellingGameReaction guildOrDmId matchId target emoji model loggedIn =
 toggleSearchOverlay : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 toggleSearchOverlay model =
     case model.loginStatus of
-        LoggedIn _ ->
+        LoggedIn loggedIn ->
             if Route.toOverlay model.route == Just Route.SearchOverlay then
-                FrontendExtra.routePush model (Route.setOverlay Nothing model.route)
+                FrontendExtra.routePush
+                    model
+                    (Route.setOverlay Nothing model.route)
 
             else
                 let
@@ -7965,7 +8042,7 @@ toggleSearchOverlay model =
                     ( model, Command.none )
 
                 else
-                    FrontendExtra.routePush model route
+                    FrontendExtra.routePush { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } } route
 
         NotLoggedIn _ ->
             ( model, Command.none )

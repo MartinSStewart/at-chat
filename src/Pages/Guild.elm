@@ -400,8 +400,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             True
                             model.time
                             maybeOtherUserId
-                            loggedIn.friendsSearch
-                            (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                             local
                         ]
                     , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -422,8 +420,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 False
                                 model.time
                                 maybeOtherUserId
-                                loggedIn.friendsSearch
-                                (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -1936,7 +1932,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
+                                , discordChannelColumnLazy True canScroll2 model local.localUser routeData guild
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -10234,6 +10230,21 @@ channelColumnContainer safeAreaInsetTop header content =
         )
 
 
+searchIcon : Bool -> Element FrontendMsg_
+searchIcon isMobile =
+    Ui.el
+        [ Ui.Font.color MyUi.font3
+        , Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.paddingXY 4 0
+        , Ui.alignRight
+        , Ui.width Ui.shrink
+        , Ui.Input.button PressedShowSearchOverlay
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+        ]
+        (Ui.html Icons.magnifyingGlass)
+
+
 channelColumn :
     Bool
     -> Time.Posix
@@ -10292,23 +10303,12 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute ChannelsHiddenOnMobile Nothing)
             [ Ui.Font.color MyUi.font2
-            , Ui.width (Ui.px 40)
-            , Ui.alignRight
-            , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
             , MyUi.hoverText "Invite users"
             ]
             (Ui.text guildName)
-        , Ui.el
-            [ Ui.Font.color MyUi.font3
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.paddingXY 4 0
-            , MyUi.noPointerEvents
-            , Ui.alignRight
-            ]
-            (Ui.html Icons.magnifyingGlass)
+        , searchIcon isMobile
         ]
         (Ui.column
             [ MyUi.scrollable canScroll2
@@ -10398,12 +10398,7 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
                 |> List.sortBy Tuple.first
                 |> List.map Tuple.second
              )
-                ++ (if searchFilter == "" then
-                        [ newChannelButton ]
-
-                    else
-                        []
-                   )
+                ++ [ newChannelButton ]
             )
         )
 
@@ -10468,14 +10463,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 =
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ Ui.row
-            [ MyUi.hoverText guildName
-            , Ui.spacing 4
-            ]
-            [ GuildIcon.discordLogo
-            , Ui.text guildName
-            ]
-        , GuildColumn.elLinkButton
+        [ GuildColumn.rowLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
@@ -10486,21 +10474,15 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 =
                 }
             )
             [ Ui.Font.color MyUi.font2
-            , Ui.width (Ui.px 40)
-            , Ui.alignRight
-            , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
             , MyUi.hoverText "Invite users"
+            , Ui.spacing 4
+            , MyUi.hoverText guildName
             ]
-            (Ui.html Icons.gear)
+            [ GuildIcon.discordLogo, Ui.text guildName ]
+        , searchIcon isMobile
         ]
-        (if showSearch then
-            channelSearchRow isMobile channelSearch
-
-         else
-            Ui.none
-        )
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -11090,11 +11072,9 @@ friendsColumnLazy :
     -> Bool
     -> Time.Posix
     -> DmChannelSelection
-    -> String
-    -> Bool
     -> LocalState
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
     let
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
@@ -11104,76 +11084,61 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
         packed =
             encodeFriendsColumn canScroll2 currentTimeRoundedToMinute
     in
-    if (friendsSearch /= "") || friendsSearchHasFocus then
-        -- The search text changes too often for laziness to be worth it here
-        friendsColumn
-            canScroll2
-            isMobile
-            currentTimeRoundedToMinute
-            friendsSearch
-            friendsSearchHasFocus
-            openedOtherUserId
-            local.dmChannels
-            local.discordDmChannels
-            local.slackDmChannels
-            local.localUser
+    case openedOtherUserId of
+        NoDmChannelSelected ->
+            Ui.Lazy.lazy6
+                friendsColumn_NoDmChannelSelected
+                packed
+                isMobile
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-    else
-        case openedOtherUserId of
-            NoDmChannelSelected ->
-                Ui.Lazy.lazy6
-                    friendsColumn_NoDmChannelSelected
-                    packed
-                    isMobile
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedDmChannel dmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDmChannel_Mobile
 
-            SelectedDmChannel dmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedDmChannel_Mobile
+                 else
+                    friendsColumn_SelectedDmChannel_NotMobile
+                )
+                packed
+                dmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-                     else
-                        friendsColumn_SelectedDmChannel_NotMobile
-                    )
-                    packed
-                    dmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedSlackDmChannel slackDmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedSlackDmChannel_Mobile
 
-            SelectedSlackDmChannel slackDmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedSlackDmChannel_Mobile
+                 else
+                    friendsColumn_SelectedSlackDmChannel_NotMobile
+                )
+                packed
+                slackDmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-                     else
-                        friendsColumn_SelectedSlackDmChannel_NotMobile
-                    )
-                    packed
-                    slackDmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedDiscordDmChannel discordDmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDiscordDmChannel_Mobile
 
-            SelectedDiscordDmChannel discordDmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedDiscordDmChannel_Mobile
-
-                     else
-                        friendsColumn_SelectedDiscordDmChannel_NotMobile
-                    )
-                    packed
-                    discordDmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+                 else
+                    friendsColumn_SelectedDiscordDmChannel_NotMobile
+                )
+                packed
+                discordDmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
 
 friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11182,7 +11147,7 @@ friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels s
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll isMobile time NoDmChannelSelected dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedSlackDmChannel_Mobile : Int -> SlackDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11191,7 +11156,7 @@ friendsColumn_SelectedSlackDmChannel_Mobile packed slackDmRoute dmChannels disco
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedSlackDmChannel_NotMobile : Int -> SlackDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11200,7 +11165,7 @@ friendsColumn_SelectedSlackDmChannel_NotMobile packed slackDmRoute dmChannels di
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11209,7 +11174,7 @@ friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels d
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11218,7 +11183,7 @@ friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannel
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11227,7 +11192,7 @@ friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChanne
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11236,22 +11201,20 @@ friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmCha
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn :
     Bool
     -> Bool
     -> Int
-    -> String
-    -> Bool
     -> DmChannelSelection
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels slackDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime dmChannelSelection dmChannels discordDmChannels slackDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -11264,348 +11227,212 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         discordDmChannelsIncludingLinkedUsers =
             discordDmChannels
 
-        searchIsVisible : Bool
-        searchIsVisible =
-            friendsSearchHasFocus || (friendsSearch /= "")
-
-        searchFilter : String
-        searchFilter =
-            String.trim friendsSearch |> String.toLower
-
-        matchesSearch : PersonName -> Bool
-        matchesSearch name =
-            String.contains searchFilter (String.toLower (PersonName.toString name))
-
         columnItems : List ( Time.Posix, Element FrontendMsg_ )
         columnItems =
             List.filterMap
                 (\( otherUserId, dmChannel ) ->
                     case User.getUser otherUserId localUser of
                         Just otherUser ->
-                            if matchesSearch otherUser.name then
-                                let
-                                    -- The route being viewed in this DM, or Nothing when the
-                                    -- open DM belongs to somebody else
-                                    threadRoute : Maybe ThreadRouteWithFriends
-                                    threadRoute =
-                                        case dmChannelSelection of
-                                            SelectedDmChannel dmRoute ->
-                                                if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
-                                                    Just dmRoute.threadRoute
-
-                                                else
-                                                    Nothing
-
-                                            SelectedDiscordDmChannel _ ->
-                                                Nothing
-
-                                            SelectedSlackDmChannel _ ->
-                                                Nothing
-
-                                            NoDmChannelSelected ->
-                                                Nothing
-                                in
-                                ( case MessageArray.last dmChannel.messages of
-                                    Just message2 ->
-                                        Message.createdAt message2
-
-                                    _ ->
-                                        Time.millisToPosix 0
-                                , Ui.column
-                                    []
-                                    [ Ui.Lazy.lazy5
-                                        (if isMobile then
-                                            friendLabelMobile
-
-                                         else
-                                            friendLabelNotMobile
-                                        )
-                                        (encodeFriendLabel
-                                            (case threadRoute of
-                                                Just (NoThreadWithFriends _ _) ->
-                                                    True
-
-                                                _ ->
-                                                    False
-                                            )
-                                            currentTime
-                                        )
-                                        localUser
-                                        otherUserId
-                                        otherUser
-                                        dmChannel
-                                    , dmColumnThreads
-                                        isMobile
-                                        (Time.millisToPosix currentTime)
-                                        threadRoute
-                                        localUser
-                                        otherUserId
-                                        dmChannel
-                                        (case threadRoute of
-                                            -- A thread that was just opened isn't in the local
-                                            -- state yet but still belongs in the list
-                                            Just (ViewThreadWithFriends threadMessageIndex _ _) ->
-                                                SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
-
-                                            _ ->
-                                                dmChannel.threads
-                                        )
-                                    ]
-                                )
-                                    |> Just
-
-                            else
-                                Nothing
-
-                        Nothing ->
-                            Nothing
-                )
-                (SeqDict.toList dmChannelsIncludingCurrentUser)
-                ++ List.filterMap
-                    (\( channelId, dmChannel ) ->
-                        if
-                            (searchFilter == "")
-                                || List.any
-                                    (\( userId, _ ) ->
-                                        case User.getDiscordUser userId localUser of
-                                            Just discordUser ->
-                                                matchesSearch discordUser.name
-
-                                            Nothing ->
-                                                False
-                                    )
-                                    (NonemptyDict.toList dmChannel.members)
-                        then
-                            ( case MessageArray.last dmChannel.messages of
-                                Just message2 ->
-                                    Message.createdAt message2
-
-                                _ ->
-                                    Time.millisToPosix 0
-                            , Ui.Lazy.lazy5
-                                (if isMobile then
-                                    discordFriendLabelMobile
-
-                                 else
-                                    discordFriendLabelNotMobile
-                                )
-                                currentTime
-                                (case dmChannelSelection of
-                                    SelectedDiscordDmChannel routeData ->
-                                        routeData.channelId == channelId
-
-                                    _ ->
-                                        False
-                                )
-                                channelId
-                                dmChannel
-                                localUser
-                            )
-                                |> Just
-
-                        else
-                            Nothing
-                    )
-                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
-                ++ List.filterMap
-                    (\( channelId, dmChannel ) ->
-                        if
-                            (searchFilter == "")
-                                || List.any
-                                    (\userId ->
-                                        case SeqDict.get userId localUser.slackUsers of
-                                            Just slackUser ->
-                                                matchesSearch slackUser.name
-
-                                            Nothing ->
-                                                False
-                                    )
-                                    (NonemptySet.toList dmChannel.members)
-                        then
-                            ( case MessageArray.last dmChannel.messages of
-                                Just message2 ->
-                                    Message.createdAt message2
-
-                                _ ->
-                                    Time.millisToPosix 0
-                            , let
-                                -- The thread being viewed in this DM, or Nothing when another
-                                -- conversation is open
-                                threadRoute : Maybe ThreadRouteWithMaybeMessage
+                            let
+                                -- The route being viewed in this DM, or Nothing when the
+                                -- open DM belongs to somebody else
+                                threadRoute : Maybe ThreadRouteWithFriends
                                 threadRoute =
                                     case dmChannelSelection of
-                                        SelectedSlackDmChannel routeData ->
-                                            if routeData.channelId == channelId then
-                                                Just routeData.threadRoute
+                                        SelectedDmChannel dmRoute ->
+                                            if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
+                                                Just dmRoute.threadRoute
 
                                             else
                                                 Nothing
 
-                                        SelectedDmChannel _ ->
+                                        SelectedDiscordDmChannel _ ->
                                             Nothing
 
-                                        SelectedDiscordDmChannel _ ->
+                                        SelectedSlackDmChannel _ ->
                                             Nothing
 
                                         NoDmChannelSelected ->
                                             Nothing
-                              in
-                              Ui.column
+                            in
+                            ( case MessageArray.last dmChannel.messages of
+                                Just message2 ->
+                                    Message.createdAt message2
+
+                                _ ->
+                                    Time.millisToPosix 0
+                            , Ui.column
                                 []
                                 [ Ui.Lazy.lazy5
                                     (if isMobile then
-                                        slackFriendLabelMobile
+                                        friendLabelMobile
 
                                      else
-                                        slackFriendLabelNotMobile
+                                        friendLabelNotMobile
                                     )
-                                    currentTime
-                                    (case threadRoute of
-                                        Just (NoThreadWithMaybeMessage _) ->
-                                            True
+                                    (encodeFriendLabel
+                                        (case threadRoute of
+                                            Just (NoThreadWithFriends _ _) ->
+                                                True
 
-                                        Just (ViewThreadWithMaybeMessage _ _) ->
-                                            False
-
-                                        Nothing ->
-                                            False
+                                            _ ->
+                                                False
+                                        )
+                                        currentTime
                                     )
-                                    channelId
-                                    dmChannel
                                     localUser
-                                , slackDmColumnThreads
+                                    otherUserId
+                                    otherUser
+                                    dmChannel
+                                , dmColumnThreads
                                     isMobile
                                     (Time.millisToPosix currentTime)
                                     threadRoute
                                     localUser
-                                    channelId
+                                    otherUserId
                                     dmChannel
                                     (case threadRoute of
-                                        Just (ViewThreadWithMaybeMessage threadId _) ->
-                                            SeqDict.update
-                                                threadId
-                                                (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
-                                                dmChannel.threads
+                                        -- A thread that was just opened isn't in the local
+                                        -- state yet but still belongs in the list
+                                        Just (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                            SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
 
-                                        Just (NoThreadWithMaybeMessage _) ->
-                                            dmChannel.threads
-
-                                        Nothing ->
+                                        _ ->
                                             dmChannel.threads
                                     )
                                 ]
                             )
                                 |> Just
 
-                        else
+                        Nothing ->
                             Nothing
+                )
+                (SeqDict.toList dmChannelsIncludingCurrentUser)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        ( case MessageArray.last dmChannel.messages of
+                            Just message2 ->
+                                Message.createdAt message2
+
+                            _ ->
+                                Time.millisToPosix 0
+                        , Ui.Lazy.lazy5
+                            (if isMobile then
+                                discordFriendLabelMobile
+
+                             else
+                                discordFriendLabelNotMobile
+                            )
+                            currentTime
+                            (case dmChannelSelection of
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
+
+                                _ ->
+                                    False
+                            )
+                            channelId
+                            dmChannel
+                            localUser
+                        )
+                    )
+                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        ( case MessageArray.last dmChannel.messages of
+                            Just message2 ->
+                                Message.createdAt message2
+
+                            _ ->
+                                Time.millisToPosix 0
+                        , let
+                            -- The thread being viewed in this DM, or Nothing when another
+                            -- conversation is open
+                            threadRoute : Maybe ThreadRouteWithMaybeMessage
+                            threadRoute =
+                                case dmChannelSelection of
+                                    SelectedSlackDmChannel routeData ->
+                                        if routeData.channelId == channelId then
+                                            Just routeData.threadRoute
+
+                                        else
+                                            Nothing
+
+                                    SelectedDmChannel _ ->
+                                        Nothing
+
+                                    SelectedDiscordDmChannel _ ->
+                                        Nothing
+
+                                    NoDmChannelSelected ->
+                                        Nothing
+                          in
+                          Ui.column
+                            []
+                            [ Ui.Lazy.lazy5
+                                (if isMobile then
+                                    slackFriendLabelMobile
+
+                                 else
+                                    slackFriendLabelNotMobile
+                                )
+                                currentTime
+                                (case threadRoute of
+                                    Just (NoThreadWithMaybeMessage _) ->
+                                        True
+
+                                    Just (ViewThreadWithMaybeMessage _ _) ->
+                                        False
+
+                                    Nothing ->
+                                        False
+                                )
+                                channelId
+                                dmChannel
+                                localUser
+                            , slackDmColumnThreads
+                                isMobile
+                                (Time.millisToPosix currentTime)
+                                threadRoute
+                                localUser
+                                channelId
+                                dmChannel
+                                (case threadRoute of
+                                    Just (ViewThreadWithMaybeMessage threadId _) ->
+                                        SeqDict.update
+                                            threadId
+                                            (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
+                                            dmChannel.threads
+
+                                    Just (NoThreadWithMaybeMessage _) ->
+                                        dmChannel.threads
+
+                                    Nothing ->
+                                        dmChannel.threads
+                                )
+                            ]
+                        )
                     )
                     (SeqDict.toList slackDmChannels)
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
         [ Ui.el
-            [ Ui.height Ui.fill
-            , -- The search input is always in the DOM, invisible and covering the magnifying glass
-              -- icon so that clicking the icon focuses it. It has to stay in the DOM while hidden
-              -- because recreating it on press would drop the browser focus that reveals it.
-              Ui.inFront
-                (Ui.row
-                    [ Ui.height Ui.fill ]
-                    [ Ui.Input.text
-                        (Ui.id (Dom.idToString friendsSearchInputId)
-                            :: (if searchIsVisible then
-                                    [ Ui.background MyUi.background2
-                                    , Ui.border 0
-                                    , Ui.rounded 4
-                                    , Ui.paddingXY 8 4
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.centerY
-                                    ]
-
-                                else
-                                    [ Ui.opacity 0
-                                    , Ui.border 0
-                                    , Ui.width (Ui.px 40)
-                                    , Ui.alignRight
-                                    , Ui.height Ui.fill
-                                    , Ui.pointer
-                                    ]
-                               )
-                        )
-                        { onChange = TypedFriendsSearch
-                        , text = friendsSearch
-                        , placeholder =
-                            if searchIsVisible then
-                                Just "Filter friends"
-
-                            else
-                                Nothing
-                        , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
-                        }
-                    , if searchIsVisible then
-                        MyUi.elButton
-                            (Dom.id "guild_clearFriendsSearch")
-                            PressedClearFriendsSearch
-                            [ Ui.Font.color MyUi.font2
-                            , Ui.width (Ui.px 40)
-                            , Ui.paddingXY 8 0
-                            , Ui.height Ui.fill
-                            , Ui.contentCenterY
-                            , MyUi.hoverText "Clear search"
-                            ]
-                            (Ui.html Icons.x)
-
-                      else
-                        Ui.none
-                    ]
-                )
+            [ Ui.Font.bold
+            , Ui.paddingXY 0 8
+            , Ui.Font.color MyUi.font2
             ]
-            (Ui.row
-                [ Ui.height Ui.fill
-                , Ui.attrIf searchIsVisible (Ui.opacity 0)
-                ]
-                [ Ui.el
-                    [ Ui.Font.bold
-                    , Ui.paddingXY 8 8
-                    , Ui.Font.color MyUi.font1
-                    ]
-                    (Ui.text directMessagesText)
-                , Ui.el
-                    [ Ui.Font.color MyUi.font2
-                    , Ui.width (Ui.px 40)
-                    , Ui.alignRight
-                    , Ui.paddingXY 8 0
-                    , Ui.height Ui.fill
-                    , Ui.contentCenterY
-                    ]
-                    (Ui.html Icons.magnifyingGlass)
-                ]
-            )
+            (Ui.text directMessagesText)
+        , searchIcon isMobile
         ]
-        Ui.none
         (case columnItems of
-            [] ->
-                Ui.Prose.paragraph
-                    [ Ui.Font.italic
-                    , Ui.Font.lineHeight 1.5
-                    , Ui.paddingXY 16 20
-                    ]
-                    [ Ui.text "No results found for "
-                    , Ui.el [ Ui.Font.bold ] (Ui.text friendsSearch)
-                    ]
-
             [ ( _, single ) ] ->
                 Ui.column
                     [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
                     [ single
-                    , if searchIsVisible then
-                        Ui.none
-
-                      else
-                        Ui.el
-                            [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
-                            (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
+                    , Ui.el
+                        [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                        (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
                     ]
 
             _ ->
@@ -13605,16 +13432,11 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ --Ui.el [ MyUi.hoverText workspace.name ] (Ui.text workspace.name)
-          Ui.row
-            [ MyUi.hoverText workspace.name
-            , Ui.spacing 6
-            ]
-            [ Ui.html (Icons.slack 16)
-            , Ui.text workspace.name
-            ]
+        [ Ui.row
+            [ MyUi.hoverText workspace.name, Ui.spacing 6 ]
+            [ Ui.html (Icons.slack 16), Ui.text workspace.name ]
+        , searchIcon isMobile
         ]
-        Ui.none
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0

@@ -1957,12 +1957,6 @@ routeRequest previousRoute newRoute model =
 
                                     Nothing ->
                                         Nothing
-                            , searchOverlayQuery =
-                                if openedSearchOverlay then
-                                    ""
-
-                                else
-                                    loggedIn.searchOverlayQuery
                             , searchOverlaySelection =
                                 if openedSearchOverlay then
                                     0
@@ -3348,18 +3342,6 @@ isPressMsg msg =
         LoadedPopSound _ ->
             False
 
-        TypedFriendsSearch _ ->
-            False
-
-        PressedClearFriendsSearch ->
-            True
-
-        TypedChannelSearch _ ->
-            False
-
-        PressedClearChannelSearch ->
-            True
-
         TypedSearchOverlay _ ->
             False
 
@@ -3427,6 +3409,9 @@ isPressMsg msg =
             True
 
         PressedUnlinkSlackUser _ ->
+            True
+
+        PressedShowSearchOverlay ->
             True
 
 
@@ -9473,10 +9458,8 @@ loadedInitHelper startupData emojiData loginData loading =
             , drawingMode = Drawing.init
             , newMessagesWhileNotScrolledToBottom = 0
             , showInviteLinkQrCode = Nothing
-            , friendsSearch = ""
             , searchOverlayQuery = ""
             , searchOverlaySelection = 0
-            , channelSearch = ""
             , showNewPrivateKey = Nothing
             , e2eeError = Nothing
             , e2eePrivateKeyText = ""
