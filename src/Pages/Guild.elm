@@ -10427,13 +10427,6 @@ channelSortName notifications channel =
         ++ ChannelName.toString channel.name
 
 
-{-| The channel search input is only shown for guilds with more channels than this.
--}
-channelSearchMinChannels : Int
-channelSearchMinChannels =
-    6
-
-
 channelSearchInputId : HtmlId
 channelSearchInputId =
     Dom.id "guild_channelSearchInput"
@@ -13454,8 +13447,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                     (SlackGuildOrDmId_Workspace
                                         { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId }
                                     )
-                        in
-                        let
+
                             channelMuted : IsMuted
                             channelMuted =
                                 MuteSettings.isSlackChannelMuted

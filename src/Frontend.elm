@@ -5920,13 +5920,13 @@ updateLoaded msg model =
                                 { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
                                 (HomePageRoute (Just Route.SearchOverlay))
 
-                        AdminRoute record ->
+                        AdminRoute _ ->
                             ( model, Command.none )
 
                         NewGuildRoute ->
                             ( model, Command.none )
 
-                        GuildRoute guildId channelRoute channelsVisibleOnMobile maybeOverlay ->
+                        GuildRoute guildId channelRoute channelsVisibleOnMobile _ ->
                             FrontendExtra.routePush
                                 (case SeqDict.get guildId local.guilds of
                                     Just guild ->
@@ -5954,15 +5954,15 @@ updateLoaded msg model =
                                 )
                                 (DiscordGuildRoute { data | overlay = Just Route.SearchOverlay })
 
-                        DmRoute dmRouteData ->
+                        DmRoute data ->
                             FrontendExtra.routePush
                                 { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (HomePageRoute (Just Route.SearchOverlay))
+                                (DmRoute { data | overlay = Just Route.SearchOverlay })
 
-                        DiscordDmRoute discordDmRouteData ->
+                        DiscordDmRoute data ->
                             FrontendExtra.routePush
                                 { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (HomePageRoute (Just Route.SearchOverlay))
+                                (DiscordDmRoute { data | overlay = Just Route.SearchOverlay })
 
                         SlackWorkspaceRoute data ->
                             FrontendExtra.routePush
@@ -5981,7 +5981,7 @@ updateLoaded msg model =
                         SlackDmRoute data ->
                             FrontendExtra.routePush
                                 { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (HomePageRoute (Just Route.SearchOverlay))
+                                (SlackDmRoute { data | overlay = Just Route.SearchOverlay })
 
                         AiChatRoute ->
                             ( model, Command.none )
@@ -5992,10 +5992,10 @@ updateLoaded msg model =
                         PrivacyRoute ->
                             ( model, Command.none )
 
-                        LinkDiscord result ->
+                        LinkDiscord _ ->
                             ( model, Command.none )
 
-                        PublicGoMatchRoute secretId ->
+                        PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
                 NotLoggedIn _ ->

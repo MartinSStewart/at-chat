@@ -36,7 +36,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import OneOrGreater exposing (OneOrGreater)
 import RichText
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
