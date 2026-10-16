@@ -31,6 +31,7 @@ module Slack exposing
     , history
     , httpErrorToString
     , idToString
+    , isHostedBySlack
     , messageFiles
     , messageUserIds
     , noStyle
@@ -911,6 +912,20 @@ messageFiles message =
 
         JoinedChannel ->
             []
+
+
+{-| Remote files (Google Drive and the like, or anything an app adds with files.remote.add) have
+whatever url whoever added them chose, and downloading one with `fileHeaders` would hand them the
+credentials.
+-}
+isHostedBySlack : File -> Bool
+isHostedBySlack file =
+    case Url.fromString file.url of
+        Just url ->
+            url.protocol == Url.Https && url.host == "files.slack.com" && url.port_ == Nothing
+
+        Nothing ->
+            False
 
 
 {-| Downloading a file from files.slack.com needs the same credentials as the API.

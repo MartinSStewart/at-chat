@@ -44,6 +44,7 @@ module FileStatus exposing
     , imageInfoView
     , imageMaxHeight
     , jsonContent
+    , maxUploadSize
     , measuredFileMetadata
     , measuredFileSerializeCodec
     , onlyUploadedFiles
@@ -845,6 +846,13 @@ type alias ExposureTime =
 secretKeyHeader : SecretId ServerSecret -> Http.Header
 secretKeyHeader secretKey =
     Http.header "x-secret-key" (SecretId.toString secretKey)
+
+
+{-| Should match MAX\_UPLOAD\_BYTES in rust-server/src/main.rs
+-}
+maxUploadSize : Int
+maxUploadSize =
+    100 * 1024 * 1024
 
 
 {-| Backend initiated, so there is no browser and no cookie. The server secret

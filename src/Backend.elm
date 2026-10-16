@@ -6469,26 +6469,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         let
                                             model2 : BackendModel
                                             model2 =
-                                                { model
-                                                    | slackUsers =
-                                                        SeqDict.insert
-                                                            slackUserId
-                                                            (SlackBasicData { user = linkedUser.user, icon = linkedUser.icon })
-                                                            model.slackUsers
-                                                    , slackWorkspaces =
-                                                        SeqDict.updateIfExists
-                                                            linkedUser.user.teamId
-                                                            (\workspace ->
-                                                                { workspace
-                                                                    | channels =
-                                                                        SeqDict.map
-                                                                            (\_ channel -> { channel | linkedMembers = SeqSet.remove slackUserId channel.linkedMembers })
-                                                                            workspace.channels
-                                                                }
-                                                            )
-                                                            model.slackWorkspaces
-                                                    , pendingSlackReconnects = SeqDict.remove slackUserId model.pendingSlackReconnects
-                                                }
+                                                SlackSync.unlinkUser slackUserId linkedUser model
                                         in
                                         ( model2
                                         , Command.batch
@@ -11335,7 +11316,10 @@ uploadSlackFiles secretKey cookie token files =
                     )
                 |> Task.onError (\_ -> Task.succeed Nothing)
         )
-        (List.Extra.uniqueBy (\file -> Slack.idToString file.id) files)
+        (List.filter
+            (\file -> Slack.isHostedBySlack file && file.size <= FileStatus.maxUploadSize)
+            (List.Extra.uniqueBy (\file -> Slack.idToString file.id) files)
+        )
         |> Task.sequence
         |> Task.map (\results -> List.filterMap identity results |> SeqDict.fromList)
 
@@ -11700,7 +11684,7 @@ slackMessageAdded time guildOrDmId threadRouteWithMessage data model =
                                     usersAcc
                         )
                         users3
-                        (RichText.mentionsUser data.content.content)
+                        (Broadcast.slackMentionedMembers teamId channelId data.content.content model)
 
                 SlackGuildOrDmId_Dm _ ->
                     users3

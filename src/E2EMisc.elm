@@ -53,6 +53,7 @@ import DmChannelId
 import Drawing
 import Duration
 import E2EHelper
+import E2ESlack
 import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -86,6 +87,7 @@ import Route exposing (ChannelsVisibleOnMobile(..))
 import SearchOverlay
 import SeqDict
 import SeqSet
+import Slack
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
@@ -2976,6 +2978,8 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
                         , E2EHelper.linkSecondDiscordAccount E2EHelper.sessionId1 discordOp0Ready discordOp0ReadySupplemental
                         , T.checkState 1000 (checkDiscordAccountIsLinked True)
+                        , E2ESlack.linkSlackWithoutOptions user
+                        , T.checkState 100 (checkSlackAccountIsLinked True)
                         ]
                     )
                 ]
@@ -2992,9 +2996,11 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         [ T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) (checkAccountIsStillScheduled userId)
                         , T.checkState 0 (checkDeletedMessages userId 0)
                         , T.checkState 0 (checkDiscordAccountIsLinked True)
+                        , T.checkState 0 (checkSlackAccountIsLinked True)
                         , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) (checkAccountWasDeleted userId)
                         , T.checkState 0 (checkDeletedMessages userId 3)
                         , T.checkState 0 (checkDiscordAccountIsLinked False)
+                        , T.checkState 0 (checkSlackAccountIsLinked False)
                         ]
 
                     Nothing ->
@@ -3029,6 +3035,56 @@ checkDiscordAccountIsLinked isLinked data =
 
             else
                 Err "The Discord account should have been unlinked and its gateway closed"
+
+
+{-| Deleting the at-chat account a Slack account is linked to forgets its credentials, takes it out
+of its channels and closes its websocket.
+-}
+checkSlackAccountIsLinked : Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkSlackAccountIsLinked isLinked data =
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend data.backend
+
+        isChannelMember : Bool
+        isChannelMember =
+            SeqDict.values backend.slackWorkspaces
+                |> List.any (\workspace -> SeqDict.values workspace.channels |> List.any (\channel -> SeqSet.member slackUserId channel.linkedMembers))
+
+        slackUserId : Slack.Id Slack.UserId
+        slackUserId =
+            Slack.Id "U09DJDQL1A8"
+    in
+    case
+        ( SeqDict.get slackUserId backend.slackUsers
+        , E2EHelper.slackWebsocketByToken E2EHelper.legitSlackToken data
+        , isLinked
+        )
+    of
+        ( Just (Types.SlackFullData _), Just _, True ) ->
+            if isChannelMember then
+                Ok ()
+
+            else
+                Err "The linked Slack account should be in its channels"
+
+        ( Just (Types.SlackBasicData _), Nothing, False ) ->
+            if isChannelMember then
+                Err "The unlinked Slack account shouldn't be in any channel"
+
+            else
+                Ok ()
+
+        ( Nothing, _, _ ) ->
+            Err "Expected the Slack account to exist"
+
+        _ ->
+            if isLinked then
+                Err "The Slack account should be linked with its websocket open"
+
+            else
+                Err "The Slack account should have been unlinked and its websocket closed"
 
 
 userIdByEmail : EmailAddress -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.UserId, User.BackendUser )

@@ -1,7 +1,8 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackMentionOutsideChannelTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
+import Codec
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -32,6 +33,7 @@ import SlackEmoji
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import User
 
 
 messageToString : Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> String
@@ -304,6 +306,58 @@ linkSlack user =
         , user.click 100 (Dom.id "userOptions_submitSlackData")
         , E2EHelper.hasExactText user [ "Loaded test-slack" ]
         ]
+
+
+{-| Only admins see the Slack section in the user options, but the backend lets any user link.
+-}
+linkSlackWithoutOptions : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+linkSlackWithoutOptions user =
+    case
+        Slack.validateSlackData
+            { slackCookie = E2EHelper.legitSlackCookie
+            , slackTeamsJson = "{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}"
+            }
+    of
+        Ok slackData ->
+            T.group
+                [ user.sendToBackend 100 (Types.LinkSlackRequest slackData)
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case SeqDict.get (Slack.Id "U09DJDQL1A8") (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData _) ->
+                                Ok ()
+
+                            _ ->
+                                Err "Expected the Slack account to be linked"
+                    )
+                , relayReady (Slack.Id "U09DJDQL1A8")
+                ]
+
+        Err () ->
+            T.checkState 0 (\_ -> Err "The Slack data should be valid")
+
+
+{-| Lets the backend send the relay its credentials, after which the websocket can be found with
+E2EHelper.slackWebsocketByToken.
+-}
+relayReady : Slack.Id Slack.UserId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+relayReady slackUserId =
+    T.andThen
+        100
+        (\data ->
+            case SeqDict.get slackUserId (E2EHelper.unwrapBackend data.backend).slackUsers of
+                Just (Types.SlackFullData { websocket }) ->
+                    case websocket of
+                        Just connection ->
+                            [ T.websocketSendString 100 connection "relay_ready" ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Expected the Slack websocket to be open") ]
+
+                _ ->
+                    [ T.checkState 0 (\_ -> Err "Expected the Slack account to be linked") ]
+        )
 
 
 lastSlackMessage :
@@ -806,9 +860,9 @@ shownNotificationUrls user data =
         data.portRequests
 
 
-adminSlackMentionCount : E2EHelper.BackendModel2 -> Int
-adminSlackMentionCount backend =
-    case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+slackMentionCount : Id.Id Id.UserId -> E2EHelper.BackendModel2 -> Int
+slackMentionCount userId backend =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend backend).users of
         Just user ->
             SeqDict.values user.slackDirectMentions
                 |> List.concatMap (\dict -> NonemptyDict.toList dict |> List.map Tuple.second)
@@ -895,7 +949,7 @@ slackUnreadAndNotificationsTest config =
                         , T.checkState
                             100
                             (\data ->
-                                if adminSlackMentionCount data.backend /= 1 then
+                                if slackMentionCount E2EHelper.defaultAdminId data.backend /= 1 then
                                     Err "Expected the mention to be counted"
 
                                 else
@@ -920,7 +974,7 @@ slackUnreadAndNotificationsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend == 0 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend == 0 then
                                     Ok ()
 
                                 else
@@ -930,6 +984,102 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackMentionOutsideChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMentionOutsideChannelTest config =
+    E2EHelper.startTest
+        "A Slack mention doesn't reach a linked user who isn't in the channel"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T0SECOND\":{\"token\":\"" ++ E2EHelper.secondSlackToken ++ "\"}}")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "Loaded test-slack" ]
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , relayReady (Slack.Id "U09DK3NCPMG")
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ linkSlackWithoutOptions user
+                        , T.andThen
+                            100
+                            (\data ->
+                                case
+                                    ( E2EHelper.slackWebsocketByToken E2EHelper.secondSlackToken data
+                                    , NonemptyDict.toList (E2EHelper.unwrapBackend data.backend).users
+                                        |> List.filter (\( _, backendUser ) -> backendUser.email == User.UserHasEmail E2EHelper.userEmail)
+                                    )
+                                of
+                                    ( Just ( connection, _ ), [ ( userId, _ ) ] ) ->
+                                        [ T.websocketSendString 100 connection """{"type":"hello"}"""
+                                        , -- Only ziggler is in #secret, so the user linked to slack-admin shouldn't hear about it.
+                                          T.websocketSendString
+                                            100
+                                            connection
+                                            (slackMentionEvent { channel = "C0SECRET123", user = "U09DK3NCPMG", ts = "1791640001.000100", mentions = "U09DJDQL1A8" })
+                                        , T.checkBackend
+                                            100
+                                            (\backend ->
+                                                case
+                                                    lastSlackMessage
+                                                        backend
+                                                        (\backend2 ->
+                                                            SeqDict.get (Slack.Id "T09DJDQL18U") backend2.slackWorkspaces
+                                                                |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C0SECRET123") workspace.channels)
+                                                        )
+                                                of
+                                                    Ok ( text, _ ) ->
+                                                        if not (String.contains "look" text) then
+                                                            Err "Expected the mention to be added to #secret"
+
+                                                        else if slackMentionCount userId backend /= 0 then
+                                                            Err "A mention in a channel the user isn't in shouldn't reach them"
+
+                                                        else
+                                                            Ok ()
+
+                                                    Err error ->
+                                                        Err error
+                                            )
+                                        , T.websocketSendString
+                                            100
+                                            connection
+                                            (slackMentionEvent { channel = "C09DJDQSWLU", user = "U09DK3NCPMG", ts = "1791640002.000100", mentions = "U09DJDQL1A8" })
+                                        , T.checkBackend
+                                            100
+                                            (\backend ->
+                                                if slackMentionCount userId backend == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "A mention in a channel both are in should reach the user"
+                                            )
+                                        ]
+
+                                    _ ->
+                                        [ T.checkState 0 (\_ -> Err "Expected ziggler's websocket and the invited user") ]
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
@@ -1058,7 +1208,7 @@ slackThreadsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend /= 1 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend /= 1 then
                                     Err "Expected the mention in the thread to be counted"
 
                                 else if allTestSlackThreadMessageCount backend /= 4 then
@@ -1072,7 +1222,7 @@ slackThreadsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend == 0 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend == 0 then
                                     Ok ()
 
                                 else
@@ -1553,7 +1703,7 @@ slackFilesTest config =
                         , T.websocketSendString
                             100
                             connection
-                            """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
+                            """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"},{"id":"F0REMOTE","name":"remote.png","mimetype":"image/png","size":1234,"mode":"external","is_external":true,"url_private":"https://attacker.example/remote.png"},{"id":"F0HUGE","name":"huge.png","mimetype":"image/png","size":200000000,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0HUGE/huge.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
                         , E2EHelper.hasExactText admin [ "Look at this" ]
                         , T.checkBackend
                             100
@@ -1565,7 +1715,30 @@ slackFilesTest config =
                                     Ok ()
 
                                 else
-                                    Err "Expected the file in the new message to be copied"
+                                    Err "Expected the file in the new message to be copied, and the remote and oversized ones left out"
+                            )
+                        , T.checkState
+                            100
+                            (\data ->
+                                let
+                                    uploadedUrls : List String
+                                    uploadedUrls =
+                                        List.filterMap
+                                            (\request ->
+                                                case request.body of
+                                                    T.JsonBody json ->
+                                                        Codec.decodeValue FileStatus.uploadUrlCodec json |> Result.toMaybe |> Maybe.map .url
+
+                                                    _ ->
+                                                        Nothing
+                                            )
+                                            data.httpRequests
+                                in
+                                if List.any (\url -> String.contains "attacker.example" url || String.contains "huge.png" url) uploadedUrls then
+                                    Err "The remote and oversized files shouldn't be downloaded"
+
+                                else
+                                    Ok ()
                             )
                         ]
                     )

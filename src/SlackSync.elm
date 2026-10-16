@@ -5,6 +5,7 @@ module SlackSync exposing
     , linkedUsers
     , newChannelMaxMessages
     , toMessage
+    , unlinkUser
     , userDataName
     , usersToFrontend
     , workspacesToFrontend
@@ -31,7 +32,7 @@ import SeqSet
 import Slack
 import SlackEmoji
 import Thread exposing (SlackBackendThread)
-import Types exposing (SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackFileData, SlackUserData(..))
+import Types exposing (BackendModel, SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackFileData, SlackLinkedUser, SlackUserData(..))
 import User exposing (BackendUser)
 import UserSession exposing (SlackFrontendUser)
 import VisibleMessages
@@ -331,3 +332,29 @@ userDataName userData =
 
         SlackBasicData { user } ->
             userName user |> PersonName.toString
+
+
+{-| Drops the credentials and the channel memberships. Closing the websocket is left to the caller.
+-}
+unlinkUser : Slack.Id Slack.UserId -> SlackLinkedUser -> BackendModel -> BackendModel
+unlinkUser slackUserId linkedUser model =
+    { model
+        | slackUsers =
+            SeqDict.insert
+                slackUserId
+                (SlackBasicData { user = linkedUser.user, icon = linkedUser.icon })
+                model.slackUsers
+        , slackWorkspaces =
+            SeqDict.updateIfExists
+                linkedUser.user.teamId
+                (\workspace ->
+                    { workspace
+                        | channels =
+                            SeqDict.map
+                                (\_ channel -> { channel | linkedMembers = SeqSet.remove slackUserId channel.linkedMembers })
+                                workspace.channels
+                    }
+                )
+                model.slackWorkspaces
+        , pendingSlackReconnects = SeqDict.remove slackUserId model.pendingSlackReconnects
+    }

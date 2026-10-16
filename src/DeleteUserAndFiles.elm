@@ -12,6 +12,7 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import FileStatus exposing (BackendFileData, FileHash)
 import Game
 import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
@@ -30,6 +31,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SheepGame
 import Slack
+import SlackSync
 import Sticker exposing (StickerData, StickerUrl(..))
 import Types exposing (BackendModel, BackendMsg(..), LoginData, SlackUserData(..), ToFrontend)
 import User exposing (BackendUserStatus(..))
@@ -107,8 +109,33 @@ deleteAccounts time model =
                     )
                     ( model.discordUsers, [] )
                     model.discordUsers
+
+            ( model2, closeSlackWebsockets ) =
+                SeqDict.foldl
+                    (\slackUserId slackUser ( modelAcc, cmds ) ->
+                        case slackUser of
+                            SlackFullData linkedUser ->
+                                if SeqSet.member linkedUser.linkedTo usersToDelete then
+                                    ( SlackSync.unlinkUser slackUserId linkedUser modelAcc
+                                    , case linkedUser.websocket of
+                                        Just connection ->
+                                            Task.perform (\() -> SlackWebsocketClosedByBackend) (Websocket.close connection)
+                                                :: cmds
+
+                                        Nothing ->
+                                            cmds
+                                    )
+
+                                else
+                                    ( modelAcc, cmds )
+
+                            SlackBasicData _ ->
+                                ( modelAcc, cmds )
+                    )
+                    ( model, [] )
+                    model.slackUsers
         in
-        ( { model
+        ( { model2
             | users =
                 NonemptyDict.map
                     (\userId user ->
@@ -122,17 +149,17 @@ deleteAccounts time model =
                         else
                             user
                     )
-                    model.users
-            , sessions = SeqDict.filter (\_ session -> not (SeqSet.member session.userId usersToDelete)) model.sessions
-            , guilds = SeqDict.map (\_ guild -> deleteMessagesInGuild usersToDelete guild) model.guilds
+                    model2.users
+            , sessions = SeqDict.filter (\_ session -> not (SeqSet.member session.userId usersToDelete)) model2.sessions
+            , guilds = SeqDict.map (\_ guild -> deleteMessagesInGuild usersToDelete guild) model2.guilds
             , deletedGuilds =
                 SeqDict.map
                     (\_ deleted -> { deleted | guild = deleteMessagesInGuild usersToDelete deleted.guild })
-                    model.deletedGuilds
-            , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model.dmChannels
+                    model2.deletedGuilds
+            , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model2.dmChannels
             , discordUsers = discordUsers
           }
-        , Command.batch closeWebsockets
+        , Command.batch (closeWebsockets ++ closeSlackWebsockets)
         )
 
 

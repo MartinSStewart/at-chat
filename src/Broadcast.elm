@@ -18,6 +18,7 @@ module Broadcast exposing
     , pushNotification
     , pushNotificationCodec
     , repliedToData
+    , slackMentionedMembers
     , slackMessageNotification
     , toAdmins
     , toDiscordDmChannel
@@ -1462,8 +1463,26 @@ discordDmNotification time channelId senderId senderName senderIcon text message
         usersToNotify
 
 
+{-| Leaves out linked users who aren't in the channel, so a private channel's messages don't reach
+someone just because it mentions them.
+-}
+slackMentionedMembers :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> BackendModel
+    -> SeqSet (Slack.Id Slack.UserId)
+slackMentionedMembers teamId channelId content model =
+    case SeqDict.get teamId model.slackWorkspaces |> Maybe.andThen (\workspace -> SeqDict.get channelId workspace.channels) of
+        Just channel ->
+            SeqSet.filter (\userId -> SeqSet.member userId channel.linkedMembers) (RichText.mentionsUser content)
+
+        Nothing ->
+            SeqSet.empty
+
+
 {-| Linked accounts hear about every message in a Slack DM, and about the messages that mention
-them in a channel. `guildOrDmId` is the author's.
+them in a channel they're in. `guildOrDmId` is the author's.
 -}
 slackMessageNotification :
     Time.Posix
@@ -1502,8 +1521,8 @@ slackMessageNotification time guildOrDmId threadRoute message model =
         recipients : List (Slack.Id Slack.UserId)
         recipients =
             case guildOrDmId of
-                SlackGuildOrDmId_Workspace _ ->
-                    RichText.mentionsUser message.content.content |> SeqSet.toList
+                SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                    slackMentionedMembers teamId channelId message.content.content model |> SeqSet.toList
 
                 SlackGuildOrDmId_Dm { channelId } ->
                     case SeqDict.get channelId model.slackDmChannels of

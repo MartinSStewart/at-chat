@@ -105,6 +105,7 @@ module E2EHelper exposing
     , sessionIdAttacker
     , setIphone14SafeAreaInsets
     , slackFormFields
+    , slackWebsocketByToken
     , startTest
     , startTime
     , startupDataJson
@@ -1665,6 +1666,26 @@ websocketByDiscordToken token data =
                     Nothing
             )
         |> List.head
+
+
+{-| The open Slack relay websocket that was asked to connect with this token.
+-}
+slackWebsocketByToken :
+    String
+    -> T.Data frontendModel backendModel
+    -> Maybe ( Websocket.Connection, T.WebsocketState )
+slackWebsocketByToken token data =
+    SeqDict.toList data.websockets
+        |> List.filter
+            (\( ( requestedBy, _ ), websocketState ) ->
+                (requestedBy == RequestedByBackend)
+                    && (websocketState.closedAt == Nothing)
+                    && List.any
+                        (\msg -> String.contains ("token=" ++ Url.percentEncode token) msg.data)
+                        (Array.toList websocketState.dataSent)
+            )
+        |> List.head
+        |> Maybe.map (\( ( _, connection ), websocketState ) -> ( connection, websocketState ))
 
 
 discordUserAuth : Discord.UserAuth
