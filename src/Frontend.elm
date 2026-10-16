@@ -624,8 +624,12 @@ startupRoute loading loggedIn =
                             Just workspace ->
                                 case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
                                     Just slackUserId ->
-                                        GuildColumn.slackWorkspaceRoute local.localUser slackUserId teamId workspace
-                                            |> Route.setOverlay overlay
+                                        case GuildColumn.slackWorkspaceRoute local.localUser slackUserId teamId workspace of
+                                            Just workspaceRoute ->
+                                                Route.setOverlay overlay workspaceRoute
+
+                                            Nothing ->
+                                                loading.route
 
                                     Nothing ->
                                         loading.route
@@ -5913,90 +5917,77 @@ updateLoaded msg model =
                         local : LocalState
                         local =
                             Local.model loggedIn.localState
+
+                        -- Inside a guild or workspace the search starts out narrowed to it
+                        query : String
+                        query =
+                            case model.route of
+                                GuildRoute guildId _ _ _ ->
+                                    case SeqDict.get guildId local.guilds of
+                                        Just guild ->
+                                            GuildName.toString guild.name ++ " "
+
+                                        Nothing ->
+                                            ""
+
+                                DiscordGuildRoute data ->
+                                    case SeqDict.get data.guildId local.discordGuilds of
+                                        Just guild ->
+                                            GuildName.toString guild.name ++ " "
+
+                                        Nothing ->
+                                            ""
+
+                                SlackWorkspaceRoute data ->
+                                    case SeqDict.get data.teamId local.slackWorkspaces of
+                                        Just workspace ->
+                                            workspace.name ++ " "
+
+                                        Nothing ->
+                                            ""
+
+                                HomePageRoute _ ->
+                                    ""
+
+                                DmRoute _ ->
+                                    ""
+
+                                DiscordDmRoute _ ->
+                                    ""
+
+                                SlackDmRoute _ ->
+                                    ""
+
+                                AdminRoute _ ->
+                                    ""
+
+                                NewGuildRoute ->
+                                    ""
+
+                                AiChatRoute ->
+                                    ""
+
+                                TextEditorRoute ->
+                                    ""
+
+                                PrivacyRoute ->
+                                    ""
+
+                                LinkDiscord _ ->
+                                    ""
+
+                                PublicGoMatchRoute _ ->
+                                    ""
+
+                        route : Route
+                        route =
+                            Route.setOverlay (Just Route.SearchOverlay) model.route
                     in
-                    case model.route of
-                        HomePageRoute _ ->
-                            FrontendExtra.routePush
-                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (HomePageRoute (Just Route.SearchOverlay))
+                    if route == model.route then
+                        ( model, Command.none )
 
-                        AdminRoute _ ->
-                            ( model, Command.none )
-
-                        NewGuildRoute ->
-                            ( model, Command.none )
-
-                        GuildRoute guildId channelRoute channelsVisibleOnMobile _ ->
-                            FrontendExtra.routePush
-                                (case SeqDict.get guildId local.guilds of
-                                    Just guild ->
-                                        { model
-                                            | loginStatus =
-                                                LoggedIn { loggedIn | searchOverlayQuery = GuildName.toString guild.name ++ " " }
-                                        }
-
-                                    Nothing ->
-                                        model
-                                )
-                                (GuildRoute guildId channelRoute channelsVisibleOnMobile (Just Route.SearchOverlay))
-
-                        DiscordGuildRoute data ->
-                            FrontendExtra.routePush
-                                (case SeqDict.get data.guildId local.discordGuilds of
-                                    Just guild ->
-                                        { model
-                                            | loginStatus =
-                                                LoggedIn { loggedIn | searchOverlayQuery = GuildName.toString guild.name ++ " " }
-                                        }
-
-                                    Nothing ->
-                                        model
-                                )
-                                (DiscordGuildRoute { data | overlay = Just Route.SearchOverlay })
-
-                        DmRoute data ->
-                            FrontendExtra.routePush
-                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (DmRoute { data | overlay = Just Route.SearchOverlay })
-
-                        DiscordDmRoute data ->
-                            FrontendExtra.routePush
-                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (DiscordDmRoute { data | overlay = Just Route.SearchOverlay })
-
-                        SlackWorkspaceRoute data ->
-                            FrontendExtra.routePush
-                                (case SeqDict.get data.teamId local.slackWorkspaces of
-                                    Just workspace ->
-                                        { model
-                                            | loginStatus =
-                                                LoggedIn { loggedIn | searchOverlayQuery = workspace.name ++ " " }
-                                        }
-
-                                    Nothing ->
-                                        model
-                                )
-                                (SlackWorkspaceRoute { data | overlay = Just Route.SearchOverlay })
-
-                        SlackDmRoute data ->
-                            FrontendExtra.routePush
-                                { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } }
-                                (SlackDmRoute { data | overlay = Just Route.SearchOverlay })
-
-                        AiChatRoute ->
-                            ( model, Command.none )
-
-                        TextEditorRoute ->
-                            ( model, Command.none )
-
-                        PrivacyRoute ->
-                            ( model, Command.none )
-
-                        LinkDiscord _ ->
-                            ( model, Command.none )
-
-                        PublicGoMatchRoute _ ->
-                            ( model, Command.none )
+                    else
+                        FrontendExtra.routePush { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = query } } route
 
                 NotLoggedIn _ ->
                     ( model, Command.none )

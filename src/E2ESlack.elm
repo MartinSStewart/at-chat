@@ -24,8 +24,10 @@ import NonemptySet
 import OneOrGreater
 import OneToOne
 import Pages.Admin
+import Pages.Guild
 import PersonName
 import RichText
+import SearchOverlay
 import SeqDict
 import SeqSet
 import Slack
@@ -468,6 +470,22 @@ viewAndWriteInSlackTest config =
                     )
                 , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
                 , E2EHelper.hasExactText admin [ "This is the start of #social" ]
+
+                -- The search button narrows the search overlay to the workspace and finds its channels
+                , admin.click 100 Pages.Guild.searchButtonId
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString SearchOverlay.resultsContainerId) ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "newer-channel", Test.Html.Selector.exactText "test-slack" ]
+                    )
+                , admin.input 100 SearchOverlay.inputId "zig"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString SearchOverlay.resultsContainerId) ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "zig" ]
+                    )
                 ]
             )
         ]

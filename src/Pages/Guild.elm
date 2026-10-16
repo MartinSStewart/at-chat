@@ -6,7 +6,6 @@ module Pages.Guild exposing
     , banMemberText
     , channelDoesNotExistText
     , channelMessageHtmlId
-    , channelSearchInputId
     , channelTextInputId
     , chatWithText
     , confirmLeaveGuildText
@@ -15,7 +14,6 @@ module Pages.Guild exposing
     , decodeMessageIndex
     , decodeMessageView
     , deleteGuildText
-    , directMessagesText
     , discordGuildView
     , dropdownButtonId
     , e2eeSectionIsExpanded
@@ -24,7 +22,6 @@ module Pages.Guild exposing
     , encodeMessageIndex
     , encodeMessageView
     , friendLabel
-    , friendsSearchInputId
     , guildMembersText
     , guildNotFoundText
     , guildView
@@ -38,10 +35,10 @@ module Pages.Guild exposing
     , newGuildFormView
     , newMessagesBadgeText
     , newMessagesId
-    , noMatchingChannelsText
     , noUnreadMessagesText
     , olderUnreadMessagesText
     , profileImageButtonId
+    , searchButtonId
     , setImportChannelStatus
     , slackWorkspaceView
     , startOfThreadText
@@ -195,11 +192,6 @@ guildNotFoundText =
 directMessagesText : String
 directMessagesText =
     "Direct messages"
-
-
-noMatchingChannelsText : String
-noMatchingChannelsText =
-    "No matching channels\u{00A0}found"
 
 
 olderUnreadMessagesText : Int -> String
@@ -10230,16 +10222,22 @@ channelColumnContainer safeAreaInsetTop header content =
         )
 
 
+searchButtonId : HtmlId
+searchButtonId =
+    Dom.id "guild_showSearchOverlay"
+
+
 searchIcon : Bool -> Element FrontendMsg_
 searchIcon isMobile =
-    Ui.el
+    MyUi.elButton
+        searchButtonId
+        PressedShowSearchOverlay
         [ Ui.Font.color MyUi.font3
         , Ui.height Ui.fill
         , Ui.contentCenterY
         , Ui.paddingXY 4 0
         , Ui.alignRight
         , Ui.width Ui.shrink
-        , Ui.Input.button PressedShowSearchOverlay
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         ]
         (Ui.html Icons.magnifyingGlass)
@@ -10305,7 +10303,7 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
             [ Ui.Font.color MyUi.font2
             , Ui.height Ui.fill
             , Ui.contentCenterY
-            , MyUi.hoverText "Invite users"
+            , MyUi.hoverText guildName
             ]
             (Ui.text guildName)
         , searchIcon isMobile
@@ -10427,11 +10425,6 @@ channelSortName notifications channel =
         ++ ChannelName.toString channel.name
 
 
-channelSearchInputId : HtmlId
-channelSearchInputId =
-    Dom.id "guild_channelSearchInput"
-
-
 discordChannelColumn :
     Bool
     -> Time.Posix
@@ -10469,7 +10462,6 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 =
             [ Ui.Font.color MyUi.font2
             , Ui.height Ui.fill
             , Ui.contentCenterY
-            , MyUi.hoverText "Invite users"
             , Ui.spacing 4
             , MyUi.hoverText guildName
             ]
@@ -11433,11 +11425,6 @@ friendsColumn canScroll2 isMobile currentTime dmChannelSelection dmChannels disc
                     |> List.map Tuple.second
                     |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
         )
-
-
-friendsSearchInputId : HtmlId
-friendsSearchInputId =
-    Dom.id "guild_friendsSearchInput"
 
 
 friendLabelMobile :
@@ -13464,7 +13451,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                     (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
                                     channelId
                                     NoThread
-                                    (SeqDict.get (SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId })) localUser.user.lastViewedMessage)
+                                    (SeqDict.get guildOrDmId localUser.user.lastViewedMessage)
                                     channel
 
                             threadNotifications : List ChannelNotificationType
@@ -13479,9 +13466,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                                 channelId
                                                 (ViewThread threadId)
                                                 (SeqDict.get
-                                                    ( SlackGuildOrDmId (SlackGuildOrDmId_Workspace { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId })
-                                                    , threadId
-                                                    )
+                                                    ( guildOrDmId, threadId )
                                                     localUser.user.lastViewedThreadMessage
                                                 )
                                                 thread
@@ -13492,15 +13477,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                             []
                             [ slackChannelColumnRow
                                 isMobile
-                                (GuildColumn.channelOrThreadHasNotifications
-                                    IsNotMuted
-                                    directMentions
-                                    False
-                                    channelId
-                                    NoThread
-                                    (SeqDict.get guildOrDmId localUser.user.lastViewedMessage)
-                                    channel
-                                )
+                                hasNotifications
                                 routeData
                                 channelId
                                 channel

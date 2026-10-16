@@ -373,8 +373,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMedia.videoAttachmentTest videoUploadConfig
     , E2EMedia.audioAttachmentTest audioUploadConfig
     , E2EMisc.inviteUserAndDmChat normalConfig
-    , E2EMisc.friendsSearchTest normalConfig
-    , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.escapeClosesUserOptionsTest normalConfig

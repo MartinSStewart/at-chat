@@ -168,6 +168,7 @@ module LocalState exposing
     , slackChannelMentions
     , slackGuildOrDmIdToLatestMessages
     , slackGuildOrDmIdToMessage
+    , slackThreadMentionName
     , typingIn
     , updateAdminData
     , updateChannel
@@ -722,6 +723,28 @@ discordThreadMentionName threadId channel localUser =
                 messageToString
                     localUser.timezone
                     (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+                    SeqDict.empty
+                    SeqDict.empty
+                    message
+
+            Nothing ->
+                "<missing>"
+        )
+
+
+slackThreadMentionName :
+    Id ChannelMessageId
+    -> { a | name : ChannelName, messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) }
+    -> LocalUser
+    -> String
+slackThreadMentionName threadId channel localUser =
+    threadName
+        channel.name
+        (case MessageArray.get threadId channel.messages of
+            Just message ->
+                messageToString
+                    localUser.timezone
+                    localUser.slackUsers
                     SeqDict.empty
                     SeqDict.empty
                     message
@@ -2344,9 +2367,9 @@ discordAnnouncementChannel guild =
     SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.idFromUInt64 (UInt64.fromInt 0))
 
 
-slackAnnouncementChannel : { a | channels : SeqDict (Slack.Id Slack.ChannelId) b } -> Slack.Id Slack.ChannelId
+slackAnnouncementChannel : { a | channels : SeqDict (Slack.Id Slack.ChannelId) b } -> Maybe (Slack.Id Slack.ChannelId)
 slackAnnouncementChannel guild =
-    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Slack.Id "")
+    SeqDict.keys guild.channels |> List.head
 
 
 addReactionEmoji :

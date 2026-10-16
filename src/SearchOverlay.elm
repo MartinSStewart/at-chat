@@ -1,5 +1,6 @@
 module SearchOverlay exposing
     ( ResultIcon
+    , ResultSource
     , SearchResult
     , inputId
     , resultsContainerId
@@ -9,7 +10,7 @@ module SearchOverlay exposing
     )
 
 {-| The overlay Ctrl+K (Cmd+K on macOS) opens for jumping to any channel, thread or DM, including
-Discord ones.
+Discord and Slack ones.
 -}
 
 import ChannelName
@@ -23,17 +24,19 @@ import GuildName
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, Id, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import List.Extra
-import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
+import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
+import NonemptySet
 import PersonName
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
+import Slack
 import Time
 import Types exposing (FrontendMsg_(..))
 import Ui exposing (Element)
@@ -42,14 +45,14 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import User exposing (FrontendUser)
-import UserSession exposing (DiscordFrontendUser)
+import UserSession exposing (DiscordFrontendUser, SlackFrontendUser)
 
 
 type alias SearchResult =
     { name : String
     , location : Maybe String
     , icon : ResultIcon
-    , isDiscord : Bool
+    , source : ResultSource
     , route : Route
     , lastActivity : Int
     }
@@ -59,6 +62,13 @@ type ResultIcon
     = ChannelIcon
     | UserIcon (Maybe FrontendUser)
     | DiscordUserIcon (Discord.Id Discord.UserId) (Maybe FileHash)
+    | SlackUserIcon (Maybe SlackFrontendUser)
+
+
+type ResultSource
+    = FromAtChat
+    | FromDiscord
+    | FromSlack
 
 
 inputId : HtmlId
@@ -169,6 +179,8 @@ allResults local =
             )
             []
             local.discordDmChannels
+        ++ SeqDict.foldl (\teamId workspace list -> slackWorkspaceResults local teamId workspace ++ list) [] local.slackWorkspaces
+        ++ SeqDict.foldl (\channelId dmChannel list -> slackDmResults local channelId dmChannel ++ list) [] local.slackDmChannels
 
 
 lastActivity : { a | messages : MessageArray messageId userId channelId } -> Int
@@ -212,7 +224,7 @@ guildResults local guildId guild =
             { name = ChannelName.toString channel.name
             , location = Just guildName
             , icon = ChannelIcon
-            , isDiscord = False
+            , source = FromAtChat
             , route = route (NoThreadWithFriends Nothing HideChannelSettings)
             , lastActivity = lastActivity channel
             }
@@ -221,7 +233,7 @@ guildResults local guildId guild =
                         { name = mentionName channelId threadId channelMentions
                         , location = Just guildName
                         , icon = ChannelIcon
-                        , isDiscord = False
+                        , source = FromAtChat
                         , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                         , lastActivity = lastActivity thread
                         }
@@ -263,7 +275,7 @@ discordGuildResults local guildId guild =
                     { name = ChannelName.toString channel.name
                     , location = Just guildName
                     , icon = ChannelIcon
-                    , isDiscord = True
+                    , source = FromDiscord
                     , route = route (NoThreadWithFriends Nothing HideChannelSettings)
                     , lastActivity = lastActivity channel
                     }
@@ -272,7 +284,7 @@ discordGuildResults local guildId guild =
                                 { name = mentionName channelId threadId channelMentions
                                 , location = Just guildName
                                 , icon = ChannelIcon
-                                , isDiscord = True
+                                , source = FromDiscord
                                 , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                                 , lastActivity = lastActivity thread
                                 }
@@ -308,7 +320,7 @@ dmResults local otherUserId dmChannel =
     { name = otherUserName
     , location = Nothing
     , icon = UserIcon (User.getUser otherUserId local.localUser)
-    , isDiscord = False
+    , source = FromAtChat
     , route = route (NoThreadWithFriends Nothing HideChannelSettings)
     , lastActivity = lastActivity dmChannel
     }
@@ -332,7 +344,7 @@ dmResults local otherUserId dmChannel =
                            )
                 , location = Nothing
                 , icon = UserIcon (User.getUser otherUserId local.localUser)
-                , isDiscord = False
+                , source = FromAtChat
                 , route = route (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                 , lastActivity = lastActivity thread
                 }
@@ -375,7 +387,7 @@ discordDmResult local channelId dmChannel =
 
                     [] ->
                         DiscordUserIcon currentUserId Nothing
-            , isDiscord = True
+            , source = FromDiscord
             , route =
                 DiscordDmRoute
                     { currentDiscordUserId = currentUserId
@@ -392,6 +404,132 @@ discordDmResult local channelId dmChannel =
 
         Nothing ->
             Nothing
+
+
+slackWorkspaceResults : LocalState -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> List SearchResult
+slackWorkspaceResults local teamId workspace =
+    case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
+        Just currentUserId ->
+            SeqDict.foldl
+                (\channelId channel list ->
+                    let
+                        route : ThreadRouteWithMaybeMessage -> Route
+                        route threadRoute =
+                            SlackWorkspaceRoute
+                                { currentSlackUserId = currentUserId
+                                , teamId = teamId
+                                , channelId = channelId
+                                , threadRoute = threadRoute
+                                , channelsVisible = ChannelsHiddenOnMobile
+                                , overlay = Nothing
+                                }
+                    in
+                    { name = ChannelName.toString channel.name
+                    , location = Just workspace.name
+                    , icon = ChannelIcon
+                    , source = FromSlack
+                    , route = route (NoThreadWithMaybeMessage Nothing)
+                    , lastActivity = lastActivity channel
+                    }
+                        :: SeqDict.foldl
+                            (\threadId thread list2 ->
+                                { name = LocalState.slackThreadMentionName threadId channel local.localUser
+                                , location = Just workspace.name
+                                , icon = ChannelIcon
+                                , source = FromSlack
+                                , route = route (ViewThreadWithMaybeMessage threadId Nothing)
+                                , lastActivity = lastActivity thread
+                                }
+                                    :: list2
+                            )
+                            list
+                            channel.threads
+                )
+                []
+                workspace.channels
+
+        Nothing ->
+            []
+
+
+{-| A Slack DM is named after the people in it besides the linked account we're in it as, or
+after that account when it's a DM with ourselves.
+-}
+slackDmResults : LocalState -> Slack.Id Slack.DmChannelId -> SlackFrontendDmChannel -> List SearchResult
+slackDmResults local channelId dmChannel =
+    case GuildColumn.slackDmCurrentUserId local.localUser dmChannel of
+        Just currentUserId ->
+            let
+                otherMembers : List (Slack.Id Slack.UserId)
+                otherMembers =
+                    case List.filter (\userId -> userId /= currentUserId) (NonemptySet.toList dmChannel.members) of
+                        [] ->
+                            [ currentUserId ]
+
+                        otherMembers2 ->
+                            otherMembers2
+
+                dmName : String
+                dmName =
+                    List.map (\userId -> User.toString userId local.localUser.slackUsers) otherMembers |> String.join ", "
+
+                icon : ResultIcon
+                icon =
+                    case otherMembers of
+                        userId :: _ ->
+                            SlackUserIcon (SeqDict.get userId local.localUser.slackUsers)
+
+                        [] ->
+                            SlackUserIcon Nothing
+
+                route : ThreadRouteWithMaybeMessage -> Route
+                route threadRoute =
+                    SlackDmRoute
+                        { currentSlackUserId = currentUserId
+                        , channelId = channelId
+                        , threadRoute = threadRoute
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
+                        }
+            in
+            { name = dmName
+            , location = Nothing
+            , icon = icon
+            , source = FromSlack
+            , route = route (NoThreadWithMaybeMessage Nothing)
+            , lastActivity = lastActivity dmChannel
+            }
+                :: SeqDict.foldl
+                    (\threadId thread list ->
+                        { name =
+                            dmName
+                                ++ "/"
+                                ++ (case MessageArray.get threadId dmChannel.messages of
+                                        Just message ->
+                                            LocalState.messageToString
+                                                local.localUser.timezone
+                                                local.localUser.slackUsers
+                                                SeqDict.empty
+                                                SeqDict.empty
+                                                message
+                                                |> String.left 50
+
+                                        Nothing ->
+                                            "<missing>"
+                                   )
+                        , location = Nothing
+                        , icon = icon
+                        , source = FromSlack
+                        , route = route (ViewThreadWithMaybeMessage threadId Nothing)
+                        , lastActivity = lastActivity thread
+                        }
+                            :: list
+                    )
+                    []
+                    dmChannel.threads
+
+        Nothing ->
+            []
 
 
 view : Bool -> String -> Int -> List SearchResult -> Element FrontendMsg_
@@ -519,6 +657,9 @@ resultView isMobile isSelected index result =
                     Ui.el
                         [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ]
                         (User.smallDiscordProfileImage userId icon)
+
+                SlackUserIcon user ->
+                    Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY, Ui.paddingWith { left = 0, right = 8, top = 0, bottom = 0 } ] (User.smallProfileImage False user)
             , Ui.text result.name
             ]
         , Ui.row
@@ -536,10 +677,14 @@ resultView isMobile isSelected index result =
 
                 Nothing ->
                     Ui.none
-            , if result.isDiscord then
-                Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, MyUi.hoverText "Discord" ] (Ui.html Icons.discord)
+            , case result.source of
+                FromAtChat ->
+                    Ui.none
 
-              else
-                Ui.none
+                FromDiscord ->
+                    Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, MyUi.hoverText "Discord" ] (Ui.html Icons.discord)
+
+                FromSlack ->
+                    Ui.el [ Ui.width Ui.shrink, MyUi.noShrinking, MyUi.hoverText "Slack" ] (Ui.html (Icons.slack 16))
             ]
         ]

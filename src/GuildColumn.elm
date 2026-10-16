@@ -10,6 +10,7 @@ module GuildColumn exposing
     , guildRoute
     , newMessageCount
     , rowLinkButton
+    , slackDmCurrentUserId
     , slackDmHasNotifications
     , slackWorkspaceCurrentUserId
     , slackWorkspaceRoute
@@ -152,11 +153,18 @@ guildColumn isMobile route local canScroll2 =
 
 slackWorkspaceIcons : Route -> LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Element FrontendMsg_
 slackWorkspaceIcons route localUser teamId workspace =
-    case slackWorkspaceCurrentUserId localUser teamId of
-        Just currentSlackUserId ->
+    case
+        slackWorkspaceCurrentUserId localUser teamId
+            |> Maybe.andThen
+                (\currentSlackUserId ->
+                    slackWorkspaceRoute localUser currentSlackUserId teamId workspace
+                        |> Maybe.map (Tuple.pair currentSlackUserId)
+                )
+    of
+        Just ( currentSlackUserId, workspaceRoute ) ->
             elLinkButton
                 (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
-                (slackWorkspaceRoute localUser currentSlackUserId teamId workspace)
+                workspaceRoute
                 []
                 (GuildIcon.slackView
                     (case route of
@@ -415,32 +423,52 @@ discordGuildRoute localUser discordUserId guildId guild =
         |> DiscordGuildRoute
 
 
-slackWorkspaceRoute : LocalUser -> Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Route
+{-| Opens the channel last viewed in the workspace, or its first channel if that one is gone. Nothing
+when the workspace has no channels we can see.
+-}
+slackWorkspaceRoute : LocalUser -> Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Maybe Route
 slackWorkspaceRoute localUser slackUserId teamId workspace =
     let
-        ( channelId2, threadRoute2 ) =
+        lastViewed : Maybe ( Slack.Id Slack.ChannelId, ThreadRouteWithMaybeMessage )
+        lastViewed =
             case SeqDict.get teamId localUser.user.lastSlackChannelViewed of
                 Just ( channelId, threadRoute ) ->
-                    ( channelId
-                    , case threadRoute of
-                        ViewThread threadId ->
-                            ViewThreadWithMaybeMessage threadId Nothing
+                    if SeqDict.member channelId workspace.channels then
+                        Just
+                            ( channelId
+                            , case threadRoute of
+                                ViewThread threadId ->
+                                    ViewThreadWithMaybeMessage threadId Nothing
 
-                        NoThread ->
-                            NoThreadWithMaybeMessage Nothing
-                    )
+                                NoThread ->
+                                    NoThreadWithMaybeMessage Nothing
+                            )
+
+                    else
+                        Nothing
 
                 Nothing ->
-                    ( LocalState.slackAnnouncementChannel workspace, NoThreadWithMaybeMessage Nothing )
+                    Nothing
     in
-    { currentSlackUserId = slackUserId
-    , teamId = teamId
-    , channelId = channelId2
-    , threadRoute = threadRoute2
-    , channelsVisible = ChannelsVisibleOnMobile
-    , overlay = Nothing
-    }
-        |> SlackWorkspaceRoute
+    (case lastViewed of
+        Just _ ->
+            lastViewed
+
+        Nothing ->
+            LocalState.slackAnnouncementChannel workspace
+                |> Maybe.map (\channelId -> ( channelId, NoThreadWithMaybeMessage Nothing ))
+    )
+        |> Maybe.map
+            (\( channelId, threadRoute ) ->
+                { currentSlackUserId = slackUserId
+                , teamId = teamId
+                , channelId = channelId
+                , threadRoute = threadRoute
+                , channelsVisible = ChannelsVisibleOnMobile
+                , overlay = Nothing
+                }
+                    |> SlackWorkspaceRoute
+            )
 
 
 dmGuildIcon : Route -> LocalUser -> Id UserId -> FrontendDmChannel -> Element FrontendMsg_
