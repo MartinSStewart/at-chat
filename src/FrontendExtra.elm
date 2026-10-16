@@ -6297,6 +6297,20 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists teamId (\workspace -> { workspace | name = name }) local.slackWorkspaces
                     }
 
+                Server_Slack_ChannelRenamed teamId channelId name ->
+                    { local
+                        | slackWorkspaces =
+                            SeqDict.updateIfExists
+                                teamId
+                                (\workspace ->
+                                    { workspace
+                                        | channels =
+                                            SeqDict.updateIfExists channelId (\channel -> { channel | name = name }) workspace.channels
+                                    }
+                                )
+                                local.slackWorkspaces
+                    }
+
                 Server_Slack_LinkedUserLoaded slackUserId teamId data ->
                     let
                         localUser : LocalUser

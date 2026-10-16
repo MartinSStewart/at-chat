@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -18,6 +18,7 @@ import Id exposing (ChannelMessageId)
 import IdArray
 import Json.Decode
 import Json.Encode
+import List.Extra
 import Message exposing (Message(..))
 import MessageDropdown
 import MuteSettings
@@ -2309,3 +2310,109 @@ slackEditMessageTest config =
                 ]
             )
         ]
+
+
+slackNewConversationsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackNewConversationsTest config =
+    E2EHelper.startTest
+        "Slack channels and DMs that show up after linking are loaded, and renamed channels update"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackNewConversationsHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"D0NEWDM","user":"U0THIRD","text":"Hi from a new DM","ts":"1791640000.000100"}"""
+                        , E2EHelper.hasExactText admin [ "fresh-channel" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case SeqDict.get (Slack.Id "D0NEWDM") (E2EHelper.unwrapBackend backend).slackDmChannels of
+                                    Just dmChannel ->
+                                        if IdArray.length dmChannel.messages == 1 then
+                                            Ok ()
+
+                                        else
+                                            Err "Expected the new DM's message to be loaded"
+
+                                    Nothing ->
+                                        Err "Expected the new DM to be loaded"
+                            )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_slackFriendLabel_D0NEWDM" ])
+                        , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"channel_rename","channel":{"id":"C09DJDQUKKN","name":"renamed-social","created":1757024114},"event_ts":"1791640001.000100"}"""
+                        , E2EHelper.hasExactText admin [ "renamed-social" ]
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Once linking has happened, Slack lists a new channel and a DM with the third person.
+-}
+slackNewConversationsHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackNewConversationsHttp handleHttpRequest ({ data, currentRequest } as request) =
+    let
+        userBootCount : Int
+        userBootCount =
+            List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                |> List.Extra.count (\customRequest -> String.endsWith "client.userBoot" customRequest.url)
+
+        formFields : List String
+        formFields =
+            case E2EHelper.decodeCustomRequest currentRequest |> Maybe.andThen .body |> Maybe.map (Json.Decode.decodeValue Json.Decode.string) of
+                Just (Ok text) ->
+                    String.split "&" text
+
+                _ ->
+                    []
+    in
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            if userBootCount < 2 || not (List.member ("token=" ++ E2EHelper.legitSlackToken) formFields) then
+                handleHttpRequest request
+
+            else if String.endsWith "users.conversations" customRequest.url && List.member "cursor=page2" formFields then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":true,"is_archived":false},{"id":"D09DK3P5RPC","is_im":true,"is_archived":false,"user":"U09DK3NCPMG"},{"id":"D09DJDQMBPW","is_im":true,"is_archived":false,"user":"U09DJDQL1A8"},{"id":"C0AMPIM1234","name":"mpdm-slack-admin--ziggler--third-1","is_channel":false,"is_group":true,"is_mpim":true,"is_private":true,"is_archived":false},{"id":"C0FRESH","name":"fresh-channel","is_channel":true,"is_private":false,"is_archived":false},{"id":"D0NEWDM","is_im":true,"is_archived":false,"user":"U0THIRD"}],"response_metadata":{"next_cursor":""}}"""
+
+            else if String.endsWith "conversations.history" customRequest.url && List.member "channel=D0NEWDM" formFields then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"messages":[{"type":"message","user":"U0THIRD","text":"Hi from a new DM","ts":"1791640000.000100"}],"has_more":false}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request

@@ -30,6 +30,7 @@ module Types exposing
     , LinkSlackWorkspaceError(..)
     , LoadStatus(..)
     , LoadedFrontend
+    , LoadedSlackWorkspace
     , LoadingFrontend
     , LocalChange(..)
     , LocalMsg(..)
@@ -533,6 +534,7 @@ type alias BackendModel =
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
     , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
     , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
+    , refreshingSlackConversations : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
     }
 
@@ -894,20 +896,8 @@ type BackendMsg
     | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackEditedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
-    | LinkSlackUserStep2
-        Time.Posix
-        (Slack.Id Slack.TeamId)
-        (Slack.Id Slack.UserId)
-        (Result
-            Slack.HttpError
-            { channels : List ( Slack.Channel, Slack.History )
-            , dmChannels : List ( Slack.DmChannel, Slack.History )
-            , users : List ( Slack.User, Maybe FileHash )
-            , selfIcon : Maybe FileHash
-            , workspaceIcon : Maybe FileHash
-            , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
-            }
-        )
+    | LinkSlackUserStep2 Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError LoadedSlackWorkspace)
+    | RefreshedSlackConversations (Slack.Id Slack.UserId) (Result ( Time.Posix, Slack.HttpError ) ( Slack.Id Slack.TeamId, LoadedSlackWorkspace ))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -1045,6 +1035,16 @@ type LinkDiscordFailure
 type LinkSlackResult
     = SlackLinkingDisabled
     | LoadedSlackWorkspaces (Nonempty (Result LinkSlackWorkspaceError String))
+
+
+type alias LoadedSlackWorkspace =
+    { channels : List ( Slack.Channel, Slack.History )
+    , dmChannels : List ( Slack.DmChannel, Slack.History )
+    , users : List ( Slack.User, Maybe FileHash )
+    , selfIcon : Maybe FileHash
+    , workspaceIcon : Maybe FileHash
+    , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
+    }
 
 
 type LinkSlackWorkspaceError
@@ -1239,6 +1239,7 @@ type ServerChange
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
     | Server_Slack_WorkspaceRenamed (Slack.Id Slack.TeamId) String
+    | Server_Slack_ChannelRenamed (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) ChannelName
     | Server_Slack_LinkedUserLoaded
         (Slack.Id Slack.UserId)
         (Slack.Id Slack.TeamId)

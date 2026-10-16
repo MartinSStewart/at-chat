@@ -1055,6 +1055,8 @@ type WebsocketEvent
     | WebsocketUserChanged User
     | WebsocketTeamRenamed String
     | WebsocketTeamDomainChanged String
+    | WebsocketConversationsChanged
+    | WebsocketChannelRenamed (Id ChannelId) String
     | WebsocketOtherEvent
 
 
@@ -1097,6 +1099,15 @@ decodeWebsocketEvent =
                 else if eventType == "team_domain_change" then
                     Decode.field "domain" Decode.string |> Decode.map WebsocketTeamDomainChanged
 
+                else if List.member eventType conversationsChangedEvents then
+                    Decode.succeed WebsocketConversationsChanged
+
+                else if eventType == "channel_rename" || eventType == "group_rename" then
+                    Decode.map2
+                        WebsocketChannelRenamed
+                        (Decode.at [ "channel", "id" ] decodeId)
+                        (Decode.at [ "channel", "name" ] Decode.string)
+
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent
 
@@ -1124,6 +1135,25 @@ decodeWebsocketEvent =
                         (Decode.field "channel" Decode.string)
                         decodeMessage
             )
+
+
+{-| Events where the conversations someone is in might have changed. Slack sends them for joining,
+leaving, archiving and being added to DMs.
+-}
+conversationsChangedEvents : List String
+conversationsChangedEvents =
+    [ "channel_joined"
+    , "channel_left"
+    , "channel_deleted"
+    , "channel_archive"
+    , "channel_unarchive"
+    , "group_joined"
+    , "group_left"
+    , "group_archive"
+    , "group_unarchive"
+    , "im_created"
+    , "mpim_joined"
+    ]
 
 
 {-| Reactions can also be on files, which at-chat doesn't show.
