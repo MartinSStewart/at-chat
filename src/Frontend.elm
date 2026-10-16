@@ -7424,8 +7424,14 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 |> List.isEmpty
                                                                 |> not
 
-                                                        SlackGuildOrDmId _ ->
-                                                            False
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            MessageDropdown.slackUserDropdownList
+                                                                (MyUi.isMobile model)
+                                                                nameSoFar
+                                                                guildOrDmId2
+                                                                local
+                                                                |> List.isEmpty
+                                                                |> not
 
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of

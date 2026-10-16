@@ -290,6 +290,7 @@ type alias SlackFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
     , color : UserColor
+    , teamId : Slack.Id Slack.TeamId
     }
 
 

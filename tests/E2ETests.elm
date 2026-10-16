@@ -435,6 +435,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackUnreadAndNotificationsTest normalConfig
     , E2ESlack.slackMuteAndNotifyAllTest normalConfig
     , E2ESlack.slackUnreadOverviewTest normalConfig
+    , E2ESlack.slackMentionDropdownTest normalConfig
     , E2ESlack.slackLinkingToggleAndLimitTest normalConfig
     , E2ESlack.slackMentionOutsideChannelTest normalConfig
     , E2ESlack.slackThreadsTest normalConfig

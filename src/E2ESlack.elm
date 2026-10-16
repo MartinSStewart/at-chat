@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -19,6 +19,7 @@ import IdArray
 import Json.Decode
 import Json.Encode
 import Message exposing (Message(..))
+import MessageDropdown
 import MuteSettings
 import NonemptyDict
 import NonemptySet
@@ -1185,6 +1186,67 @@ slackUnreadOverviewTest config =
                     )
                 , admin.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasText admin [ "Unread in a thread" ]
+                ]
+            )
+        ]
+
+
+slackMentionDropdownTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMentionDropdownTest config =
+    E2EHelper.startTest
+        "Typing @ or # in a Slack channel suggests Slack users and channels"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zi"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString (Pages.Guild.dropdownButtonId 0)), Test.Html.Selector.exactText "zig" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi #soc"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "social" ])
+
+                -- Picking a suggestion closes the dropdown. The name it writes into the message
+                -- is put there by js, which these tests don't run, so it's typed in its place.
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zi"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zig"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case
+                            SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                |> Maybe.andThen (\channel -> IdArray.toList channel.messages |> List.reverse |> List.head)
+                        of
+                            Just (UserTextMessage data) ->
+                                if SeqSet.member (Slack.Id "U09DK3NCPMG") (RichText.mentionsUser data.content.content) then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the sent message to mention zig"
+
+                            _ ->
+                                Err "Expected the sent message to be the last in the channel"
+                    )
                 ]
             )
         ]

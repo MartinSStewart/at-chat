@@ -296,6 +296,7 @@ usersToFrontend users linked slackUsers =
 
                                 Nothing ->
                                     RichText.defaultColor
+                        , teamId = linkedUser.user.teamId
                         }
                             |> Just
 
@@ -307,7 +308,7 @@ usersToFrontend users linked slackUsers =
 
 basicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
 basicUserToFrontend user icon =
-    { name = userName user, icon = icon, color = RichText.defaultColor }
+    { name = userName user, icon = icon, color = RichText.defaultColor, teamId = user.teamId }
 
 
 userName : Slack.User -> PersonName

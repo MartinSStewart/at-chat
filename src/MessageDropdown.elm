@@ -8,6 +8,7 @@ module MessageDropdown exposing
     , mentionUserText
     , pressedArrowInDropdown
     , pressedDropdownItem
+    , slackUserDropdownList
     , userDropdownList
     , view
     )
@@ -22,7 +23,7 @@ import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, UserId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -33,12 +34,14 @@ import MessageInput exposing (MentionUserDropdown, Msg(..), NameSoFar(..), NameS
 import MessageMenu
 import MyUi
 import NonemptyDict
+import NonemptySet
 import PersonName
 import Ports
 import Range exposing (Range)
 import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Slack
 import Sticker
 import String.Nonempty exposing (NonemptyString)
 import TimeInMinutes exposing (TimeInMinutes)
@@ -47,7 +50,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import User exposing (FrontendUser, LocalUser)
-import UserSession exposing (DiscordFrontendUser)
+import UserSession exposing (DiscordFrontendUser, SlackFrontendUser)
 
 
 mentionUserText : String
@@ -109,8 +112,8 @@ pressedArrowInDropdown isMobile timezone time nameSoFar guildOrDmId index maybeP
                         DiscordGuildOrDmId guildOrDmId2 ->
                             discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local |> List.length |> helper
 
-                        SlackGuildOrDmId _ ->
-                            Nothing
+                        SlackGuildOrDmId guildOrDmId2 ->
+                            slackUserDropdownList isMobile nameSoFarData guildOrDmId2 local |> List.length |> helper
 
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
@@ -197,8 +200,10 @@ channelDropdownList isMobile nameSoFar guildOrDmId local =
                 |> SeqDict.toList
                 |> List.map (\( _, mention ) -> { name = mention.name })
 
-        SlackGuildOrDmId _ ->
-            []
+        SlackGuildOrDmId guildOrDmId2 ->
+            LocalState.slackChannelMentions guildOrDmId2 local
+                |> SeqDict.toList
+                |> List.map (\( _, mention ) -> { name = mention.name })
     )
         |> List.filterMap
             (\mention ->
@@ -304,6 +309,38 @@ emojiDropdownList isMobile nameSoFar availableCustomEmojis availableStickers loc
 
     else
         []
+
+
+{-| Slack has no member lists here, so a workspace offers everyone in it the at-chat user has seen.
+-}
+slackUserDropdownList : Bool -> NameSoFarData -> SlackGuildOrDmId -> LocalState -> List ( Slack.Id Slack.UserId, SlackFrontendUser )
+slackUserDropdownList isMobile nameSoFar guildOrDmId local =
+    (case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId } ->
+            SeqDict.filter (\_ user -> user.teamId == teamId) local.localUser.slackUsers |> SeqDict.toList
+
+        SlackGuildOrDmId_Dm data ->
+            case SeqDict.get data.channelId local.slackDmChannels of
+                Just channel ->
+                    List.filterMap
+                        (\userId -> SeqDict.get userId local.localUser.slackUsers |> Maybe.map (Tuple.pair userId))
+                        (NonemptySet.toList channel.members)
+
+                Nothing ->
+                    []
+    )
+        |> List.filterMap
+            (\( userId, user ) ->
+                case namesSortBy nameSoFar.nameSoFar (PersonName.toString user.name) of
+                    Just a ->
+                        Just ( ( userId, user ), a )
+
+                    Nothing ->
+                        Nothing
+            )
+        |> List.sortBy Tuple.second
+        |> List.take (maxDropdownUsers isMobile)
+        |> List.map Tuple.first
 
 
 discordUserDropdownList : Bool -> NameSoFarData -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
@@ -440,8 +477,21 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
                                 Nothing ->
                                     Nothing
 
-                        SlackGuildOrDmId _ ->
-                            Nothing
+                        SlackGuildOrDmId guildOrDmId2 ->
+                            case
+                                slackUserDropdownList isMobile nameSoFarData guildOrDmId2 local
+                                    |> List.Extra.getAt dropdownIndex
+                            of
+                                Just ( _, user ) ->
+                                    ( { start = nameSoFarData.index
+                                      , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
+                                      }
+                                    , PersonName.toString user.name
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
 
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
@@ -559,8 +609,18 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                                 )
                                 (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local)
 
-                        SlackGuildOrDmId _ ->
-                            []
+                        SlackGuildOrDmId guildOrDmId2 ->
+                            List.indexedMap
+                                (\index ( _, user ) ->
+                                    dropdownButton
+                                        isMobile
+                                        False
+                                        dropdown
+                                        dropdownButtonId
+                                        index
+                                        (Ui.text (PersonName.toString user.name))
+                                )
+                                (slackUserDropdownList isMobile nameSoFarData guildOrDmId2 local)
 
                 dropdownViewHeight : Int
                 dropdownViewHeight =
