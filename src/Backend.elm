@@ -88,7 +88,7 @@ import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread, SlackBackendThread)
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LinkSlackWorkspaceError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SlackFrontendUser, ToBeFilledInByBackend(..), UserSession, Viewing)
@@ -274,6 +274,7 @@ init =
       , exportState = Nothing
       , lastBackup = Nothing
       , discordLinkLimit = Nothing
+      , slackLinkLimit = Nothing
       , downloadBackupState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
@@ -884,90 +885,52 @@ updateHelper msg model =
                     )
 
         LinkSlackUserStep1 linkedAt clientId userId cookie results ->
-            ( List.Nonempty.foldl
-                (\( token, result ) model2 ->
+            let
+                linkWorkspace :
+                    ( SlackToken, Result Slack.HttpError Slack.UserBoot )
+                    -> BackendModel
+                    -> ( BackendModel, ( SlackToken, Result LinkSlackWorkspaceError Slack.UserBoot ) )
+                linkWorkspace ( token, result ) current =
                     case result of
-                        Ok { self, team } ->
-                            { model2
-                                | slackWorkspaces =
-                                    SeqDict.update
-                                        team.id
-                                        (\maybeWorkspace ->
-                                            { name = team.name
-                                            , domain = team.domain
-                                            , icon =
-                                                case maybeWorkspace of
-                                                    Just workspace ->
-                                                        workspace.icon
+                        Ok userBoot ->
+                            if BackendExtra.slackLinkLimitReached userBoot.self.id current then
+                                ( current, ( token, Err SlackLinkLimitReached ) )
 
-                                                    Nothing ->
-                                                        Nothing
-                                            , channels =
-                                                case maybeWorkspace of
-                                                    Just workspace ->
-                                                        workspace.channels
+                            else
+                                ( addLinkedSlackUser linkedAt userId cookie token userBoot current, ( token, Ok userBoot ) )
 
-                                                    Nothing ->
-                                                        SeqDict.empty
-                                            }
-                                                |> Just
-                                        )
-                                        model2.slackWorkspaces
-                                , slackUsers =
-                                    SeqDict.insert
-                                        self.id
-                                        (SlackFullData
-                                            { user = self
-                                            , icon =
-                                                case SeqDict.get self.id model2.slackUsers of
-                                                    Just (SlackFullData existing) ->
-                                                        existing.icon
+                        Err error ->
+                            ( current, ( token, Err (SlackWorkspaceHttpError error) ) )
 
-                                                    Just (SlackBasicData existing) ->
-                                                        existing.icon
+                (Nonempty firstResult restOfResults) =
+                    results
 
-                                                    Nothing ->
-                                                        Nothing
-                                            , linkedTo = userId
-                                            , linkedAt = linkedAt
-                                            , token = token
-                                            , cookie = cookie
-                                            , websocket =
-                                                case SeqDict.get self.id model2.slackUsers of
-                                                    Just (SlackFullData existing) ->
-                                                        existing.websocket
+                ( model2, firstResult2 ) =
+                    linkWorkspace firstResult model
 
-                                                    Just (SlackBasicData _) ->
-                                                        Nothing
+                ( model3, restOfResults2 ) =
+                    List.foldl
+                        (\result ( current, list ) ->
+                            let
+                                ( next, result2 ) =
+                                    linkWorkspace result current
+                            in
+                            ( next, result2 :: list )
+                        )
+                        ( model2, [] )
+                        restOfResults
 
-                                                    Nothing ->
-                                                        Nothing
-                                            , reconnect =
-                                                case SeqDict.get self.id model2.slackUsers of
-                                                    Just (SlackFullData existing) ->
-                                                        existing.reconnect
-
-                                                    Just (SlackBasicData _) ->
-                                                        { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
-
-                                                    Nothing ->
-                                                        { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
-                                            }
-                                        )
-                                        model2.slackUsers
-                            }
-
-                        Err _ ->
-                            model2
-                )
-                model
-                results
+                results2 : Nonempty ( SlackToken, Result LinkSlackWorkspaceError Slack.UserBoot )
+                results2 =
+                    Nonempty firstResult2 (List.reverse restOfResults2)
+            in
+            ( model3
             , Command.batch
-                [ List.Nonempty.map (\( _, result ) -> Result.map (\{ team } -> team.name) result) results
+                [ List.Nonempty.map (\( _, result ) -> Result.map (\{ team } -> team.name) result) results2
                     |> LoadedSlackWorkspaces
                     |> LinkSlackResponse
                     |> Lamdera.sendToFrontend clientId
-                , List.Nonempty.toList results
+                , List.Nonempty.toList results2
                     |> List.filterMap
                         (\( token, result ) ->
                             case result of
@@ -10653,6 +10616,30 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
+        Pages.Admin.SetSlackLinkingEnabled isEnabled ->
+            let
+                model2 =
+                    { model | slackLinkingEnabled = isEnabled }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.SetSlackLinkLimit limit ->
+            let
+                model2 =
+                    { model | slackLinkLimit = limit }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
         Pages.Admin.SetPrivateVapidKey privateKey ->
             ( { model
                 | privateVapidKey = privateKey
@@ -12069,6 +12056,78 @@ slackMessageLocations slackMessageId conversation =
             )
             []
             conversation.threads
+
+
+addLinkedSlackUser : Time.Posix -> Id UserId -> SlackCookie -> SlackToken -> Slack.UserBoot -> BackendModel -> BackendModel
+addLinkedSlackUser linkedAt userId cookie token { self, team } model =
+    { model
+        | slackWorkspaces =
+            SeqDict.update
+                team.id
+                (\maybeWorkspace ->
+                    { name = team.name
+                    , domain = team.domain
+                    , icon =
+                        case maybeWorkspace of
+                            Just workspace ->
+                                workspace.icon
+
+                            Nothing ->
+                                Nothing
+                    , channels =
+                        case maybeWorkspace of
+                            Just workspace ->
+                                workspace.channels
+
+                            Nothing ->
+                                SeqDict.empty
+                    }
+                        |> Just
+                )
+                model.slackWorkspaces
+        , slackUsers =
+            SeqDict.insert
+                self.id
+                (SlackFullData
+                    { user = self
+                    , icon =
+                        case SeqDict.get self.id model.slackUsers of
+                            Just (SlackFullData existing) ->
+                                existing.icon
+
+                            Just (SlackBasicData existing) ->
+                                existing.icon
+
+                            Nothing ->
+                                Nothing
+                    , linkedTo = userId
+                    , linkedAt = linkedAt
+                    , token = token
+                    , cookie = cookie
+                    , websocket =
+                        case SeqDict.get self.id model.slackUsers of
+                            Just (SlackFullData existing) ->
+                                existing.websocket
+
+                            Just (SlackBasicData _) ->
+                                Nothing
+
+                            Nothing ->
+                                Nothing
+                    , reconnect =
+                        case SeqDict.get self.id model.slackUsers of
+                            Just (SlackFullData existing) ->
+                                existing.reconnect
+
+                            Just (SlackBasicData _) ->
+                                { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
+
+                            Nothing ->
+                                { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
+                    }
+                )
+                model.slackUsers
+    }
 
 
 {-| Hands the at-chat user everything linking loaded, so their open tabs show it without a reload.

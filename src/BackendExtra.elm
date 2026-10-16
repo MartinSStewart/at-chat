@@ -53,6 +53,7 @@ module BackendExtra exposing
     , sendLoginEmail
     , sessionLastActiveAt
     , shouldRateLimit
+    , slackLinkLimitReached
     , toBackendLog
     , unreadOverviewData
     , validateAttachedFiles
@@ -1516,6 +1517,41 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
         linkedUsers
 
 
+{-| Relinking a Slack user that's already linked doesn't add to the count, so it's always allowed.
+-}
+slackLinkLimitReached : Slack.Id Slack.UserId -> BackendModel -> Bool
+slackLinkLimitReached slackUserId model =
+    case model.slackLinkLimit of
+        Just limit ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData _) ->
+                    False
+
+                Just (SlackBasicData _) ->
+                    linkedSlackUserCount model >= limit
+
+                Nothing ->
+                    linkedSlackUserCount model >= limit
+
+        Nothing ->
+            False
+
+
+linkedSlackUserCount : BackendModel -> Int
+linkedSlackUserCount model =
+    SeqDict.foldl
+        (\_ slackUser count ->
+            case slackUser of
+                SlackFullData _ ->
+                    count + 1
+
+                SlackBasicData _ ->
+                    count
+        )
+        0
+        model.slackUsers
+
+
 {-| Relinking a Discord user that's already linked (for example one that needs to be authenticated again) doesn't add to the count, so it's always allowed.
 -}
 discordLinkLimitReached : Discord.Id Discord.UserId -> BackendModel -> Bool
@@ -1556,6 +1592,8 @@ adminData model lastLogPageViewed =
     , signupsEnabled = model.signupsEnabled
     , discordLinkingEnabled = model.discordLinkingEnabled
     , discordLinkLimit = model.discordLinkLimit
+    , slackLinkingEnabled = model.slackLinkingEnabled
+    , slackLinkLimit = model.slackLinkLimit
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , openRouterKey = model.openRouterKey

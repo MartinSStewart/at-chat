@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -37,6 +37,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import User
+import UserOptions
 
 
 messageToString : Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> String
@@ -311,7 +312,7 @@ linkSlack user =
         ]
 
 
-{-| Only admins see the Slack section in the user options, but the backend lets any user link.
+{-| Links straight through the backend, skipping the user options.
 -}
 linkSlackWithoutOptions : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 linkSlackWithoutOptions user =
@@ -989,6 +990,108 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+linkedSlackUserCount : E2EHelper.BackendModel2 -> Int
+linkedSlackUserCount backend =
+    SeqDict.values (E2EHelper.unwrapBackend backend).slackUsers
+        |> List.filter
+            (\slackUser ->
+                case slackUser of
+                    Types.SlackFullData _ ->
+                        True
+
+                    Types.SlackBasicData _ ->
+                        False
+            )
+        |> List.length
+
+
+slackLinkingToggleAndLimitTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackLinkingToggleAndLimitTest config =
+    E2EHelper.startTest
+        "Admins can turn Slack linking off and limit how many Slack accounts get linked"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.UsersSection)
+                        , E2EHelper.hasExactText adminPage [ Pages.Admin.slackLinkingEnabledText ]
+                        , adminPage.input 100 (Dom.id (Dom.idToString Pages.Admin.slackLinkLimitId ++ "_label")) "1"
+                        , adminPage.click 100 (Dom.id (Dom.idToString Pages.Admin.slackLinkLimitId ++ "_acceptEdit"))
+                        , adminPage.click 100 (Dom.id "slackLinkingEnabledId")
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if (E2EHelper.unwrapBackend backend).slackLinkLimit /= Just 1 then
+                                    Err "The backend didn't store the linked Slack user limit"
+
+                                else if (E2EHelper.unwrapBackend backend).slackLinkingEnabled then
+                                    Err "Slack linking should have been turned off"
+
+                                else
+                                    Ok ()
+                            )
+                        , E2EHelper.inviteUser
+                            admin
+                            (\user ->
+                                [ user.click 1000 (Dom.id "guild_showUserOptions")
+                                , user.click 100 (Dom.id "userOptions_slackSection")
+                                , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                                , user.input
+                                    100
+                                    (Dom.id "userOptions_slackTeamsJson")
+                                    ("{\"T09DJDQL18U\":{\"token\":\""
+                                        ++ E2EHelper.legitSlackToken
+                                        ++ "\"},\"T0SECOND\":{\"token\":\""
+                                        ++ E2EHelper.secondSlackToken
+                                        ++ "\"}}"
+                                    )
+                                , user.click 100 (Dom.id "userOptions_submitSlackData")
+                                , E2EHelper.hasExactText user [ "Slack account linking is disabled" ]
+                                , adminPage.click 100 (Dom.id "slackLinkingEnabledId")
+                                , user.click 100 (Dom.id "userOptions_submitSlackData")
+                                , E2EHelper.hasExactText user [ "Loaded test-slack", UserOptions.slackLinkLimitReachedText ]
+                                , T.checkBackend
+                                    1000
+                                    (\backend ->
+                                        case linkedSlackUserCount backend of
+                                            1 ->
+                                                Ok ()
+
+                                            count ->
+                                                Err ("Expected the limit to stop at one linked Slack user, got " ++ String.fromInt count)
+                                    )
+                                ]
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs

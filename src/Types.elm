@@ -27,6 +27,7 @@ module Types exposing
     , LastBackupData
     , LinkDiscordFailure(..)
     , LinkSlackResult(..)
+    , LinkSlackWorkspaceError(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -510,6 +511,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
     , discordLinkLimit : Maybe Int
+    , slackLinkLimit : Maybe Int
     , downloadBackupState : Maybe BackupTransfer
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
@@ -1041,7 +1043,12 @@ type LinkDiscordFailure
 
 type LinkSlackResult
     = SlackLinkingDisabled
-    | LoadedSlackWorkspaces (Nonempty (Result Slack.HttpError String))
+    | LoadedSlackWorkspaces (Nonempty (Result LinkSlackWorkspaceError String))
+
+
+type LinkSlackWorkspaceError
+    = SlackWorkspaceHttpError Slack.HttpError
+    | SlackLinkLimitReached
 
 
 type alias SlackBackendWorkspace =

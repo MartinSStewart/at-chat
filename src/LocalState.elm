@@ -1083,6 +1083,8 @@ type alias AdminData =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , discordLinkLimit : Maybe Int
+    , slackLinkingEnabled : Bool
+    , slackLinkLimit : Maybe Int
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
