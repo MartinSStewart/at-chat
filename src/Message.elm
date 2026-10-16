@@ -24,6 +24,7 @@ module Message exposing
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
+    , loadEmbeds
     , maxReactionEmojis
     , maybeToReply
     , mentionsChannel
@@ -328,6 +329,28 @@ editUserTextMessage time newContent attachedFiles data =
                     |> Array.fromList
             }
     }
+
+
+{-| For a message made without embeds, like one from Slack. Each link's embed is loading until its
+request comes back.
+-}
+loadEmbeds :
+    SecretId ServerSecret
+    -> UserTextMessageData messageId userId channelId
+    -> ( UserTextMessageData messageId userId channelId, Command BackendOnly toMsg ( Url, Result Http.Error EmbedData ) )
+loadEmbeds secretKey data =
+    let
+        content : MessageContent userId channelId
+        content =
+            data.content
+
+        hyperlinks : List Url
+        hyperlinks =
+            RichText.hyperlinks content.content |> List.take maxEmbeds
+    in
+    ( { data | content = { content | embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading) } }
+    , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
+    )
 
 
 addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId channelId -> Message messageId userId channelId

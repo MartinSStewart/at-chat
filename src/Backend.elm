@@ -631,31 +631,30 @@ updateHelper msg model =
                         author : Slack.Id Slack.UserId
                         author =
                             slackAuthor guildOrDmId
+
+                        ( data, embedCmds ) =
+                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty
+                                |> Message.loadEmbeds model1.serverSecret
+
+                        ( threadData, _ ) =
+                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty
+                                |> Message.loadEmbeds model1.serverSecret
                     in
                     case
                         updateSlackConversation
                             guildOrDmId
-                            (addToSlackConversation
-                                threadRoute
-                                slackMessageId
-                                (Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty |> UserTextMessage)
-                                (Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty |> UserTextMessage)
-                            )
+                            (addToSlackConversation threadRoute slackMessageId (UserTextMessage data) (UserTextMessage threadData))
                             model1
                     of
                         Just ( model2, threadRouteWithMessage ) ->
                             let
                                 ( model3, notificationCmds ) =
-                                    slackMessageAdded
-                                        time
-                                        guildOrDmId
-                                        threadRouteWithMessage
-                                        (Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty)
-                                        model2
+                                    slackMessageAdded time guildOrDmId threadRouteWithMessage data model2
                             in
                             ( model3
                             , Command.batch
                                 [ Command.batch notificationCmds
+                                , Command.map identity (SlackGotMessageEmbed guildOrDmId threadRouteWithMessage) embedCmds
                                 , Local_Slack_SendMessage time timezone guildOrDmId threadRoute text
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
@@ -2034,6 +2033,42 @@ updateHelper msg model =
 
                         Nothing ->
                             ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        SlackGotMessageEmbed guildOrDmId threadRouteWithMessage result ->
+            case
+                updateSlackConversation
+                    guildOrDmId
+                    (\conversation ->
+                        ( case threadRouteWithMessage of
+                            NoThreadWithMessage messageId ->
+                                LocalState.addEmbedBackend messageId result conversation
+
+                            ViewThreadWithMessage threadId messageId ->
+                                { conversation
+                                    | threads =
+                                        SeqDict.updateIfExists threadId (LocalState.addEmbedBackend messageId result) conversation.threads
+                                }
+                        , ()
+                        )
+                            |> Just
+                    )
+                    model
+            of
+                Just ( model2, () ) ->
+                    ( model2
+                    , Broadcast.toSlack
+                        guildOrDmId
+                        (Server_Slack_GotMessageEmbed
+                            guildOrDmId
+                            threadRouteWithMessage
+                            (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                            |> ServerChange
+                        )
+                        model2
+                    )
 
                 Nothing ->
                     ( model, Command.none )
@@ -11489,13 +11524,19 @@ handleSlackWebsocketEvent linkedUser event model =
                 , ( SlackSync.toMessage model.slackFiles message, SlackSync.toMessage model.slackFiles message )
                 )
             of
-                ( Just guildOrDmId, ( Just (UserTextMessage data), Just threadMessage ) ) ->
+                ( Just guildOrDmId, ( Just (UserTextMessage data), Just (UserTextMessage threadData) ) ) ->
                     if SeqDict.member (slackPendingSendKey guildOrDmId) model.pendingSlackSends then
                         -- Probably the message at-chat is sending right now. SentSlackMessage adds it instead.
                         ( model, Command.none )
 
                     else
                         let
+                            ( data2, embedCmds ) =
+                                Message.loadEmbeds model.serverSecret data
+
+                            ( threadData2, _ ) =
+                                Message.loadEmbeds model.serverSecret threadData
+
                             parentId : Slack.Id Slack.MessageId -> List ThreadRoute
                             parentId slackParentId =
                                 case
@@ -11525,19 +11566,20 @@ handleSlackWebsocketEvent linkedUser event model =
                                 case
                                     updateSlackConversation
                                         guildOrDmId
-                                        (addToSlackConversation threadRoute message.id (UserTextMessage data) threadMessage)
+                                        (addToSlackConversation threadRoute message.id (UserTextMessage data2) (UserTextMessage threadData2))
                                         model2
                                 of
                                     Just ( model3, threadRouteWithMessage ) ->
                                         let
                                             ( model4, notificationCmds ) =
-                                                slackMessageAdded message.createdAt guildOrDmId threadRouteWithMessage data model3
+                                                slackMessageAdded message.createdAt guildOrDmId threadRouteWithMessage data2 model3
                                         in
                                         ( model4
                                         , Broadcast.toSlack
                                             guildOrDmId
-                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data.content.content (slackThreadStarter guildOrDmId threadRoute model4) |> ServerChange)
+                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data2.content.content (slackThreadStarter guildOrDmId threadRoute model4) |> ServerChange)
                                             model4
+                                            :: Command.map identity (SlackGotMessageEmbed guildOrDmId threadRouteWithMessage) embedCmds
                                             :: notificationCmds
                                             ++ cmds
                                         )

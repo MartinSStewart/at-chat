@@ -6297,6 +6297,39 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists teamId (\workspace -> { workspace | name = name }) local.slackWorkspaces
                     }
 
+                Server_Slack_GotMessageEmbed guildOrDmId threadRouteWithMessage result ->
+                    let
+                        addEmbed :
+                            { a
+                                | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                                , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+                            }
+                            ->
+                                { a
+                                    | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+                                    , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
+                                }
+                        addEmbed channel =
+                            case threadRouteWithMessage of
+                                NoThreadWithMessage messageId ->
+                                    LocalState.addEmbedFrontend messageId result channel
+
+                                ViewThreadWithMessage threadId messageId ->
+                                    { channel
+                                        | threads =
+                                            SeqDict.updateIfExists threadId (LocalState.addEmbedFrontend messageId result) channel.threads
+                                    }
+                    in
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            { local
+                                | slackWorkspaces =
+                                    SeqDict.updateIfExists teamId (LocalState.updateChannel addEmbed channelId) local.slackWorkspaces
+                            }
+
+                        SlackGuildOrDmId_Dm { channelId } ->
+                            { local | slackDmChannels = SeqDict.updateIfExists channelId addEmbed local.slackDmChannels }
+
                 Server_Slack_NeedsAuthAgain slackUserId ->
                     let
                         localUser : LocalUser

@@ -942,6 +942,7 @@ type BackendMsg
     | GotTimeForDiscordForumPostRenamed Discord.Channel Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
+    | SlackGotMessageEmbed SlackGuildOrDmId ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | DiscordGotGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | DiscordGotDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result Http.Error EmbedData )
     | DiscordGotDataForJoinedOrCreatedGuild
@@ -1245,6 +1246,7 @@ type ServerChange
     | Server_Slack_WorkspaceRenamed (Slack.Id Slack.TeamId) String
     | Server_Slack_ChannelRenamed (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) ChannelName
     | Server_Slack_NeedsAuthAgain (Slack.Id Slack.UserId)
+    | Server_Slack_GotMessageEmbed SlackGuildOrDmId ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_Slack_LinkedUserLoaded
         (Slack.Id Slack.UserId)
         (Slack.Id Slack.TeamId)

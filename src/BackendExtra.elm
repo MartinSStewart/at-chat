@@ -2977,6 +2977,9 @@ backendMsgLog msg =
         CheckedSlackAuth _ _ ->
             BackendMsgLog_CheckedSlackAuth
 
+        SlackGotMessageEmbed _ _ _ ->
+            BackendMsgLog_SlackGotMessageEmbed
+
         RefreshedSlackConversations _ _ ->
             BackendMsgLog_RefreshedSlackConversations
 

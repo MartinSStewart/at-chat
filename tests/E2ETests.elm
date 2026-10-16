@@ -440,6 +440,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackNewConversationsTest normalConfig
     , E2ESlack.slackCatchUpAfterDropTest normalConfig
     , E2ESlack.slackExpiredLoginTest normalConfig
+    , E2ESlack.slackLinkPreviewTest normalConfig
     , E2ESlack.slackLinkingToggleAndLimitTest normalConfig
     , E2ESlack.slackMentionOutsideChannelTest normalConfig
     , E2ESlack.slackThreadsTest normalConfig

@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -2593,3 +2593,43 @@ slackExpiredLoginHttp handleHttpRequest ({ data, currentRequest } as request) =
 
         Nothing ->
             handleHttpRequest request
+
+
+slackLinkPreviewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackLinkPreviewTest config =
+    E2EHelper.startTest
+        "Links in new Slack messages get previews"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"C09DJDQSWLU","user":"U09DK3NCPMG","text":"Look <https://example.com/page>","ts":"1791640200.000100","blocks":[{"type":"rich_text","block_id":"b1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Look "},{"type":"link","url":"https://example.com/page"}]}]}]}"""
+                        , E2EHelper.hasExactText admin [ "Title for https://example.com/page" ]
+                        ]
+                    )
+                , admin.input 100 Pages.Guild.channelTextInputId "See https://at-chat.app/about"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , E2EHelper.hasExactText admin [ "Title for https://at-chat.app/about" ]
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
