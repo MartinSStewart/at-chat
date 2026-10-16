@@ -2758,7 +2758,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Discord_SendMessage _ _ _ _ _ _ ->
                     True
 
-                Local_Slack_SendMessage _ _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ _ ->
                     True
 
                 Local_Slack_SendEditMessage _ _ _ _ _ ->
@@ -3034,7 +3034,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_SendMessage _ _ _ _ _ ->
+                        Types.Server_Slack_SendMessage _ _ _ _ _ _ ->
                             True
 
                         Types.Server_Slack_EditMessage _ _ _ _ _ ->
@@ -3539,9 +3539,9 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_workspace (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText SeqDict.empty
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText SeqDict.empty
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText SeqDict.empty
     , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_workspace threadRouteWithMessage normalText
     , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_dm threadRouteWithMessage normalText
     , Local_Slack_LoadThreadMessages slackGuildOrDmId_workspace (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder

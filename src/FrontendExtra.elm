@@ -201,7 +201,7 @@ pendingChangesText localChange =
         Local_Discord_SendMessage _ _ _ _ _ _ ->
             Just "Sent a message"
 
-        Local_Slack_SendMessage _ _ _ _ _ ->
+        Local_Slack_SendMessage _ _ _ _ _ _ ->
             Just "Sent a message"
 
         Local_Slack_SendEditMessage _ _ _ _ _ ->
@@ -3530,10 +3530,11 @@ slackSendMessage :
     -> SlackGuildOrDmId
     -> ThreadRoute
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> SeqDict (Id FileId) FileData
     -> Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     -> LocalState
     -> LocalState
-slackSendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter local =
+slackSendMessage createdAt guildOrDmId threadRoute content attachedFiles maybeThreadStarter local =
     case guildOrDmId of
         SlackGuildOrDmId_Workspace { currentUserId, teamId, channelId } ->
             case LocalState.getSlackWorkspaceAndChannel teamId channelId local of
@@ -3558,7 +3559,7 @@ slackSendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter lo
                                     | channels =
                                         SeqDict.insert
                                             channelId
-                                            (slackAddMessage createdAt currentUserId threadRoute content (slackLoadThreadStarter threadRoute maybeThreadStarter channel))
+                                            (slackAddMessage createdAt currentUserId threadRoute content attachedFiles (slackLoadThreadStarter threadRoute maybeThreadStarter channel))
                                             workspace.channels
                                 }
                                 local.slackWorkspaces
@@ -3587,7 +3588,7 @@ slackSendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter lo
                         | slackDmChannels =
                             SeqDict.insert
                                 channelId
-                                (slackAddMessage createdAt currentUserId threadRoute content (slackLoadThreadStarter threadRoute maybeThreadStarter dmChannel))
+                                (slackAddMessage createdAt currentUserId threadRoute content attachedFiles (slackLoadThreadStarter threadRoute maybeThreadStarter dmChannel))
                                 local.slackDmChannels
                         , localUser = { localUser | user = user2, currentlyViewing = currentlyViewing2 }
                     }
@@ -3623,6 +3624,7 @@ slackAddMessage :
     -> Slack.Id Slack.UserId
     -> ThreadRoute
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> SeqDict (Id FileId) FileData
     ->
         { a
             | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
@@ -3635,17 +3637,17 @@ slackAddMessage :
             , visibleMessages : VisibleMessages ChannelMessageId
             , threads : SeqDict (Id ChannelMessageId) SlackFrontendThread
         }
-slackAddMessage createdAt author threadRoute content channel =
+slackAddMessage createdAt author threadRoute content attachedFiles channel =
     case threadRoute of
         NoThread ->
             LocalState.createChannelMessageFrontend
-                (Message.userTextMessageFrontend createdAt author content Message.NoReply SeqDict.empty)
+                (Message.userTextMessageFrontend createdAt author content Message.NoReply attachedFiles)
                 channel
 
         ViewThread threadId ->
             LocalState.createThreadMessageFrontend
                 threadId
-                (Message.userTextMessageFrontend createdAt author content Message.NoReply SeqDict.empty)
+                (Message.userTextMessageFrontend createdAt author content Message.NoReply attachedFiles)
                 channel
 
 
@@ -4973,7 +4975,7 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Local_Slack_SendMessage createdAt _ guildOrDmId threadRoute text ->
+                Local_Slack_SendMessage createdAt _ guildOrDmId threadRoute text attachedFiles ->
                     slackSendMessage
                         createdAt
                         guildOrDmId
@@ -4984,6 +4986,7 @@ changeUpdate localMsg local =
                             (LocalState.slackChannelMentions guildOrDmId local)
                             text
                         )
+                        attachedFiles
                         Nothing
                         local
 
@@ -5524,8 +5527,8 @@ changeUpdate localMsg local =
                                 threadRoute
                                 local
 
-                Server_Slack_SendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter ->
-                    slackSendMessage createdAt guildOrDmId threadRoute content maybeThreadStarter local
+                Server_Slack_SendMessage createdAt guildOrDmId threadRoute content attachedFiles maybeThreadStarter ->
+                    slackSendMessage createdAt guildOrDmId threadRoute content attachedFiles maybeThreadStarter local
 
                 Server_Slack_EditMessage editedAt editedBy guildOrDmId threadRoute content ->
                     slackEditMessage editedAt editedBy guildOrDmId threadRoute content local

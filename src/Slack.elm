@@ -38,6 +38,7 @@ module Slack exposing
     , noStyle
     , parseWebsocketEvent
     , postMessage
+    , postMessageWithFiles
     , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
@@ -51,6 +52,7 @@ module Slack exposing
     , websocketRelayUrl
     )
 
+import Bytes exposing (Bytes)
 import Duration
 import Effect.Command exposing (BackendOnly)
 import Effect.Http as Http
@@ -711,6 +713,157 @@ postMessage secretKey cookie token channelId maybeThreadId text blocks =
                )
         )
         (Decode.field "ts" decodeId)
+
+
+{-| Uploads the files and posts them as one message, like Slack's own app does. Slack shares the
+files in the channel after it has answered, so the message's ts is looked up afterwards.
+-}
+postMessageWithFiles :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Maybe (Id MessageId)
+    -> List RichTextElement
+    -> Nonempty { fileName : String, contentType : String, bytes : Bytes }
+    -> Task BackendOnly HttpError ( Id MessageId, Nonempty (Id FileId) )
+postMessageWithFiles secretKey cookie token channelId maybeThreadId blocks files =
+    List.Nonempty.toList files
+        |> List.map
+            (\file ->
+                http
+                    secretKey
+                    cookie
+                    token
+                    "files.getUploadURLExternal"
+                    [ ( "filename", file.fileName ), ( "length", String.fromInt (Bytes.width file.bytes) ) ]
+                    (Decode.map2 Tuple.pair (Decode.field "upload_url" Decode.string) (Decode.field "file_id" decodeId))
+                    |> Task.andThen
+                        (\( uploadUrl, fileId ) ->
+                            Http.task
+                                { method = "POST"
+                                , headers = []
+                                , url = uploadUrl
+                                , body = Http.bytesBody file.contentType file.bytes
+                                , resolver = Http.stringResolver resolveUpload
+                                , timeout = Just Duration.minute
+                                }
+                                |> Task.map (\() -> ( fileId, file.fileName ))
+                        )
+            )
+        |> Task.sequence
+        |> Task.andThen
+            (\uploaded ->
+                case uploaded of
+                    ( firstFileId, _ ) :: rest ->
+                        http
+                            secretKey
+                            cookie
+                            token
+                            "files.completeUploadExternal"
+                            ([ ( "files"
+                               , Json.Encode.list
+                                    (\( fileId, fileName ) ->
+                                        Json.Encode.object
+                                            [ ( "id", Json.Encode.string (idToString fileId) )
+                                            , ( "title", Json.Encode.string fileName )
+                                            ]
+                                    )
+                                    uploaded
+                                    |> Json.Encode.encode 0
+                               )
+                             , ( "channel_id", idToString channelId )
+                             ]
+                                ++ (case maybeThreadId of
+                                        Just threadId ->
+                                            [ ( "thread_ts", idToString threadId ) ]
+
+                                        Nothing ->
+                                            []
+                                   )
+                                ++ (if List.isEmpty blocks then
+                                        []
+
+                                    else
+                                        [ ( "blocks"
+                                          , Json.Encode.list
+                                                identity
+                                                [ Json.Encode.object
+                                                    [ ( "type", Json.Encode.string "rich_text" )
+                                                    , ( "elements", Json.Encode.list encodeRichTextElement blocks )
+                                                    ]
+                                                ]
+                                                |> Json.Encode.encode 0
+                                          )
+                                        ]
+                                   )
+                            )
+                            (Decode.succeed ())
+                            |> Task.andThen (\() -> sharedMessageId secretKey cookie token channelId firstFileId 5)
+                            |> Task.map (\messageId -> ( messageId, Nonempty firstFileId (List.map Tuple.first rest) ))
+
+                    [] ->
+                        Task.fail (BadBody "No files to upload")
+            )
+
+
+{-| Slack answers an upload with plain text rather than JSON.
+-}
+resolveUpload : Http.Response String -> Result HttpError ()
+resolveUpload response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            Err (BadStatus metadata.statusCode body)
+
+        Http.GoodStatus_ _ _ ->
+            Ok ()
+
+
+{-| The ts of the message a file was shared in. Slack shares it a moment after the upload completes,
+so this tries again a few times.
+-}
+sharedMessageId : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id channelId -> Id FileId -> Int -> Task BackendOnly HttpError (Id MessageId)
+sharedMessageId secretKey cookie token channelId fileId triesLeft =
+    http
+        secretKey
+        cookie
+        token
+        "files.info"
+        [ ( "file", idToString fileId ) ]
+        (Decode.oneOf
+            [ Decode.at [ "file", "shares" ] (Decode.keyValuePairs (Decode.keyValuePairs (Decode.list (Decode.field "ts" decodeId))))
+            , Decode.succeed []
+            ]
+            |> Decode.map
+                (\shares ->
+                    List.concatMap Tuple.second shares
+                        |> List.Extra.find (\( sharedIn, _ ) -> sharedIn == idToString channelId)
+                        |> Maybe.andThen (\( _, messageIds ) -> List.head messageIds)
+                )
+        )
+        |> Task.andThen
+            (\maybeMessageId ->
+                case maybeMessageId of
+                    Just messageId ->
+                        Task.succeed messageId
+
+                    Nothing ->
+                        if triesLeft > 1 then
+                            Process.sleep Duration.second
+                                |> Task.andThen (\() -> sharedMessageId secretKey cookie token channelId fileId (triesLeft - 1))
+
+                        else
+                            Task.fail (BadBody "The uploaded file wasn't shared in the channel")
+            )
 
 
 addReaction :
