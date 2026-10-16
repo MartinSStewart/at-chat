@@ -982,6 +982,9 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToEditSlackMessage guildOrDmId error) model
 
+        GotChangedSlackUser user icon ->
+            slackUserChanged user icon model
+
         GotSlackUser slackUserId result ->
             let
                 model2 : BackendModel
@@ -11336,6 +11339,15 @@ websocketEventUserIds event =
         Slack.WebsocketHello ->
             []
 
+        Slack.WebsocketUserChanged _ ->
+            []
+
+        Slack.WebsocketTeamRenamed _ ->
+            []
+
+        Slack.WebsocketTeamDomainChanged _ ->
+            []
+
         Slack.WebsocketOtherEvent ->
             []
 
@@ -11393,6 +11405,15 @@ websocketEventFiles event =
             []
 
         Slack.WebsocketHello ->
+            []
+
+        Slack.WebsocketUserChanged _ ->
+            []
+
+        Slack.WebsocketTeamRenamed _ ->
+            []
+
+        Slack.WebsocketTeamDomainChanged _ ->
             []
 
         Slack.WebsocketOtherEvent ->
@@ -11699,7 +11720,92 @@ handleSlackWebsocketEvent linkedUser event model =
             , Command.none
             )
 
+        Slack.WebsocketUserChanged user ->
+            case SeqDict.get user.id model.slackUsers of
+                Just (SlackBasicData existing) ->
+                    if user.teamId /= linkedUser.user.teamId || existing.user == user then
+                        ( model, Command.none )
+
+                    else if existing.user.image == user.image then
+                        slackUserChanged user existing.icon model
+
+                    else
+                        ( model, uploadSlackImage model.serverSecret user.image |> Task.perform (GotChangedSlackUser user) )
+
+                Just (SlackFullData existing) ->
+                    if user.teamId /= linkedUser.user.teamId || existing.user == user then
+                        ( model, Command.none )
+
+                    else if existing.user.image == user.image then
+                        slackUserChanged user existing.icon model
+
+                    else
+                        ( model, uploadSlackImage model.serverSecret user.image |> Task.perform (GotChangedSlackUser user) )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Slack.WebsocketTeamRenamed name ->
+            let
+                teamId : Slack.Id Slack.TeamId
+                teamId =
+                    linkedUser.user.teamId
+
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | slackWorkspaces =
+                            SeqDict.updateIfExists teamId (\workspace -> { workspace | name = name }) model.slackWorkspaces
+                    }
+            in
+            ( model2
+            , Broadcast.toSlackTeam teamId (Server_Slack_WorkspaceRenamed teamId name |> ServerChange) model2
+            )
+
+        Slack.WebsocketTeamDomainChanged domain ->
+            ( { model
+                | slackWorkspaces =
+                    SeqDict.updateIfExists
+                        linkedUser.user.teamId
+                        (\workspace -> { workspace | domain = domain })
+                        model.slackWorkspaces
+              }
+            , Command.none
+            )
+
         Slack.WebsocketOtherEvent ->
+            ( model, Command.none )
+
+
+{-| Every linked Slack account in the workspace gets the same profile change, so this runs once
+per account but only the first one changes anything.
+-}
+slackUserChanged : Slack.User -> Maybe FileHash -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+slackUserChanged user icon model =
+    case SeqDict.get user.id model.slackUsers of
+        Just userData ->
+            let
+                userData2 : SlackUserData
+                userData2 =
+                    case userData of
+                        SlackBasicData _ ->
+                            SlackBasicData { user = user, icon = icon }
+
+                        SlackFullData linkedUser ->
+                            SlackFullData { linkedUser | user = user, icon = icon }
+
+                model2 : BackendModel
+                model2 =
+                    { model | slackUsers = SeqDict.insert user.id userData2 model.slackUsers }
+            in
+            ( model2
+            , Broadcast.toSlackTeam
+                user.teamId
+                (Server_Slack_UserLoaded user.id (SlackSync.userToFrontend model2.users userData2) |> ServerChange)
+                model2
+            )
+
+        Nothing ->
             ( model, Command.none )
 
 

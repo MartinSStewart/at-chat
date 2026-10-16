@@ -3049,6 +3049,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Slack_UserLoaded _ _ ->
                             True
 
+                        Types.Server_Slack_WorkspaceRenamed _ _ ->
+                            True
+
                         Types.Server_Slack_LinkedUserLoaded _ _ _ ->
                             True
 

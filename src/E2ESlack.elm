@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -1247,6 +1247,72 @@ slackMentionDropdownTest config =
                             _ ->
                                 Err "Expected the sent message to be the last in the channel"
                     )
+                ]
+            )
+        ]
+
+
+slackProfileAndWorkspaceChangesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackProfileAndWorkspaceChangesTest config =
+    E2EHelper.startTest
+        "Slack profile changes and workspace renames show up live"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"user_change","user":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zag","avatar_hash":"g5c945c6010c"}},"event_ts":"1791640000.000100"}"""
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_slackFriendLabel_D09DK3P5RPC" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.exactText "zag" ]
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                        , T.websocketSendString 100 connection """{"type":"team_rename","name":"renamed-slack","event_ts":"1791640001.000100"}"""
+                        , E2EHelper.hasExactText admin [ "renamed-slack" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case
+                                    ( SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                    , SeqDict.get (Slack.Id "U09DK3NCPMG") (E2EHelper.unwrapBackend backend).slackUsers
+                                    )
+                                of
+                                    ( Just workspace, Just (Types.SlackBasicData { user }) ) ->
+                                        if workspace.name /= "renamed-slack" then
+                                            Err "Expected the workspace's new name to be stored"
+
+                                        else if user.displayName /= "zag" then
+                                            Err "Expected zig's new display name to be stored"
+
+                                        else
+                                            Ok ()
+
+                                    _ ->
+                                        Err "Expected the workspace and zig to be stored"
+                            )
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
                 ]
             )
         ]

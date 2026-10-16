@@ -1052,6 +1052,9 @@ type WebsocketEvent
     | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
     | WebsocketReactionAdded { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
     | WebsocketReactionRemoved { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+    | WebsocketUserChanged User
+    | WebsocketTeamRenamed String
+    | WebsocketTeamDomainChanged String
     | WebsocketOtherEvent
 
 
@@ -1084,6 +1087,15 @@ decodeWebsocketEvent =
 
                 else if eventType == "reaction_removed" then
                     decodeReactionEvent |> Decode.map WebsocketReactionRemoved
+
+                else if eventType == "user_change" || eventType == "user_profile_changed" then
+                    Decode.field "user" decodeUser |> Decode.map WebsocketUserChanged
+
+                else if eventType == "team_rename" then
+                    Decode.field "name" Decode.string |> Decode.map WebsocketTeamRenamed
+
+                else if eventType == "team_domain_change" then
+                    Decode.field "domain" Decode.string |> Decode.map WebsocketTeamDomainChanged
 
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent

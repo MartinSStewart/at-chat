@@ -6291,6 +6291,12 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | slackUsers = SeqDict.insert slackUserId user localUser.slackUsers } }
 
+                Server_Slack_WorkspaceRenamed teamId name ->
+                    { local
+                        | slackWorkspaces =
+                            SeqDict.updateIfExists teamId (\workspace -> { workspace | name = name }) local.slackWorkspaces
+                    }
+
                 Server_Slack_LinkedUserLoaded slackUserId teamId data ->
                     let
                         localUser : LocalUser

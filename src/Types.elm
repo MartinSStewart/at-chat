@@ -888,6 +888,7 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError ( Slack.User, Maybe FileHash ))
+    | GotChangedSlackUser Slack.User (Maybe FileHash)
     | SlackMessageFilesUploaded (Slack.Id Slack.UserId) Slack.WebsocketEvent (SeqDict (Slack.Id Slack.FileId) SlackFileData)
     | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
@@ -1237,6 +1238,7 @@ type ServerChange
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
+    | Server_Slack_WorkspaceRenamed (Slack.Id Slack.TeamId) String
     | Server_Slack_LinkedUserLoaded
         (Slack.Id Slack.UserId)
         (Slack.Id Slack.TeamId)

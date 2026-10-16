@@ -2949,6 +2949,9 @@ backendMsgLog msg =
         GotSlackUser _ _ ->
             BackendMsgLog_GotSlackUser
 
+        GotChangedSlackUser _ _ ->
+            BackendMsgLog_GotChangedSlackUser
+
         SlackChangedReaction _ _ _ ->
             BackendMsgLog_SlackChangedReaction
 

@@ -7,6 +7,7 @@ module SlackSync exposing
     , toMessage
     , unlinkUser
     , userDataName
+    , userToFrontend
     , usersToFrontend
     , workspacesToFrontend
     )
@@ -277,33 +278,43 @@ usersToFrontend users linked slackUsers =
     in
     SeqDict.filterMap
         (\_ userData ->
-            case userData of
-                SlackBasicData { user, icon } ->
-                    if List.member user.teamId teams then
-                        Just (basicUserToFrontend user icon)
+            if List.member (userTeamId userData) teams then
+                Just (userToFrontend users userData)
 
-                    else
-                        Nothing
-
-                SlackFullData linkedUser ->
-                    if List.member linkedUser.user.teamId teams then
-                        { name = userName linkedUser.user
-                        , icon = linkedUser.icon
-                        , color =
-                            case NonemptyDict.get linkedUser.linkedTo users of
-                                Just user ->
-                                    user.color
-
-                                Nothing ->
-                                    RichText.defaultColor
-                        , teamId = linkedUser.user.teamId
-                        }
-                            |> Just
-
-                    else
-                        Nothing
+            else
+                Nothing
         )
         slackUsers
+
+
+userTeamId : SlackUserData -> Slack.Id Slack.TeamId
+userTeamId userData =
+    case userData of
+        SlackBasicData { user } ->
+            user.teamId
+
+        SlackFullData linkedUser ->
+            linkedUser.user.teamId
+
+
+userToFrontend : NonemptyDict (Id UserId) BackendUser -> SlackUserData -> SlackFrontendUser
+userToFrontend users userData =
+    case userData of
+        SlackBasicData { user, icon } ->
+            basicUserToFrontend user icon
+
+        SlackFullData linkedUser ->
+            { name = userName linkedUser.user
+            , icon = linkedUser.icon
+            , color =
+                case NonemptyDict.get linkedUser.linkedTo users of
+                    Just user ->
+                        user.color
+
+                    Nothing ->
+                        RichText.defaultColor
+            , teamId = linkedUser.user.teamId
+            }
 
 
 basicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
