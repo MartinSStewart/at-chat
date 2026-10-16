@@ -433,6 +433,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackWebsocketBackoffTest normalConfig
     , E2ESlack.unlinkSlackTest normalConfig
     , E2ESlack.slackUnreadAndNotificationsTest normalConfig
+    , E2ESlack.slackMuteAndNotifyAllTest normalConfig
     , E2ESlack.slackMentionOutsideChannelTest normalConfig
     , E2ESlack.slackThreadsTest normalConfig
     , E2ESlack.slackReactionsAndNewThreadTest normalConfig

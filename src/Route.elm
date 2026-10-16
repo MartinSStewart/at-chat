@@ -10,6 +10,7 @@ module Route exposing
     , Overlay(..)
     , Route(..)
     , ShowChannelSettings(..)
+    , SlackChannelRoute(..)
     , SlackDmRouteData
     , SlackWorkspaceRouteData
     , ThreadRouteWithFriends(..)
@@ -98,11 +99,15 @@ type alias DiscordDmRouteData =
 type alias SlackWorkspaceRouteData =
     { currentSlackUserId : Slack.Id Slack.UserId
     , teamId : Slack.Id Slack.TeamId
-    , channelId : Slack.Id Slack.ChannelId
-    , threadRoute : ThreadRouteWithMaybeMessage
+    , channelRoute : SlackChannelRoute
     , channelsVisible : ChannelsVisibleOnMobile
     , overlay : Maybe Overlay
     }
+
+
+type SlackChannelRoute
+    = SlackChannel_ChannelRoute (Slack.Id Slack.ChannelId) ThreadRouteWithMaybeMessage ShowChannelSettings
+    | SlackChannel_WorkspaceSettingsRoute
 
 
 type alias SlackDmRouteData =
@@ -461,8 +466,16 @@ decode url =
             SlackWorkspaceRoute
                 { currentSlackUserId = Slack.Id userId
                 , teamId = Slack.Id teamId
-                , channelId = Slack.Id channelId
-                , threadRoute = slackThreadRouteFromPath rest
+                , channelRoute = SlackChannel_ChannelRoute (Slack.Id channelId) (slackThreadRouteFromPath rest) showMembers
+                , channelsVisible = channelsVisible
+                , overlay = overlay
+                }
+
+        [ "sw", userId, teamId, "settings" ] ->
+            SlackWorkspaceRoute
+                { currentSlackUserId = Slack.Id userId
+                , teamId = Slack.Id teamId
+                , channelRoute = SlackChannel_WorkspaceSettingsRoute
                 , channelsVisible = channelsVisible
                 , overlay = overlay
                 }
@@ -728,8 +741,13 @@ toShowMembersTabVisible { sidebarMode } route =
         DiscordDmRoute routeData ->
             ( routeData.showMembersTab, False )
 
-        SlackWorkspaceRoute _ ->
-            ( HideChannelSettings, False )
+        SlackWorkspaceRoute routeData ->
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute _ threadRoute showMembers ->
+                    ( helper showMembers, slackIsThread threadRoute )
+
+                SlackChannel_WorkspaceSettingsRoute ->
+                    ( HideChannelSettings, False )
 
         SlackDmRoute _ ->
             ( HideChannelSettings, False )
@@ -796,8 +814,13 @@ toShowMembersTab route =
         DiscordDmRoute routeData ->
             ( routeData.showMembersTab, False )
 
-        SlackWorkspaceRoute _ ->
-            ( HideChannelSettings, False )
+        SlackWorkspaceRoute routeData ->
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute _ threadRoute showMembers ->
+                    ( showMembers, slackIsThread threadRoute )
+
+                SlackChannel_WorkspaceSettingsRoute ->
+                    ( HideChannelSettings, False )
 
         SlackDmRoute _ ->
             ( HideChannelSettings, False )
@@ -816,6 +839,16 @@ toShowMembersTab route =
 
         PublicGoMatchRoute _ ->
             ( HideChannelSettings, False )
+
+
+slackIsThread : ThreadRouteWithMaybeMessage -> Bool
+slackIsThread threadRoute =
+    case threadRoute of
+        ViewThreadWithMaybeMessage _ _ ->
+            True
+
+        NoThreadWithMaybeMessage _ ->
+            False
 
 
 threadRouteToShowMembersTab : ThreadRouteWithFriends -> ( ShowChannelSettings, Bool )
@@ -885,6 +918,14 @@ setShowMembers showMembers route =
 
         DiscordDmRoute routeData ->
             DiscordDmRoute { routeData | showMembersTab = showMembers }
+
+        SlackWorkspaceRoute routeData ->
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute channelId threadRoute _ ->
+                    SlackWorkspaceRoute { routeData | channelRoute = SlackChannel_ChannelRoute channelId threadRoute showMembers }
+
+                SlackChannel_WorkspaceSettingsRoute ->
+                    route
 
         _ ->
             route
@@ -1234,16 +1275,23 @@ encode route =
                         ++ encodeOverlay overlay
                     )
 
-                SlackWorkspaceRoute { currentSlackUserId, teamId, channelId, threadRoute, channelsVisible, overlay } ->
-                    ( [ "sw"
-                      , Slack.idToString currentSlackUserId
-                      , Slack.idToString teamId
-                      , "c"
-                      , Slack.idToString channelId
-                      ]
-                        ++ slackThreadRouteToPath threadRoute
-                    , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
-                    )
+                SlackWorkspaceRoute { currentSlackUserId, teamId, channelRoute, channelsVisible, overlay } ->
+                    case channelRoute of
+                        SlackChannel_ChannelRoute channelId threadRoute showMembers ->
+                            ( [ "sw"
+                              , Slack.idToString currentSlackUserId
+                              , Slack.idToString teamId
+                              , "c"
+                              , Slack.idToString channelId
+                              ]
+                                ++ slackThreadRouteToPath threadRoute
+                            , encodeShowMembers showMembers ++ encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
+                            )
+
+                        SlackChannel_WorkspaceSettingsRoute ->
+                            ( [ "sw", Slack.idToString currentSlackUserId, Slack.idToString teamId, "settings" ]
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
+                            )
 
                 SlackDmRoute { currentSlackUserId, channelId, threadRoute, channelsVisible, overlay } ->
                     ( [ "sd", Slack.idToString currentSlackUserId, Slack.idToString channelId ]
@@ -1473,8 +1521,14 @@ sameConversation old new =
         ( SlackWorkspaceRoute oldData, SlackWorkspaceRoute newData ) ->
             (oldData.currentSlackUserId == newData.currentSlackUserId)
                 && (oldData.teamId == newData.teamId)
-                && (oldData.channelId == newData.channelId)
-                && (Id.threadRouteWithoutMaybeMessage oldData.threadRoute == Id.threadRouteWithoutMaybeMessage newData.threadRoute)
+                && (case ( oldData.channelRoute, newData.channelRoute ) of
+                        ( SlackChannel_ChannelRoute oldChannelId oldThreadRoute _, SlackChannel_ChannelRoute newChannelId newThreadRoute _ ) ->
+                            (oldChannelId == newChannelId)
+                                && (Id.threadRouteWithoutMaybeMessage oldThreadRoute == Id.threadRouteWithoutMaybeMessage newThreadRoute)
+
+                        _ ->
+                            False
+                   )
                 && (oldData.channelsVisible == newData.channelsVisible)
 
         ( SlackDmRoute oldData, SlackDmRoute newData ) ->
@@ -1559,15 +1613,20 @@ toGuildOrDmId userId route =
                 |> Just
 
         SlackWorkspaceRoute data ->
-            ( SlackGuildOrDmId_Workspace
-                { currentUserId = data.currentSlackUserId
-                , teamId = data.teamId
-                , channelId = data.channelId
-                }
-                |> SlackGuildOrDmId
-            , Id.threadRouteWithoutMaybeMessage data.threadRoute
-            )
-                |> Just
+            case data.channelRoute of
+                SlackChannel_ChannelRoute channelId threadRoute _ ->
+                    ( SlackGuildOrDmId_Workspace
+                        { currentUserId = data.currentSlackUserId
+                        , teamId = data.teamId
+                        , channelId = channelId
+                        }
+                        |> SlackGuildOrDmId
+                    , Id.threadRouteWithoutMaybeMessage threadRoute
+                    )
+                        |> Just
+
+                SlackChannel_WorkspaceSettingsRoute ->
+                    Nothing
 
         SlackDmRoute data ->
             ( SlackGuildOrDmId_Dm { currentUserId = data.currentSlackUserId, channelId = data.channelId }

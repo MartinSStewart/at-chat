@@ -79,7 +79,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
 import SearchOverlay
@@ -1719,13 +1719,24 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 ( SlackWorkspaceRoute routeData, LoggedIn loggedIn ) ->
-                    case routeData.threadRoute of
-                        NoThreadWithMaybeMessage _ ->
+                    case routeData.channelRoute of
+                        SlackChannel_ChannelRoute channelId (NoThreadWithMaybeMessage _) _ ->
                             FrontendExtra.routePush
                                 { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                                (SlackWorkspaceRoute { routeData | threadRoute = ViewThreadWithMaybeMessage messageIndex Nothing })
+                                (SlackWorkspaceRoute
+                                    { routeData
+                                        | channelRoute =
+                                            SlackChannel_ChannelRoute
+                                                channelId
+                                                (ViewThreadWithMaybeMessage messageIndex Nothing)
+                                                HideChannelSettings
+                                    }
+                                )
 
-                        ViewThreadWithMaybeMessage _ _ ->
+                        SlackChannel_ChannelRoute _ (ViewThreadWithMaybeMessage _ _) _ ->
+                            ( model, Command.none )
+
+                        SlackChannel_WorkspaceSettingsRoute ->
                             ( model, Command.none )
 
                 ( SlackDmRoute routeData, LoggedIn loggedIn ) ->
@@ -3005,8 +3016,7 @@ updateLoaded msg model =
                                 (SlackWorkspaceRoute
                                     { currentSlackUserId = currentUserId
                                     , teamId = teamId
-                                    , channelId = channelId
-                                    , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , channelRoute = SlackChannel_ChannelRoute channelId (ViewThreadWithMaybeMessage messageId Nothing) HideChannelSettings
                                     , channelsVisible = ChannelsHiddenOnMobile
                                     , overlay = Nothing
                                     }
@@ -3385,6 +3395,17 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_SetDiscordGuildNotificationLevel userId guildId notificationLevel |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedSlackWorkspaceNotificationLevel slackUserId teamId notificationLevel ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetSlackWorkspaceNotificationLevel slackUserId teamId notificationLevel |> Just)
                         loggedIn
                         Command.none
                 )
@@ -6125,6 +6146,39 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMuteSlackWorkspace slackUserId teamId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackWorkspace slackUserId teamId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackChannel slackUserId teamId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackChannel slackUserId teamId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackThread slackUserId teamId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackThread slackUserId teamId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedMarkChannelAsRead guildOrDmId threadRoute ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -7732,7 +7786,7 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         SlackWorkspaceRoute _ ->
-            ( model, Command.none )
+            FrontendExtra.routePush model (Route.setShowMembers showMembers model.route)
 
         SlackDmRoute _ ->
             ( model, Command.none )

@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackMentionOutsideChannelTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -19,6 +19,7 @@ import IdArray
 import Json.Decode
 import Json.Encode
 import Message exposing (Message(..))
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import OneOrGreater
@@ -988,6 +989,149 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackMuteAndNotifyAllTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMuteAndNotifyAllTest config =
+    let
+        adminUser : E2EHelper.BackendModel2 -> Maybe User.BackendUser
+        adminUser backend =
+            NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users
+    in
+    E2EHelper.startTest
+        "Slack workspaces can notify on every message, and workspaces and channels can be muted"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.portEvent 100 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , admin.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool False)
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , admin.click 100 Pages.Guild.slackWorkspaceSettingsButtonId
+                , E2EHelper.hasExactText admin [ "Workspace settings" ]
+                , admin.keyUp 100 Pages.Guild.slackNotificationLevelId "ArrowDown" []
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case adminUser backend of
+                            Just user ->
+                                if SeqSet.member (Slack.Id "T09DJDQL18U") user.slackNotifyOnAllMessages then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the workspace to notify on every message"
+
+                            Nothing ->
+                                Err "Admin not found"
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "For everyone" })
+                        , T.checkState
+                            100
+                            (\data ->
+                                case shownNotificationUrls admin data of
+                                    [ url ] ->
+                                        if String.endsWith "/sw/U09DJDQL1A8/T09DJDQL18U/c/C09DJDQSWLU" url then
+                                            Ok ()
+
+                                        else
+                                            Err ("The notification opens the wrong conversation: " ++ url)
+
+                                    urls ->
+                                        Err ("Expected one notification for a message nobody was mentioned in, got " ++ String.fromInt (List.length urls))
+                            )
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                        , admin.click 100 (Dom.id "guild_showMembers")
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case adminUser backend of
+                                    Just user ->
+                                        case MuteSettings.isSlackChannelSpecificallyMuted user.muteSettings (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") of
+                                            MuteSettings.IsFullyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Err "Expected the channel to be fully muted, got partially muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the channel to be fully muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640001.000100", text = "Muted message" })
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                        , admin.click 100 Pages.Guild.slackWorkspaceSettingsButtonId
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case adminUser backend of
+                                    Just user ->
+                                        case MuteSettings.isSlackWorkspaceSpecificallyMuted user.muteSettings (Slack.Id "T09DJDQL18U") of
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsFullyMuted ->
+                                                Err "Expected the workspace to be partially muted, got fully muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the workspace to be partially muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs

@@ -688,6 +688,7 @@ type FrontendMsg_
     | PressedCloseAccountDeletionBanner
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
+    | PressedSlackWorkspaceNotificationLevel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) NotificationLevel
     | GotStartupData (Result String Ports.StartupData)
     | GotDevicePixelRatio Float
     | PressedCloseImageInfo
@@ -762,6 +763,9 @@ type FrontendMsg_
     | PressedMarkAllChannelsAsRead (List ( AnyGuildOrDmId, ThreadRouteWithMessage ))
     | PressedMuteGuild (Id GuildId) IsMuted
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | PressedMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
+    | PressedMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | PressedMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
@@ -1281,6 +1285,7 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
+    | Server_SetSlackWorkspaceNotificationLevel (Slack.Id Slack.TeamId) NotificationLevel
     | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
@@ -1332,6 +1337,9 @@ type ServerChange
     | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
+    | Server_SetMuteSlackWorkspace (Slack.Id Slack.TeamId) IsMuted
+    | Server_SetMuteSlackChannel (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | Server_SetMuteSlackThread (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
       -- The DM is named from the point of view of whoever is receiving this, so the user
       -- that asked for encryption is named separately.
@@ -1392,6 +1400,7 @@ type LocalChange
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
+    | Local_SetSlackWorkspaceNotificationLevel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection { collapseOthers : Bool }
     | Local_CollapseUserOptionSection UserOptionSection
@@ -1418,6 +1427,9 @@ type LocalChange
     | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_SetMuteGuild (Id GuildId) IsMuted
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | Local_SetMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
+    | Local_SetMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | Local_SetMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_RequestE2ee Viewing_DmId
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId

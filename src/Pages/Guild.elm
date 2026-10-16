@@ -40,6 +40,8 @@ module Pages.Guild exposing
     , profileImageButtonId
     , searchButtonId
     , setImportChannelStatus
+    , slackNotificationLevelId
+    , slackWorkspaceSettingsButtonId
     , slackWorkspaceView
     , startOfThreadText
     , startedACallText
@@ -101,7 +103,7 @@ import PersonName exposing (PersonName)
 import QRCode
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowChannelSettings(..), SlackDmRouteData, SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowChannelSettings(..), SlackChannelRoute(..), SlackDmRouteData, SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
 import Scroll
 import SecretId
 import SeqDict exposing (SeqDict)
@@ -12088,6 +12090,35 @@ slackWorkspaceView model routeData loggedIn local =
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , MyUi.unscrollable
+                            , (case ( Route.toShowMembersTabVisible loggedIn model.route, routeData.channelRoute ) of
+                                ( ( ShowChannelSettings, _ ), SlackChannel_ChannelRoute channelId threadRoute _ ) ->
+                                    Ui.Lazy.lazy6
+                                        slackChannelSettingsMobile
+                                        (MyUi.canScroll True model.drag)
+                                        local.localUser
+                                        routeData.currentSlackUserId
+                                        routeData.teamId
+                                        channelId
+                                        threadRoute
+                                        |> Ui.el
+                                            [ Ui.height Ui.fill
+                                            , Ui.background MyUi.background3
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            , Ui.move
+                                                { x = Call.memberColumnOffset loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
+                                            , Ui.heightMin 0
+                                            ]
+
+                                ( ( ShowChannelSettings, _ ), SlackChannel_WorkspaceSettingsRoute ) ->
+                                    Ui.none
+
+                                ( ( HideChannelSettings, _ ), _ ) ->
+                                    Ui.none
+                              )
+                                |> Ui.inFront
                             , slackChannelView routeData workspace loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
@@ -12143,6 +12174,26 @@ slackWorkspaceView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
+                            , case ( Route.toShowMembersTabVisible loggedIn model.route, routeData.channelRoute ) of
+                                ( ( ShowChannelSettings, _ ), SlackChannel_ChannelRoute channelId threadRoute _ ) ->
+                                    Ui.Lazy.lazy5
+                                        slackChannelSettingsNotMobile
+                                        local.localUser
+                                        routeData.currentSlackUserId
+                                        routeData.teamId
+                                        channelId
+                                        threadRoute
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            ]
+
+                                ( ( ShowChannelSettings, _ ), SlackChannel_WorkspaceSettingsRoute ) ->
+                                    Ui.none
+
+                                ( ( HideChannelSettings, _ ), _ ) ->
+                                    Ui.none
                             ]
 
                 Nothing ->
@@ -12151,43 +12202,185 @@ slackWorkspaceView model routeData loggedIn local =
 
 slackChannelView : SlackWorkspaceRouteData -> SlackFrontendWorkspace -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 slackChannelView routeData workspace loggedIn local model =
-    case SeqDict.get routeData.channelId workspace.channels of
-        Just channel ->
-            let
-                guildOrDmId : SlackGuildOrDmId
-                guildOrDmId =
-                    SlackGuildOrDmId_Workspace
-                        { currentUserId = routeData.currentSlackUserId
-                        , teamId = routeData.teamId
-                        , channelId = routeData.channelId
-                        }
-            in
-            case routeData.threadRoute of
-                NoThreadWithMaybeMessage maybeMessageId ->
-                    slackConversationView
-                        routeData.currentSlackUserId
-                        guildOrDmId
-                        maybeMessageId
-                        loggedIn
-                        model
-                        local
-                        (ChannelName.toString channel.name)
-                        channel
+    case routeData.channelRoute of
+        SlackChannel_ChannelRoute channelId threadRoute _ ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    let
+                        guildOrDmId : SlackGuildOrDmId
+                        guildOrDmId =
+                            SlackGuildOrDmId_Workspace
+                                { currentUserId = routeData.currentSlackUserId
+                                , teamId = routeData.teamId
+                                , channelId = channelId
+                                }
+                    in
+                    case threadRoute of
+                        NoThreadWithMaybeMessage maybeMessageId ->
+                            slackConversationView
+                                routeData.currentSlackUserId
+                                guildOrDmId
+                                maybeMessageId
+                                loggedIn
+                                model
+                                local
+                                (ChannelName.toString channel.name)
+                                channel
 
-                ViewThreadWithMaybeMessage threadId maybeMessageId ->
-                    slackThreadConversationView
-                        routeData.currentSlackUserId
-                        guildOrDmId
-                        threadId
-                        maybeMessageId
-                        loggedIn
-                        model
-                        local
-                        (ChannelName.toString channel.name)
-                        channel
+                        ViewThreadWithMaybeMessage threadId maybeMessageId ->
+                            slackThreadConversationView
+                                routeData.currentSlackUserId
+                                guildOrDmId
+                                threadId
+                                maybeMessageId
+                                loggedIn
+                                model
+                                local
+                                (ChannelName.toString channel.name)
+                                channel
 
-        Nothing ->
-            pageMissing channelDoesNotExistText
+                Nothing ->
+                    pageMissing channelDoesNotExistText
+
+        SlackChannel_WorkspaceSettingsRoute ->
+            slackWorkspaceSettingsView model routeData.currentSlackUserId routeData.teamId local
+
+
+slackWorkspaceSettingsView :
+    LoadedFrontend
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> LocalState
+    -> Element FrontendMsg_
+slackWorkspaceSettingsView model currentUserId teamId local =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Workspace settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
+            ]
+            [ Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MyUi.radioColumn
+                    slackNotificationLevelId
+                    (PressedSlackWorkspaceNotificationLevel currentUserId teamId)
+                    (if SeqSet.member teamId local.localUser.user.slackNotifyOnAllMessages then
+                        Just NotifyOnEveryMessage
+
+                     else
+                        Just NotifyOnMention
+                    )
+                    (Ui.text "Workspace notifications")
+                    [ ( NotifyOnMention, "Only when mentioned" )
+                    , ( NotifyOnEveryMessage, "On every message" )
+                    ]
+                )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteSlackWorkspace currentUserId teamId)
+                    (MuteSettings.isSlackWorkspaceSpecificallyMuted local.localUser.user.muteSettings teamId)
+                )
+            ]
+        ]
+
+
+slackNotificationLevelId : HtmlId
+slackNotificationLevelId =
+    Dom.id "guild_slackNotificationLevel"
+
+
+slackWorkspaceSettingsButtonId : HtmlId
+slackWorkspaceSettingsButtonId =
+    Dom.id "guild_slackWorkspaceSettings"
+
+
+slackChannelSettingsNotMobile :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsNotMobile localUser currentSlackUserId teamId channelId threadRoute =
+    memberColumnContainerNotMobile
+        (case threadRoute of
+            NoThreadWithMaybeMessage _ ->
+                False
+
+            ViewThreadWithMaybeMessage _ _ ->
+                True
+        )
+        [ slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute ]
+
+
+slackChannelSettingsMobile :
+    Bool
+    -> LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsMobile canScroll2 localUser currentSlackUserId teamId channelId threadRoute =
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , case threadRoute of
+                ViewThreadWithMaybeMessage _ _ ->
+                    Ui.text "Thread settings"
+
+                NoThreadWithMaybeMessage _ ->
+                    Ui.text "Channel settings"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute ]
+        ]
+
+
+slackChannelSettingsForm :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute =
+    (case threadRoute of
+        NoThreadWithMaybeMessage _ ->
+            MuteSettings.view
+                (PressedMuteSlackChannel currentSlackUserId teamId channelId)
+                (MuteSettings.isSlackChannelSpecificallyMuted localUser.user.muteSettings teamId channelId)
+
+        ViewThreadWithMaybeMessage threadId _ ->
+            MuteSettings.view
+                (PressedMuteSlackThread currentSlackUserId teamId channelId threadId)
+                (MuteSettings.isSlackThreadSpecificallyMuted localUser.user.muteSettings teamId channelId threadId)
+    )
+        |> Ui.el [ Ui.Font.color MyUi.font1, Ui.padding 8 ]
 
 
 slackDmChannelView : SlackDmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -12302,7 +12495,7 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread
+        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
             [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
             , Ui.heightMin 0
@@ -12440,7 +12633,7 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread
+        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
             [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
             , Ui.heightMin 0
@@ -13412,8 +13605,22 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ Ui.row
-            [ MyUi.hoverText workspace.name, Ui.spacing 6 ]
+        [ GuildColumn.rowLinkButton
+            slackWorkspaceSettingsButtonId
+            (SlackWorkspaceRoute
+                { currentSlackUserId = routeData.currentSlackUserId
+                , teamId = routeData.teamId
+                , channelRoute = SlackChannel_WorkspaceSettingsRoute
+                , channelsVisible = ChannelsHiddenOnMobile
+                , overlay = Nothing
+                }
+            )
+            [ Ui.Font.color MyUi.font2
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.spacing 6
+            , MyUi.hoverText workspace.name
+            ]
             [ Ui.html (Icons.slack 16), Ui.text workspace.name ]
         , searchIcon isMobile
         ]
@@ -13477,6 +13684,7 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                             []
                             [ slackChannelColumnRow
                                 isMobile
+                                channelMuted
                                 hasNotifications
                                 routeData
                                 channelId
@@ -13490,9 +13698,9 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                 channelNames
                                 channelId
                                 channel
-                                (case routeData.threadRoute of
-                                    ViewThreadWithMaybeMessage threadId _ ->
-                                        if routeData.channelId == channelId then
+                                (case routeData.channelRoute of
+                                    SlackChannel_ChannelRoute selectedChannelId (ViewThreadWithMaybeMessage threadId _) _ ->
+                                        if selectedChannelId == channelId then
                                             SeqDict.update
                                                 threadId
                                                 (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
@@ -13501,7 +13709,10 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                         else
                                             channel.threads
 
-                                    NoThreadWithMaybeMessage _ ->
+                                    SlackChannel_ChannelRoute _ (NoThreadWithMaybeMessage _) _ ->
+                                        channel.threads
+
+                                    SlackChannel_WorkspaceSettingsRoute ->
                                         channel.threads
                                 )
                             ]
@@ -13526,26 +13737,37 @@ slackChannelColumnThreads :
     -> Element FrontendMsg_
 slackChannelColumnThreads isMobile now routeData directMentions localUser channels channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
                     let
                         isSelected : Bool
                         isSelected =
-                            case routeData.threadRoute of
-                                ViewThreadWithMaybeMessage threadId _ ->
-                                    routeData.channelId == channelId && threadId == threadMessageIndex
+                            case routeData.channelRoute of
+                                SlackChannel_ChannelRoute selectedChannelId (ViewThreadWithMaybeMessage threadId _) _ ->
+                                    selectedChannelId == channelId && threadId == threadMessageIndex
 
-                                NoThreadWithMaybeMessage _ ->
+                                SlackChannel_ChannelRoute _ (NoThreadWithMaybeMessage _) _ ->
                                     False
+
+                                SlackChannel_WorkspaceSettingsRoute ->
+                                    False
+
+                        isMuted : IsMuted
+                        isMuted =
+                            MuteSettings.isSlackChannelMuted
+                                localUser.user.muteSettings
+                                routeData.teamId
+                                channelId
+                                (ViewThread threadMessageIndex)
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
-                                IsNotMuted
+                                isMuted
                                 directMentions
-                                False
+                                (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
                                 channelId
                                 (ViewThread threadMessageIndex)
                                 (SeqDict.get
@@ -13560,19 +13782,19 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
                                 thread
                     in
                     if isSelected || hasNotifications /= NoNotification then
-                        Just ( threadMessageIndex, hasNotifications, isSelected )
+                        Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                     else
                         case MessageArray.last thread.messages of
                             Just message ->
                                 if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                    Just ( threadMessageIndex, hasNotifications, isSelected )
+                                    Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                                 else
                                     Nothing
 
                             Nothing ->
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -13581,11 +13803,11 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
-                IsNotMuted
+                isMuted
                 hasNotifications
                 index
                 count
@@ -13593,8 +13815,7 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
                 (SlackWorkspaceRoute
                     { currentSlackUserId = routeData.currentSlackUserId
                     , teamId = routeData.teamId
-                    , channelId = channelId
-                    , threadRoute = ViewThreadWithMaybeMessage threadMessageIndex Nothing
+                    , channelRoute = SlackChannel_ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing) HideChannelSettings
                     , channelsVisible = ChannelsHiddenOnMobile
                     , overlay = Nothing
                     }
@@ -13607,20 +13828,24 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
 
 slackChannelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> SlackWorkspaceRouteData
     -> Slack.Id Slack.ChannelId
     -> SlackFrontendChannel
     -> Element FrontendMsg_
-slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
+slackChannelColumnRow isMobile isMuted hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
-            case routeData.threadRoute of
-                NoThreadWithMaybeMessage _ ->
-                    routeData.channelId == channelId
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute selectedChannelId (NoThreadWithMaybeMessage _) _ ->
+                    selectedChannelId == channelId
 
-                ViewThreadWithMaybeMessage _ _ ->
+                SlackChannel_ChannelRoute _ (ViewThreadWithMaybeMessage _ _) _ ->
+                    False
+
+                SlackChannel_WorkspaceSettingsRoute ->
                     False
     in
     GuildColumn.rowLinkButton
@@ -13628,8 +13853,7 @@ slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
         (SlackWorkspaceRoute
             { currentSlackUserId = routeData.currentSlackUserId
             , teamId = routeData.teamId
-            , channelId = channelId
-            , threadRoute = NoThreadWithMaybeMessage Nothing
+            , channelRoute = SlackChannel_ChannelRoute channelId (NoThreadWithMaybeMessage Nothing) HideChannelSettings
             , channelsVisible = ChannelsHiddenOnMobile
             , overlay = Nothing
             }
@@ -13667,7 +13891,9 @@ slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ Ui.text (ChannelName.toString channel.name) ]
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
 
 
 slackDmColumnThreads :

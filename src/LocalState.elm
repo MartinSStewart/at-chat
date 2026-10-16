@@ -215,7 +215,7 @@ import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -4060,36 +4060,41 @@ routeToViewing isMobile route local =
             StopViewingChannel
 
         SlackWorkspaceRoute data ->
-            let
-                id : Viewing_SlackChannelId
-                id =
-                    { currentUserId = data.currentSlackUserId, teamId = data.teamId, channelId = data.channelId }
-            in
-            case getSlackWorkspaceAndChannel data.teamId data.channelId local of
-                Just _ ->
-                    if isMobile && data.channelsVisible == ChannelsVisibleOnMobile then
-                        StopViewingChannel
+            case data.channelRoute of
+                SlackChannel_ChannelRoute channelId threadRoute _ ->
+                    let
+                        id : Viewing_SlackChannelId
+                        id =
+                            { currentUserId = data.currentSlackUserId, teamId = data.teamId, channelId = channelId }
+                    in
+                    case getSlackWorkspaceAndChannel data.teamId channelId local of
+                        Just _ ->
+                            if isMobile && data.channelsVisible == ChannelsVisibleOnMobile then
+                                StopViewingChannel
 
-                    else
-                        case data.threadRoute of
-                            NoThreadWithMaybeMessage _ ->
-                                ViewSlackChannel
-                                    { id = id
-                                    , previouslyLastViewedMessage =
-                                        previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
-                                    }
-                                    EmptyPlaceholder
+                            else
+                                case threadRoute of
+                                    NoThreadWithMaybeMessage _ ->
+                                        ViewSlackChannel
+                                            { id = id
+                                            , previouslyLastViewedMessage =
+                                                previouslyLastViewedMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) local
+                                            }
+                                            EmptyPlaceholder
 
-                            ViewThreadWithMaybeMessage threadId _ ->
-                                ViewSlackChannelThread
-                                    { id = id
-                                    , threadId = threadId
-                                    , previouslyLastViewedMessage =
-                                        previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) threadId local
-                                    }
-                                    EmptyPlaceholder
+                                    ViewThreadWithMaybeMessage threadId _ ->
+                                        ViewSlackChannelThread
+                                            { id = id
+                                            , threadId = threadId
+                                            , previouslyLastViewedMessage =
+                                                previouslyLastViewedThreadMessage (SlackGuildOrDmId (SlackGuildOrDmId_Workspace id)) threadId local
+                                            }
+                                            EmptyPlaceholder
 
-                Nothing ->
+                        Nothing ->
+                            StopViewingChannel
+
+                SlackChannel_WorkspaceSettingsRoute ->
                     StopViewingChannel
 
         SlackDmRoute data ->

@@ -25,6 +25,7 @@ module BackendExtra exposing
     , asGuildOwner
     , asSlackChannelMember
     , asSlackDmUser
+    , asSlackWorkspaceMember
     , asUser
     , backendMsgLog
     , channelDataToDecrypt
@@ -3146,6 +3147,18 @@ toBackendLog toBackend =
                 Local_SetMuteDiscordGuild _ _ _ ->
                     ToBackendLog_Local_SetMuteDiscordGuild
 
+                Local_SetSlackWorkspaceNotificationLevel _ _ _ ->
+                    ToBackendLog_Local_SetSlackWorkspaceNotificationLevel
+
+                Local_SetMuteSlackWorkspace _ _ _ ->
+                    ToBackendLog_Local_SetMuteSlackWorkspace
+
+                Local_SetMuteSlackChannel _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteSlackChannel
+
+                Local_SetMuteSlackThread _ _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteSlackThread
+
                 Local_RequestE2ee _ ->
                     ToBackendLog_Local_RequestE2ee
 
@@ -3737,6 +3750,42 @@ asSlackChannelMember model sessionId { teamId, channelId, currentUserId } func =
                 ( model, Command.none )
 
         _ ->
+            ( model, Command.none )
+
+
+asSlackWorkspaceMember :
+    BackendModel
+    -> SessionId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.UserId
+    ->
+        (UserSession
+         -> SlackLinkedUser
+         -> BackendUser
+         -> SlackBackendWorkspace
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asSlackWorkspaceMember model sessionId teamId currentUserId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case
+                ( NonemptyDict.get session.userId model.users
+                , SeqDict.get currentUserId model.slackUsers
+                , SeqDict.get teamId model.slackWorkspaces
+                )
+            of
+                ( Just user, Just (SlackFullData slackUser), Just workspace ) ->
+                    if slackUser.linkedTo == session.userId && slackUser.user.teamId == teamId then
+                        func session slackUser user workspace
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
             ( model, Command.none )
 
 

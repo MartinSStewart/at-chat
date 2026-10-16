@@ -54,6 +54,7 @@ module User exposing
     , setLastSlackChannelViewed
     , setLastViewedMessage
     , setName
+    , setSlackWorkspaceNotificationLevel
     , slackUserColor
     , smallDiscordProfileImage
     , smallProfileImage
@@ -566,6 +567,23 @@ setDiscordGuildNotificationLevel guildId notificationLevel user =
 
                 NotifyOnMention ->
                     SeqSet.remove guildId user.discordNotifyOnAllMessages
+    }
+
+
+setSlackWorkspaceNotificationLevel :
+    Slack.Id Slack.TeamId
+    -> NotificationLevel
+    -> { a | slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId) }
+    -> { a | slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId) }
+setSlackWorkspaceNotificationLevel teamId notificationLevel user =
+    { user
+        | slackNotifyOnAllMessages =
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    SeqSet.insert teamId user.slackNotifyOnAllMessages
+
+                NotifyOnMention ->
+                    SeqSet.remove teamId user.slackNotifyOnAllMessages
     }
 
 

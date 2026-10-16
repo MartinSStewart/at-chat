@@ -34,7 +34,7 @@ import MyUi
 import NonemptyDict
 import NonemptySet
 import PersonName
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import Slack
 import Time
@@ -418,8 +418,7 @@ slackWorkspaceResults local teamId workspace =
                             SlackWorkspaceRoute
                                 { currentSlackUserId = currentUserId
                                 , teamId = teamId
-                                , channelId = channelId
-                                , threadRoute = threadRoute
+                                , channelRoute = SlackChannel_ChannelRoute channelId threadRoute HideChannelSettings
                                 , channelsVisible = ChannelsHiddenOnMobile
                                 , overlay = Nothing
                                 }

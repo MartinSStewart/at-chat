@@ -84,7 +84,7 @@ import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -1522,7 +1522,37 @@ slackMessageNotification time guildOrDmId threadRoute message model =
         recipients =
             case guildOrDmId of
                 SlackGuildOrDmId_Workspace { teamId, channelId } ->
-                    slackMentionedMembers teamId channelId message.content.content model |> SeqSet.toList
+                    let
+                        alwaysNotify : List (Slack.Id Slack.UserId)
+                        alwaysNotify =
+                            case LocalState.getSlackWorkspaceAndChannel teamId channelId model of
+                                Just ( _, channel ) ->
+                                    SeqSet.toList channel.linkedMembers
+                                        |> List.filter
+                                            (\slackUserId ->
+                                                case SeqDict.get slackUserId model.slackUsers of
+                                                    Just (SlackFullData linkedUser) ->
+                                                        case NonemptyDict.get linkedUser.linkedTo model.users of
+                                                            Just user ->
+                                                                SeqSet.member teamId user.slackNotifyOnAllMessages
+
+                                                            Nothing ->
+                                                                False
+
+                                                    Just (SlackBasicData _) ->
+                                                        False
+
+                                                    Nothing ->
+                                                        False
+                                            )
+
+                                Nothing ->
+                                    []
+                    in
+                    SeqSet.union
+                        (slackMentionedMembers teamId channelId message.content.content model)
+                        (SeqSet.fromList alwaysNotify)
+                        |> SeqSet.toList
 
                 SlackGuildOrDmId_Dm { channelId } ->
                     case SeqDict.get channelId model.slackDmChannels of
@@ -1586,8 +1616,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                                     Route.SlackWorkspaceRoute
                                         { currentSlackUserId = recipient
                                         , teamId = teamId
-                                        , channelId = channelId
-                                        , threadRoute = Id.threadRouteWithNoMessage threadRoute
+                                        , channelRoute = SlackChannel_ChannelRoute channelId (Id.threadRouteWithNoMessage threadRoute) HideChannelSettings
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }

@@ -4,6 +4,7 @@ module MuteSettings exposing
     , MutedChannel
     , MutedDiscordGuild
     , MutedGuild
+    , MutedSlackWorkspace
     , hidesRedDot
     , hidesWhiteDot
     , init
@@ -17,12 +18,18 @@ module MuteSettings exposing
     , isDmMuted
     , isGuildSpecificallyMute
     , isSlackChannelMuted
+    , isSlackChannelSpecificallyMuted
+    , isSlackThreadSpecificallyMuted
+    , isSlackWorkspaceSpecificallyMuted
     , isThreadSpecificallyMuted
     , setMuteChannel
     , setMuteDiscordChannel
     , setMuteDiscordGuild
     , setMuteDiscordThread
     , setMuteGuild
+    , setMuteSlackChannel
+    , setMuteSlackThread
+    , setMuteSlackWorkspace
     , setMuteThread
     , view
     )
@@ -42,6 +49,7 @@ type alias Model =
     , mutedDms : SeqDict (Id UserId) MutedChannel
     , mutedDiscordGuilds : SeqDict (Discord.Id Discord.GuildId) MutedDiscordGuild
     , mutedDiscordDms : SeqDict (Discord.Id Discord.PrivateChannelId) IsMuted
+    , mutedSlackWorkspaces : SeqDict (Slack.Id Slack.TeamId) MutedSlackWorkspace
     }
 
 
@@ -67,12 +75,19 @@ type alias MutedDiscordGuild =
     }
 
 
+type alias MutedSlackWorkspace =
+    { mutedWorkspace : IsMuted
+    , channels : SeqDict (Slack.Id Slack.ChannelId) MutedChannel
+    }
+
+
 init : Model
 init =
     { mutedGuilds = SeqDict.empty
     , mutedDms = SeqDict.empty
     , mutedDiscordGuilds = SeqDict.empty
     , mutedDiscordDms = SeqDict.empty
+    , mutedSlackWorkspaces = SeqDict.empty
     }
 
 
@@ -145,6 +160,28 @@ setMuteDiscordGuild guildId isMuted model =
     }
 
 
+setMuteSlackWorkspace : Slack.Id Slack.TeamId -> IsMuted -> Model -> Model
+setMuteSlackWorkspace teamId isMuted model =
+    { model
+        | mutedSlackWorkspaces =
+            SeqDict.update
+                teamId
+                (\maybeWorkspace ->
+                    { mutedWorkspace = isMuted
+                    , channels =
+                        case maybeWorkspace of
+                            Just workspace ->
+                                workspace.channels
+
+                            Nothing ->
+                                SeqDict.empty
+                    }
+                        |> Just
+                )
+                model.mutedSlackWorkspaces
+    }
+
+
 setMuteChannel : Id GuildId -> Id ChannelId -> IsMuted -> Model -> Model
 setMuteChannel guildId channelId isMuted model =
     updateMutedChannel guildId channelId (\channel -> { channel | mutedChannel = isMuted }) model
@@ -187,6 +224,39 @@ setMuteDiscordThread :
 setMuteDiscordThread guildId channelId threadId isMuted model =
     updateMutedDiscordChannel
         guildId
+        channelId
+        (\channel ->
+            { channel
+                | mutedThreads =
+                    case isMuted of
+                        IsNotMuted ->
+                            SeqDict.remove threadId channel.mutedThreads
+
+                        IsPartiallyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+
+                        IsFullyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+            }
+        )
+        model
+
+
+setMuteSlackChannel : Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> IsMuted -> Model -> Model
+setMuteSlackChannel teamId channelId isMuted model =
+    updateMutedSlackChannel teamId channelId (\channel -> { channel | mutedChannel = isMuted }) model
+
+
+setMuteSlackThread :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+    -> Model
+    -> Model
+setMuteSlackThread teamId channelId threadId isMuted model =
+    updateMutedSlackChannel
+        teamId
         channelId
         (\channel ->
             { channel
@@ -265,6 +335,40 @@ updateMutedDiscordChannel guildId channelId updateFunc model =
                         |> Just
                 )
                 model.mutedDiscordGuilds
+    }
+
+
+updateMutedSlackChannel :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> (MutedChannel -> MutedChannel)
+    -> Model
+    -> Model
+updateMutedSlackChannel teamId channelId updateFunc model =
+    { model
+        | mutedSlackWorkspaces =
+            SeqDict.update
+                teamId
+                (\maybeWorkspace ->
+                    let
+                        workspace : MutedSlackWorkspace
+                        workspace =
+                            Maybe.withDefault { mutedWorkspace = IsNotMuted, channels = SeqDict.empty } maybeWorkspace
+                    in
+                    { workspace
+                        | channels =
+                            SeqDict.update
+                                channelId
+                                (\maybeChannel ->
+                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqDict.empty } maybeChannel
+                                        |> updateFunc
+                                        |> Just
+                                )
+                                workspace.channels
+                    }
+                        |> Just
+                )
+                model.mutedSlackWorkspaces
     }
 
 
@@ -457,7 +561,61 @@ isDiscordChannelMuted model guildId channelId threadRoute =
             IsNotMuted
 
 
+isSlackWorkspaceSpecificallyMuted : Model -> Slack.Id Slack.TeamId -> IsMuted
+isSlackWorkspaceSpecificallyMuted model teamId =
+    case SeqDict.get teamId model.mutedSlackWorkspaces of
+        Just workspace ->
+            workspace.mutedWorkspace
+
+        Nothing ->
+            IsNotMuted
+
+
+isSlackChannelSpecificallyMuted : Model -> Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> IsMuted
+isSlackChannelSpecificallyMuted model teamId channelId =
+    case SeqDict.get teamId model.mutedSlackWorkspaces of
+        Just workspace ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    channel.mutedChannel
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isSlackThreadSpecificallyMuted :
+    Model
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+isSlackThreadSpecificallyMuted model teamId channelId threadId =
+    case SeqDict.get teamId model.mutedSlackWorkspaces of
+        Just workspace ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    SeqDict.get threadId channel.mutedThreads |> Maybe.withDefault IsNotMuted
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
 isSlackChannelMuted : Model -> Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> ThreadRoute -> IsMuted
-isSlackChannelMuted model guildId channelId threadRoute =
-    -- TODO
-    IsNotMuted
+isSlackChannelMuted model teamId channelId threadRoute =
+    case SeqDict.get teamId model.mutedSlackWorkspaces of
+        Just workspace ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    strongest workspace.mutedWorkspace (channelOrThreadMuted threadRoute channel)
+
+                Nothing ->
+                    workspace.mutedWorkspace
+
+        Nothing ->
+            IsNotMuted

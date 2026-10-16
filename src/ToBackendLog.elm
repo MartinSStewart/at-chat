@@ -90,6 +90,10 @@ type ToBackendLog
     | ToBackendLog_Local_SetMuteDiscordThread
     | ToBackendLog_Local_SetMuteGuild
     | ToBackendLog_Local_SetMuteDiscordGuild
+    | ToBackendLog_Local_SetSlackWorkspaceNotificationLevel
+    | ToBackendLog_Local_SetMuteSlackWorkspace
+    | ToBackendLog_Local_SetMuteSlackChannel
+    | ToBackendLog_Local_SetMuteSlackThread
     | ToBackendLog_Local_RequestE2ee
     | ToBackendLog_Local_CancelE2eeRequest
     | ToBackendLog_Local_DeclineE2eeRequest
@@ -348,6 +352,18 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetMuteDiscordGuild ->
             "Local_SetMuteDiscordGuild"
+
+        ToBackendLog_Local_SetSlackWorkspaceNotificationLevel ->
+            "Local_SetSlackWorkspaceNotificationLevel"
+
+        ToBackendLog_Local_SetMuteSlackWorkspace ->
+            "Local_SetMuteSlackWorkspace"
+
+        ToBackendLog_Local_SetMuteSlackChannel ->
+            "Local_SetMuteSlackChannel"
+
+        ToBackendLog_Local_SetMuteSlackThread ->
+            "Local_SetMuteSlackThread"
 
         ToBackendLog_Local_RequestE2ee ->
             "Local_RequestE2ee"

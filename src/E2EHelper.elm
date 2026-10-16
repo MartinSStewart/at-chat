@@ -2895,6 +2895,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetDiscordGuildNotificationLevel _ _ _ ->
                     True
 
+                Local_SetSlackWorkspaceNotificationLevel _ _ _ ->
+                    True
+
                 Local_SetNotificationMode _ ->
                     False
 
@@ -2971,6 +2974,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     True
 
                 Local_SetMuteDiscordGuild _ _ _ ->
+                    True
+
+                Local_SetMuteSlackWorkspace _ _ _ ->
+                    True
+
+                Local_SetMuteSlackChannel _ _ _ _ ->
+                    True
+
+                Local_SetMuteSlackThread _ _ _ _ _ ->
                     True
 
                 Local_RequestE2ee _ ->
@@ -3153,6 +3165,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetDiscordGuildNotificationLevel _ _ ->
                             True
 
+                        Types.Server_SetSlackWorkspaceNotificationLevel _ _ ->
+                            True
+
                         Types.Server_PushNotificationFailed _ _ ->
                             True
 
@@ -3280,6 +3295,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetMuteDiscordGuild _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackWorkspace _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackThread _ _ _ _ ->
                             True
 
                         Types.Server_DiscordAvatarsLoaded _ _ ->
@@ -3529,6 +3553,10 @@ allAttackerLocalChanges =
             EmptyPlaceholder
         )
     , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
+    , Local_SetSlackWorkspaceNotificationLevel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") User.NotifyOnEveryMessage
+    , Local_SetMuteSlackWorkspace (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackChannel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackThread (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") (Id.fromInt 0) MuteSettings.IsFullyMuted
     , Local_CurrentlyViewing
         { markMessagesAsViewed = True }
         (ViewSlackChannel

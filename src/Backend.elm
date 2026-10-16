@@ -7742,6 +7742,118 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetSlackWorkspaceNotificationLevel slackUserId teamId notificationLevel ->
+                    BackendExtra.asSlackWorkspaceMember
+                        model
+                        sessionId
+                        teamId
+                        slackUserId
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        (User.setSlackWorkspaceNotificationLevel teamId notificationLevel user)
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetSlackWorkspaceNotificationLevel teamId notificationLevel |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteSlackWorkspace slackUserId teamId isMuted ->
+                    BackendExtra.asSlackWorkspaceMember
+                        model
+                        sessionId
+                        teamId
+                        slackUserId
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | muteSettings = MuteSettings.setMuteSlackWorkspace teamId isMuted user.muteSettings }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteSlackWorkspace teamId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteSlackChannel slackUserId teamId channelId isMuted ->
+                    BackendExtra.asSlackChannelMember
+                        model
+                        sessionId
+                        { teamId = teamId, channelId = channelId, currentUserId = slackUserId }
+                        (\session _ _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackChannel teamId channelId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackChannel teamId channelId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SetMuteSlackThread slackUserId teamId channelId threadId isMuted ->
+                    BackendExtra.asSlackChannelMember
+                        model
+                        sessionId
+                        { teamId = teamId, channelId = channelId, currentUserId = slackUserId }
+                        (\session _ _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackThread teamId channelId threadId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackThread teamId channelId threadId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_RequestE2ee id ->
                     BackendExtra.asDmUser
                         model

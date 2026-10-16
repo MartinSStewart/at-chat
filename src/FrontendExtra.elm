@@ -127,7 +127,7 @@ import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
-import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SearchOverlay
 import SeqDict exposing (SeqDict)
@@ -307,6 +307,14 @@ pendingChangesText localChange =
                 NotifyOnMention ->
                     Just "Disabled notifications for all messages"
 
+        Local_SetSlackWorkspaceNotificationLevel _ _ notificationLevel ->
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    Just "Enabled notifications for all messages"
+
+                NotifyOnMention ->
+                    Just "Disabled notifications for all messages"
+
         Local_SetNotificationMode _ ->
             Just "Set notification mode"
 
@@ -408,6 +416,15 @@ pendingChangesText localChange =
 
         Local_SetMuteDiscordGuild _ _ _ ->
             Just "Set mute Discord guild"
+
+        Local_SetMuteSlackWorkspace _ _ _ ->
+            Just "Set mute Slack workspace"
+
+        Local_SetMuteSlackChannel _ _ _ _ ->
+            Just "Changed channel notifications"
+
+        Local_SetMuteSlackThread _ _ _ _ _ ->
+            Just "Changed thread notifications"
 
         Local_RequestE2ee _ ->
             Just "Asked to start end-to-end encryption"
@@ -1640,10 +1657,23 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
 
                     else
                         case guildOrDmId of
-                            SlackGuildOrDmId_Workspace _ ->
-                                RichText.mentionsUser content
-                                    |> SeqSet.toList
-                                    |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
+                            SlackGuildOrDmId_Workspace { teamId } ->
+                                case
+                                    RichText.mentionsUser content
+                                        |> SeqSet.toList
+                                        |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
+                                of
+                                    Just mentioned ->
+                                        Just mentioned
+
+                                    Nothing ->
+                                        if SeqSet.member teamId local.localUser.user.slackNotifyOnAllMessages then
+                                            SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) local.localUser.linkedSlackUsers
+                                                |> SeqDict.keys
+                                                |> List.head
+
+                                        else
+                                            Nothing
 
                             SlackGuildOrDmId_Dm { channelId } ->
                                 SeqDict.get channelId local.slackDmChannels
@@ -1679,8 +1709,7 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                                         SlackWorkspaceRoute
                                                             { currentSlackUserId = currentUserId
                                                             , teamId = teamId
-                                                            , channelId = channelId
-                                                            , threadRoute = Id.threadRouteWithNoMessage threadRoute
+                                                            , channelRoute = SlackChannel_ChannelRoute channelId (Id.threadRouteWithNoMessage threadRoute) HideChannelSettings
                                                             , channelsVisible = ChannelsHiddenOnMobile
                                                             , overlay = Nothing
                                                             }
@@ -2237,44 +2266,54 @@ routeRequest previousRoute newRoute model =
             )
 
         SlackWorkspaceRoute routeData ->
-            let
-                sameChannelRoute =
-                    case previousRoute of
-                        Just (SlackWorkspaceRoute previousRouteData) ->
-                            (routeData.teamId == previousRouteData.teamId)
-                                && (routeData.channelId == previousRouteData.channelId)
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute channelId threadRoute showMembers ->
+                    let
+                        sameChannelRoute =
+                            case previousRoute of
+                                Just (SlackWorkspaceRoute previousRouteData) ->
+                                    case previousRouteData.channelRoute of
+                                        SlackChannel_ChannelRoute previousChannelId _ _ ->
+                                            (routeData.teamId == previousRouteData.teamId)
+                                                && (channelId == previousChannelId)
 
-                        _ ->
-                            False
+                                        SlackChannel_WorkspaceSettingsRoute ->
+                                            False
 
-                model3 : LoadedFrontend
-                model3 =
-                    if sameChannelRoute then
-                        model2
+                                _ ->
+                                    False
 
-                    else
-                        clearRevealedSpoilers model2
+                        model3 : LoadedFrontend
+                        model3 =
+                            if sameChannelRoute then
+                                model2
 
-                guildOrDmId : SlackGuildOrDmId
-                guildOrDmId =
-                    SlackGuildOrDmId_Workspace
-                        { currentUserId = routeData.currentSlackUserId
-                        , teamId = routeData.teamId
-                        , channelId = routeData.channelId
-                        }
-            in
-            updateLoggedIn
-                (\loggedIn ->
-                    routeRequestChannelHelper
-                        sameChannelRoute
-                        (SlackGuildOrDmId guildOrDmId)
-                        Nothing
-                        (slackThreadRouteWithFriends routeData.threadRoute)
-                        (Local.model loggedIn.localState)
-                        loggedIn
+                            else
+                                clearRevealedSpoilers model2
+
+                        guildOrDmId : SlackGuildOrDmId
+                        guildOrDmId =
+                            SlackGuildOrDmId_Workspace
+                                { currentUserId = routeData.currentSlackUserId
+                                , teamId = routeData.teamId
+                                , channelId = channelId
+                                }
+                    in
+                    updateLoggedIn
+                        (\loggedIn ->
+                            routeRequestChannelHelper
+                                sameChannelRoute
+                                (SlackGuildOrDmId guildOrDmId)
+                                Nothing
+                                (slackThreadRouteWithFriends threadRoute showMembers)
+                                (Local.model loggedIn.localState)
+                                loggedIn
+                                model3
+                        )
                         model3
-                )
-                model3
+
+                SlackChannel_WorkspaceSettingsRoute ->
+                    ( clearRevealedSpoilers model2, Command.none )
 
         SlackDmRoute routeData ->
             let
@@ -2304,7 +2343,7 @@ routeRequest previousRoute newRoute model =
                         sameDmRoute
                         (SlackGuildOrDmId guildOrDmId)
                         Nothing
-                        (slackThreadRouteWithFriends routeData.threadRoute)
+                        (slackThreadRouteWithFriends routeData.threadRoute HideChannelSettings)
                         (Local.model loggedIn.localState)
                         loggedIn
                         model3
@@ -2314,14 +2353,14 @@ routeRequest previousRoute newRoute model =
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
-slackThreadRouteWithFriends : ThreadRouteWithMaybeMessage -> ThreadRouteWithFriends
-slackThreadRouteWithFriends threadRoute =
+slackThreadRouteWithFriends : ThreadRouteWithMaybeMessage -> ShowChannelSettings -> ThreadRouteWithFriends
+slackThreadRouteWithFriends threadRoute showMembers =
     case threadRoute of
         NoThreadWithMaybeMessage maybeMessageId ->
-            NoThreadWithFriends maybeMessageId HideChannelSettings
+            NoThreadWithFriends maybeMessageId showMembers
 
         ViewThreadWithMaybeMessage threadId maybeMessageId ->
-            ViewThreadWithFriends threadId maybeMessageId HideChannelSettings
+            ViewThreadWithFriends threadId maybeMessageId showMembers
 
 
 encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
@@ -3218,6 +3257,9 @@ isPressMsg msg =
         PressedDiscordGuildNotificationLevel _ _ _ ->
             True
 
+        PressedSlackWorkspaceNotificationLevel _ _ _ ->
+            True
+
         PressedCloseExternalLinkWarning ->
             True
 
@@ -3385,6 +3427,15 @@ isPressMsg msg =
             True
 
         PressedMuteDiscordGuild _ _ _ ->
+            True
+
+        PressedMuteSlackWorkspace _ _ _ ->
+            True
+
+        PressedMuteSlackChannel _ _ _ _ ->
+            True
+
+        PressedMuteSlackThread _ _ _ _ _ ->
             True
 
         UnreadOverviewChannelMsg _ _ messageViewMsg ->
@@ -4922,6 +4973,18 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Local_SetSlackWorkspaceNotificationLevel _ teamId notificationLevel ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.setSlackWorkspaceNotificationLevel teamId notificationLevel localUser.user
+                            }
+                    }
+
                 Local_SetNotificationMode notificationMode ->
                     let
                         localUser : LocalUser
@@ -5152,6 +5215,15 @@ changeUpdate localMsg local =
 
                 Local_SetMuteDiscordGuild _ guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
+
+                Local_SetMuteSlackWorkspace _ teamId isMuted ->
+                    setMuteSlackWorkspace teamId isMuted local
+
+                Local_SetMuteSlackChannel _ teamId channelId isMuted ->
+                    setMuteSlackChannel teamId channelId isMuted local
+
+                Local_SetMuteSlackThread _ teamId channelId threadId isMuted ->
+                    setMuteSlackThread teamId channelId threadId isMuted local
 
                 Local_RequestE2ee id ->
                     LocalState.setDmE2ee
@@ -6056,6 +6128,18 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_SetSlackWorkspaceNotificationLevel teamId notificationLevel ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.setSlackWorkspaceNotificationLevel teamId notificationLevel localUser.user
+                            }
+                    }
+
                 Server_PushNotificationFailed subscribeData error ->
                     let
                         localUser : LocalUser
@@ -6777,6 +6861,15 @@ changeUpdate localMsg local =
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
+                Server_SetMuteSlackWorkspace teamId isMuted ->
+                    setMuteSlackWorkspace teamId isMuted local
+
+                Server_SetMuteSlackChannel teamId channelId isMuted ->
+                    setMuteSlackChannel teamId channelId isMuted local
+
+                Server_SetMuteSlackThread teamId channelId threadId isMuted ->
+                    setMuteSlackThread teamId channelId threadId isMuted local
+
                 Server_E2eeRequested id requestedBy ->
                     LocalState.setDmE2ee id (DmChannel.E2eeRequestedBy requestedBy) local
 
@@ -7079,6 +7172,76 @@ setMuteDiscordThread guildId channelId threadId isMuted local =
                     { user
                         | muteSettings =
                             MuteSettings.setMuteDiscordThread guildId channelId threadId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteSlackWorkspace : Slack.Id Slack.TeamId -> IsMuted -> LocalState -> LocalState
+setMuteSlackWorkspace teamId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user = { user | muteSettings = MuteSettings.setMuteSlackWorkspace teamId isMuted user.muteSettings }
+            }
+    }
+
+
+setMuteSlackChannel : Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> IsMuted -> LocalState -> LocalState
+setMuteSlackChannel teamId channelId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings = MuteSettings.setMuteSlackChannel teamId channelId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteSlackThread :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+    -> LocalState
+    -> LocalState
+setMuteSlackThread teamId channelId threadId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings =
+                            MuteSettings.setMuteSlackThread teamId channelId threadId isMuted user.muteSettings
                     }
             }
     }
