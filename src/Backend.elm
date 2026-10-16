@@ -1140,16 +1140,31 @@ updateHelper msg model =
                                 ( delay, reconnect ) =
                                     nextSlackReconnectDelay linkedUser.reconnect
                             in
-                            ( { model
-                                | slackUsers =
-                                    SeqDict.insert
-                                        slackUserId
-                                        (SlackFullData { linkedUser | websocket = Nothing, reconnect = reconnect })
-                                        model.slackUsers
-                                , pendingSlackReconnects = SeqDict.insert slackUserId delay model.pendingSlackReconnects
-                              }
-                            , Command.none
-                            )
+                            if linkedUser.needsAuthAgain then
+                                ( { model
+                                    | slackUsers =
+                                        SeqDict.insert slackUserId (SlackFullData { linkedUser | websocket = Nothing }) model.slackUsers
+                                  }
+                                , Command.none
+                                )
+
+                            else
+                                ( { model
+                                    | slackUsers =
+                                        SeqDict.insert
+                                            slackUserId
+                                            (SlackFullData { linkedUser | websocket = Nothing, reconnect = reconnect })
+                                            model.slackUsers
+                                    , pendingSlackReconnects = SeqDict.insert slackUserId delay model.pendingSlackReconnects
+                                  }
+                                , -- Failing twice in a row could mean the login expired, which reconnecting won't fix.
+                                  if linkedUser.reconnect.failedAttempts > 0 then
+                                    Slack.userBoot model.serverSecret linkedUser.cookie linkedUser.token
+                                        |> Task.attempt (CheckedSlackAuth slackUserId)
+
+                                  else
+                                    Command.none
+                                )
 
                 _ ->
                     ( model, Command.none )
@@ -1173,6 +1188,45 @@ updateHelper msg model =
                     ( model, Command.none )
 
                 Nothing ->
+                    ( model, Command.none )
+
+        CheckedSlackAuth slackUserId result ->
+            case ( SeqDict.get slackUserId model.slackUsers, result ) of
+                ( Just (SlackFullData linkedUser), Err (Slack.SlackError error) ) ->
+                    if List.member error [ "invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive" ] then
+                        let
+                            model2 : BackendModel
+                            model2 =
+                                { model
+                                    | slackUsers =
+                                        SeqDict.insert
+                                            slackUserId
+                                            (SlackFullData { linkedUser | websocket = Nothing, needsAuthAgain = True })
+                                            model.slackUsers
+                                    , pendingSlackReconnects = SeqDict.remove slackUserId model.pendingSlackReconnects
+                                }
+                        in
+                        ( model2
+                        , Command.batch
+                            [ Broadcast.toUser
+                                Nothing
+                                Nothing
+                                linkedUser.linkedTo
+                                (Server_Slack_NeedsAuthAgain slackUserId |> ServerChange)
+                                model2
+                            , case linkedUser.websocket of
+                                Just connection ->
+                                    Websocket.close connection |> Task.perform (\() -> SlackWebsocketClosedByBackend)
+
+                                Nothing ->
+                                    Command.none
+                            ]
+                        )
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
                     ( model, Command.none )
 
         SlackWebsocketSentData slackUserId result ->
@@ -12431,6 +12485,7 @@ addLinkedSlackUser linkedAt userId cookie token { self, team } model =
 
                             Nothing ->
                                 { failedAttempts = 0, seed = Time.posixToMillis linkedAt }
+                    , needsAuthAgain = False
                     }
                 )
                 model.slackUsers

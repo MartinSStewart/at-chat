@@ -6297,6 +6297,14 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists teamId (\workspace -> { workspace | name = name }) local.slackWorkspaces
                     }
 
+                Server_Slack_NeedsAuthAgain slackUserId ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | slackUsersNeedingAuth = SeqSet.insert slackUserId localUser.slackUsersNeedingAuth } }
+
                 Server_Slack_ChannelRenamed teamId channelId name ->
                     { local
                         | slackWorkspaces =
@@ -6325,6 +6333,7 @@ changeUpdate localMsg local =
                         | localUser =
                             { localUser
                                 | linkedSlackUsers = SeqDict.insert slackUserId teamId localUser.linkedSlackUsers
+                                , slackUsersNeedingAuth = SeqSet.remove slackUserId localUser.slackUsersNeedingAuth
                                 , slackUsers = SeqDict.union data.users localUser.slackUsers
                                 , user =
                                     { user
@@ -9843,6 +9852,7 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
         , discordUsers = loginData.discordUsers
         , slackUsers = loginData.slackUsers
         , linkedSlackUsers = loginData.linkedSlackUsers
+        , slackUsersNeedingAuth = loginData.slackUsersNeedingAuth
         , timezone = startupData.timezone
         , userAgent = startupData.userAgent
         , devicePixelRatio = startupData.devicePixelRatio

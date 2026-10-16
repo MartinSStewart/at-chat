@@ -8,6 +8,7 @@ module SlackSync exposing
     , unlinkUser
     , userDataName
     , userToFrontend
+    , usersNeedingAuth
     , usersToFrontend
     , workspacesToFrontend
     )
@@ -29,7 +30,7 @@ import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Slack
 import SlackEmoji
 import Thread exposing (SlackBackendThread)
@@ -203,6 +204,25 @@ linkedUsers userId slackUsers =
                     dict
         )
         SeqDict.empty
+        slackUsers
+
+
+usersNeedingAuth : Id UserId -> SeqDict (Slack.Id Slack.UserId) SlackUserData -> SeqSet (Slack.Id Slack.UserId)
+usersNeedingAuth userId slackUsers =
+    SeqDict.foldl
+        (\slackUserId userData set ->
+            case userData of
+                SlackFullData linked ->
+                    if linked.linkedTo == userId && linked.needsAuthAgain then
+                        SeqSet.insert slackUserId set
+
+                    else
+                        set
+
+                SlackBasicData _ ->
+                    set
+        )
+        SeqSet.empty
         slackUsers
 
 

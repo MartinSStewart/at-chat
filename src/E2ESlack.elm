@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -2488,6 +2488,105 @@ slackCatchUpHttp handleHttpRequest ({ currentRequest } as request) =
                     currentRequest.url
                     200
                     """{"ok":true,"messages":[{"type":"message","user":"U09DK3NCPMG","text":"Missed while offline","ts":"1791640100.000100"}],"has_more":false}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request
+
+
+slackExpiredLoginTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackExpiredLoginTest config =
+    E2EHelper.startTest
+        "An expired Slack login stops the websocket reconnecting until it's linked again"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackExpiredLoginHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ -> [ T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed" ])
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ -> [ T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed" ])
+                , E2EHelper.hasExactText admin [ UserOptions.slackNeedsAuthAgainText ]
+                , T.checkBackend
+                    (E2EHelper.gatewayReconnectDelay * 4)
+                    (\backend ->
+                        case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData linkedUser) ->
+                                if not linkedUser.needsAuthAgain then
+                                    Err "Expected the Slack user to need linking again"
+
+                                else if linkedUser.websocket /= Nothing then
+                                    Err "Expected the Slack websocket to stay closed"
+
+                                else if SeqDict.member adminSlackUserId (E2EHelper.unwrapBackend backend).pendingSlackReconnects then
+                                    Err "Expected no reconnect to be pending"
+
+                                else
+                                    Ok ()
+
+                            _ ->
+                                Err "Expected the Slack user to still be linked"
+                    )
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , admin.checkView
+                    1000
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText UserOptions.slackNeedsAuthAgainText ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData linkedUser) ->
+                                if linkedUser.needsAuthAgain then
+                                    Err "Expected linking again to fix the login"
+
+                                else if linkedUser.websocket == Nothing then
+                                    Err "Expected the Slack websocket to be open again"
+
+                                else
+                                    Ok ()
+
+                            _ ->
+                                Err "Expected the Slack user to still be linked"
+                    )
+                ]
+            )
+        ]
+
+
+{-| The login stops working after linking, until it's linked again.
+-}
+slackExpiredLoginHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackExpiredLoginHttp handleHttpRequest ({ data, currentRequest } as request) =
+    let
+        userBootCount : Int
+        userBootCount =
+            List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                |> List.Extra.count (\customRequest -> String.endsWith "client.userBoot" customRequest.url)
+    in
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            if String.endsWith "client.userBoot" customRequest.url && userBootCount == 1 then
+                E2EHelper.httpBasic currentRequest.url 200 """{"ok":false,"error":"invalid_auth"}"""
 
             else
                 handleHttpRequest request

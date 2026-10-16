@@ -1254,6 +1254,7 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
     , slackDmChannels = SlackSync.dmChannelsToFrontend linkedSlackUsers model.slackDmChannels
     , slackUsers = SlackSync.usersToFrontend model.users linkedSlackUsers model.slackUsers
     , linkedSlackUsers = linkedSlackUsers
+    , slackUsersNeedingAuth = SlackSync.usersNeedingAuth session.userId model.slackUsers
     , dmChannels = dmChannels
     , user = User.backendToFrontendCurrent email user
     , otherUsers = visibleUsers session.userId guilds dmChannels model.users
@@ -2972,6 +2973,9 @@ backendMsgLog msg =
 
         CaughtUpSlackMessages _ _ ->
             BackendMsgLog_CaughtUpSlackMessages
+
+        CheckedSlackAuth _ _ ->
+            BackendMsgLog_CheckedSlackAuth
 
         RefreshedSlackConversations _ _ ->
             BackendMsgLog_RefreshedSlackConversations

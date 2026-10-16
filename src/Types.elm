@@ -898,6 +898,7 @@ type BackendMsg
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2 Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError LoadedSlackWorkspace)
     | CaughtUpSlackMessages (Slack.Id Slack.UserId) (List Slack.WebsocketEvent)
+    | CheckedSlackAuth (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.UserBoot)
     | RefreshedSlackConversations (Slack.Id Slack.UserId) (Result ( Time.Posix, Slack.HttpError ) ( Slack.Id Slack.TeamId, LoadedSlackWorkspace ))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
@@ -1109,6 +1110,7 @@ type alias SlackLinkedUser =
     , cookie : SlackCookie
     , websocket : Maybe Websocket.Connection
     , reconnect : { failedAttempts : Int, seed : Int }
+    , needsAuthAgain : Bool
     }
 
 
@@ -1192,6 +1194,7 @@ type alias LoginData =
     , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
     , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    , slackUsersNeedingAuth : SeqSet (Slack.Id Slack.UserId)
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers
@@ -1241,6 +1244,7 @@ type ServerChange
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
     | Server_Slack_WorkspaceRenamed (Slack.Id Slack.TeamId) String
     | Server_Slack_ChannelRenamed (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) ChannelName
+    | Server_Slack_NeedsAuthAgain (Slack.Id Slack.UserId)
     | Server_Slack_LinkedUserLoaded
         (Slack.Id Slack.UserId)
         (Slack.Id Slack.TeamId)

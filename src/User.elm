@@ -977,6 +977,7 @@ type alias LocalUser =
     , discordUsers : LinkedAndOtherDiscordUsers
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
     , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    , slackUsersNeedingAuth : SeqSet (Slack.Id Slack.UserId)
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent

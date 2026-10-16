@@ -8,6 +8,7 @@ module UserOptions exposing
     , init
     , loadingUserDataText
     , slackLinkLimitReachedText
+    , slackNeedsAuthAgainText
     , view
     )
 
@@ -63,6 +64,13 @@ import X25519
 currentDeviceText : String
 currentDeviceText =
     "Current device"
+
+
+{-| Linking it again with a new cookie and token fixes it.
+-}
+slackNeedsAuthAgainText : String
+slackNeedsAuthAgainText =
+    "This account's login has expired. Link it again below to keep using it"
 
 
 slackLinkLimitReachedText : String
@@ -1102,6 +1110,13 @@ slackUserCard local slackUserId teamId =
                         Ui.none
                 ]
             ]
+        , if SeqSet.member slackUserId local.localUser.slackUsersNeedingAuth then
+            Ui.el
+                [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14 ]
+                (Ui.text slackNeedsAuthAgainText)
+
+          else
+            Ui.none
         , MyUi.elButton
             (Dom.id ("userOptions_unlinkSlack_" ++ Slack.idToString slackUserId))
             (PressedUnlinkSlackUser slackUserId)

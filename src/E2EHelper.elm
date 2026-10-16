@@ -3055,6 +3055,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Slack_ChannelRenamed _ _ _ ->
                             True
 
+                        Types.Server_Slack_NeedsAuthAgain _ ->
+                            True
+
                         Types.Server_Slack_LinkedUserLoaded _ _ _ ->
                             True
 
