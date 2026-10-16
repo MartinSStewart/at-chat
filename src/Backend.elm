@@ -1056,7 +1056,7 @@ updateHelper msg model =
                         slackFiles =
                             SeqDict.union files model.slackFiles
                     in
-                    ( { model
+                    { model
                         | slackFiles = slackFiles
                         , slackWorkspaces =
                             SeqDict.updateIfExists
@@ -1155,14 +1155,20 @@ updateHelper msg model =
                                     model.slackUsers
                                 )
                                 users
-                      }
+                    }
                         |> markNewSlackConversationsAsViewed
                             slackUserId
                             teamId
                             (List.map (\( channel, _ ) -> channel.id) channels)
                             (List.map (\( dmChannel, _ ) -> dmChannel.id) dmChannels)
-                    , Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
-                    )
+                        |> (\model2 ->
+                                ( model2
+                                , Command.batch
+                                    [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
+                                    , slackLinkedUserLoaded slackUserId teamId model2
+                                    ]
+                                )
+                           )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadSlackConversations teamId error) model
@@ -11951,6 +11957,58 @@ slackMessageLocations slackMessageId conversation =
             )
             []
             conversation.threads
+
+
+{-| Hands the at-chat user everything linking loaded, so their open tabs show it without a reload.
+-}
+slackLinkedUserLoaded : Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+slackLinkedUserLoaded slackUserId teamId model =
+    case SeqDict.get slackUserId model.slackUsers of
+        Just (SlackFullData linkedUser) ->
+            case NonemptyDict.get linkedUser.linkedTo model.users of
+                Just user ->
+                    let
+                        linked : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+                        linked =
+                            SlackSync.linkedUsers linkedUser.linkedTo model.slackUsers
+
+                        isSlack : AnyGuildOrDmId -> Bool
+                        isSlack guildOrDmId =
+                            case guildOrDmId of
+                                SlackGuildOrDmId _ ->
+                                    True
+
+                                GuildOrDmId _ ->
+                                    False
+
+                                DiscordGuildOrDmId _ ->
+                                    False
+                    in
+                    Broadcast.toUser
+                        Nothing
+                        Nothing
+                        linkedUser.linkedTo
+                        (Server_Slack_LinkedUserLoaded
+                            slackUserId
+                            teamId
+                            { workspaces = SlackSync.workspacesToFrontend linked model.slackWorkspaces
+                            , dmChannels = SlackSync.dmChannelsToFrontend linked model.slackDmChannels
+                            , users = SlackSync.usersToFrontend model.users linked model.slackUsers
+                            , lastViewedMessage = SeqDict.filter (\guildOrDmId _ -> isSlack guildOrDmId) user.lastViewedMessage
+                            , lastViewedThreadMessage = SeqDict.filter (\( guildOrDmId, _ ) _ -> isSlack guildOrDmId) user.lastViewedThreadMessage
+                            }
+                            |> ServerChange
+                        )
+                        model
+
+                Nothing ->
+                    Command.none
+
+        Just (SlackBasicData _) ->
+            Command.none
+
+        Nothing ->
+            Command.none
 
 
 {-| Linking Slack loads the newest messages of every conversation, and none of them are new to

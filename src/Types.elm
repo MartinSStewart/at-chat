@@ -1226,6 +1226,15 @@ type ServerChange
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
+    | Server_Slack_LinkedUserLoaded
+        (Slack.Id Slack.UserId)
+        (Slack.Id Slack.TeamId)
+        { workspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+        , dmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
+        , users : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+        , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+        , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
     | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)

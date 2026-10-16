@@ -408,23 +408,9 @@ viewAndWriteInSlackTest config =
             (\admin ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , linkSlack admin
-                ]
-            )
-        , T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ T.andThen
-                    10
-                    (\data ->
-                        [ admin.portEvent
-                            10
-                            "load_startup_data_from_js"
-                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
-                        ]
-                    )
+
+                -- What linking loaded shows up without reloading the page
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
                 , admin.click 100 (Dom.id "guild_slackFriendLabel_D09DK3P5RPC")
                 , E2EHelper.hasExactText admin [ "This is the start of your conversation with zig" ]
                 , -- The message is "Good a~~fternoon!~~" so its text is split by the strikethrough

@@ -6144,6 +6144,31 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | slackUsers = SeqDict.insert slackUserId user localUser.slackUsers } }
 
+                Server_Slack_LinkedUserLoaded slackUserId teamId data ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | linkedSlackUsers = SeqDict.insert slackUserId teamId localUser.linkedSlackUsers
+                                , slackUsers = SeqDict.union data.users localUser.slackUsers
+                                , user =
+                                    { user
+                                        | lastViewedMessage = SeqDict.union data.lastViewedMessage user.lastViewedMessage
+                                        , lastViewedThreadMessage = SeqDict.union data.lastViewedThreadMessage user.lastViewedThreadMessage
+                                    }
+                            }
+                        , slackWorkspaces = SeqDict.union data.workspaces local.slackWorkspaces
+                        , slackDmChannels = SeqDict.union data.dmChannels local.slackDmChannels
+                    }
+
                 Server_UnlinkDiscordUser userId ->
                     let
                         localUser =
