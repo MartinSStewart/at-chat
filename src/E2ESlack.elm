@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -2770,3 +2770,38 @@ slackFileUploadHttp handleHttpRequest ({ data, currentRequest } as request) =
 
             Nothing ->
                 handleHttpRequest request
+
+
+slackReloadUserTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackReloadUserTest config =
+    E2EHelper.startTest
+        "Reloading a Slack account picks up channels and DMs it joined since linking"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackNewConversationsHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_reloadSlack_U09DJDQL1A8")
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        if SeqDict.member (Slack.Id "D0NEWDM") (E2EHelper.unwrapBackend backend).slackDmChannels then
+                            Ok ()
+
+                        else
+                            Err "Expected reloading to load the new DM"
+                    )
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "fresh-channel" ]
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]

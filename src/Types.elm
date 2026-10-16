@@ -779,6 +779,7 @@ type FrontendMsg_
     | TypedSlackTeamsJson String
     | PressedSubmitSlackData
     | PressedUnlinkSlackUser (Slack.Id Slack.UserId)
+    | PressedReloadSlackUser (Slack.Id Slack.UserId)
 
 
 type alias NewChannelForm =
@@ -1389,6 +1390,7 @@ type LocalChange
     | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (SeqDict (Id FileId) FileData)
     | Local_Slack_SendEditMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRouteWithMessage NonemptyString
     | Local_Slack_UnlinkUser (Slack.Id Slack.UserId)
+    | Local_Slack_ReloadUser (Slack.Id Slack.UserId)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)

@@ -1162,21 +1162,41 @@ slackUserCard local slackUserId teamId =
 
           else
             Ui.none
-        , MyUi.elButton
-            (Dom.id ("userOptions_unlinkSlack_" ++ Slack.idToString slackUserId))
-            (PressedUnlinkSlackUser slackUserId)
-            [ Ui.background MyUi.deleteButtonBackground
-            , Ui.border 1
-            , Ui.borderColor MyUi.deleteButtonBorder
-            , Ui.Font.color MyUi.deleteButtonFont
-            , Ui.width Ui.shrink
-            , Ui.paddingXY 12 0
-            , Ui.rounded 4
-            , Ui.Font.size 14
-            , Ui.contentCenterY
-            , Ui.height (Ui.px 30)
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ if SeqSet.member slackUserId local.localUser.slackUsersNeedingAuth then
+                Ui.none
+
+              else
+                MyUi.elButton
+                    (Dom.id ("userOptions_reloadSlack_" ++ Slack.idToString slackUserId))
+                    (PressedReloadSlackUser slackUserId)
+                    [ Ui.background MyUi.buttonBackground
+                    , Ui.Font.color MyUi.font1
+                    , Ui.width Ui.shrink
+                    , Ui.paddingXY 12 0
+                    , Ui.rounded 4
+                    , Ui.Font.size 14
+                    , Ui.contentCenterY
+                    , Ui.height (Ui.px 30)
+                    ]
+                    (Ui.text "Reload user data")
+            , MyUi.elButton
+                (Dom.id ("userOptions_unlinkSlack_" ++ Slack.idToString slackUserId))
+                (PressedUnlinkSlackUser slackUserId)
+                [ Ui.background MyUi.deleteButtonBackground
+                , Ui.border 1
+                , Ui.borderColor MyUi.deleteButtonBorder
+                , Ui.Font.color MyUi.deleteButtonFont
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 12 0
+                , Ui.rounded 4
+                , Ui.Font.size 14
+                , Ui.contentCenterY
+                , Ui.height (Ui.px 30)
+                ]
+                (Ui.text "Unlink user")
             ]
-            (Ui.text "Unlink user")
         ]
 
 

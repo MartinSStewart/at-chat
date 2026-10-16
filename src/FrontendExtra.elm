@@ -210,6 +210,9 @@ pendingChangesText localChange =
         Local_Slack_UnlinkUser _ ->
             Just "Unlink Slack user"
 
+        Local_Slack_ReloadUser _ ->
+            Just "Reload Slack user"
+
         Local_NewChannel _ _ _ _ ->
             Just "Created new channel"
 
@@ -3468,6 +3471,9 @@ isPressMsg msg =
         PressedUnlinkSlackUser _ ->
             True
 
+        PressedReloadSlackUser _ ->
+            True
+
         PressedShowSearchOverlay ->
             True
 
@@ -5179,6 +5185,9 @@ changeUpdate localMsg local =
 
                 Local_Slack_UnlinkUser slackUserId ->
                     unlinkSlackUser slackUserId local
+
+                Local_Slack_ReloadUser _ ->
+                    local
 
                 Local_UnlinkDiscordUser userId ->
                     let

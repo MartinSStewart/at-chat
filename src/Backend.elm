@@ -6469,6 +6469,42 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         SlackGuildOrDmId_Dm data ->
                             BackendExtra.asSlackDmUser model sessionId data (\_ _ channel -> respond channel)
 
+                Local_Slack_ReloadUser slackUserId ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session _ ->
+                            case SeqDict.get slackUserId model.slackUsers of
+                                Just (SlackFullData linkedUser) ->
+                                    if linkedUser.linkedTo == session.userId && not linkedUser.needsAuthAgain then
+                                        let
+                                            ( model2, refreshCmd ) =
+                                                refreshSlackConversations linkedUser model
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                            , refreshCmd
+                                            , catchUpSlackConversations linkedUser model2
+                                            , case ( linkedUser.websocket, SeqDict.member slackUserId model2.pendingSlackReconnects ) of
+                                                ( Nothing, False ) ->
+                                                    Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
+
+                                                _ ->
+                                                    Command.none
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (SlackBasicData _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_Slack_UnlinkUser slackUserId ->
                     BackendExtra.asUser
                         model

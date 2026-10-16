@@ -35,6 +35,7 @@ type ToBackendLog
     | ToBackendLog_Local_Slack_SendMessage
     | ToBackendLog_Local_Slack_SendEditMessage
     | ToBackendLog_Local_Slack_UnlinkUser
+    | ToBackendLog_Local_Slack_ReloadUser
     | ToBackendLog_Local_NewChannel
     | ToBackendLog_Local_EditChannel
     | ToBackendLog_Local_DeleteChannel
@@ -188,6 +189,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Slack_UnlinkUser ->
             "Local_Slack_UnlinkUser"
+
+        ToBackendLog_Local_Slack_ReloadUser ->
+            "Local_Slack_ReloadUser"
 
         ToBackendLog_Local_NewChannel ->
             "Local_NewChannel"

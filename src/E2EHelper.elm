@@ -2780,6 +2780,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Slack_UnlinkUser _ ->
                     True
 
+                Local_Slack_ReloadUser _ ->
+                    True
+
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     True
 
@@ -3581,6 +3584,7 @@ allAttackerLocalChanges =
             EmptyPlaceholder
         )
     , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
+    , Local_Slack_ReloadUser (Slack.Id "U09DJDQL1A8")
     , Local_SetSlackWorkspaceNotificationLevel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") User.NotifyOnEveryMessage
     , Local_SetMuteSlackWorkspace (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") MuteSettings.IsFullyMuted
     , Local_SetMuteSlackChannel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") MuteSettings.IsFullyMuted

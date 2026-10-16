@@ -3385,6 +3385,9 @@ toBackendLog toBackend =
                 Local_Slack_UnlinkUser _ ->
                     ToBackendLog_Local_Slack_UnlinkUser
 
+                Local_Slack_ReloadUser _ ->
+                    ToBackendLog_Local_Slack_ReloadUser
+
                 Local_Slack_LoadChannelMessages _ _ _ ->
                     ToBackendLog_Local_Slack_LoadChannelMessages
 
