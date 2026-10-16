@@ -44,6 +44,7 @@ type BackendMsgLog
     | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_LinkSlackUserStep2
     | BackendMsgLog_RefreshedSlackConversations
+    | BackendMsgLog_CaughtUpSlackMessages
     | BackendMsgLog_SentSlackMessage
     | BackendMsgLog_SlackWebsocketCreatedHandle
     | BackendMsgLog_SlackWebsocketClosedByBackend
@@ -199,6 +200,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_RefreshedSlackConversations ->
             "RefreshedSlackConversations"
+
+        BackendMsgLog_CaughtUpSlackMessages ->
+            "CaughtUpSlackMessages"
 
         BackendMsgLog_SentSlackMessage ->
             "SentSlackMessage"

@@ -1130,30 +1130,7 @@ updateHelper msg model =
                 Just (SlackFullData linkedUser) ->
                     case result of
                         Ok text ->
-                            let
-                                event : Slack.WebsocketEvent
-                                event =
-                                    Slack.parseWebsocketEvent text
-
-                                ( model2, lookUpCmd ) =
-                                    lookUpUnknownSlackUsers linkedUser (websocketEventUserIds event) model
-                            in
-                            case List.filter (\file -> not (SeqDict.member file.id model2.slackFiles)) (websocketEventFiles event) of
-                                [] ->
-                                    let
-                                        ( model3, cmd ) =
-                                            handleSlackWebsocketEvent linkedUser event model2
-                                    in
-                                    ( model3, Command.batch [ cmd, lookUpCmd ] )
-
-                                newFiles ->
-                                    ( model2
-                                    , Command.batch
-                                        [ uploadSlackFiles model2.serverSecret linkedUser.cookie linkedUser.token newFiles
-                                            |> Task.perform (SlackMessageFilesUploaded slackUserId event)
-                                        , lookUpCmd
-                                        ]
-                                    )
+                            receivedSlackWebsocketEvent linkedUser (Slack.parseWebsocketEvent text) model
 
                         Err ( code, reason ) ->
                             let
@@ -1175,6 +1152,27 @@ updateHelper msg model =
                             )
 
                 _ ->
+                    ( model, Command.none )
+
+        CaughtUpSlackMessages slackUserId events ->
+            case SeqDict.get slackUserId model.slackUsers of
+                Just (SlackFullData linkedUser) ->
+                    List.foldl
+                        (\event ( model2, cmds ) ->
+                            let
+                                ( model3, cmd ) =
+                                    receivedSlackWebsocketEvent linkedUser event model2
+                            in
+                            ( model3, cmd :: cmds )
+                        )
+                        ( model, [] )
+                        events
+                        |> Tuple.mapSecond Command.batch
+
+                Just (SlackBasicData _) ->
+                    ( model, Command.none )
+
+                Nothing ->
                     ( model, Command.none )
 
         SlackWebsocketSentData slackUserId result ->
@@ -11668,7 +11666,11 @@ handleSlackWebsocketEvent linkedUser event model =
                         (SlackFullData { linkedUser | reconnect = { failedAttempts = 0, seed = linkedUser.reconnect.seed } })
                         model.slackUsers
               }
-            , Command.none
+            , if linkedUser.reconnect.failedAttempts > 0 then
+                catchUpSlackConversations linkedUser model
+
+              else
+                Command.none
             )
 
         Slack.WebsocketUserChanged user ->
@@ -11761,6 +11763,86 @@ handleSlackWebsocketEvent linkedUser event model =
 
         Slack.WebsocketOtherEvent ->
             ( model, Command.none )
+
+
+receivedSlackWebsocketEvent :
+    SlackLinkedUser
+    -> Slack.WebsocketEvent
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+receivedSlackWebsocketEvent linkedUser event model =
+    let
+        ( model2, lookUpCmd ) =
+            lookUpUnknownSlackUsers linkedUser (websocketEventUserIds event) model
+    in
+    case List.filter (\file -> not (SeqDict.member file.id model2.slackFiles)) (websocketEventFiles event) of
+        [] ->
+            let
+                ( model3, cmd ) =
+                    handleSlackWebsocketEvent linkedUser event model2
+            in
+            ( model3, Command.batch [ cmd, lookUpCmd ] )
+
+        newFiles ->
+            ( model2
+            , Command.batch
+                [ uploadSlackFiles model2.serverSecret linkedUser.cookie linkedUser.token newFiles
+                    |> Task.perform (SlackMessageFilesUploaded linkedUser.user.id event)
+                , lookUpCmd
+                ]
+            )
+
+
+{-| Loads the messages posted while the websocket was down, and handles them as if they had come
+through it. Replies in threads that were already there before are missed.
+-}
+catchUpSlackConversations : SlackLinkedUser -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+catchUpSlackConversations linkedUser model =
+    let
+        newestMessage : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId) -> Maybe (Slack.Id Slack.MessageId)
+        newestMessage linkedMessageIds =
+            OneToOne.toList linkedMessageIds
+                |> List.map (\( slackMessageId, _ ) -> Slack.idToString slackMessageId)
+                |> List.maximum
+                |> Maybe.map Slack.Id
+
+        catchUp : Slack.Id channelId -> Slack.Id Slack.MessageId -> Task BackendOnly Never (List Slack.WebsocketEvent)
+        catchUp channelId oldest =
+            Slack.messagesSince model.serverSecret linkedUser.cookie linkedUser.token channelId oldest
+                |> Task.map (List.map (Slack.WebsocketMessageCreated (Slack.idToString channelId)))
+
+        channels : List (Task BackendOnly Never (List Slack.WebsocketEvent))
+        channels =
+            case SeqDict.get linkedUser.user.teamId model.slackWorkspaces of
+                Just workspace ->
+                    SeqDict.toList workspace.channels
+                        |> List.filterMap
+                            (\( channelId, channel ) ->
+                                if SeqSet.member linkedUser.user.id channel.linkedMembers then
+                                    newestMessage channel.linkedMessageIds |> Maybe.map (catchUp channelId)
+
+                                else
+                                    Nothing
+                            )
+
+                Nothing ->
+                    []
+
+        dmChannels : List (Task BackendOnly Never (List Slack.WebsocketEvent))
+        dmChannels =
+            SeqDict.toList model.slackDmChannels
+                |> List.filterMap
+                    (\( dmChannelId, dmChannel ) ->
+                        if NonemptySet.member linkedUser.user.id dmChannel.members then
+                            newestMessage dmChannel.linkedMessageIds |> Maybe.map (catchUp dmChannelId)
+
+                        else
+                            Nothing
+                    )
+    in
+    Task.sequence (channels ++ dmChannels)
+        |> Task.map List.concat
+        |> Task.perform (CaughtUpSlackMessages linkedUser.user.id)
 
 
 {-| Adds what loadSlackWorkspaceData loaded, keeping the messages of conversations we already had.

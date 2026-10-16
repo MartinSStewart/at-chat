@@ -897,6 +897,7 @@ type BackendMsg
     | SlackEditedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
     | LinkSlackUserStep2 Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError LoadedSlackWorkspace)
+    | CaughtUpSlackMessages (Slack.Id Slack.UserId) (List Slack.WebsocketEvent)
     | RefreshedSlackConversations (Slack.Id Slack.UserId) (Result ( Time.Posix, Slack.HttpError ) ( Slack.Id Slack.TeamId, LoadedSlackWorkspace ))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)

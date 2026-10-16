@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -2410,6 +2410,84 @@ slackNewConversationsHttp handleHttpRequest ({ data, currentRequest } as request
                     currentRequest.url
                     200
                     """{"ok":true,"messages":[{"type":"message","user":"U0THIRD","text":"Hi from a new DM","ts":"1791640000.000100"}],"has_more":false}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request
+
+
+slackCatchUpAfterDropTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackCatchUpAfterDropTest config =
+    E2EHelper.startTest
+        "Slack messages posted while the websocket was down show up once it reconnects"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackCatchUpHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed"
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , E2EHelper.hasExactText admin [ "Missed while offline" ]
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Slack has one message in #all-test-slack newer than the ones loaded when linking.
+-}
+slackCatchUpHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackCatchUpHttp handleHttpRequest ({ currentRequest } as request) =
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            let
+                formFields : List String
+                formFields =
+                    case Maybe.map (Json.Decode.decodeValue Json.Decode.string) customRequest.body of
+                        Just (Ok text) ->
+                            String.split "&" text
+
+                        _ ->
+                            []
+            in
+            if
+                String.endsWith "conversations.history" customRequest.url
+                    && List.member ("token=" ++ E2EHelper.legitSlackToken) formFields
+                    && List.member "channel=C09DJDQSWLU" formFields
+                    && List.any (String.startsWith "oldest=") formFields
+            then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"messages":[{"type":"message","user":"U09DK3NCPMG","text":"Missed while offline","ts":"1791640100.000100"}],"has_more":false}"""
 
             else
                 handleHttpRequest request

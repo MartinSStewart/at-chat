@@ -2970,6 +2970,9 @@ backendMsgLog msg =
         LinkSlackUserStep2 _ _ _ _ ->
             BackendMsgLog_LinkSlackUserStep2
 
+        CaughtUpSlackMessages _ _ ->
+            BackendMsgLog_CaughtUpSlackMessages
+
         RefreshedSlackConversations _ _ ->
             BackendMsgLog_RefreshedSlackConversations
 

@@ -34,6 +34,7 @@ module Slack exposing
     , isHostedBySlack
     , messageFiles
     , messageUserIds
+    , messagesSince
     , noStyle
     , parseWebsocketEvent
     , postMessage
@@ -583,6 +584,33 @@ newestMessages secretKey cookie token limit channelId =
         ]
         (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
             |> Decode.map (List.filterMap identity)
+        )
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
+{-| Oldest first. Thread replies aren't included, only messages posted to the channel itself.
+-}
+messagesSince :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly x (List Message)
+messagesSince secretKey cookie token channelId oldest =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.history"
+        [ ( "channel", idToString channelId )
+        , ( "oldest", idToString oldest )
+        , ( "limit", "200" )
+        , ( "include_free_team_extra_messages", "true" )
+        ]
+        (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
+            |> Decode.map (\messages -> List.filterMap identity messages |> List.reverse)
         )
         |> retryWhenRateLimited
         |> Task.onError (\_ -> Task.succeed [])
