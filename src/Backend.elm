@@ -935,7 +935,7 @@ updateHelper msg model =
                         (\( token, result ) ->
                             case result of
                                 Ok { self, team } ->
-                                    loadSlackWorkspaceData model cookie token self team
+                                    loadSlackWorkspaceData model3 cookie token self team
                                         |> Task.attempt (LinkSlackUserStep2 linkedAt team.id self.id)
                                         |> Just
 

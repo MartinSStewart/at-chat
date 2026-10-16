@@ -537,8 +537,8 @@ type alias UnreadOverviewChannel =
     }
 
 
-{-| Discord messages are kept apart from the rest because they are written by Discord users
-rather than our own users, and thread messages are kept apart from channel messages because
+{-| Discord and Slack messages are kept apart from the rest because they are written by Discord
+or Slack users rather than our own users, and thread messages are kept apart from channel messages because
 they are numbered separately.
 -}
 type UnreadOverviewMessages
@@ -546,6 +546,8 @@ type UnreadOverviewMessages
     | UnreadOverviewThreadMessages (Id ChannelMessageId) (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) (Id ChannelId) ))
     | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) ))
     | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) ))
+    | UnreadOverviewSlackMessages (Slack.Id Slack.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+    | UnreadOverviewSlackThreadMessages (Id ChannelMessageId) (Slack.Id Slack.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
 
 
 unreadOverviewNotMobile : LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -843,6 +845,84 @@ unreadOverviewNotMobile local loggedIn model =
                                                     currentDiscordUserId
                                                     local.localUser
                                                     Nothing
+                                                    messageId
+                                                    message
+                                                    |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
+                                                )
+                                            )
+                                            messages
+
+                                    UnreadOverviewSlackMessages currentSlackUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedChannelSpoilers unread.guildOrDmId loggedIn
+                                        in
+                                        List.map
+                                            (\( messageId, message ) ->
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , slackMessageView
+                                                    model.time
+                                                    containerWidth
+                                                    revealedSpoilers
+                                                    NoHighlight
+                                                    currentSlackUserId
+                                                    (case unread.guildOrDmId of
+                                                        GuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        DiscordGuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        SlackGuildOrDmId guildOrDmId ->
+                                                            LocalState.slackChannelMentions guildOrDmId local
+                                                    )
+                                                    local.localUser
+                                                    Nothing
+                                                    False
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (NoThreadWithMessage messageId)
+                                                        loggedIn
+                                                    )
+                                                    messageId
+                                                    message
+                                                    |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
+                                                )
+                                            )
+                                            messages
+
+                                    UnreadOverviewSlackThreadMessages threadId currentSlackUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedThreadSpoilers unread.guildOrDmId threadId loggedIn
+                                        in
+                                        List.map
+                                            (\( messageId, message ) ->
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , slackThreadMessageView
+                                                    model.time
+                                                    containerWidth
+                                                    revealedSpoilers
+                                                    NoHighlight
+                                                    currentSlackUserId
+                                                    (case unread.guildOrDmId of
+                                                        GuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        DiscordGuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        SlackGuildOrDmId guildOrDmId ->
+                                                            LocalState.slackChannelMentions guildOrDmId local
+                                                    )
+                                                    local.localUser
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (ViewThreadWithMessage threadId messageId)
+                                                        loggedIn
+                                                    )
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
@@ -1158,6 +1238,181 @@ unreadOverviewChannels local allDiscordUsers =
                         Nothing
             )
             (SeqDict.toList local.discordDmChannels)
+        ++ List.concatMap
+            (\( teamId, workspace ) ->
+                case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
+                    Just currentSlackUserId ->
+                        List.concatMap
+                            (\( channelId, channel ) ->
+                                let
+                                    slackGuildOrDmId : SlackGuildOrDmId
+                                    slackGuildOrDmId =
+                                        SlackGuildOrDmId_Workspace { currentUserId = currentSlackUserId, teamId = teamId, channelId = channelId }
+
+                                    guildOrDmId : AnyGuildOrDmId
+                                    guildOrDmId =
+                                        SlackGuildOrDmId slackGuildOrDmId
+                                in
+                                (if showInUnreadOverview (MuteSettings.isSlackChannelMuted currentUser.muteSettings teamId channelId NoThread) (SeqSet.member teamId currentUser.slackNotifyOnAllMessages || isMentioned (SeqDict.get teamId currentUser.slackDirectMentions) ( channelId, NoThread )) then
+                                    unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                                        |> Maybe.map
+                                            (\unread ->
+                                                [ { source = slackChannelSource workspace.name channel.name
+                                                  , route =
+                                                        SlackWorkspaceRoute
+                                                            { currentSlackUserId = currentSlackUserId
+                                                            , teamId = teamId
+                                                            , channelRoute =
+                                                                SlackChannel_ChannelRoute
+                                                                    channelId
+                                                                    (NoThreadWithMaybeMessage Nothing)
+                                                                    HideChannelSettings
+                                                            , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
+                                                            }
+                                                  , guildOrDmId = guildOrDmId
+                                                  , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                                  , additionalUnread = unread.additionalUnread
+                                                  , oldestAt = unread.oldestAt
+                                                  , messages = UnreadOverviewSlackMessages currentSlackUserId unread.messages
+                                                  }
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+
+                                 else
+                                    []
+                                )
+                                    ++ List.filterMap
+                                        (\( threadId, thread ) ->
+                                            if showInUnreadOverview (MuteSettings.isSlackChannelMuted currentUser.muteSettings teamId channelId (ViewThread threadId)) (SeqSet.member teamId currentUser.slackNotifyOnAllMessages || isMentioned (SeqDict.get teamId currentUser.slackDirectMentions) ( channelId, ViewThread threadId )) then
+                                                unreadMessages
+                                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                                    thread
+                                                    |> Maybe.map
+                                                        (\unread ->
+                                                            { source =
+                                                                slackThreadSource
+                                                                    workspace.name
+                                                                    channel.name
+                                                                    (threadPreviewText
+                                                                        local.localUser.timezone
+                                                                        local.localUser.slackUsers
+                                                                        (LocalState.slackChannelMentions slackGuildOrDmId local)
+                                                                        threadId
+                                                                        SeqDict.empty
+                                                                        channel
+                                                                    )
+                                                            , route =
+                                                                SlackWorkspaceRoute
+                                                                    { currentSlackUserId = currentSlackUserId
+                                                                    , teamId = teamId
+                                                                    , channelRoute =
+                                                                        SlackChannel_ChannelRoute
+                                                                            channelId
+                                                                            (ViewThreadWithMaybeMessage threadId Nothing)
+                                                                            HideChannelSettings
+                                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                                    , overlay = Nothing
+                                                                    }
+                                                            , guildOrDmId = guildOrDmId
+                                                            , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
+                                                            , additionalUnread = unread.additionalUnread
+                                                            , oldestAt = unread.oldestAt
+                                                            , messages =
+                                                                UnreadOverviewSlackThreadMessages threadId currentSlackUserId unread.messages
+                                                            }
+                                                        )
+
+                                            else
+                                                Nothing
+                                        )
+                                        (SeqDict.toList channel.threads)
+                            )
+                            (SeqDict.toList workspace.channels)
+
+                    Nothing ->
+                        []
+            )
+            (SeqDict.toList local.slackWorkspaces)
+        ++ List.concatMap
+            (\( channelId, dmChannel ) ->
+                case GuildColumn.slackDmCurrentUserId local.localUser dmChannel of
+                    Just currentSlackUserId ->
+                        let
+                            guildOrDmId : AnyGuildOrDmId
+                            guildOrDmId =
+                                SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentSlackUserId, channelId = channelId })
+
+                            dmName : String
+                            dmName =
+                                slackDmMembers currentSlackUserId dmChannel
+                                    |> List.map (\userId -> User.toString userId local.localUser.slackUsers)
+                                    |> String.join ", "
+                        in
+                        (unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
+                            |> Maybe.map
+                                (\unread ->
+                                    [ { source = Ui.text dmName
+                                      , route =
+                                            SlackDmRoute
+                                                { currentSlackUserId = currentSlackUserId
+                                                , channelId = channelId
+                                                , threadRoute = NoThreadWithMaybeMessage Nothing
+                                                , channelsVisible = ChannelsHiddenOnMobile
+                                                , overlay = Nothing
+                                                }
+                                      , guildOrDmId = guildOrDmId
+                                      , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                      , additionalUnread = unread.additionalUnread
+                                      , oldestAt = unread.oldestAt
+                                      , messages = UnreadOverviewSlackMessages currentSlackUserId unread.messages
+                                      }
+                                    ]
+                                )
+                            |> Maybe.withDefault []
+                        )
+                            ++ List.filterMap
+                                (\( threadId, thread ) ->
+                                    unreadMessages
+                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                        thread
+                                        |> Maybe.map
+                                            (\unread ->
+                                                { source =
+                                                    slackDmThreadSource
+                                                        dmName
+                                                        (threadPreviewText
+                                                            local.localUser.timezone
+                                                            local.localUser.slackUsers
+                                                            SeqDict.empty
+                                                            threadId
+                                                            SeqDict.empty
+                                                            dmChannel
+                                                        )
+                                                , route =
+                                                    SlackDmRoute
+                                                        { currentSlackUserId = currentSlackUserId
+                                                        , channelId = channelId
+                                                        , threadRoute = ViewThreadWithMaybeMessage threadId Nothing
+                                                        , channelsVisible = ChannelsHiddenOnMobile
+                                                        , overlay = Nothing
+                                                        }
+                                                , guildOrDmId = guildOrDmId
+                                                , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
+                                                , additionalUnread = unread.additionalUnread
+                                                , oldestAt = unread.oldestAt
+                                                , messages =
+                                                    UnreadOverviewSlackThreadMessages threadId currentSlackUserId unread.messages
+                                                }
+                                            )
+                                )
+                                (SeqDict.toList dmChannel.threads)
+
+                    Nothing ->
+                        []
+            )
+            (SeqDict.toList local.slackDmChannels)
         |> List.sortBy (\unread -> Time.posixToMillis unread.oldestAt)
 
 
@@ -1186,6 +1441,46 @@ threadSource guildName channelName threadName =
             [ Ui.text (GuildName.toString guildName)
             , Ui.text "/"
             , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+slackChannelSource : String -> ChannelName -> Element msg
+slackChannelSource workspaceName channelName =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.shrink
+        ]
+        [ Ui.text workspaceName
+        , Ui.text "/"
+        , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+        ]
+
+
+slackThreadSource : String -> ChannelName -> String -> Element msg
+slackThreadSource workspaceName channelName threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.text workspaceName
+            , Ui.text "/"
+            , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+slackDmThreadSource : String -> String -> Element msg
+slackDmThreadSource dmName threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.text dmName
             , Ui.text "/"
             ]
         , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)

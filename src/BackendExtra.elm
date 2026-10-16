@@ -88,7 +88,7 @@ import Env
 import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
 import Hex
 import Http
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -660,6 +660,129 @@ unreadOverviewData userId user model =
                 )
                 { channels = SeqDict.empty, threads = SeqDict.empty }
                 model.dmChannels
+
+        linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linkedSlackUsers =
+            SlackSync.linkedUsers userId model.slackUsers
+
+        slackWorkspaces :
+            { channels :
+                SeqDict
+                    ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId )
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+            , threads :
+                SeqDict
+                    ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId, Id ChannelMessageId )
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+            }
+        slackWorkspaces =
+            SeqDict.foldl
+                (\teamId workspace dict ->
+                    -- Same choice of linked Slack user as GuildColumn.slackWorkspaceCurrentUserId
+                    case SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) linkedSlackUsers |> SeqDict.keys |> List.head of
+                        Just slackUserId ->
+                            SeqDict.foldl
+                                (\channelId channel dict2 ->
+                                    let
+                                        guildOrDmId : AnyGuildOrDmId
+                                        guildOrDmId =
+                                            SlackGuildOrDmId
+                                                (SlackGuildOrDmId_Workspace
+                                                    { currentUserId = slackUserId, teamId = teamId, channelId = channelId }
+                                                )
+                                    in
+                                    if SeqSet.member slackUserId channel.linkedMembers then
+                                        { channels =
+                                            case unreadMessages (SeqDict.get guildOrDmId user.lastViewedMessage) channel of
+                                                Just messages ->
+                                                    SeqDict.insert ( teamId, channelId ) messages dict2.channels
+
+                                                Nothing ->
+                                                    dict2.channels
+                                        , threads =
+                                            SeqDict.foldl
+                                                (\threadId thread dict3 ->
+                                                    case
+                                                        unreadMessages
+                                                            (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
+                                                            thread
+                                                    of
+                                                        Just messages ->
+                                                            SeqDict.insert ( teamId, channelId, threadId ) messages dict3
+
+                                                        Nothing ->
+                                                            dict3
+                                                )
+                                                dict2.threads
+                                                channel.threads
+                                        }
+
+                                    else
+                                        dict2
+                                )
+                                dict
+                                workspace.channels
+
+                        Nothing ->
+                            dict
+                )
+                { channels = SeqDict.empty, threads = SeqDict.empty }
+                model.slackWorkspaces
+
+        slackDms :
+            { channels :
+                SeqDict
+                    (Slack.Id Slack.DmChannelId)
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+            , threads :
+                SeqDict
+                    ( Slack.Id Slack.DmChannelId, Id ChannelMessageId )
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+            }
+        slackDms =
+            SeqDict.foldl
+                (\channelId dmChannel dict ->
+                    case
+                        List.Extra.find
+                            (\slackUserId -> SeqDict.member slackUserId linkedSlackUsers)
+                            (NonemptySet.toList dmChannel.members)
+                    of
+                        Just currentUserId ->
+                            let
+                                guildOrDmId : AnyGuildOrDmId
+                                guildOrDmId =
+                                    SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId })
+                            in
+                            { channels =
+                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewedMessage) dmChannel of
+                                    Just messages ->
+                                        SeqDict.insert channelId messages dict.channels
+
+                                    Nothing ->
+                                        dict.channels
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread dict2 ->
+                                        case
+                                            unreadMessages
+                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
+                                                thread
+                                        of
+                                            Just messages ->
+                                                SeqDict.insert ( channelId, threadId ) messages dict2
+
+                                            Nothing ->
+                                                dict2
+                                    )
+                                    dict.threads
+                                    dmChannel.threads
+                            }
+
+                        Nothing ->
+                            dict
+                )
+                { channels = SeqDict.empty, threads = SeqDict.empty }
+                model.slackDmChannels
     in
     { guildChannels = guilds.channels
     , guildThreads = guilds.threads
@@ -672,6 +795,10 @@ unreadOverviewData userId user model =
         SeqDict.empty
             |> discordUsersInMessages model (SeqDict.values discordGuilds.channels ++ SeqDict.values discordDmChannels)
             |> discordUsersInMessages model (SeqDict.values discordGuilds.threads)
+    , slackChannels = slackWorkspaces.channels
+    , slackThreads = slackWorkspaces.threads
+    , slackDmChannels = slackDms.channels
+    , slackDmThreads = slackDms.threads
     }
 
 

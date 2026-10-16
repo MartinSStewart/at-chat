@@ -105,7 +105,7 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
-import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
@@ -4660,6 +4660,30 @@ changeUpdate localMsg local =
                                                 )
                                                 local.discordGuilds
                                                 overviewData2.discordGuildChannels
+
+                                        slackWorkspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+                                        slackWorkspaces =
+                                            SeqDict.foldl
+                                                (\( teamId, channelId ) messages slackWorkspaces2 ->
+                                                    SeqDict.updateIfExists
+                                                        teamId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        slackWorkspaces2
+                                                )
+                                                local.slackWorkspaces
+                                                overviewData2.slackChannels
+
+                                        slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
+                                        slackDmChannels =
+                                            SeqDict.foldl
+                                                (\channelId messages slackDmChannels2 ->
+                                                    SeqDict.updateIfExists
+                                                        channelId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        slackDmChannels2
+                                                )
+                                                local.slackDmChannels
+                                                overviewData2.slackDmChannels
                                     in
                                     { local
                                         | localUser =
@@ -4740,6 +4764,45 @@ changeUpdate localMsg local =
                                                 )
                                                 local.discordDmChannels
                                                 overviewData2.discordDmChannels
+                                        , slackWorkspaces =
+                                            SeqDict.foldl
+                                                (\( teamId, channelId, threadId ) messages slackWorkspaces2 ->
+                                                    SeqDict.updateIfExists
+                                                        teamId
+                                                        (LocalState.updateChannel
+                                                            (\channel ->
+                                                                { channel
+                                                                    | threads =
+                                                                        SeqDict.updateIfExists
+                                                                            threadId
+                                                                            (DmChannel.loadUnreadMessages messages)
+                                                                            channel.threads
+                                                                }
+                                                            )
+                                                            channelId
+                                                        )
+                                                        slackWorkspaces2
+                                                )
+                                                slackWorkspaces
+                                                overviewData2.slackThreads
+                                        , slackDmChannels =
+                                            SeqDict.foldl
+                                                (\( channelId, threadId ) messages slackDmChannels2 ->
+                                                    SeqDict.updateIfExists
+                                                        channelId
+                                                        (\dmChannel ->
+                                                            { dmChannel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (DmChannel.loadUnreadMessages messages)
+                                                                        dmChannel.threads
+                                                            }
+                                                        )
+                                                        slackDmChannels2
+                                                )
+                                                slackDmChannels
+                                                overviewData2.slackDmThreads
                                     }
 
                                 EmptyPlaceholder ->

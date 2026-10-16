@@ -261,6 +261,22 @@ type alias UnreadOverviewData =
             (Discord.Id Discord.PrivateChannelId)
             (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    , slackChannels :
+        SeqDict
+            ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId )
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackThreads :
+        SeqDict
+            ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackDmChannels :
+        SeqDict
+            (Slack.Id Slack.DmChannelId)
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackDmThreads :
+        SeqDict
+            ( Slack.Id Slack.DmChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     }
 
 

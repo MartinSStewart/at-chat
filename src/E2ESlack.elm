@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackLinkingToggleAndLimitTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -1095,6 +1095,96 @@ slackLinkingToggleAndLimitTest config =
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackUnreadOverviewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackUnreadOverviewTest config =
+    let
+        overviewEntryHas : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> String -> List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        overviewEntryHas user htmlId texts =
+            user.checkView
+                100
+                (\html ->
+                    Test.Html.Query.find [ Test.Html.Selector.id ("guild_unreadOverviewOpenChannel_" ++ htmlId) ] html
+                        |> Test.Html.Query.has (List.map Test.Html.Selector.exactText texts)
+                )
+    in
+    E2EHelper.startTest
+        "Unread Slack messages show in the unread overview"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "Unread in a channel" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackDmEvent { user = "U09DK3NCPMG", ts = "1791640001.000100", text = "Unread in a DM" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackThreadReplyEvent { ts = "1791640002.000100", text = "Unread in a thread" })
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , overviewEntryHas admin "slack_T09DJDQL18U_C09DJDQSWLU" [ "test-slack", "all-test-slack" ]
+                        , overviewEntryHas admin "slackDm_D09DK3P5RPC" [ "zig" ]
+                        , E2EHelper.hasExactText admin [ "Unread in a channel", "Unread in a DM" ]
+                        , E2EHelper.hasText admin [ "Unread in a thread" ]
+                        , admin.click 100 (Dom.id "guild_unreadOverviewMarkAsRead_slack_T09DJDQL18U_C09DJDQSWLU")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_slack_T09DJDQL18U_C09DJDQSWLU" ])
+                        , admin.click 100 (Dom.id "guild_unreadOverviewOpenChannel_slackDm_D09DK3P5RPC")
+                        , E2EHelper.hasExactText admin [ "Unread in a DM" ]
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_slackDm_D09DK3P5RPC" ])
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+
+        -- A fresh tab still lists the unread thread
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasText admin [ "Unread in a thread" ]
                 ]
             )
         ]
