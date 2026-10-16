@@ -511,14 +511,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             Nothing ->
                                 [ Ui.el [ Ui.Font.bold ] (Ui.text "Account deletion")
                                 , Ui.text
-                                    ("Pressing this will delete your account and all your messages"
-                                        ++ (if SeqDict.isEmpty (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers) then
-                                                ""
-
-                                            else
-                                                " (excluding Discord messages)"
-                                           )
-                                        ++ " in "
+                                    ("Pressing this will delete your account and all your messages from at-chat in "
                                         ++ String.fromInt User.accountDeletionDelayInWeeks
                                         ++ " weeks. The delay is to give other users a chance to export their conversation with you should they want a personal copy."
                                     )
