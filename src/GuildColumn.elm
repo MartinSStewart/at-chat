@@ -1014,7 +1014,7 @@ canChangeUnreadNotificationCount change =
         Local_Discord_SendMessage _ _ _ _ _ _ ->
             True
 
-        Local_Slack_SendMessage _ _ _ _ _ ->
+        Local_Slack_SendMessage _ _ _ _ _ _ ->
             True
 
         Local_Slack_UnlinkUser _ ->

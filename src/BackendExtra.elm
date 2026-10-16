@@ -3112,7 +3112,7 @@ backendMsgLog msg =
         BackendMsgCompleted _ _ ->
             BackendMsgLog_BackendMsgCompleted
 
-        SentSlackMessage _ _ _ _ _ _ _ _ _ ->
+        SentSlackMessage _ _ _ _ _ _ _ _ _ _ ->
             BackendMsgLog_SentSlackMessage
 
         SlackWebsocketCreatedHandle _ _ ->
@@ -3373,7 +3373,7 @@ toBackendLog toBackend =
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedEditMessage
 
-                Local_Slack_SendMessage _ _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ _ ->
                     ToBackendLog_Local_Slack_SendMessage
 
                 Local_Slack_SendEditMessage _ _ _ _ _ ->

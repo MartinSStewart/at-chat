@@ -5030,7 +5030,19 @@ updateLoaded msg model =
                                                                 )
 
                                                         SlackGuildOrDmId guildOrDmId2 ->
-                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 threadRoute nonempty
+                                                            Local_Slack_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                threadRoute
+                                                                nonempty
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
                                                      )
                                                         |> Just
                                                     )
@@ -9376,7 +9388,7 @@ updateLoadedFromBackend msg model =
                                                             Command.none
                                             )
 
-                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content _ ->
+                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content _ _ ->
                                             let
                                                 scrollsToBottom : Bool
                                                 scrollsToBottom =

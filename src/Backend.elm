@@ -39,6 +39,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
+import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
@@ -602,7 +603,7 @@ updateHelper msg model =
                         model
                         (BackendExtra.invalidChangeResponse changeId clientId)
 
-        SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText result ->
+        SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText attachedFiles result ->
             let
                 model1 : BackendModel
                 model1 =
@@ -626,25 +627,40 @@ updateHelper msg model =
                     }
             in
             case result of
-                Ok slackMessageId ->
+                Ok ( slackMessageId, slackFiles ) ->
                     let
                         author : Slack.Id Slack.UserId
                         author =
                             slackAuthor guildOrDmId
 
                         ( data, embedCmds ) =
-                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty
+                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply attachedFiles
                                 |> Message.loadEmbeds model1.serverSecret
 
                         ( threadData, _ ) =
-                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply SeqDict.empty
+                            Message.userTextMessageNoEmbeds time author richText SeqDict.empty Message.NoReply attachedFiles
                                 |> Message.loadEmbeds model1.serverSecret
+
+                        {- So the files are recognized when the message comes back from Slack, in an
+                           edit or when catching up.
+                        -}
+                        model1b : BackendModel
+                        model1b =
+                            { model1
+                                | slackFiles =
+                                    List.foldl
+                                        (\( slackFileId, fileData ) dict ->
+                                            SeqDict.insert slackFileId { fileHash = fileData.fileHash, metadata = fileData.metadata } dict
+                                        )
+                                        model1.slackFiles
+                                        slackFiles
+                            }
                     in
                     case
                         updateSlackConversation
                             guildOrDmId
                             (addToSlackConversation threadRoute slackMessageId (UserTextMessage data) (UserTextMessage threadData))
-                            model1
+                            model1b
                     of
                         Just ( model2, threadRouteWithMessage ) ->
                             let
@@ -655,19 +671,19 @@ updateHelper msg model =
                             , Command.batch
                                 [ Command.batch notificationCmds
                                 , Command.map identity (SlackGotMessageEmbed guildOrDmId threadRouteWithMessage) embedCmds
-                                , Local_Slack_SendMessage time timezone guildOrDmId threadRoute text
+                                , Local_Slack_SendMessage time timezone guildOrDmId threadRoute text attachedFiles
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , Broadcast.toSlackExcludingOne
                                     clientId
                                     guildOrDmId
-                                    (Server_Slack_SendMessage time guildOrDmId threadRoute richText (slackThreadStarter guildOrDmId threadRoute model3) |> ServerChange)
+                                    (Server_Slack_SendMessage time guildOrDmId threadRoute richText attachedFiles (slackThreadStarter guildOrDmId threadRoute model3) |> ServerChange)
                                     model3
                                 ]
                             )
 
                         Nothing ->
-                            ( model1, BackendExtra.invalidChangeResponse changeId clientId )
+                            ( model1b, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Err error ->
                     BackendExtra.addLogWithCmd
@@ -6494,7 +6510,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_Slack_SendMessage _ timezone guildOrDmId threadRoute text ->
+                Local_Slack_SendMessage _ timezone guildOrDmId threadRoute text attachedFiles ->
                     let
                         send :
                             SlackLinkedUser
@@ -6525,6 +6541,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         richText : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
                                         richText =
                                             RichText.fromNonemptyString timezone workspaceUsers channelMentions text
+
+                                        attachedFiles2 : SeqDict (Id FileId) FileData
+                                        attachedFiles2 =
+                                            BackendExtra.validateAttachedFiles model.files attachedFiles
                                     in
                                     ( { model
                                         | sendMessageRateLimits = sendMessageRateLimits
@@ -6534,15 +6554,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (\maybeCount -> Maybe.withDefault 0 maybeCount + 1 |> Just)
                                                 model.pendingSlackSends
                                       }
-                                    , Slack.postMessage
+                                    , sendSlackMessage
                                         model.serverSecret
-                                        slackUser.cookie
-                                        slackUser.token
+                                        slackUser
                                         slackChannelId
                                         maybeSlackThreadId
                                         (RichText.toString timezone False workspaceUsers channelMentions richText)
                                         (RichText.toSlack richText)
-                                        |> Task.attempt (SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText)
+                                        attachedFiles2
+                                        |> Task.attempt (SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText attachedFiles2)
                                     )
 
                                 _ ->
@@ -11577,7 +11597,7 @@ handleSlackWebsocketEvent linkedUser event model =
                                         ( model4
                                         , Broadcast.toSlack
                                             guildOrDmId
-                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data2.content.content (slackThreadStarter guildOrDmId threadRoute model4) |> ServerChange)
+                                            (Server_Slack_SendMessage message.createdAt guildOrDmId threadRoute data2.content.content data2.content.attachedFiles (slackThreadStarter guildOrDmId threadRoute model4) |> ServerChange)
                                             model4
                                             :: Command.map identity (SlackGotMessageEmbed guildOrDmId threadRouteWithMessage) embedCmds
                                             :: notificationCmds
@@ -11939,6 +11959,77 @@ catchUpSlackConversations linkedUser model =
     Task.sequence (channels ++ dmChannels)
         |> Task.map List.concat
         |> Task.perform (CaughtUpSlackMessages linkedUser.user.id)
+
+
+{-| Returns the new message's ts, and the Slack ID of each file. Files that can't be read from
+at-chat's storage are left out.
+-}
+sendSlackMessage :
+    SecretId ServerSecret
+    -> SlackLinkedUser
+    -> Slack.Id channelId
+    -> Maybe (Slack.Id Slack.MessageId)
+    -> String
+    -> List Slack.RichTextElement
+    -> SeqDict (Id FileId) FileData
+    -> Task BackendOnly Slack.HttpError ( Slack.Id Slack.MessageId, List ( Slack.Id Slack.FileId, FileData ) )
+sendSlackMessage secretKey slackUser channelId maybeThreadId text blocks attachedFiles =
+    if SeqDict.isEmpty attachedFiles then
+        Slack.postMessage secretKey slackUser.cookie slackUser.token channelId maybeThreadId text blocks
+            |> Task.map (\messageId -> ( messageId, [] ))
+
+    else
+        SeqDict.values attachedFiles
+            |> List.map
+                (\fileData ->
+                    Http.task
+                        { method = "GET"
+                        , headers = []
+                        , url = FileStatus.fileUrl fileData.contentType fileData.fileHash
+                        , body = Http.emptyBody
+                        , resolver =
+                            Http.bytesResolver
+                                (\response ->
+                                    case response of
+                                        Http.GoodStatus_ _ body ->
+                                            Ok
+                                                ( fileData
+                                                , { fileName = FileName.toString fileData.fileName
+                                                  , contentType = FileStatus.contentTypeHeader fileData.contentType
+                                                  , bytes = body
+                                                  }
+                                                )
+
+                                        _ ->
+                                            Err ()
+                                )
+                        , timeout = Duration.seconds 30 |> Just
+                        }
+                        |> Task.map Just
+                        |> Task.onError (\() -> Task.succeed Nothing)
+                )
+            |> Task.sequence
+            |> Task.andThen
+                (\files ->
+                    case List.filterMap identity files of
+                        (( _, first ) :: rest) as files2 ->
+                            Slack.postMessageWithFiles
+                                secretKey
+                                slackUser.cookie
+                                slackUser.token
+                                channelId
+                                maybeThreadId
+                                blocks
+                                (Nonempty first (List.map Tuple.second rest))
+                                |> Task.map
+                                    (\( messageId, fileIds ) ->
+                                        ( messageId, List.map2 Tuple.pair (List.Nonempty.toList fileIds) (List.map Tuple.first files2) )
+                                    )
+
+                        [] ->
+                            Slack.postMessage secretKey slackUser.cookie slackUser.token channelId maybeThreadId text blocks
+                                |> Task.map (\messageId -> ( messageId, [] ))
+                )
 
 
 {-| Adds what loadSlackWorkspaceData loaded, keeping the messages of conversations we already had.

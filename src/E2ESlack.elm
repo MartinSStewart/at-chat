@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -2175,6 +2175,7 @@ slackFilesTest config =
                             connection
                             """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"},{"id":"F0REMOTE","name":"remote.png","mimetype":"image/png","size":1234,"mode":"external","is_external":true,"url_private":"https://attacker.example/remote.png"},{"id":"F0HUGE","name":"huge.png","mimetype":"image/png","size":200000000,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0HUGE/huge.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
                         , E2EHelper.hasExactText admin [ "Look at this" ]
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_6_image_1" ])
                         , T.checkBackend
                             100
                             (\backend ->
@@ -2633,3 +2634,119 @@ slackLinkPreviewTest config =
                 ]
             )
         ]
+
+
+slackSendFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackSendFileTest config =
+    E2EHelper.startTest
+        "Files attached in at-chat are uploaded to Slack with the message"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackFileUploadHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        if allTestSlackAttachedFiles 6 backend /= [ ( "test-image.png", FileStatus.fileHash "123123123" ) ] then
+                            Err "Expected the sent message to keep its attached file"
+
+                        else if
+                            SeqDict.get (Slack.Id "F0UPLOADED") (E2EHelper.unwrapBackend backend).slackFiles
+                                |> Maybe.map .fileHash
+                                |> (/=) (Just (FileStatus.fileHash "123123123"))
+                        then
+                            Err "Expected the Slack file to be linked to the at-chat file"
+
+                        else
+                            case
+                                SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                    |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                    |> Maybe.andThen (\channel -> OneToOne.second (Slack.Id "1791640300.000100") channel.linkedMessageIds)
+                            of
+                                Just _ ->
+                                    Ok ()
+
+                                Nothing ->
+                                    Err "Expected the message to be linked to the one Slack shared the file in"
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        let
+                            completeUploads : List String
+                            completeUploads =
+                                List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                                    |> List.filter (\request -> String.endsWith "files.completeUploadExternal" request.url)
+                                    |> List.filterMap (\request -> Maybe.andThen (\body -> Json.Decode.decodeValue Json.Decode.string body |> Result.toMaybe) request.body)
+                        in
+                        case completeUploads of
+                            [ body ] ->
+                                if String.contains "channel_id=C09DJDQSWLU" body then
+                                    Ok ()
+
+                                else
+                                    Err ("Expected the upload to be shared in #all-test-slack, got " ++ body)
+
+                            _ ->
+                                Err "Expected one completed upload"
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Slack only says where the file was shared after the first files.info.
+-}
+slackFileUploadHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackFileUploadHttp handleHttpRequest ({ data, currentRequest } as request) =
+    if currentRequest.url == "https://files.slack.com/upload/v1/test-upload" then
+        E2EHelper.httpBasic currentRequest.url 200 "OK - 6"
+
+    else
+        case E2EHelper.decodeCustomRequest currentRequest of
+            Just customRequest ->
+                if String.endsWith "files.getUploadURLExternal" customRequest.url then
+                    E2EHelper.httpBasic
+                        currentRequest.url
+                        200
+                        """{"ok":true,"upload_url":"https://files.slack.com/upload/v1/test-upload","file_id":"F0UPLOADED"}"""
+
+                else if String.endsWith "files.completeUploadExternal" customRequest.url then
+                    E2EHelper.httpBasic currentRequest.url 200 """{"ok":true,"files":[{"id":"F0UPLOADED","title":"test-image.png"}]}"""
+
+                else if String.endsWith "files.info" customRequest.url then
+                    if
+                        List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                            |> List.any (\previous -> String.endsWith "files.info" previous.url)
+                    then
+                        E2EHelper.httpBasic
+                            currentRequest.url
+                            200
+                            """{"ok":true,"file":{"id":"F0UPLOADED","shares":{"public":{"C09DJDQSWLU":[{"ts":"1791640300.000100","channel_name":"all-test-slack"}]}}}}"""
+
+                    else
+                        E2EHelper.httpBasic currentRequest.url 200 """{"ok":true,"file":{"id":"F0UPLOADED"}}"""
+
+                else
+                    handleHttpRequest request
+
+            Nothing ->
+                handleHttpRequest request
