@@ -77,6 +77,7 @@ type ToBackendLog
     | ToBackendLog_Local_UnlinkDiscordUser
     | ToBackendLog_Local_StartReloadingDiscordUser
     | ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
+    | ToBackendLog_Local_LinkSlackAcknowledgementIsChecked
     | ToBackendLog_Local_SetDomainWhitelist
     | ToBackendLog_Local_SetEmojiSkinTone
     | ToBackendLog_Local_SetUserColor
@@ -313,6 +314,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked ->
             "Local_LinkDiscordAcknowledgementIsChecked"
+
+        ToBackendLog_Local_LinkSlackAcknowledgementIsChecked ->
+            "Local_LinkSlackAcknowledgementIsChecked"
 
         ToBackendLog_Local_SetDomainWhitelist ->
             "Local_SetDomainWhitelist"

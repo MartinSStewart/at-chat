@@ -7135,6 +7135,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
                         )
 
+                Local_LinkSlackAcknowledgementIsChecked isChecked ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | linkSlackAcknowledgementIsChecked = isChecked }
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
                 Local_LinkDiscordAcknowledgementIsChecked isChecked ->
                     BackendExtra.asUser
                         model

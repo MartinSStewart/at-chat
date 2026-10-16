@@ -2950,6 +2950,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_LinkDiscordAcknowledgementIsChecked _ ->
                     False
 
+                Local_LinkSlackAcknowledgementIsChecked _ ->
+                    False
+
                 Local_SetDomainWhitelist _ _ ->
                     False
 
@@ -3606,6 +3609,7 @@ allAttackerLocalChanges =
     , Local_Invalid
     , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LinkSlackAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
@@ -3648,6 +3652,7 @@ allAttackerLocalChanges =
     , Local_UnlinkDiscordUser discordUserId
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LinkSlackAcknowledgementIsChecked True
     , Local_SetDomainWhitelist False brokenDomain
     , Local_SetDomainWhitelist True brokenDomain
     , Local_SetEmojiSkinTone Nothing

@@ -1158,6 +1158,9 @@ canChangeUnreadNotificationCount change =
         Local_LinkDiscordAcknowledgementIsChecked _ ->
             False
 
+        Local_LinkSlackAcknowledgementIsChecked _ ->
+            False
+
         Local_SetDomainWhitelist _ _ ->
             False
 

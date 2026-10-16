@@ -137,6 +137,7 @@ type alias BackendUser =
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
+    , linkSlackAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
@@ -313,6 +314,7 @@ type alias FrontendCurrentUser =
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
+    , linkSlackAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
@@ -449,6 +451,7 @@ init createdAt name email userIsAdmin =
     , slackDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
     , linkDiscordAcknowledgementIsChecked = False
+    , linkSlackAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
     , emojiConfig = { skinTone = Nothing, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
@@ -1060,6 +1063,7 @@ backendToFrontendCurrent email user =
     , slackDirectMentions = user.slackDirectMentions
     , lastPushNotification = user.lastPushNotification
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
+    , linkSlackAcknowledgementIsChecked = user.linkSlackAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
     , emojiConfig = user.emojiConfig
     , availableStickers = user.availableStickers

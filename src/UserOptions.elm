@@ -754,89 +754,97 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     (SeqDict.toList local.localUser.linkedSlackUsers)
                                 )
                             ]
-                     , Ui.column
-                        [ Ui.paddingXY 16 0 ]
-                        [ slackCookieLabel.element
-                        , Ui.Input.text
-                            [ Ui.background MyUi.inputBackground
-                            , Ui.paddingXY 8 8
-                            , Ui.widthMax 300
-                            , Ui.borderColor MyUi.inputBorder
-                            ]
-                            { onChange = TypedSlackCookie
-                            , text = model.slackCookie
-                            , placeholder = Just "xoxd-..."
-                            , label = slackCookieLabel.id
-                            }
-                        , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
-                            ( True, Err error ) ->
-                                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
-
-                            _ ->
-                                Ui.none
-                        ]
-                     , Ui.column
-                        [ Ui.paddingXY 16 0 ]
-                        [ slackTeamsJsonLabel.element
-                        , Ui.Input.text
-                            [ Ui.background MyUi.inputBackground
-                            , Ui.paddingXY 8 8
-                            , Ui.widthMax 300
-                            , Ui.borderColor MyUi.inputBorder
-                            ]
-                            { onChange = TypedSlackTeamsJson
-                            , text = model.slackTeamsJson
-                            , placeholder = Nothing
-                            , label = slackTeamsJsonLabel.id
-                            }
-                        , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.slackTeamsJson ) of
-                            ( True, Err error ) ->
-                                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
-
-                            _ ->
-                                Ui.none
-                        ]
-                     , Ui.el
-                        [ Ui.paddingXY 16 0 ]
-                        (MyUi.elButton
-                            (Dom.id "userOptions_submitSlackData")
-                            PressedSubmitSlackData
-                            [ Ui.background MyUi.buttonBackground
-                            , Ui.width Ui.shrink
-                            , Ui.paddingXY 16 8
-                            , Ui.rounded 4
-                            , Ui.borderColor MyUi.buttonBorder
-                            , Ui.border 1
-                            ]
-                            (Ui.text "Link Slack account")
-                        )
-                     , case model.linkSlackResult of
-                        Just SlackLinkingDisabled ->
-                            Ui.el [ Ui.paddingXY 16 0, Ui.Font.color MyUi.errorColor ] (Ui.text "Slack account linking is disabled")
-
-                        Just (LoadedSlackWorkspaces results) ->
-                            List.Nonempty.toList results
-                                |> List.map
-                                    (\result ->
-                                        case result of
-                                            Ok workspaceName ->
-                                                Ui.text ("Loaded " ++ workspaceName)
-
-                                            Err (SlackWorkspaceHttpError error) ->
-                                                Ui.el
-                                                    [ Ui.Font.color MyUi.errorColor ]
-                                                    (Ui.text ("Couldn't load a workspace: " ++ Slack.httpErrorToString error))
-
-                                            Err SlackLinkLimitReached ->
-                                                Ui.el
-                                                    [ Ui.Font.color MyUi.errorColor ]
-                                                    (Ui.text slackLinkLimitReachedText)
-                                    )
-                                |> Ui.column [ Ui.paddingXY 16 0 ]
-
-                        Nothing ->
-                            Ui.none
+                     , Ui.el [ Ui.paddingXY 16 0 ] (slackAcknowledgement local.localUser.user.linkSlackAcknowledgementIsChecked)
                      ]
+                        ++ (if local.localUser.user.linkSlackAcknowledgementIsChecked then
+                                [ Ui.column
+                                    [ Ui.paddingXY 16 0 ]
+                                    [ slackCookieLabel.element
+                                    , Ui.Input.text
+                                        [ Ui.background MyUi.inputBackground
+                                        , Ui.paddingXY 8 8
+                                        , Ui.widthMax 300
+                                        , Ui.borderColor MyUi.inputBorder
+                                        ]
+                                        { onChange = TypedSlackCookie
+                                        , text = model.slackCookie
+                                        , placeholder = Just "xoxd-..."
+                                        , label = slackCookieLabel.id
+                                        }
+                                    , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
+                                        ( True, Err error ) ->
+                                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                                        _ ->
+                                            Ui.none
+                                    ]
+                                , Ui.column
+                                    [ Ui.paddingXY 16 0 ]
+                                    [ slackTeamsJsonLabel.element
+                                    , Ui.Input.text
+                                        [ Ui.background MyUi.inputBackground
+                                        , Ui.paddingXY 8 8
+                                        , Ui.widthMax 300
+                                        , Ui.borderColor MyUi.inputBorder
+                                        ]
+                                        { onChange = TypedSlackTeamsJson
+                                        , text = model.slackTeamsJson
+                                        , placeholder = Nothing
+                                        , label = slackTeamsJsonLabel.id
+                                        }
+                                    , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.slackTeamsJson ) of
+                                        ( True, Err error ) ->
+                                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                                        _ ->
+                                            Ui.none
+                                    ]
+                                , Ui.el
+                                    [ Ui.paddingXY 16 0 ]
+                                    (MyUi.elButton
+                                        (Dom.id "userOptions_submitSlackData")
+                                        PressedSubmitSlackData
+                                        [ Ui.background MyUi.buttonBackground
+                                        , Ui.width Ui.shrink
+                                        , Ui.paddingXY 16 8
+                                        , Ui.rounded 4
+                                        , Ui.borderColor MyUi.buttonBorder
+                                        , Ui.border 1
+                                        ]
+                                        (Ui.text "Link Slack account")
+                                    )
+                                ]
+
+                            else
+                                []
+                           )
+                        ++ [ case model.linkSlackResult of
+                                Just SlackLinkingDisabled ->
+                                    Ui.el [ Ui.paddingXY 16 0, Ui.Font.color MyUi.errorColor ] (Ui.text "Slack account linking is disabled")
+
+                                Just (LoadedSlackWorkspaces results) ->
+                                    List.Nonempty.toList results
+                                        |> List.map
+                                            (\result ->
+                                                case result of
+                                                    Ok workspaceName ->
+                                                        Ui.text ("Loaded " ++ workspaceName)
+
+                                                    Err (SlackWorkspaceHttpError error) ->
+                                                        Ui.el
+                                                            [ Ui.Font.color MyUi.errorColor ]
+                                                            (Ui.text ("Couldn't load a workspace: " ++ Slack.httpErrorToString error))
+
+                                                    Err SlackLinkLimitReached ->
+                                                        Ui.el
+                                                            [ Ui.Font.color MyUi.errorColor ]
+                                                            (Ui.text slackLinkLimitReachedText)
+                                            )
+                                        |> Ui.column [ Ui.paddingXY 16 0 ]
+
+                                Nothing ->
+                                    Ui.none
+                           ]
                     )
                 , MyUi.container
                     16
@@ -1026,6 +1034,43 @@ view windowSize textInputFocus time local loggedIn loaded model =
                 ]
             )
         )
+
+
+slackAcknowledgement : Bool -> Element FrontendMsg_
+slackAcknowledgement slackAcknowledged =
+    let
+        acknowledgmentLabel =
+            Ui.Input.label
+                "userOptions_slackAcknowledgment"
+                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
+                (Ui.text "I have read the above and accept the risks")
+    in
+    Ui.column
+        [ Ui.spacing 16
+        , Ui.attrIf slackAcknowledged (Ui.opacity 0.5)
+        ]
+        [ Ui.column
+            [ Ui.spacing 8 ]
+            [ MyUi.warningHeader "Before you link your Slack account, please note:"
+            , numberPoint
+                1
+                (Ui.text "This signs in to Slack the same way Slack's own web app does, which Slack doesn't allow for 3rd party apps. Slack or your workspace's admins could notice and sign you out or deactivate your account.")
+            , numberPoint
+                2
+                (Ui.text "The cookie and token you paste in give complete access to your Slack account in every workspace you link. You are trusting us to not abuse that level of access or accidentally let hackers access your account.")
+            ]
+        , Ui.row
+            []
+            [ Ui.Input.checkbox
+                []
+                { onChange = PressedSlackAcknowledgment
+                , icon = Nothing
+                , checked = slackAcknowledged
+                , label = acknowledgmentLabel.id
+                }
+            , acknowledgmentLabel.element
+            ]
+        ]
 
 
 discordAcknowledgement : Bool -> Element FrontendMsg_

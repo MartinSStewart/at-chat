@@ -4037,6 +4037,17 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        PressedSlackAcknowledgment checked ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Just (Local_LinkSlackAcknowledgementIsChecked checked))
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedDiscordAcknowledgment checked ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

@@ -88,6 +88,7 @@ linkSlackLoadsChannelsTest config =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
                 , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
                 , admin.input
                     100
@@ -319,6 +320,8 @@ linkSlack user =
     T.group
         [ user.click 1000 (Dom.id "guild_showUserOptions")
         , user.click 100 (Dom.id "userOptions_slackSection")
+        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_slackCookie" ])
+        , user.click 100 (Dom.id "userOptions_slackAcknowledgment")
         , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
         , user.input
             100
@@ -1082,6 +1085,7 @@ slackLinkingToggleAndLimitTest config =
                             (\user ->
                                 [ user.click 1000 (Dom.id "guild_showUserOptions")
                                 , user.click 100 (Dom.id "userOptions_slackSection")
+                                , user.click 100 (Dom.id "userOptions_slackAcknowledgment")
                                 , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
                                 , user.input
                                     100
@@ -1494,6 +1498,7 @@ slackMentionOutsideChannelTest config =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
                 , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
                 , admin.input
                     100

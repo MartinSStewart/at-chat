@@ -3289,6 +3289,9 @@ toBackendLog toBackend =
                 Local_LinkDiscordAcknowledgementIsChecked _ ->
                     ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
 
+                Local_LinkSlackAcknowledgementIsChecked _ ->
+                    ToBackendLog_Local_LinkSlackAcknowledgementIsChecked
+
                 Local_SetDomainWhitelist _ _ ->
                     ToBackendLog_Local_SetDomainWhitelist
 

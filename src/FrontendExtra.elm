@@ -354,6 +354,9 @@ pendingChangesText localChange =
         Local_LinkDiscordAcknowledgementIsChecked _ ->
             Just "Checked link Discord account acknowledgement"
 
+        Local_LinkSlackAcknowledgementIsChecked _ ->
+            Just "Checked link Slack account acknowledgement"
+
         Local_SetDomainWhitelist _ _ ->
             Just "Whitelist domain"
 
@@ -3239,6 +3242,9 @@ isPressMsg msg =
         PressedDiscordAcknowledgment _ ->
             True
 
+        PressedSlackAcknowledgment _ ->
+            True
+
         PressedReloadDiscordUser _ ->
             True
 
@@ -5186,6 +5192,21 @@ changeUpdate localMsg local =
 
                 Local_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
+
+                Local_LinkSlackAcknowledgementIsChecked isChecked ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = { user | linkSlackAcknowledgementIsChecked = isChecked } }
+                    }
 
                 Local_LinkDiscordAcknowledgementIsChecked isChecked ->
                     let

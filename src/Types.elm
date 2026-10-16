@@ -715,6 +715,7 @@ type FrontendMsg_
     | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
+    | PressedSlackAcknowledgment Bool
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
     | PressedDiscordGuildMemberLabel
@@ -1431,6 +1432,7 @@ type LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
+    | Local_LinkSlackAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_SetUserColor UserColor
