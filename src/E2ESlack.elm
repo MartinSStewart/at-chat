@@ -173,6 +173,7 @@ linkSlackLoadsChannelsTest config =
                                    , "U09DJDQL1A8: Run `make`\n```elm make src/Main.elm```"
                                    , "U09DK3NCPMG: Before\n> Quoted\n* First item\n* Second item"
                                    , "U09DJDQL1A8: [!1]"
+                                   , "B0BOT: Deploy finished"
                                    ]
                         then
                             Ok ()
@@ -212,11 +213,25 @@ linkSlackLoadsChannelsTest config =
                                 |> List.sort
                         of
                             -- Only users found in the loaded conversations, so not the deleted bot U09DFEXKH9T
-                            [ "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
+                            [ "B0BOT", "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
                                 Ok ()
 
                             slackUsers ->
                                 Err ("Unexpected Slack users: " ++ String.join ", " slackUsers)
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get (Slack.Id "B0BOT") (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackBasicData { user }) ->
+                                if user.name == "Deploy bot" && user.isBot then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the bot to be loaded with bots.info"
+
+                            _ ->
+                                Err "Expected the bot that posted without a user to be loaded"
                     )
                 , T.checkState
                     100
@@ -266,10 +281,10 @@ linkSlackLoadsChannelsTest config =
                     )
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackWorkspacesSection)
-                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 3", "slack-admin", "ziggler" ]
+                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 4", "slack-admin", "ziggler" ]
                 , E2EHelper.hasNotExactText admin [ "#social" ]
                 , admin.click 100 (Pages.Admin.expandSlackWorkspaceButtonId (Slack.Id "T09DJDQL18U"))
-                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 6" ]
+                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 7" ]
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackDmChannelsSection)
                 , E2EHelper.hasExactText admin [ "D09DK3P5RPC", "C0AMPIM1234", "third", "Messages: 1" ]
                 , admin.click 100 (Pages.Admin.deleteSlackDmChannelButtonId (Slack.Id "C0AMPIM1234"))
@@ -2175,12 +2190,12 @@ slackFilesTest config =
                             connection
                             """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"},{"id":"F0REMOTE","name":"remote.png","mimetype":"image/png","size":1234,"mode":"external","is_external":true,"url_private":"https://attacker.example/remote.png"},{"id":"F0HUGE","name":"huge.png","mimetype":"image/png","size":200000000,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0HUGE/huge.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
                         , E2EHelper.hasExactText admin [ "Look at this" ]
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_6_image_1" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_7_image_1" ])
                         , T.checkBackend
                             100
                             (\backend ->
                                 if
-                                    allTestSlackAttachedFiles 6 backend
+                                    allTestSlackAttachedFiles 7 backend
                                         == [ ( "new.png", FileStatus.fileHash "https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png" ) ]
                                 then
                                     Ok ()
@@ -2661,7 +2676,7 @@ slackSendFileTest config =
                 , T.checkBackend
                     1000
                     (\backend ->
-                        if allTestSlackAttachedFiles 6 backend /= [ ( "test-image.png", FileStatus.fileHash "123123123" ) ] then
+                        if allTestSlackAttachedFiles 7 backend /= [ ( "test-image.png", FileStatus.fileHash "123123123" ) ] then
                             Err "Expected the sent message to keep its attached file"
 
                         else if

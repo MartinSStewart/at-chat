@@ -320,16 +320,53 @@ optionalString path =
     Decode.oneOf [ Decode.at path Decode.string, Decode.succeed "" ]
 
 
-userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id UserId -> Task BackendOnly HttpError User
-userInfo secretKey cookie token userId =
-    http
-        secretKey
-        cookie
-        token
-        "users.info"
-        [ ( "user", idToString userId ) ]
-        (Decode.field "user" decodeUser)
-        |> retryWhenRateLimited
+{-| Bots that post without a user of their own are given their bot ID as a user ID, and those IDs
+start with B.
+-}
+userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id TeamId -> Id UserId -> Task BackendOnly HttpError User
+userInfo secretKey cookie token teamId userId =
+    if isBotId userId then
+        http
+            secretKey
+            cookie
+            token
+            "bots.info"
+            [ ( "bot", idToString userId ) ]
+            (Decode.field
+                "bot"
+                (Decode.map3
+                    (\name image deleted ->
+                        { id = userId
+                        , teamId = teamId
+                        , name = name
+                        , realName = name
+                        , displayName = ""
+                        , image = image
+                        , isBot = True
+                        , deleted = deleted
+                        }
+                    )
+                    (Decode.field "name" Decode.string)
+                    (optionalString [ "icons", "image_72" ])
+                    (optionalBool "deleted")
+                )
+            )
+            |> retryWhenRateLimited
+
+    else
+        http
+            secretKey
+            cookie
+            token
+            "users.info"
+            [ ( "user", idToString userId ) ]
+            (Decode.field "user" decodeUser)
+            |> retryWhenRateLimited
+
+
+isBotId : Id UserId -> Bool
+isBotId (Id userId) =
+    String.startsWith "B" userId
 
 
 {-| Loads many users at once through the edge API Slack's web client uses. It isn't documented, so
@@ -344,23 +381,26 @@ usersById :
     -> List (Id UserId)
     -> Task BackendOnly x (List User)
 usersById secretKey cookie token teamId userIds =
-    List.Extra.greedyGroupsOf 100 userIds
-        |> List.map
-            (\batch ->
-                edgeUsersInfo secretKey cookie token teamId batch
-                    |> Task.onError
-                        (\_ ->
-                            List.map
-                                (\userId ->
-                                    userInfo secretKey cookie token userId
-                                        |> Task.map Just
-                                        |> Task.onError (\_ -> Task.succeed Nothing)
-                                )
-                                batch
-                                |> Task.sequence
-                                |> Task.map (List.filterMap identity)
-                        )
-            )
+    let
+        ( botIds, humanIds ) =
+            List.partition isBotId userIds
+
+        oneAtATime : List (Id UserId) -> Task BackendOnly x (List User)
+        oneAtATime userIds2 =
+            List.map
+                (\userId ->
+                    userInfo secretKey cookie token teamId userId
+                        |> Task.map Just
+                        |> Task.onError (\_ -> Task.succeed Nothing)
+                )
+                userIds2
+                |> Task.sequence
+                |> Task.map (List.filterMap identity)
+    in
+    oneAtATime botIds
+        :: List.map
+            (\batch -> edgeUsersInfo secretKey cookie token teamId batch |> Task.onError (\_ -> oneAtATime batch))
+            (List.Extra.greedyGroupsOf 100 humanIds)
         |> Task.sequence
         |> Task.map List.concat
 
@@ -1116,8 +1156,33 @@ fileHeaders (SlackCookie cookie) (SlackToken token) =
     [ ( "Cookie", "d=" ++ cookie ), ( "Authorization", "Bearer " ++ token ) ]
 
 
-{-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
-show for fail to decode.
+{-| Subtypes shown as the text Slack gives them. Bot messages without a user are shown as being
+written by the bot, whose ID starts with B instead of U. For legacy integrations that only send
+attachments, the attachments' text is shown.
+-}
+textSubtypes : List String
+textSubtypes =
+    [ ""
+    , "thread_broadcast"
+    , "file_share"
+    , "me_message"
+    , "bot_message"
+    , "channel_leave"
+    , "group_leave"
+    , "channel_topic"
+    , "group_topic"
+    , "channel_purpose"
+    , "group_purpose"
+    , "channel_name"
+    , "group_name"
+    , "channel_archive"
+    , "group_archive"
+    , "channel_unarchive"
+    , "group_unarchive"
+    ]
+
+
+{-| Kinds of message at-chat has nothing to show for fail to decode.
 -}
 decodeMessage : Decoder Message
 decodeMessage =
@@ -1128,11 +1193,35 @@ decodeMessage =
                     Message
                     (Decode.field "ts" decodeId)
                     (Decode.field "ts" decodeTimestamp)
-                    (Decode.field "user" decodeId)
-                    (if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
+                    (Decode.oneOf [ Decode.field "user" decodeId, Decode.field "bot_id" decodeId ])
+                    (if List.member subtype textSubtypes then
                         Decode.map3
                             (\text blocks files -> TextMessage { text = text, blocks = blocks, files = files })
-                            (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
+                            (Decode.map2
+                                (\text attachments ->
+                                    if text == "" then
+                                        String.join "\n" attachments
+
+                                    else
+                                        text
+                                )
+                                (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
+                                (Decode.oneOf
+                                    [ Decode.field
+                                        "attachments"
+                                        (Decode.list
+                                            (Decode.oneOf
+                                                [ Decode.field "text" Decode.string
+                                                , Decode.field "fallback" Decode.string
+                                                , Decode.succeed ""
+                                                ]
+                                            )
+                                        )
+                                        |> Decode.map (List.filter (\attachment -> attachment /= ""))
+                                    , Decode.succeed []
+                                    ]
+                                )
+                            )
                             (Decode.oneOf
                                 [ Decode.field "blocks" (Decode.list decodeBlock) |> Decode.map List.concat
                                 , Decode.succeed []
@@ -1145,7 +1234,7 @@ decodeMessage =
                                 ]
                             )
 
-                     else if subtype == "channel_join" then
+                     else if subtype == "channel_join" || subtype == "group_join" then
                         Decode.succeed JoinedChannel
 
                      else

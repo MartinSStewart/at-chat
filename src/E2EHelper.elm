@@ -2150,6 +2150,19 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                             """{"ok":false,"error":"invalid_arguments"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "bots.info" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if not (isLegitSlackRequest headers body || isSecondSlackUserRequest headers body) then
+                        """{"ok":false,"error":"invalid_auth"}"""
+
+                     else if List.member "bot=B0BOT" (slackFormFields body) then
+                        """{"ok":true,"bot":{"id":"B0BOT","deleted":false,"name":"Deploy bot","app_id":"A0BOT","icons":{"image_36":"https://a.slack-edge.com/bot_36.png","image_48":"https://a.slack-edge.com/bot_48.png","image_72":"https://a.slack-edge.com/bot_72.png"}}}"""
+
+                     else
+                        """{"ok":false,"error":"bot_not_found"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "users.info" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2319,7 +2332,7 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 
 
 {-| The newest message first, the way Slack sends them. Besides the messages people wrote it has
-one from an integration (no user) and one with only a file, which are both left out.
+one from an integration (no user, so it's shown as written by the bot) and one with only a file.
 -}
 slackChannelHistory : String
 slackChannelHistory =

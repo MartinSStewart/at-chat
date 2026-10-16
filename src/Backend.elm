@@ -11423,7 +11423,7 @@ lookUpUnknownSlackUsers linkedUser userIds model =
     ( { model | pendingSlackUserLookups = List.foldl SeqSet.insert model.pendingSlackUserLookups unknown }
     , List.map
         (\userId ->
-            Slack.userInfo model.serverSecret linkedUser.cookie linkedUser.token userId
+            Slack.userInfo model.serverSecret linkedUser.cookie linkedUser.token linkedUser.user.teamId userId
                 |> Task.andThen (\user -> uploadSlackImage model.serverSecret user.image |> Task.map (Tuple.pair user))
                 |> Task.attempt (GotSlackUser userId)
         )
