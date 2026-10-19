@@ -731,16 +731,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Slack"
-                    (let
-                        slackCookieLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
-                        slackCookieLabel =
-                            Ui.Input.label "userOptions_slackCookie" [] (Ui.text "Paste in cookie starting with xoxd-")
-
-                        slackTeamsJsonLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
-                        slackTeamsJsonLabel =
-                            Ui.Input.label "userOptions_slackTeamsJson" [] (Ui.text "JSON.parse(localStorage.localConfig_v2).teams")
-                     in
-                     [ if SeqDict.isEmpty local.localUser.linkedSlackUsers then
+                    ([ if SeqDict.isEmpty local.localUser.linkedSlackUsers then
                         Ui.none
 
                        else
@@ -757,47 +748,79 @@ view windowSize textInputFocus time local loggedIn loaded model =
                      , Ui.el [ Ui.paddingXY 16 0 ] (slackAcknowledgement local.localUser.user.linkSlackAcknowledgementIsChecked)
                      ]
                         ++ (if local.localUser.user.linkSlackAcknowledgementIsChecked then
+                                let
+                                    slackCookieLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+                                    slackCookieLabel =
+                                        Ui.Input.label "userOptions_slackCookie" [] (Ui.text "3. Paste in the value for the cookie named \"d\"")
+
+                                    slackTeamsJsonLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+                                    slackTeamsJsonLabel =
+                                        Ui.Input.label "userOptions_slackTeamsJson" [] (Ui.text "JSON.parse(localStorage.localConfig_v2).teams")
+                                in
                                 [ Ui.column
-                                    [ Ui.paddingXY 16 0 ]
-                                    [ slackCookieLabel.element
-                                    , Ui.Input.text
-                                        [ Ui.background MyUi.inputBackground
-                                        , Ui.paddingXY 8 8
-                                        , Ui.widthMax 300
-                                        , Ui.borderColor MyUi.inputBorder
-                                        ]
-                                        { onChange = TypedSlackCookie
-                                        , text = model.slackCookie
-                                        , placeholder = Just "xoxd-..."
-                                        , label = slackCookieLabel.id
-                                        }
-                                    , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
-                                        ( True, Err error ) ->
-                                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+                                    [ Ui.paddingXY 16 0, Ui.spacing 16 ]
+                                    [ horizontalLine
+                                    , Ui.column
+                                        [ Ui.spacing 4 ]
+                                        [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Slack account:\n")
+                                        , Ui.Prose.paragraph
+                                            [ Ui.paddingXY 0 5 ]
+                                            [ Ui.text "1. Go to "
+                                            , textLink "https://app.slack.com/client" "app.slack.com/client"
+                                            , Ui.text " in your browser"
+                                            ]
+                                        , Ui.text "2. Open the browser developer tools and click on the Application tab (for Chrome) or Storage tab (Firefox)\n"
+                                        , Ui.column
+                                            []
+                                            [ slackCookieLabel.element
+                                            , Ui.Input.text
+                                                [ Ui.background MyUi.inputBackground
+                                                , Ui.paddingXY 8 8
+                                                , Ui.widthMax 300
+                                                , Ui.borderColor MyUi.inputBorder
+                                                ]
+                                                { onChange = TypedSlackCookie
+                                                , text = model.slackCookie
+                                                , placeholder = Just "xoxd-..."
+                                                , label = slackCookieLabel.id
+                                                }
+                                            , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
+                                                ( True, Err error ) ->
+                                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
-                                        _ ->
-                                            Ui.none
-                                    ]
-                                , Ui.column
-                                    [ Ui.paddingXY 16 0 ]
-                                    [ slackTeamsJsonLabel.element
-                                    , Ui.Input.text
-                                        [ Ui.background MyUi.inputBackground
-                                        , Ui.paddingXY 8 8
-                                        , Ui.widthMax 300
-                                        , Ui.borderColor MyUi.inputBorder
-                                        ]
-                                        { onChange = TypedSlackTeamsJson
-                                        , text = model.slackTeamsJson
-                                        , placeholder = Nothing
-                                        , label = slackTeamsJsonLabel.id
-                                        }
-                                    , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.slackTeamsJson ) of
-                                        ( True, Err error ) ->
-                                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+                                                _ ->
+                                                    Ui.none
+                                            ]
+                                        , MyUi.copyBox
+                                            (Dom.id "userOptions_slackConsoleCommand")
+                                            (Just "Open the console tab and paste in this text (the browser might require you type in \"allow pasting\" first)")
+                                            PressedCopyText
+                                            FrontendNoOp
+                                            loaded
+                                            "JSON.parse(localStorage.localConfig_v2).teams"
+                                            |> Ui.el [ Ui.widthMax 400 ]
+                                        , Ui.column
+                                            []
+                                            [ slackTeamsJsonLabel.element
+                                            , Ui.Input.text
+                                                [ Ui.background MyUi.inputBackground
+                                                , Ui.paddingXY 8 8
+                                                , Ui.widthMax 300
+                                                , Ui.borderColor MyUi.inputBorder
+                                                ]
+                                                { onChange = TypedSlackTeamsJson
+                                                , text = model.slackTeamsJson
+                                                , placeholder = Nothing
+                                                , label = slackTeamsJsonLabel.id
+                                                }
+                                            , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.slackTeamsJson ) of
+                                                ( True, Err error ) ->
+                                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
-                                        _ ->
-                                            Ui.none
+                                                _ ->
+                                                    Ui.none
+                                            ]
+                                        ]
                                     ]
                                 , Ui.el
                                     [ Ui.paddingXY 16 0 ]
@@ -875,7 +898,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
                             Ui.column
                                 [ Ui.spacing 16 ]
-                                [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
+                                [ horizontalLine
                                 , Ui.column
                                     [ Ui.spacing 4 ]
                                     [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
@@ -885,12 +908,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     , Ui.Prose.paragraph
                                         [ Ui.paddingXY 0 5 ]
                                         [ Ui.text "4. Go to "
-                                        , Ui.el
-                                            [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
-                                            , Ui.Font.underline
-                                            , Ui.linkNewTab "https://discord.com/app"
-                                            ]
-                                            (Ui.text "discord.com/app")
+                                        , textLink "https://discord.com/app" "discord.com/app"
                                         , Ui.text " in your browser"
                                         ]
                                     , Ui.text "5. Make sure you are logged in on Discord and then click on the bookmark"
@@ -1036,6 +1054,21 @@ view windowSize textInputFocus time local loggedIn loaded model =
         )
 
 
+horizontalLine : Element msg
+horizontalLine =
+    Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
+
+
+textLink : String -> String -> Element msg
+textLink url text =
+    Ui.el
+        [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
+        , Ui.Font.underline
+        , Ui.linkNewTab url
+        ]
+        (Ui.text text)
+
+
 slackAcknowledgement : Bool -> Element FrontendMsg_
 slackAcknowledgement slackAcknowledged =
     let
@@ -1054,10 +1087,13 @@ slackAcknowledgement slackAcknowledged =
             [ MyUi.warningHeader "Before you link your Slack account, please note:"
             , numberPoint
                 1
-                (Ui.text "This signs in to Slack the same way Slack's own web app does, which Slack doesn't allow for 3rd party apps. Slack or your workspace's admins could notice and sign you out or deactivate your account.")
+                (Ui.text "In order to link your Slack account, you'll need to provide a session cookie and one or more workspace tokens. Doing so gives us complete access to your Slack account in every workspace you provide. You are trusting us to not abuse that level of access or accidentally let hackers access your account.")
             , numberPoint
                 2
-                (Ui.text "The cookie and token you paste in give complete access to your Slack account in every workspace you link. You are trusting us to not abuse that level of access or accidentally let hackers access your account.")
+                (Ui.text "This is likely not allowed by Slack's terms of service and there is a risk that your account might be temporarily or permanently banned.")
+            , numberPoint
+                3
+                (Ui.text "Consider that if you link a private workspace, you are not just increasing the risk that a hacker gets access to your sensitive data in that workspace but also sensitive data any other user may have posted there.")
             ]
         , Ui.row
             []
