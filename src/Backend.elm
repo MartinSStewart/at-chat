@@ -498,48 +498,48 @@ updateHelper msg model =
                         oldModel : BackendModel
                         oldModel =
                             model
-                    in
-                    updateFromFrontendWithTime
-                        time
-                        sessionId
-                        clientId
-                        toBackend
-                        { model
-                            | connections =
-                                SeqDict.updateIfExists
-                                    sessionId
-                                    (NonemptyDict.updateIfExists
-                                        clientId
-                                        (\data ->
-                                            { lastRequest = LastRequest time
-                                            , call = data.call
-                                            , remoteCallData = data.remoteCallData
-                                            , currentlyViewing = data.currentlyViewing
-                                            }
-                                        )
-                                    )
-                                    model.connections
-                            , sessionRateLimits = sessionRateLimits
-                        }
-                        |> (\( model2, cmds ) ->
-                                ( model2
-                                , if Env.isProduction then
-                                    Command.batch
-                                        [ Task.perform
-                                            (\endTime ->
-                                                ToBackendCompleted
-                                                    (BackendExtra.toBackendLog toBackend)
-                                                    (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
-                                                    { startTime = time, endTime = endTime }
-                                            )
-                                            Time.now
-                                        , cmds
-                                        ]
 
-                                  else
-                                    cmds
+                        ( model2, cmds ) =
+                            updateFromFrontendWithTime
+                                time
+                                sessionId
+                                clientId
+                                toBackend
+                                { model
+                                    | connections =
+                                        SeqDict.updateIfExists
+                                            sessionId
+                                            (NonemptyDict.updateIfExists
+                                                clientId
+                                                (\data ->
+                                                    { lastRequest = LastRequest time
+                                                    , call = data.call
+                                                    , remoteCallData = data.remoteCallData
+                                                    , currentlyViewing = data.currentlyViewing
+                                                    }
+                                                )
+                                            )
+                                            model.connections
+                                    , sessionRateLimits = sessionRateLimits
+                                }
+                    in
+                    ( model2
+                    , if Env.isProduction then
+                        Command.batch
+                            [ Task.perform
+                                (\endTime ->
+                                    ToBackendCompleted
+                                        (BackendExtra.toBackendLog toBackend)
+                                        (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
+                                        { startTime = time, endTime = endTime }
                                 )
-                           )
+                                Time.now
+                            , cmds
+                            ]
+
+                      else
+                        cmds
+                    )
 
         SentLoginEmail time emailAddress result ->
             BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
@@ -1033,20 +1033,21 @@ updateHelper msg model =
         LinkSlackUserStep2 time teamId slackUserId result ->
             case result of
                 Ok data ->
-                    addLoadedSlackWorkspace teamId slackUserId data model
-                        |> markNewSlackConversationsAsViewed
-                            slackUserId
-                            teamId
-                            (List.map (\( channel, _ ) -> channel.id) data.channels)
-                            (List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels)
-                        |> (\model2 ->
-                                ( model2
-                                , Command.batch
-                                    [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
-                                    , slackLinkedUserLoaded slackUserId teamId model2
-                                    ]
-                                )
-                           )
+                    let
+                        model2 =
+                            addLoadedSlackWorkspace teamId slackUserId data model
+                                |> markNewSlackConversationsAsViewed
+                                    slackUserId
+                                    teamId
+                                    (List.map (\( channel, _ ) -> channel.id) data.channels)
+                                    (List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels)
+                    in
+                    ( model2
+                    , Command.batch
+                        [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
+                        , slackLinkedUserLoaded slackUserId teamId model2
+                        ]
+                    )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadSlackConversations teamId error) model

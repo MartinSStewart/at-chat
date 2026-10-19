@@ -499,25 +499,30 @@ slackWorkspaceRoute localUser slackUserId teamId workspace =
 
                 Nothing ->
                     Nothing
+
+        targetChannel : Maybe ( Slack.Id Slack.ChannelId, ThreadRouteWithMaybeMessage )
+        targetChannel =
+            case lastViewed of
+                Just _ ->
+                    lastViewed
+
+                Nothing ->
+                    LocalState.slackAnnouncementChannel workspace
+                        |> Maybe.map (\channelId -> ( channelId, NoThreadWithMaybeMessage Nothing ))
     in
-    (case lastViewed of
-        Just _ ->
-            lastViewed
+    case targetChannel of
+        Just ( channelId, threadRoute ) ->
+            { currentSlackUserId = slackUserId
+            , teamId = teamId
+            , channelRoute = SlackChannel_ChannelRoute channelId threadRoute HideChannelSettings
+            , channelsVisible = ChannelsVisibleOnMobile
+            , overlay = Nothing
+            }
+                |> SlackWorkspaceRoute
+                |> Just
 
         Nothing ->
-            LocalState.slackAnnouncementChannel workspace
-                |> Maybe.map (\channelId -> ( channelId, NoThreadWithMaybeMessage Nothing ))
-    )
-        |> Maybe.map
-            (\( channelId, threadRoute ) ->
-                { currentSlackUserId = slackUserId
-                , teamId = teamId
-                , channelRoute = SlackChannel_ChannelRoute channelId threadRoute HideChannelSettings
-                , channelsVisible = ChannelsVisibleOnMobile
-                , overlay = Nothing
-                }
-                    |> SlackWorkspaceRoute
-            )
+            Nothing
 
 
 dmGuildIcon : Route -> LocalUser -> Id UserId -> FrontendDmChannel -> Element FrontendMsg_
