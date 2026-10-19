@@ -213,7 +213,7 @@ teamsJsonToSlackTokens removedTeams text =
                     Ok tokens
 
                 Nothing ->
-                    Err "Every workspace has been removed"
+                    Err "You must include at least one workspace"
 
         Err error ->
             Err error

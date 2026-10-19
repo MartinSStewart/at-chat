@@ -777,7 +777,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                             , Ui.Input.text
                                                 [ Ui.background MyUi.inputBackground
                                                 , Ui.paddingXY 8 8
-                                                , Ui.widthMax 300
+                                                , Ui.widthMax 400
                                                 , Ui.borderColor MyUi.inputBorder
                                                 ]
                                                 { onChange = TypedSlackCookie
@@ -785,28 +785,32 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                 , placeholder = Just "xoxd-..."
                                                 , label = slackCookieLabel.id
                                                 }
+                                                |> Ui.el [ Ui.paddingXY 16 0 ]
                                             , case ( model.pressedSubmitSlackData, Slack.stringToSlackCookie model.slackCookie ) of
                                                 ( True, Err error ) ->
-                                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+                                                    Ui.el [ Ui.Font.color MyUi.errorColor, Ui.paddingXY 16 0 ] (Ui.text error)
 
                                                 _ ->
                                                     Ui.none
                                             ]
-                                        , MyUi.copyBox
-                                            (Dom.id "userOptions_slackConsoleCommand")
-                                            (Just "4. Open the console tab and paste in this text (the browser might require you type in \"allow pasting\" first)")
-                                            PressedCopyText
-                                            FrontendNoOp
-                                            loaded
-                                            "JSON.parse(localStorage.localConfig_v2).teams"
-                                            |> Ui.el [ Ui.widthMax 400 ]
+                                        , Ui.row
+                                            [ Ui.contentTop, Ui.widthMax 416, Ui.spacing 4 ]
+                                            [ Ui.text "4. "
+                                            , MyUi.copyBoxAlt
+                                                (Dom.id "userOptions_slackConsoleCommand")
+                                                (Just ( [], Ui.text "Open the console tab and paste in this text (you\u{00A0}might\u{00A0}need\u{00A0}to\u{00A0}type\u{00A0}in\u{00A0}\"allow pasting\" first)" ))
+                                                PressedCopyText
+                                                FrontendNoOp
+                                                loaded
+                                                "JSON.parse(localStorage.localConfig_v2).teams"
+                                            ]
                                         , Ui.column
                                             []
                                             [ slackTeamsJsonLabel.element
                                             , Ui.Input.text
                                                 [ Ui.background MyUi.inputBackground
                                                 , Ui.paddingXY 8 8
-                                                , Ui.widthMax 300
+                                                , Ui.widthMax 400
                                                 , Ui.borderColor MyUi.inputBorder
                                                 ]
                                                 { onChange = TypedSlackTeamsJson
@@ -814,15 +818,22 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                 , placeholder = Nothing
                                                 , label = slackTeamsJsonLabel.id
                                                 }
+                                                |> Ui.el [ Ui.paddingXY 16 0 ]
                                             , case Slack.teamsJsonToWorkspaces model.slackTeamsJson of
                                                 Ok workspaces ->
                                                     pastedSlackWorkspaces model.removedSlackTeams workspaces
 
                                                 Err _ ->
                                                     Ui.none
-                                            , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.removedSlackTeams model.slackTeamsJson ) of
+                                            , case
+                                                ( model.pressedSubmitSlackData
+                                                , Slack.teamsJsonToSlackTokens model.removedSlackTeams model.slackTeamsJson
+                                                )
+                                              of
                                                 ( True, Err error ) ->
-                                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+                                                    Ui.el
+                                                        [ Ui.Font.color MyUi.errorColor, Ui.paddingXY 16 0 ]
+                                                        (Ui.text error)
 
                                                 _ ->
                                                     Ui.none
@@ -841,7 +852,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                         , Ui.borderColor MyUi.buttonBorder
                                         , Ui.border 1
                                         ]
-                                        (Ui.text "Link Slack account")
+                                        (Ui.text "Link Slack account and workspaces")
                                     )
                                 ]
 
@@ -1167,7 +1178,7 @@ pastedSlackWorkspaces removedTeams workspaces =
     List.Nonempty.toList workspaces
         |> List.filter (\workspace -> not (SeqSet.member workspace.teamId removedTeams))
         |> List.map pastedSlackWorkspace
-        |> Ui.column [ Ui.spacing 8, Ui.paddingWith { top = 8, bottom = 0, left = 0, right = 0 }, Ui.widthMax 300 ]
+        |> Ui.column [ Ui.spacing 8, Ui.paddingWith { top = 8, bottom = 0, left = 0, right = 0 }, Ui.widthMax 400 ]
 
 
 pastedSlackWorkspace : Slack.PastedWorkspace -> Element FrontendMsg_

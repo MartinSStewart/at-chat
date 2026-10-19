@@ -25,6 +25,7 @@ module MyUi exposing
     , container
     , conversationWidthIgnoreScrollbar
     , copyBox
+    , copyBoxAlt
     , css
     , dangerRed
     , datestamp
@@ -200,14 +201,29 @@ type Copied
 
 copyBox : HtmlId -> Maybe String -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
 copyBox htmlId label2 pressedCopyText noOp loaded text =
+    copyBoxAlt
+        htmlId
+        (Maybe.map (\labelText -> ( [ Ui.Font.size 14, Ui.Font.color font3, Ui.Font.bold ], Ui.text labelText )) label2)
+        pressedCopyText
+        noOp
+        loaded
+        text
+
+
+copyBoxAlt :
+    HtmlId
+    -> Maybe ( List (Ui.Attribute msg), Element msg )
+    -> (String -> msg)
+    -> msg
+    -> { a | lastCopied : Maybe LastCopy }
+    -> String
+    -> Element msg
+copyBoxAlt htmlId label2 pressedCopyText noOp loaded text =
     let
         label4 =
             case label2 of
-                Just label3 ->
-                    Ui.Input.label
-                        (Dom.idToString htmlId ++ "_textInput")
-                        [ Ui.Font.size 14, Ui.Font.color font3, Ui.Font.bold ]
-                        (Ui.text label3)
+                Just ( labelAttribute, labelText ) ->
+                    Ui.Input.label (Dom.idToString htmlId ++ "_textInput") labelAttribute labelText
 
                 Nothing ->
                     { element = Ui.none, id = Ui.Input.labelHidden (Dom.idToString htmlId ++ "_textInput") }
