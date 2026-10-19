@@ -152,34 +152,32 @@ guildColumn isMobile route local canScroll2 =
 
 slackWorkspaceIcons : Route -> LocalUser -> Slack.Id Slack.TeamId -> SlackFrontendWorkspace -> Element FrontendMsg_
 slackWorkspaceIcons route localUser teamId workspace =
-    case
-        slackWorkspaceCurrentUserId localUser teamId
-            |> Maybe.andThen
-                (\currentSlackUserId ->
-                    slackWorkspaceRoute localUser currentSlackUserId teamId workspace
-                        |> Maybe.map (Tuple.pair currentSlackUserId)
-                )
-    of
-        Just ( currentSlackUserId, workspaceRoute ) ->
-            elLinkButton
-                (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
-                workspaceRoute
-                []
-                (GuildIcon.slackView
-                    (case route of
-                        SlackWorkspaceRoute data ->
-                            if data.teamId == teamId then
-                                GuildIcon.IsSelected
+    case slackWorkspaceCurrentUserId localUser teamId of
+        Just currentSlackUserId ->
+            case slackWorkspaceRoute localUser currentSlackUserId teamId workspace of
+                Just workspaceRoute ->
+                    elLinkButton
+                        (Dom.id ("guild_openSlackWorkspace_" ++ Slack.idToString teamId))
+                        workspaceRoute
+                        []
+                        (GuildIcon.slackView
+                            (case route of
+                                SlackWorkspaceRoute data ->
+                                    if data.teamId == teamId then
+                                        GuildIcon.IsSelected
 
-                            else
-                                GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
+                                    else
+                                        GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
 
-                        _ ->
-                            GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
-                    )
-                    workspace.name
-                    workspace.icon
-                )
+                                _ ->
+                                    GuildIcon.Normal (slackWorkspaceHasNotifications currentSlackUserId localUser.user teamId workspace)
+                            )
+                            workspace.name
+                            workspace.icon
+                        )
+
+                Nothing ->
+                    Ui.none
 
         Nothing ->
             Ui.none
