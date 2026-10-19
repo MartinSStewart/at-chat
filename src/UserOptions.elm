@@ -755,7 +755,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
 
                                     slackTeamsJsonLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
                                     slackTeamsJsonLabel =
-                                        Ui.Input.label "userOptions_slackTeamsJson" [] (Ui.text "JSON.parse(localStorage.localConfig_v2).teams")
+                                        Ui.Input.label "userOptions_slackTeamsJson" [] (Ui.text "5. Right click the output and click \"Copy object\" and paste it here")
                                 in
                                 [ Ui.column
                                     [ Ui.paddingXY 16 0, Ui.spacing 16 ]
@@ -793,7 +793,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                             ]
                                         , MyUi.copyBox
                                             (Dom.id "userOptions_slackConsoleCommand")
-                                            (Just "Open the console tab and paste in this text (the browser might require you type in \"allow pasting\" first)")
+                                            (Just "4. Open the console tab and paste in this text (the browser might require you type in \"allow pasting\" first)")
                                             PressedCopyText
                                             FrontendNoOp
                                             loaded
