@@ -103,6 +103,7 @@ init domainWhitelist =
     , privateKeyText = ""
     , slackCookie = ""
     , slackTeamsJson = ""
+    , removedSlackTeams = SeqSet.empty
     , pressedSubmitSlackData = False
     , linkSlackResult = Nothing
     }
@@ -813,7 +814,13 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                 , placeholder = Nothing
                                                 , label = slackTeamsJsonLabel.id
                                                 }
-                                            , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.slackTeamsJson ) of
+                                            , case Slack.teamsJsonToWorkspaces model.slackTeamsJson of
+                                                Ok workspaces ->
+                                                    pastedSlackWorkspaces model.removedSlackTeams workspaces
+
+                                                Err _ ->
+                                                    Ui.none
+                                            , case ( model.pressedSubmitSlackData, Slack.teamsJsonToSlackTokens model.removedSlackTeams model.slackTeamsJson ) of
                                                 ( True, Err error ) ->
                                                     Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
@@ -1152,6 +1159,40 @@ numberPoint index content =
         [ Ui.contentTop ]
         [ Ui.el [ MyUi.noShrinking, Ui.width (Ui.px 24) ] (Ui.text (String.fromInt index ++ "."))
         , content
+        ]
+
+
+pastedSlackWorkspaces : SeqSet (Slack.Id Slack.TeamId) -> Nonempty Slack.PastedWorkspace -> Element FrontendMsg_
+pastedSlackWorkspaces removedTeams workspaces =
+    List.Nonempty.toList workspaces
+        |> List.filter (\workspace -> not (SeqSet.member workspace.teamId removedTeams))
+        |> List.map pastedSlackWorkspace
+        |> Ui.column [ Ui.spacing 8, Ui.paddingWith { top = 8, bottom = 0, left = 0, right = 0 }, Ui.widthMax 300 ]
+
+
+pastedSlackWorkspace : Slack.PastedWorkspace -> Element FrontendMsg_
+pastedSlackWorkspace workspace =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.paddingWith { top = 8, bottom = 8, left = 12, right = 8 }
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 8
+        , Ui.contentCenterY
+        ]
+        [ Ui.column
+            [ Ui.spacing 2, Ui.clip ]
+            [ Ui.text (Maybe.withDefault (Slack.idToString workspace.teamId) workspace.name)
+            , case workspace.url of
+                Just url ->
+                    Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text url)
+
+                Nothing ->
+                    Ui.none
+            ]
+        , MyUi.deleteButton
+            (Dom.id ("userOptions_removeSlackTeam_" ++ Slack.idToString workspace.teamId))
+            (PressedRemoveSlackTeam workspace.teamId)
         ]
 
 

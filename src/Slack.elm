@@ -12,6 +12,7 @@ module Slack exposing
     , Message
     , MessageContent(..)
     , MessageId
+    , PastedWorkspace
     , Reaction
     , RichTextElement(..)
     , RichTextInline(..)
@@ -42,6 +43,7 @@ module Slack exposing
     , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
+    , teamsJsonToWorkspaces
     , updateMessage
     , userBoot
     , userConversations
@@ -67,6 +69,7 @@ import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Url
 
 
@@ -102,9 +105,11 @@ type alias SlackData =
     }
 
 
-validateSlackData : { a | slackCookie : String, slackTeamsJson : String } -> Result () SlackData
-validateSlackData { slackCookie, slackTeamsJson } =
-    case ( stringToSlackCookie slackCookie, teamsJsonToSlackTokens slackTeamsJson ) of
+validateSlackData :
+    { a | slackCookie : String, slackTeamsJson : String, removedSlackTeams : SeqSet (Id TeamId) }
+    -> Result () SlackData
+validateSlackData { slackCookie, slackTeamsJson, removedSlackTeams } =
+    case ( stringToSlackCookie slackCookie, teamsJsonToSlackTokens removedSlackTeams slackTeamsJson ) of
         ( Ok cookie, Ok tokens ) ->
             Ok { cookie = cookie, tokens = tokens }
 
@@ -138,16 +143,35 @@ stringToSlackCookie text =
         Err "Cookie must start with \"xoxd-\""
 
 
+{-| A workspace from the `teams` object in the Slack web client's `localStorage.localConfig_v2`.
+-}
+type alias PastedWorkspace =
+    { teamId : Id TeamId
+    , name : Maybe String
+    , url : Maybe String
+    , token : SlackToken
+    }
+
+
 {-| Parses the `teams` object in the Slack web client's `localStorage.localConfig_v2`. It has an
 entry for every workspace the browser is signed into, each with its own token.
 -}
-teamsJsonToSlackTokens : String -> Result String (Nonempty SlackToken)
-teamsJsonToSlackTokens text =
-    case Decode.decodeString (Decode.keyValuePairs (Decode.field "token" Decode.string)) text of
+teamsJsonToWorkspaces : String -> Result String (Nonempty PastedWorkspace)
+teamsJsonToWorkspaces text =
+    case Decode.decodeString (Decode.keyValuePairs decodePastedWorkspace) text of
         Ok teams ->
-            case List.map (\( _, token ) -> stringToSlackToken token) teams |> resultCombine of
-                Ok tokens ->
-                    case List.Nonempty.fromList tokens of
+            case
+                List.map
+                    (\( teamId, workspace ) ->
+                        stringToSlackToken workspace.token
+                            |> Result.map
+                                (\token -> { teamId = Id teamId, name = workspace.name, url = workspace.url, token = token })
+                    )
+                    teams
+                    |> resultCombine
+            of
+                Ok workspaces ->
+                    case List.Nonempty.fromList workspaces of
                         Just nonempty ->
                             Ok nonempty
 
@@ -159,6 +183,40 @@ teamsJsonToSlackTokens text =
 
         Err _ ->
             Err "This isn't the teams JSON"
+
+
+decodePastedWorkspace : Decoder { name : Maybe String, url : Maybe String, token : String }
+decodePastedWorkspace =
+    Decode.map3 (\name url token -> { name = name, url = url, token = token })
+        (Decode.maybe (Decode.field "name" Decode.string))
+        (Decode.maybe (Decode.field "url" Decode.string))
+        (Decode.field "token" Decode.string)
+
+
+teamsJsonToSlackTokens : SeqSet (Id TeamId) -> String -> Result String (Nonempty SlackToken)
+teamsJsonToSlackTokens removedTeams text =
+    case teamsJsonToWorkspaces text of
+        Ok workspaces ->
+            case
+                List.Nonempty.toList workspaces
+                    |> List.filterMap
+                        (\workspace ->
+                            if SeqSet.member workspace.teamId removedTeams then
+                                Nothing
+
+                            else
+                                Just workspace.token
+                        )
+                    |> List.Nonempty.fromList
+            of
+                Just tokens ->
+                    Ok tokens
+
+                Nothing ->
+                    Err "Every workspace has been removed"
+
+        Err error ->
+            Err error
 
 
 resultCombine : List (Result e a) -> Result e (List a)

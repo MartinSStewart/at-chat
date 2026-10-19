@@ -3465,6 +3465,9 @@ isPressMsg msg =
         TypedSlackTeamsJson _ ->
             False
 
+        PressedRemoveSlackTeam _ ->
+            True
+
         PressedSubmitSlackData ->
             True
 

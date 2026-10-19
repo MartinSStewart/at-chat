@@ -3412,7 +3412,7 @@ allAttackerToBackendChanges =
     , ReloadDataRequest InitialLoadRequested_None
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
     , LinkSlackRequest
-        (case Slack.validateSlackData { slackCookie = "xoxd-attacker-cookie", slackTeamsJson = "{\"T0\":{\"token\":\"xoxc-attacker-token\"}}" } of
+        (case Slack.validateSlackData { slackCookie = "xoxd-attacker-cookie", slackTeamsJson = "{\"T0\":{\"token\":\"xoxc-attacker-token\"}}", removedSlackTeams = SeqSet.empty } of
             Ok slackData ->
                 slackData
 

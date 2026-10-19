@@ -1,4 +1,4 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackRemovePastedWorkspaceTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
@@ -340,6 +340,7 @@ linkSlackWithoutOptions user =
         Slack.validateSlackData
             { slackCookie = E2EHelper.legitSlackCookie
             , slackTeamsJson = "{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}"
+            , removedSlackTeams = SeqSet.empty
             }
     of
         Ok slackData ->
@@ -1012,6 +1013,61 @@ slackUnreadAndNotificationsTest config =
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
                         ]
                     )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+linkSlackRemovePastedWorkspaceTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+linkSlackRemovePastedWorkspaceTest config =
+    E2EHelper.startTest
+        "Pasted Slack workspaces are previewed and removed ones aren't linked"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T09DJDQL18U\":{\"name\":\"test-slack\",\"url\":\"https://testslack-kob3907.slack.com/\",\"token\":\""
+                        ++ E2EHelper.legitSlackToken
+                        ++ "\"},\"T0SECOND\":{\"name\":\"Second workspace\",\"token\":\""
+                        ++ E2EHelper.secondSlackToken
+                        ++ "\"},\"T0EXPIRED\":{\"token\":\"xoxc-expired-token\"}}"
+                    )
+                , E2EHelper.hasExactText admin [ "test-slack", "https://testslack-kob3907.slack.com/", "Second workspace", "T0EXPIRED" ]
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T0SECOND")
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T0EXPIRED")
+                , E2EHelper.hasNotExactText admin [ "Second workspace" ]
+                , E2EHelper.hasNotExactText admin [ "T0EXPIRED" ]
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "Loaded test-slack" ]
+                , E2EHelper.hasNotText admin [ "Couldn't load a workspace" ]
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case linkedSlackUserCount backend of
+                            1 ->
+                                Ok ()
+
+                            count ->
+                                Err ("Expected only the workspace that wasn't removed to be linked, got " ++ String.fromInt count)
+                    )
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T09DJDQL18U")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "Every workspace has been removed" ]
                 , E2EHelper.checkNoErrorLogs
                 ]
             )

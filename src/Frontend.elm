@@ -6555,7 +6555,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
-                            Maybe.map (\userOptions -> { userOptions | slackTeamsJson = text }) loggedIn.userOptions
+                            Maybe.map
+                                (\userOptions -> { userOptions | slackTeamsJson = text, removedSlackTeams = SeqSet.empty })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedRemoveSlackTeam teamId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | removedSlackTeams = SeqSet.insert teamId userOptions.removedSlackTeams })
+                                loggedIn.userOptions
                       }
                     , Command.none
                     )

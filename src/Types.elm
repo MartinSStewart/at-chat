@@ -393,6 +393,7 @@ type alias UserOptionsModel =
       privateKeyText : String
     , slackCookie : String
     , slackTeamsJson : String
+    , removedSlackTeams : SeqSet (Slack.Id Slack.TeamId)
     , pressedSubmitSlackData : Bool
     , linkSlackResult : Maybe LinkSlackResult
     }
@@ -777,6 +778,7 @@ type FrontendMsg_
     | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))))
     | TypedSlackCookie String
     | TypedSlackTeamsJson String
+    | PressedRemoveSlackTeam (Slack.Id Slack.TeamId)
     | PressedSubmitSlackData
     | PressedUnlinkSlackUser (Slack.Id Slack.UserId)
     | PressedReloadSlackUser (Slack.Id Slack.UserId)

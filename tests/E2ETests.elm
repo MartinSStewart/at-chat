@@ -428,6 +428,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
     , E2ESlack.linkSlackLoadsChannelsTest normalConfig
+    , E2ESlack.linkSlackRemovePastedWorkspaceTest normalConfig
     , E2ESlack.viewAndWriteInSlackTest normalConfig
     , E2ESlack.slackWebsocketTest normalConfig
     , E2ESlack.slackWebsocketBackoffTest normalConfig
