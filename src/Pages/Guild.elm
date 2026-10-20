@@ -6456,7 +6456,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     fileUploadPreview
                         (PressedDeleteAttachedFile ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
                         (PressedViewAttachedFileInfo ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
-                        (PressedToggleAttachedFileSpoiler ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
+                        (Just (PressedToggleAttachedFileSpoiler ( GuildOrDmId guildOrDmIdNoThread, NoThread )))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -6642,7 +6642,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -6952,7 +6952,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -7137,7 +7137,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -7534,7 +7534,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                             fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
-                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                (Just (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId))
                                 editingRichText
                                 filesToUpload
                                 |> Ui.inFront
@@ -7700,7 +7700,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                             fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
-                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                (Just (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId))
                                 editingRichText
                                 filesToUpload
                                 |> Ui.inFront
@@ -12351,7 +12351,7 @@ guildNameInput form =
 fileUploadPreview :
     (Id FileId -> msg)
     -> (Id FileId -> msg)
-    -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
     -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
     -> Element msg
@@ -12849,6 +12849,18 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
             [ Ui.paddingXY 2 0
             , Ui.heightMin 0
             , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        Nothing
+                        draftRichText
+                        filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
             ]
             [ newMessagesView model loggedIn channel
             , MessageInput.view
@@ -12868,7 +12880,13 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
                 (RichText.maxLength - String.length draft)
                 draft
                 draftRichText
-                SeqDict.empty
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+
+                    Nothing ->
+                        SeqDict.empty
+                )
                 local.localUser
                 loggedIn
                 local.localUser.slackUsers
@@ -13011,6 +13029,18 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
             [ Ui.paddingXY 2 0
             , Ui.heightMin 0
             , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        Nothing
+                        draftRichText
+                        filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
             ]
             [ newMessagesView model loggedIn thread
             , MessageInput.view
@@ -13022,7 +13052,13 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
                 (RichText.maxLength - String.length draft)
                 draft
                 draftRichText
-                SeqDict.empty
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+
+                    Nothing ->
+                        SeqDict.empty
+                )
                 local.localUser
                 loggedIn
                 local.localUser.slackUsers

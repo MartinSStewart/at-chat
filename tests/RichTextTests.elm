@@ -749,6 +749,12 @@ test =
                                 ]
                             ]
                 )
+            , Test.test
+                "A spoiler around only an attached file sends nothing"
+                (\_ ->
+                    RichText.toSlack SeqDict.empty (Nonempty (NormalText 'a' "") [ Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) []) ])
+                        |> Expect.equal [ Slack.RichTextSection [ slackTextInline "a" ] ]
+                )
             ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"

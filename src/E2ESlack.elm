@@ -2742,6 +2742,10 @@ slackSendFileTest config =
                 , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                 , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
                 , E2EHelper.uploadImageAttachment admin
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "fileStatus_delete_1" ])
+
+                -- Slack has no spoilered files
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "fileStatus_spoiler_1" ])
                 , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , T.checkBackend

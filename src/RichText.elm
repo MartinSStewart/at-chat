@@ -6836,9 +6836,12 @@ toSlackInlines customEmojiNames style node =
             List.concatMap (toSlackInlines customEmojiNames { style | strike = True }) (List.Nonempty.toList nonempty)
 
         Spoiler nonempty ->
-            Slack.RichText_Text { text = "||", style = style }
-                :: List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty)
-                ++ [ Slack.RichText_Text { text = "||", style = style } ]
+            case List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty) of
+                [] ->
+                    []
+
+                inlines ->
+                    Slack.RichText_Text { text = "||", style = style } :: inlines ++ [ Slack.RichText_Text { text = "||", style = style } ]
 
         BlockQuote _ list ->
             List.concatMap (toSlackInlines customEmojiNames style) list
