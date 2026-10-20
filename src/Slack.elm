@@ -1135,8 +1135,12 @@ encodeInline inline =
             Json.Encode.object
                 (( "type", Json.Encode.string "emoji" )
                     :: ( "name", Json.Encode.string name )
-                    :: ( "unicode", Json.Encode.string unicode )
-                    :: encodeStyle style
+                    :: (if unicode == "" then
+                            encodeStyle style
+
+                        else
+                            ( "unicode", Json.Encode.string unicode ) :: encodeStyle style
+                       )
                 )
 
         RichText_User userId ->

@@ -2997,7 +2997,7 @@ slackCustomEmojiTest config =
                                 if field "text" /= "Nice :partyparrot:" then
                                     Err ("Expected the text to name the custom emoji, got " ++ field "text")
 
-                                else if not (String.contains "{\"type\":\"emoji\",\"name\":\"partyparrot\"" (field "blocks")) then
+                                else if not (String.contains "{\"type\":\"emoji\",\"name\":\"partyparrot\"}" (field "blocks")) then
                                     Err ("Expected the blocks to have the custom emoji, got " ++ field "blocks")
 
                                 else
