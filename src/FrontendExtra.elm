@@ -105,7 +105,7 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
-import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, SlackFrontendDmChannel, SlackFrontendWorkspace)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
@@ -6393,6 +6393,41 @@ changeUpdate localMsg local =
                         localUser : LocalUser
                         localUser =
                             local.localUser
+
+                        existingChannels : SeqDict (Slack.Id Slack.ChannelId) SlackFrontendChannel
+                        existingChannels =
+                            case SeqDict.get teamId local.slackWorkspaces of
+                                Just workspace ->
+                                    workspace.channels
+
+                                Nothing ->
+                                    SeqDict.empty
+
+                        newChannels : List (Slack.Id Slack.ChannelId)
+                        newChannels =
+                            case SeqDict.get teamId data.workspaces of
+                                Just workspace ->
+                                    SeqDict.keys workspace.channels
+                                        |> List.filter (\channelId -> not (SeqDict.member channelId existingChannels))
+
+                                Nothing ->
+                                    []
+
+                        newDmChannels : List (Slack.Id Slack.DmChannelId)
+                        newDmChannels =
+                            if data.markNewDmsAsViewed then
+                                SeqDict.toList data.dmChannels
+                                    |> List.filterMap
+                                        (\( channelId, dmChannel ) ->
+                                            if dmChannel.teamId == teamId && not (SeqDict.member channelId local.slackDmChannels) then
+                                                Just channelId
+
+                                            else
+                                                Nothing
+                                        )
+
+                            else
+                                []
                     in
                     { local
                         | localUser =
@@ -6406,7 +6441,7 @@ changeUpdate localMsg local =
                         , slackWorkspaces = SeqDict.union data.workspaces local.slackWorkspaces
                         , slackDmChannels = SeqDict.union data.dmChannels local.slackDmChannels
                     }
-                        |> markNewSlackConversationsAsViewed slackUserId teamId data.newChannels data.newDmChannels
+                        |> markNewSlackConversationsAsViewed slackUserId teamId newChannels newDmChannels
 
                 Server_Slack_CustomEmojisLoaded customEmojis ->
                     let
@@ -7967,8 +8002,8 @@ markDiscordDataAsViewed discordUserId local =
     }
 
 
-{-| Same as `Backend.markNewSlackConversationsAsViewed`, so the conversations it marked as viewed
-are marked here too.
+{-| Same as `Backend.markNewSlackConversationsAsViewed`, given the conversations this frontend didn't
+have yet, which are the ones `Backend.newSlackConversations` finds.
 -}
 markNewSlackConversationsAsViewed :
     Slack.Id Slack.UserId

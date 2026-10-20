@@ -5,6 +5,8 @@ module SlackSync exposing
     , dmChannelsToFrontend
     , emojiFromSlackName
     , emojiToSlackName
+    , isChannelVisible
+    , isDmChannelVisible
     , linkedUsers
     , newChannelMaxMessages
     , teamCustomEmojis
@@ -308,7 +310,7 @@ workspacesToFrontend linked workspaces =
 
 channelToFrontend : SeqDict (Slack.Id Slack.UserId) a -> SlackBackendChannel -> Maybe SlackFrontendChannel
 channelToFrontend linked channel =
-    if List.any (\slackUserId -> SeqSet.member slackUserId channel.linkedMembers) (SeqDict.keys linked) then
+    if isChannelVisible linked channel then
         { name = channel.name
         , isPrivate = channel.isPrivate
         , messages = DmChannel.loadThreadStarters channel.threads channel.messages (Thread.loadMessages False channel.messages)
@@ -321,6 +323,16 @@ channelToFrontend linked channel =
         Nothing
 
 
+isChannelVisible : SeqDict (Slack.Id Slack.UserId) a -> SlackBackendChannel -> Bool
+isChannelVisible linked channel =
+    List.any (\slackUserId -> SeqSet.member slackUserId channel.linkedMembers) (SeqDict.keys linked)
+
+
+isDmChannelVisible : SeqDict (Slack.Id Slack.UserId) a -> SlackDmChannel -> Bool
+isDmChannelVisible linked dmChannel =
+    List.any (\slackUserId -> NonemptySet.member slackUserId dmChannel.members) (SeqDict.keys linked)
+
+
 dmChannelsToFrontend :
     SeqDict (Slack.Id Slack.UserId) a
     -> SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
@@ -328,7 +340,7 @@ dmChannelsToFrontend :
 dmChannelsToFrontend linked dmChannels =
     SeqDict.filterMap
         (\_ dmChannel ->
-            if List.any (\slackUserId -> NonemptySet.member slackUserId dmChannel.members) (SeqDict.keys linked) then
+            if isDmChannelVisible linked dmChannel then
                 { teamId = dmChannel.teamId
                 , members = dmChannel.members
                 , messages = DmChannel.loadThreadStarters dmChannel.threads dmChannel.messages (Thread.loadMessages False dmChannel.messages)

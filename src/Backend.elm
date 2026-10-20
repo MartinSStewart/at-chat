@@ -1033,13 +1033,8 @@ updateHelper msg model =
             case result of
                 Ok data ->
                     let
-                        channelIds : List (Slack.Id Slack.ChannelId)
-                        channelIds =
-                            List.map (\( channel, _ ) -> channel.id) data.channels
-
-                        dmChannelIds : List (Slack.Id Slack.DmChannelId)
-                        dmChannelIds =
-                            List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels
+                        ( channelIds, dmChannelIds ) =
+                            newSlackConversations slackUserId teamId data model
 
                         ( model2, customEmojiCmd ) =
                             addLoadedSlackWorkspace teamId slackUserId data model
@@ -1051,7 +1046,7 @@ updateHelper msg model =
                     ( model3
                     , Command.batch
                         [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
-                        , slackLinkedUserLoaded slackUserId teamId channelIds dmChannelIds model3
+                        , slackLinkedUserLoaded slackUserId teamId True model3
                         , customEmojiCmd
                         ]
                     )
@@ -1068,32 +1063,14 @@ updateHelper msg model =
             case result of
                 Ok ( teamId, data ) ->
                     let
-                        joinedChannels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
-                        joinedChannels =
-                            case SeqDict.get teamId model2.slackWorkspaces of
-                                Just workspace ->
-                                    SeqDict.filter (\_ channel -> SeqSet.member slackUserId channel.linkedMembers) workspace.channels
-
-                                Nothing ->
-                                    SeqDict.empty
-
-                        newChannelIds : List (Slack.Id Slack.ChannelId)
-                        newChannelIds =
-                            List.filterMap
-                                (\( channel, _ ) ->
-                                    if SeqDict.member channel.id joinedChannels then
-                                        Nothing
-
-                                    else
-                                        Just channel.id
-                                )
-                                data.channels
+                        ( newChannelIds, _ ) =
+                            newSlackConversations slackUserId teamId data model2
 
                         ( model3, customEmojiCmd ) =
                             addLoadedSlackWorkspace teamId slackUserId data model2
                     in
                     ( markNewSlackConversationsAsViewed slackUserId teamId newChannelIds [] model3
-                    , Command.batch [ slackLinkedUserLoaded slackUserId teamId newChannelIds [] model3, customEmojiCmd ]
+                    , Command.batch [ slackLinkedUserLoaded slackUserId teamId False model3, customEmojiCmd ]
                     )
 
                 Err ( time, error ) ->
@@ -13009,17 +12986,16 @@ addLinkedSlackUser linkedAt userId cookie token { self, team } model =
 
 
 {-| Hands the at-chat user everything linking loaded, so their open tabs show it without a reload.
-`newChannels` and `newDmChannels` are the conversations `markNewSlackConversationsAsViewed` was given,
-so the frontend can mark the same ones as viewed.
+The frontend marks the conversations it didn't have as viewed, the same way
+`markNewSlackConversationsAsViewed` does, leaving out new DMs after a refresh.
 -}
 slackLinkedUserLoaded :
     Slack.Id Slack.UserId
     -> Slack.Id Slack.TeamId
-    -> List (Slack.Id Slack.ChannelId)
-    -> List (Slack.Id Slack.DmChannelId)
+    -> Bool
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-slackLinkedUserLoaded slackUserId teamId newChannels newDmChannels model =
+slackLinkedUserLoaded slackUserId teamId markNewDmsAsViewed model =
     case SeqDict.get slackUserId model.slackUsers of
         Just (SlackFullData linkedUser) ->
             let
@@ -13041,8 +13017,7 @@ slackLinkedUserLoaded slackUserId teamId newChannels newDmChannels model =
                         SeqDict.values (SlackSync.teamCustomEmojis teamId model)
                             |> List.filterMap (\customEmojiId -> SeqDict.get customEmojiId model.customEmojis |> Maybe.map (Tuple.pair customEmojiId))
                             |> SeqDict.fromList
-                    , newChannels = newChannels
-                    , newDmChannels = newDmChannels
+                    , markNewDmsAsViewed = markNewDmsAsViewed
                     }
                     |> ServerChange
                 )
@@ -13053,6 +13028,78 @@ slackLinkedUserLoaded slackUserId teamId newChannels newDmChannels model =
 
         Nothing ->
             Command.none
+
+
+{-| The channels and DMs in what was loaded that the at-chat user couldn't see before, which are
+the ones their frontend doesn't have yet. A Slack account that has never been loaded before (it
+isn't a member of any of the workspace's channels yet) didn't make any DMs visible.
+-}
+newSlackConversations :
+    Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> LoadedSlackWorkspace
+    -> BackendModel
+    -> ( List (Slack.Id Slack.ChannelId), List (Slack.Id Slack.DmChannelId) )
+newSlackConversations slackUserId teamId data model =
+    case SeqDict.get slackUserId model.slackUsers of
+        Just (SlackFullData linkedUser) ->
+            let
+                linked : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+                linked =
+                    SlackSync.linkedUsers linkedUser.linkedTo model.slackUsers
+
+                existingChannels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
+                existingChannels =
+                    case SeqDict.get teamId model.slackWorkspaces of
+                        Just workspace ->
+                            workspace.channels
+
+                        Nothing ->
+                            SeqDict.empty
+
+                linkedBefore : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+                linkedBefore =
+                    if List.any (\channel -> SeqSet.member slackUserId channel.linkedMembers) (SeqDict.values existingChannels) then
+                        linked
+
+                    else
+                        SeqDict.remove slackUserId linked
+            in
+            ( List.filterMap
+                (\( channel, _ ) ->
+                    case SeqDict.get channel.id existingChannels of
+                        Just existing ->
+                            if SlackSync.isChannelVisible linked existing then
+                                Nothing
+
+                            else
+                                Just channel.id
+
+                        Nothing ->
+                            Just channel.id
+                )
+                data.channels
+            , List.filterMap
+                (\( dmChannel, _ ) ->
+                    case SeqDict.get dmChannel.id model.slackDmChannels of
+                        Just existing ->
+                            if SlackSync.isDmChannelVisible linkedBefore existing then
+                                Nothing
+
+                            else
+                                Just dmChannel.id
+
+                        Nothing ->
+                            Just dmChannel.id
+                )
+                data.dmChannels
+            )
+
+        Just (SlackBasicData _) ->
+            ( [], [] )
+
+        Nothing ->
+            ( [], [] )
 
 
 {-| Linking Slack loads the newest messages of every conversation, and none of them are new to

@@ -1261,8 +1261,7 @@ type ServerChange
         , dmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
         , users : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
         , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-        , newChannels : List (Slack.Id Slack.ChannelId)
-        , newDmChannels : List (Slack.Id Slack.DmChannelId)
+        , markNewDmsAsViewed : Bool
         }
     | Server_Slack_CustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_Slack_CustomEmojiAdded (Slack.Id Slack.TeamId) (Id CustomEmojiId) CustomEmojiData
