@@ -750,6 +750,15 @@ test =
                             ]
                 )
             , Test.test
+                "A timestamp is sent with a fallback, since Slack rejects an empty one"
+                (\_ ->
+                    RichText.toSlack SeqDict.empty (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])
+                        |> Expect.equal
+                            [ Slack.RichTextSection
+                                [ Slack.RichText_Date { timestamp = 29766890 * 60, fallback = "August 6, 2026 at 10:50 UTC" } ]
+                            ]
+                )
+            , Test.test
                 "A spoiler around only an attached file sends nothing"
                 (\_ ->
                     RichText.toSlack SeqDict.empty (Nonempty (NormalText 'a' "") [ Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) []) ])

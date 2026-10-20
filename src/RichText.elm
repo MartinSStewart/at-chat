@@ -6885,7 +6885,7 @@ toSlackInlines customEmojiNames style node =
                 |> List.concat
 
         Timestamp time ->
-            [ Slack.RichText_Date { timestamp = TimeInMinutes.toSeconds time, fallback = "" } ]
+            [ Slack.RichText_Date { timestamp = TimeInMinutes.toSeconds time, fallback = dateAndTimeToString Time.utc time ++ " UTC" } ]
 
 
 fromDiscord :
