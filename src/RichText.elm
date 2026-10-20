@@ -6391,14 +6391,15 @@ fromSlack customEmojis2 text elements =
                 |> String.replace "&gt;" ">"
                 |> String.replace "&amp;" "&"
                 |> slackText
-                |> Maybe.map (\a -> Nonempty a [])
+                |> Maybe.map (\a -> slackSpoilers [ a ])
+                |> Maybe.andThen List.Nonempty.fromList
 
         _ ->
             List.foldl
                 (\element revNodes ->
                     case element of
                         Slack.RichTextSection inlines ->
-                            List.reverse (List.filterMap (slackInline customEmojis2) inlines) ++ revNodes
+                            List.reverse (slackInlines customEmojis2 inlines) ++ revNodes
 
                         Slack.RichTextPreformatted inlines ->
                             let
@@ -6413,11 +6414,11 @@ fromSlack customEmojis2 text elements =
                                 CodeBlock NoLanguage code :: revNodes
 
                         Slack.RichTextQuote inlines ->
-                            BlockQuote (slackLeadingLineBreak revNodes) (List.filterMap (slackInline customEmojis2) inlines)
+                            BlockQuote (slackLeadingLineBreak revNodes) (slackInlines customEmojis2 inlines)
                                 :: dropTrailingLineBreak revNodes
 
                         Slack.RichTextList items ->
-                            case List.Nonempty.fromList (List.map (List.filterMap (slackInline customEmojis2)) items) of
+                            case List.Nonempty.fromList (List.map (slackInlines customEmojis2) items) of
                                 Just items2 ->
                                     BulletPoint (slackLeadingLineBreak revNodes) items2 :: dropTrailingLineBreak revNodes
 
@@ -6428,6 +6429,104 @@ fromSlack customEmojis2 text elements =
                 elements
                 |> List.reverse
                 |> List.Nonempty.fromList
+
+
+slackInlines : SeqDict String (Id CustomEmojiId) -> List Slack.RichTextInline -> List (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackInlines customEmojis2 inlines =
+    List.filterMap (slackInline customEmojis2) inlines |> slackSpoilers
+
+
+type SlackSpoilerToken userId channelId
+    = SlackSpoilerNode (RichText userId channelId)
+    | SlackSpoilerMarker
+
+
+{-| Slack has no spoilers, so at-chat sends them wrapped in || like it writes them, and turns text
+between pairs of || back into a spoiler. Markers inside bold, italic or struck out text pair up
+there.
+-}
+slackSpoilers : List (RichText userId channelId) -> List (RichText userId channelId)
+slackSpoilers nodes =
+    List.concatMap
+        (\node ->
+            case node of
+                NormalText char rest ->
+                    String.split "||" (String.cons char rest)
+                        |> List.map (\text -> slackText text |> Maybe.map SlackSpoilerNode |> Maybe.map List.singleton |> Maybe.withDefault [])
+                        |> List.intersperse [ SlackSpoilerMarker ]
+                        |> List.concat
+
+                Bold nonempty ->
+                    [ SlackSpoilerNode (Bold (slackSpoilersNonempty nonempty)) ]
+
+                Italic nonempty ->
+                    [ SlackSpoilerNode (Italic (slackSpoilersNonempty nonempty)) ]
+
+                Strikethrough nonempty ->
+                    [ SlackSpoilerNode (Strikethrough (slackSpoilersNonempty nonempty)) ]
+
+                _ ->
+                    [ SlackSpoilerNode node ]
+        )
+        nodes
+        |> slackSpoilersHelper []
+
+
+slackSpoilersNonempty : Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
+slackSpoilersNonempty nonempty =
+    case List.Nonempty.fromList (slackSpoilers (List.Nonempty.toList nonempty)) of
+        Just nonempty2 ->
+            nonempty2
+
+        Nothing ->
+            nonempty
+
+
+slackSpoilersHelper : List (RichText userId channelId) -> List (SlackSpoilerToken userId channelId) -> List (RichText userId channelId)
+slackSpoilersHelper revNodes tokens =
+    case tokens of
+        [] ->
+            List.reverse revNodes
+
+        (SlackSpoilerNode node) :: rest ->
+            slackSpoilersHelper (pushSlackNode node revNodes) rest
+
+        SlackSpoilerMarker :: rest ->
+            let
+                ( inside, afterInside ) =
+                    List.Extra.break (\token -> token == SlackSpoilerMarker) rest
+
+                insideNodes : List (RichText userId channelId)
+                insideNodes =
+                    List.filterMap
+                        (\token ->
+                            case token of
+                                SlackSpoilerNode node ->
+                                    Just node
+
+                                SlackSpoilerMarker ->
+                                    Nothing
+                        )
+                        inside
+            in
+            case ( afterInside, List.Nonempty.fromList insideNodes ) of
+                ( SlackSpoilerMarker :: afterSpoiler, Just spoilered ) ->
+                    slackSpoilersHelper (Spoiler spoilered :: revNodes) afterSpoiler
+
+                _ ->
+                    slackSpoilersHelper (pushSlackNode (NormalText '|' "|") revNodes) rest
+
+
+{-| Splitting text up at unpaired || markers leaves pieces of text that belong together.
+-}
+pushSlackNode : RichText userId channelId -> List (RichText userId channelId) -> List (RichText userId channelId)
+pushSlackNode node revNodes =
+    case ( node, revNodes ) of
+        ( NormalText char rest, (NormalText previousChar previousRest) :: restOfNodes ) ->
+            NormalText previousChar (previousRest ++ String.cons char rest) :: restOfNodes
+
+        _ ->
+            node :: revNodes
 
 
 slackLeadingLineBreak : List (RichText userId channelId) -> HasLeadingLineBreak
@@ -6609,7 +6708,8 @@ slackStyle style node =
 
 
 {-| The rich\_text elements to post to Slack. Things Slack has nothing for (stickers, attached files,
-custom emojis from elsewhere) are left out, and underline and spoilers become plain text.
+custom emojis from elsewhere) are left out, underline becomes plain text, and spoilers are wrapped
+in || like they're written in at-chat.
 -}
 toSlack :
     SeqDict (Id CustomEmojiId) String
@@ -6736,7 +6836,9 @@ toSlackInlines customEmojiNames style node =
             List.concatMap (toSlackInlines customEmojiNames { style | strike = True }) (List.Nonempty.toList nonempty)
 
         Spoiler nonempty ->
-            List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty)
+            Slack.RichText_Text { text = "||", style = style }
+                :: List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty)
+                ++ [ Slack.RichText_Text { text = "||", style = style } ]
 
         BlockQuote _ list ->
             List.concatMap (toSlackInlines customEmojiNames style) list
