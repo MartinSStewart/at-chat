@@ -1067,7 +1067,7 @@ linkSlackRemovePastedWorkspaceTest config =
                     )
                 , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T09DJDQL18U")
                 , admin.click 100 (Dom.id "userOptions_submitSlackData")
-                , E2EHelper.hasExactText admin [ "Every workspace has been removed" ]
+                , E2EHelper.hasExactText admin [ "You must include at least one workspace" ]
                 , E2EHelper.checkNoErrorLogs
                 ]
             )

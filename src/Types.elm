@@ -1257,8 +1257,8 @@ type ServerChange
         { workspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
         , dmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
         , users : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
-        , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-        , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        , newChannels : List (Slack.Id Slack.ChannelId)
+        , newDmChannels : List (Slack.Id Slack.DmChannelId)
         }
     | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji

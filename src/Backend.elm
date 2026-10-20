@@ -1034,18 +1034,22 @@ updateHelper msg model =
             case result of
                 Ok data ->
                     let
+                        channelIds : List (Slack.Id Slack.ChannelId)
+                        channelIds =
+                            List.map (\( channel, _ ) -> channel.id) data.channels
+
+                        dmChannelIds : List (Slack.Id Slack.DmChannelId)
+                        dmChannelIds =
+                            List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels
+
                         model2 =
                             addLoadedSlackWorkspace teamId slackUserId data model
-                                |> markNewSlackConversationsAsViewed
-                                    slackUserId
-                                    teamId
-                                    (List.map (\( channel, _ ) -> channel.id) data.channels)
-                                    (List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels)
+                                |> markNewSlackConversationsAsViewed slackUserId teamId channelIds dmChannelIds
                     in
                     ( model2
                     , Command.batch
                         [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
-                        , slackLinkedUserLoaded slackUserId teamId model2
+                        , slackLinkedUserLoaded slackUserId teamId channelIds dmChannelIds model2
                         ]
                     )
 
@@ -1070,25 +1074,25 @@ updateHelper msg model =
                                 Nothing ->
                                     SeqDict.empty
 
+                        newChannelIds : List (Slack.Id Slack.ChannelId)
+                        newChannelIds =
+                            List.filterMap
+                                (\( channel, _ ) ->
+                                    if SeqDict.member channel.id joinedChannels then
+                                        Nothing
+
+                                    else
+                                        Just channel.id
+                                )
+                                data.channels
+
                         model3 : BackendModel
                         model3 =
                             addLoadedSlackWorkspace teamId slackUserId data model2
-                                |> markNewSlackConversationsAsViewed
-                                    slackUserId
-                                    teamId
-                                    (List.filterMap
-                                        (\( channel, _ ) ->
-                                            if SeqDict.member channel.id joinedChannels then
-                                                Nothing
-
-                                            else
-                                                Just channel.id
-                                        )
-                                        data.channels
-                                    )
-                                    []
                     in
-                    ( model3, slackLinkedUserLoaded slackUserId teamId model3 )
+                    ( markNewSlackConversationsAsViewed slackUserId teamId newChannelIds [] model3
+                    , slackLinkedUserLoaded slackUserId teamId newChannelIds [] model3
+                    )
 
                 Err ( time, error ) ->
                     case SeqDict.get slackUserId model2.slackUsers of
@@ -12679,49 +12683,40 @@ addLinkedSlackUser linkedAt userId cookie token { self, team } model =
 
 
 {-| Hands the at-chat user everything linking loaded, so their open tabs show it without a reload.
+`newChannels` and `newDmChannels` are the conversations `markNewSlackConversationsAsViewed` was given,
+so the frontend can mark the same ones as viewed.
 -}
-slackLinkedUserLoaded : Slack.Id Slack.UserId -> Slack.Id Slack.TeamId -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
-slackLinkedUserLoaded slackUserId teamId model =
+slackLinkedUserLoaded :
+    Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> List (Slack.Id Slack.ChannelId)
+    -> List (Slack.Id Slack.DmChannelId)
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+slackLinkedUserLoaded slackUserId teamId newChannels newDmChannels model =
     case SeqDict.get slackUserId model.slackUsers of
         Just (SlackFullData linkedUser) ->
-            case NonemptyDict.get linkedUser.linkedTo model.users of
-                Just user ->
-                    let
-                        linked : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
-                        linked =
-                            SlackSync.linkedUsers linkedUser.linkedTo model.slackUsers
-
-                        isSlack : AnyGuildOrDmId -> Bool
-                        isSlack guildOrDmId =
-                            case guildOrDmId of
-                                SlackGuildOrDmId _ ->
-                                    True
-
-                                GuildOrDmId _ ->
-                                    False
-
-                                DiscordGuildOrDmId _ ->
-                                    False
-                    in
-                    Broadcast.toUser
-                        Nothing
-                        Nothing
-                        linkedUser.linkedTo
-                        (Server_Slack_LinkedUserLoaded
-                            slackUserId
-                            teamId
-                            { workspaces = SlackSync.workspacesToFrontend linked model.slackWorkspaces
-                            , dmChannels = SlackSync.dmChannelsToFrontend linked model.slackDmChannels
-                            , users = SlackSync.usersToFrontend model.users linked model.slackUsers
-                            , lastViewedMessage = SeqDict.filter (\guildOrDmId _ -> isSlack guildOrDmId) user.lastViewedMessage
-                            , lastViewedThreadMessage = SeqDict.filter (\( guildOrDmId, _ ) _ -> isSlack guildOrDmId) user.lastViewedThreadMessage
-                            }
-                            |> ServerChange
-                        )
-                        model
-
-                Nothing ->
-                    Command.none
+            let
+                linked : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+                linked =
+                    SlackSync.linkedUsers linkedUser.linkedTo model.slackUsers
+            in
+            Broadcast.toUser
+                Nothing
+                Nothing
+                linkedUser.linkedTo
+                (Server_Slack_LinkedUserLoaded
+                    slackUserId
+                    teamId
+                    { workspaces = SlackSync.workspacesToFrontend linked model.slackWorkspaces
+                    , dmChannels = SlackSync.dmChannelsToFrontend linked model.slackDmChannels
+                    , users = SlackSync.usersToFrontend model.users linked model.slackUsers
+                    , newChannels = newChannels
+                    , newDmChannels = newDmChannels
+                    }
+                    |> ServerChange
+                )
+                model
 
         Just (SlackBasicData _) ->
             Command.none

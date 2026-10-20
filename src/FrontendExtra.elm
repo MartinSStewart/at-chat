@@ -6393,10 +6393,6 @@ changeUpdate localMsg local =
                         localUser : LocalUser
                         localUser =
                             local.localUser
-
-                        user : FrontendCurrentUser
-                        user =
-                            localUser.user
                     in
                     { local
                         | localUser =
@@ -6404,15 +6400,11 @@ changeUpdate localMsg local =
                                 | linkedSlackUsers = SeqDict.insert slackUserId teamId localUser.linkedSlackUsers
                                 , slackUsersNeedingAuth = SeqSet.remove slackUserId localUser.slackUsersNeedingAuth
                                 , slackUsers = SeqDict.union data.users localUser.slackUsers
-                                , user =
-                                    { user
-                                        | lastViewedMessage = SeqDict.union data.lastViewedMessage user.lastViewedMessage
-                                        , lastViewedThreadMessage = SeqDict.union data.lastViewedThreadMessage user.lastViewedThreadMessage
-                                    }
                             }
                         , slackWorkspaces = SeqDict.union data.workspaces local.slackWorkspaces
                         , slackDmChannels = SeqDict.union data.dmChannels local.slackDmChannels
                     }
+                        |> markNewSlackConversationsAsViewed slackUserId teamId data.newChannels data.newDmChannels
 
                 Server_UnlinkDiscordUser userId ->
                     let
@@ -7940,6 +7932,85 @@ markDiscordDataAsViewed discordUserId local =
                         local.discordDmChannels
             }
     }
+
+
+{-| Same as `Backend.markNewSlackConversationsAsViewed`, so the conversations it marked as viewed
+are marked here too.
+-}
+markNewSlackConversationsAsViewed :
+    Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> List (Slack.Id Slack.ChannelId)
+    -> List (Slack.Id Slack.DmChannelId)
+    -> LocalState
+    -> LocalState
+markNewSlackConversationsAsViewed slackUserId teamId channelIds dmChannelIds local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        markAsViewed :
+            SlackGuildOrDmId
+            -> { a | messages : MessageArray ChannelMessageId b c, threads : SeqDict (Id ChannelMessageId) SlackFrontendThread }
+            -> FrontendCurrentUser
+            -> FrontendCurrentUser
+        markAsViewed guildOrDmId conversation user =
+            if MessageArray.length conversation.messages > 0 && not (SeqDict.member (SlackGuildOrDmId guildOrDmId) user.lastViewedMessage) then
+                SeqDict.foldl
+                    (\threadId thread user2 ->
+                        User.setLastViewedMessage
+                            (SlackGuildOrDmId guildOrDmId)
+                            (ViewThreadWithMessage threadId (DmChannel.latestFrontendThreadMessageId thread))
+                            user2
+                    )
+                    (User.setLastViewedMessage
+                        (SlackGuildOrDmId guildOrDmId)
+                        (NoThreadWithMessage (DmChannel.latestFrontendMessageId conversation))
+                        user
+                    )
+                    conversation.threads
+
+            else
+                user
+
+        markChannels : FrontendCurrentUser -> FrontendCurrentUser
+        markChannels user =
+            case SeqDict.get teamId local.slackWorkspaces of
+                Just workspace ->
+                    List.foldl
+                        (\channelId user2 ->
+                            case SeqDict.get channelId workspace.channels of
+                                Just channel ->
+                                    markAsViewed
+                                        (SlackGuildOrDmId_Workspace { currentUserId = slackUserId, teamId = teamId, channelId = channelId })
+                                        channel
+                                        user2
+
+                                Nothing ->
+                                    user2
+                        )
+                        user
+                        channelIds
+
+                Nothing ->
+                    user
+
+        markDmChannels : FrontendCurrentUser -> FrontendCurrentUser
+        markDmChannels user =
+            List.foldl
+                (\channelId user2 ->
+                    case SeqDict.get channelId local.slackDmChannels of
+                        Just dmChannel ->
+                            markAsViewed (SlackGuildOrDmId_Dm { currentUserId = slackUserId, channelId = channelId }) dmChannel user2
+
+                        Nothing ->
+                            user2
+                )
+                user
+                dmChannelIds
+    in
+    { local | localUser = { localUser | user = markChannels localUser.user |> markDmChannels } }
 
 
 startReloadingDiscordUser : Time.Posix -> Discord.Id Discord.UserId -> LocalState -> LocalState
