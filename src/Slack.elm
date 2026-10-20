@@ -1,6 +1,7 @@
 module Slack exposing
     ( Channel
     , ChannelId
+    , CustomEmojiSource(..)
     , DmChannel
     , DmChannelId
     , File
@@ -27,11 +28,13 @@ module Slack exposing
     , UserId
     , WebsocketEvent(..)
     , addReaction
+    , customEmojis
     , deleteMessage
     , fileHeaders
     , history
     , httpErrorToString
     , idToString
+    , isCustomEmojiHostedBySlack
     , isHostedBySlack
     , messageFiles
     , messageUserIds
@@ -716,6 +719,31 @@ messagesSince secretKey cookie token channelId oldest =
         |> Task.onError (\_ -> Task.succeed [])
 
 
+{-| An alias names another emoji, which can be one of Slack's standard emoji.
+-}
+type CustomEmojiSource
+    = CustomEmojiImage String
+    | CustomEmojiAlias String
+
+
+{-| The workspace's custom emoji by name. A workspace whose emoji can't be loaded is treated as
+having none, so linking still works.
+-}
+customEmojis : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly x (List ( String, CustomEmojiSource ))
+customEmojis secretKey cookie token =
+    http
+        secretKey
+        cookie
+        token
+        "emoji.list"
+        []
+        (Decode.field "emoji" (Decode.keyValuePairs Decode.string)
+            |> Decode.map (List.map (\( name, value ) -> ( name, customEmojiSource value )))
+        )
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
 history :
     SecretId ServerSecret
     -> SlackCookie
@@ -1207,6 +1235,25 @@ isHostedBySlack file =
             False
 
 
+customEmojiSource : String -> CustomEmojiSource
+customEmojiSource value =
+    if String.startsWith "alias:" value then
+        CustomEmojiAlias (String.dropLeft 6 value)
+
+    else
+        CustomEmojiImage value
+
+
+isCustomEmojiHostedBySlack : String -> Bool
+isCustomEmojiHostedBySlack urlText =
+    case Url.fromString urlText of
+        Just url ->
+            url.protocol == Url.Https && url.host == "emoji.slack-edge.com" && url.port_ == Nothing
+
+        Nothing ->
+            False
+
+
 {-| Downloading a file from files.slack.com needs the same credentials as the API.
 -}
 fileHeaders : SlackCookie -> SlackToken -> List ( String, String )
@@ -1385,6 +1432,7 @@ type WebsocketEvent
     | WebsocketTeamDomainChanged String
     | WebsocketConversationsChanged
     | WebsocketChannelRenamed (Id ChannelId) String
+    | WebsocketCustomEmojiAdded String CustomEmojiSource
     | WebsocketOtherEvent
 
 
@@ -1435,6 +1483,12 @@ decodeWebsocketEvent =
                         WebsocketChannelRenamed
                         (Decode.at [ "channel", "id" ] decodeId)
                         (Decode.at [ "channel", "name" ] Decode.string)
+
+                else if eventType == "emoji_changed" && subtype == "add" then
+                    Decode.map2
+                        WebsocketCustomEmojiAdded
+                        (Decode.field "name" Decode.string)
+                        (Decode.field "value" Decode.string |> Decode.map customEmojiSource)
 
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent

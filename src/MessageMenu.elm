@@ -945,8 +945,26 @@ availableCustomEmojisAndStickers guildOrDmId local =
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
             ( SeqSet.empty, SeqSet.empty )
 
-        SlackGuildOrDmId _ ->
-            ( SeqSet.empty, SeqSet.empty )
+        SlackGuildOrDmId (SlackGuildOrDmId_Workspace { teamId }) ->
+            ( slackWorkspaceCustomEmojis teamId local, SeqSet.empty )
+
+        SlackGuildOrDmId (SlackGuildOrDmId_Dm { channelId }) ->
+            case SeqDict.get channelId local.slackDmChannels of
+                Just dmChannel ->
+                    ( slackWorkspaceCustomEmojis dmChannel.teamId local, SeqSet.empty )
+
+                Nothing ->
+                    ( SeqSet.empty, SeqSet.empty )
+
+
+slackWorkspaceCustomEmojis : Slack.Id Slack.TeamId -> LocalState -> SeqSet (Id CustomEmojiId)
+slackWorkspaceCustomEmojis teamId local =
+    case SeqDict.get teamId local.slackWorkspaces of
+        Just workspace ->
+            SeqSet.intersect local.localUser.user.availableCustomEmojis workspace.customEmojis
+
+        Nothing ->
+            SeqSet.empty
 
 
 menuItemsHelper : Bool -> List ContextMenuItem -> { items : List (Element FrontendMsg_), height : Int }

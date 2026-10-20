@@ -1,9 +1,13 @@
 module SlackSync exposing
     ( basicUserToFrontend
     , conversationFromHistory
+    , customEmojiNames
     , dmChannelsToFrontend
+    , emojiFromSlackName
+    , emojiToSlackName
     , linkedUsers
     , newChannelMaxMessages
+    , teamCustomEmojis
     , toMessage
     , unlinkUser
     , userDataName
@@ -18,7 +22,7 @@ import Drawing
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, IsEncrypted(..))
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, UserId)
 import IdArray exposing (IdArray)
 import List.Nonempty
 import LocalState exposing (SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
@@ -49,17 +53,18 @@ newChannelMaxMessages =
 -}
 messagesAndLinks :
     SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> SeqDict String (Id CustomEmojiId)
     -> List Slack.Message
     ->
         ( IdArray messageId (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
         , OneToOne (Slack.Id Slack.MessageId) (Id messageId)
         )
-messagesAndLinks slackFiles messages =
+messagesAndLinks slackFiles customEmojis messages =
     let
         converted : List ( Slack.Id Slack.MessageId, Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) )
         converted =
             List.filterMap
-                (\message -> toMessage slackFiles message |> Maybe.map (Tuple.pair message.id))
+                (\message -> toMessage slackFiles customEmojis message |> Maybe.map (Tuple.pair message.id))
                 messages
     in
     ( IdArray.fromList (List.map Tuple.second converted)
@@ -71,16 +76,17 @@ messagesAndLinks slackFiles messages =
 -}
 conversationFromHistory :
     SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> SeqDict String (Id CustomEmojiId)
     -> Slack.History
     ->
         { messages : IdArray ChannelMessageId (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
         , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
         , threads : SeqDict (Id ChannelMessageId) SlackBackendThread
         }
-conversationFromHistory slackFiles history =
+conversationFromHistory slackFiles customEmojis history =
     let
         ( messages, linkedMessageIds ) =
-            messagesAndLinks slackFiles (List.reverse history.messages)
+            messagesAndLinks slackFiles customEmojis (List.reverse history.messages)
     in
     { messages = messages
     , linkedMessageIds = linkedMessageIds
@@ -91,7 +97,7 @@ conversationFromHistory slackFiles history =
                     Just threadId ->
                         let
                             ( threadMessages, threadLinks ) =
-                                messagesAndLinks slackFiles replies
+                                messagesAndLinks slackFiles customEmojis replies
                         in
                         if IdArray.length threadMessages > 0 then
                             SeqDict.insert threadId { messages = threadMessages, linkedMessageIds = threadLinks } dict
@@ -111,9 +117,10 @@ conversationFromHistory slackFiles history =
 -}
 toMessage :
     SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> SeqDict String (Id CustomEmojiId)
     -> Slack.Message
     -> Maybe (Message messageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-toMessage slackFiles message =
+toMessage slackFiles customEmojis message =
     case message.content of
         Slack.TextMessage { text, blocks, files } ->
             let
@@ -129,7 +136,7 @@ toMessage slackFiles message =
                 attachedFileNodes =
                     List.map RichText.AttachedFile (SeqDict.keys attachedFiles)
             in
-            (case RichText.fromSlack text blocks of
+            (case RichText.fromSlack customEmojis text blocks of
                 Just content ->
                     NonemptyExtra.appendList content attachedFileNodes |> Just
 
@@ -142,14 +149,14 @@ toMessage slackFiles message =
                             message.createdAt
                             message.user
                             content
-                            (reactions message.reactions)
+                            (reactions customEmojis message.reactions)
                             NoReply
                             attachedFiles
                             |> UserTextMessage
                     )
 
         Slack.JoinedChannel ->
-            UserJoinedMessage message.createdAt message.user (reactions message.reactions) Drawing.emptyDrawing |> Just
+            UserJoinedMessage message.createdAt message.user (reactions customEmojis message.reactions) Drawing.emptyDrawing |> Just
 
 
 fileData : Slack.File -> SlackFileData -> FileData
@@ -163,15 +170,15 @@ fileData file { fileHash, metadata } =
     }
 
 
-{-| Slack's custom emoji aren't in at-chat so reactions with them are left out.
+{-| Reactions with custom emoji added to the workspace since it was linked are left out.
 -}
-reactions : List Slack.Reaction -> SeqDict EmojiOrCustomEmoji (NonemptySet (Slack.Id Slack.UserId))
-reactions slackReactions =
+reactions : SeqDict String (Id CustomEmojiId) -> List Slack.Reaction -> SeqDict EmojiOrCustomEmoji (NonemptySet (Slack.Id Slack.UserId))
+reactions customEmojis slackReactions =
     List.foldl
         (\reaction dict ->
-            case ( SlackEmoji.fromSlackName reaction.name, NonemptySet.fromList reaction.users ) of
+            case ( emojiFromSlackName customEmojis reaction.name, NonemptySet.fromList reaction.users ) of
                 ( Just emoji, Just users ) ->
-                    SeqDict.insert (EmojiOrCustomEmoji_Emoji emoji) users dict
+                    SeqDict.insert emoji users dict
 
                 ( Just _, Nothing ) ->
                     dict
@@ -184,6 +191,58 @@ reactions slackReactions =
         )
         SeqDict.empty
         slackReactions
+
+
+emojiFromSlackName : SeqDict String (Id CustomEmojiId) -> String -> Maybe EmojiOrCustomEmoji
+emojiFromSlackName customEmojis name =
+    case SlackEmoji.fromSlackName name of
+        Just emoji ->
+            Just (EmojiOrCustomEmoji_Emoji emoji)
+
+        Nothing ->
+            case SeqDict.get name customEmojis of
+                Just customEmojiId ->
+                    Just (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
+
+                Nothing ->
+                    Nothing
+
+
+{-| What to call each custom emoji when sending it to Slack. An emoji is always added before its
+aliases, so it goes by its own name rather than an alias's.
+-}
+customEmojiNames : SeqDict String (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) String
+customEmojiNames customEmojis =
+    SeqDict.foldl
+        (\name customEmojiId dict ->
+            if SeqDict.member customEmojiId dict then
+                dict
+
+            else
+                SeqDict.insert customEmojiId name dict
+        )
+        SeqDict.empty
+        customEmojis
+
+
+emojiToSlackName : SeqDict String (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Maybe String
+emojiToSlackName customEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji unicodeEmoji ->
+            SlackEmoji.toSlackName unicodeEmoji
+
+        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+            SeqDict.get customEmojiId (customEmojiNames customEmojis)
+
+
+teamCustomEmojis : Slack.Id Slack.TeamId -> BackendModel -> SeqDict String (Id CustomEmojiId)
+teamCustomEmojis teamId model =
+    case SeqDict.get teamId model.slackWorkspaces of
+        Just workspace ->
+            workspace.customEmojis
+
+        Nothing ->
+            SeqDict.empty
 
 
 {-| The Slack accounts an at-chat user has linked, and the workspace each one is in.
@@ -237,6 +296,7 @@ workspacesToFrontend linked workspaces =
                 { name = workspace.name
                 , icon = workspace.icon
                 , channels = SeqDict.filterMap (\_ channel -> channelToFrontend linked channel) workspace.channels
+                , customEmojis = SeqDict.values workspace.customEmojis |> SeqSet.fromList
                 }
                     |> Just
 

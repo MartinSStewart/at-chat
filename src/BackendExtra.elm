@@ -3067,6 +3067,9 @@ backendMsgLog msg =
         GotDiscordReadyDataCustomEmojis _ _ _ ->
             BackendMsgLog_GotDiscordReadyDataCustomEmojis
 
+        GotSlackCustomEmojis _ _ _ ->
+            BackendMsgLog_GotSlackCustomEmojis
+
         GotDiscordMessageCustomEmojis _ _ _ ->
             BackendMsgLog_GotDiscordMessageCustomEmojis
 

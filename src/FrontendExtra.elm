@@ -6400,11 +6400,44 @@ changeUpdate localMsg local =
                                 | linkedSlackUsers = SeqDict.insert slackUserId teamId localUser.linkedSlackUsers
                                 , slackUsersNeedingAuth = SeqSet.remove slackUserId localUser.slackUsersNeedingAuth
                                 , slackUsers = SeqDict.union data.users localUser.slackUsers
+                                , customEmojis = SeqDict.union data.customEmojis localUser.customEmojis
+                                , user = User.addNewCustomEmojis data.customEmojis localUser.user
                             }
                         , slackWorkspaces = SeqDict.union data.workspaces local.slackWorkspaces
                         , slackDmChannels = SeqDict.union data.dmChannels local.slackDmChannels
                     }
                         |> markNewSlackConversationsAsViewed slackUserId teamId data.newChannels data.newDmChannels
+
+                Server_Slack_CustomEmojisLoaded customEmojis ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | customEmojis = SeqDict.union customEmojis localUser.customEmojis } }
+
+                Server_Slack_CustomEmojiAdded teamId customEmojiId customEmoji ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | customEmojis = SeqDict.insert customEmojiId customEmoji localUser.customEmojis
+                                , user = { user | availableCustomEmojis = SeqSet.insert customEmojiId user.availableCustomEmojis }
+                            }
+                        , slackWorkspaces =
+                            SeqDict.updateIfExists
+                                teamId
+                                (\workspace -> { workspace | customEmojis = SeqSet.insert customEmojiId workspace.customEmojis })
+                                local.slackWorkspaces
+                    }
 
                 Server_UnlinkDiscordUser userId ->
                     let

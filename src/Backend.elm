@@ -19,7 +19,7 @@ import ChannelDescription
 import ChannelExport
 import ChannelImport
 import ChannelName exposing (ChannelName)
-import CustomEmoji exposing (CustomEmojiData)
+import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..), EmojiName)
 import DeleteUserAndFiles
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -81,7 +81,6 @@ import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
 import Slack exposing (SlackCookie, SlackToken)
-import SlackEmoji
 import SlackSync
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -1042,14 +1041,18 @@ updateHelper msg model =
                         dmChannelIds =
                             List.map (\( dmChannel, _ ) -> dmChannel.id) data.dmChannels
 
-                        model2 =
+                        ( model2, customEmojiCmd ) =
                             addLoadedSlackWorkspace teamId slackUserId data model
-                                |> markNewSlackConversationsAsViewed slackUserId teamId channelIds dmChannelIds
+
+                        model3 : BackendModel
+                        model3 =
+                            markNewSlackConversationsAsViewed slackUserId teamId channelIds dmChannelIds model2
                     in
-                    ( model2
+                    ( model3
                     , Command.batch
                         [ Websocket.createHandle (SlackWebsocketCreatedHandle slackUserId) Slack.websocketRelayUrl
-                        , slackLinkedUserLoaded slackUserId teamId channelIds dmChannelIds model2
+                        , slackLinkedUserLoaded slackUserId teamId channelIds dmChannelIds model3
+                        , customEmojiCmd
                         ]
                     )
 
@@ -1086,12 +1089,11 @@ updateHelper msg model =
                                 )
                                 data.channels
 
-                        model3 : BackendModel
-                        model3 =
+                        ( model3, customEmojiCmd ) =
                             addLoadedSlackWorkspace teamId slackUserId data model2
                     in
                     ( markNewSlackConversationsAsViewed slackUserId teamId newChannelIds [] model3
-                    , slackLinkedUserLoaded slackUserId teamId newChannelIds [] model3
+                    , Command.batch [ slackLinkedUserLoaded slackUserId teamId newChannelIds [] model3, customEmojiCmd ]
                     )
 
                 Err ( time, error ) ->
@@ -2414,7 +2416,7 @@ updateHelper msg model =
         GotDiscordReadyDataCustomEmojis userId results time ->
             let
                 ( errors, customEmojis, newCustomEmojis ) =
-                    gotDiscordCustomEmojis results model
+                    gotCustomEmojis results model
             in
             case List.Nonempty.fromList errors of
                 Just nonempty ->
@@ -2439,10 +2441,31 @@ updateHelper msg model =
                         model
                     )
 
+        GotSlackCustomEmojis teamId results time ->
+            let
+                ( errors, customEmojis, newCustomEmojis ) =
+                    gotCustomEmojis results model
+
+                model2 : BackendModel
+                model2 =
+                    { model | customEmojis = customEmojis }
+
+                cmd : Command BackendOnly ToFrontend BackendMsg
+                cmd =
+                    Broadcast.toSlackTeam teamId (Server_Slack_CustomEmojisLoaded newCustomEmojis |> ServerChange) model2
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog time (Log.FailedToLoadSlackCustomEmojis teamId nonempty (List.length results)) model2
+                        |> Tuple.mapSecond (\logCmd -> Command.batch [ logCmd, cmd ])
+
+                Nothing ->
+                    ( model2, cmd )
+
         GotDiscordMessageCustomEmojis guildOrDmId results time ->
             let
                 ( errors, customEmojis, newCustomEmojis ) =
-                    gotDiscordCustomEmojis results model
+                    gotCustomEmojis results model
             in
             case List.Nonempty.fromList errors of
                 Just nonempty ->
@@ -2784,11 +2807,11 @@ gotDiscordStickers results model =
         results
 
 
-gotDiscordCustomEmojis :
+gotCustomEmojis :
     List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )
     -> BackendModel
     -> ( List ( Id CustomEmojiId, Http.Error ), SeqDict (Id CustomEmojiId) CustomEmojiData, SeqDict (Id CustomEmojiId) CustomEmojiData )
-gotDiscordCustomEmojis results model =
+gotCustomEmojis results model =
     List.foldl
         (\( customEmojiId, result ) ( errors2, customEmojis2, newCustomEmojis2 ) ->
             case result of
@@ -2977,14 +3000,15 @@ loadSlackWorkspaceData model cookie token self team =
                         List.concatMap Slack.messageFiles history2.messages
                             ++ List.concatMap (List.concatMap Slack.messageFiles) (SeqDict.values history2.replies)
                 in
-                Task.map4
-                    (\users2 selfIcon workspaceIcon files ->
+                Task.map5
+                    (\users2 selfIcon workspaceIcon files customEmojis ->
                         { channels = channels
                         , dmChannels = dmChannels
                         , users = users2
                         , selfIcon = selfIcon
                         , workspaceIcon = workspaceIcon
                         , files = files
+                        , customEmojis = customEmojis
                         }
                     )
                     (List.map
@@ -3005,6 +3029,7 @@ loadSlackWorkspaceData model cookie token self team =
                         |> List.filter (\file -> not (SeqDict.member file.id model.slackFiles))
                         |> uploadSlackFiles model.serverSecret cookie token
                     )
+                    (Slack.customEmojis model.serverSecret cookie token)
             )
 
 
@@ -4775,7 +4800,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 slackGuildOrDmId
                                 (\session slackUser slackChannelId ->
                                     case
-                                        ( slackReactionName emoji
+                                        ( SlackSync.emojiToSlackName (SlackSync.teamCustomEmojis slackUser.user.teamId model) emoji
                                         , updateSlackConversation
                                             slackGuildOrDmId
                                             (\conversation ->
@@ -5007,7 +5032,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 slackGuildOrDmId
                                 (\_ slackUser slackChannelId ->
                                     case
-                                        ( slackReactionName emoji
+                                        ( SlackSync.emojiToSlackName (SlackSync.teamCustomEmojis slackUser.user.teamId model) emoji
                                         , updateSlackConversation
                                             slackGuildOrDmId
                                             (\conversation ->
@@ -6586,6 +6611,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         attachedFiles2 : SeqDict (Id FileId) FileData
                                         attachedFiles2 =
                                             BackendExtra.validateAttachedFiles model.files attachedFiles
+
+                                        customEmojiNames : SeqDict (Id CustomEmojiId) String
+                                        customEmojiNames =
+                                            SlackSync.customEmojiNames (SlackSync.teamCustomEmojis slackUser.user.teamId model)
                                     in
                                     ( { model
                                         | sendMessageRateLimits = sendMessageRateLimits
@@ -6600,8 +6629,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         slackUser
                                         slackChannelId
                                         maybeSlackThreadId
-                                        (RichText.toString timezone False workspaceUsers channelMentions richText)
-                                        (RichText.toSlack richText)
+                                        (RichText.toString timezone False workspaceUsers channelMentions richText
+                                            |> slackCustomEmojiText customEmojiNames richText
+                                        )
+                                        (RichText.toSlack customEmojiNames richText)
                                         attachedFiles2
                                         |> Task.attempt (SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText attachedFiles2)
                                     )
@@ -6655,6 +6686,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 richText : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
                                 richText =
                                     RichText.fromNonemptyString timezone workspaceUsers channelMentions text
+
+                                customEmojiNames : SeqDict (Id CustomEmojiId) String
+                                customEmojiNames =
+                                    SlackSync.customEmojiNames (SlackSync.teamCustomEmojis slackUser.user.teamId model)
                             in
                             case
                                 updateSlackConversation
@@ -6694,8 +6729,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             slackUser.token
                                             slackChannelId
                                             ts
-                                            (RichText.toString timezone False workspaceUsers channelMentions richText)
-                                            (RichText.toSlack richText)
+                                            (RichText.toString timezone False workspaceUsers channelMentions richText
+                                                |> slackCustomEmojiText customEmojiNames richText
+                                            )
+                                            (RichText.toSlack customEmojiNames richText)
                                             |> Task.attempt (SlackEditedMessage time guildOrDmId)
                                         ]
                                     )
@@ -11454,6 +11491,9 @@ websocketEventUserIds event =
         Slack.WebsocketChannelRenamed _ _ ->
             []
 
+        Slack.WebsocketCustomEmojiAdded _ _ ->
+            []
+
         Slack.WebsocketOtherEvent ->
             []
 
@@ -11528,6 +11568,9 @@ websocketEventFiles event =
         Slack.WebsocketChannelRenamed _ _ ->
             []
 
+        Slack.WebsocketCustomEmojiAdded _ _ ->
+            []
+
         Slack.WebsocketOtherEvent ->
             []
 
@@ -11598,7 +11641,7 @@ handleSlackWebsocketEvent linkedUser event model =
         Slack.WebsocketMessageCreated channelString message ->
             case
                 ( slackChannelFromWebsocket linkedUser message.user channelString model
-                , ( SlackSync.toMessage model.slackFiles message, SlackSync.toMessage model.slackFiles message )
+                , ( SlackSync.toMessage model.slackFiles (SlackSync.teamCustomEmojis linkedUser.user.teamId model) message, SlackSync.toMessage model.slackFiles (SlackSync.teamCustomEmojis linkedUser.user.teamId model) message )
                 )
             of
                 ( Just guildOrDmId, ( Just (UserTextMessage data), Just (UserTextMessage threadData) ) ) ->
@@ -11677,7 +11720,7 @@ handleSlackWebsocketEvent linkedUser event model =
         Slack.WebsocketMessageChanged channelString message editedAt ->
             case
                 ( slackChannelFromWebsocket linkedUser message.user channelString model
-                , SlackSync.toMessage model.slackFiles message
+                , SlackSync.toMessage model.slackFiles (SlackSync.teamCustomEmojis linkedUser.user.teamId model) message
                 )
             of
                 ( Just guildOrDmId, Just (UserTextMessage data) ) ->
@@ -11740,13 +11783,12 @@ handleSlackWebsocketEvent linkedUser event model =
                     ( model, Command.none )
 
         Slack.WebsocketReactionAdded { user, reaction, channel, messageId } ->
-            case ( slackChannelFromWebsocket linkedUser user channel model, SlackEmoji.fromSlackName reaction ) of
-                ( Just guildOrDmId, Just unicodeEmoji ) ->
-                    let
-                        emoji : EmojiOrCustomEmoji
-                        emoji =
-                            EmojiOrCustomEmoji_Emoji unicodeEmoji
-                    in
+            case
+                ( slackChannelFromWebsocket linkedUser user channel model
+                , SlackSync.emojiFromSlackName (SlackSync.teamCustomEmojis linkedUser.user.teamId model) reaction
+                )
+            of
+                ( Just guildOrDmId, Just emoji ) ->
                     case
                         updateSlackConversation
                             guildOrDmId
@@ -11786,13 +11828,12 @@ handleSlackWebsocketEvent linkedUser event model =
                     ( model, Command.none )
 
         Slack.WebsocketReactionRemoved { user, reaction, channel, messageId } ->
-            case ( slackChannelFromWebsocket linkedUser user channel model, SlackEmoji.fromSlackName reaction ) of
-                ( Just guildOrDmId, Just unicodeEmoji ) ->
-                    let
-                        emoji : EmojiOrCustomEmoji
-                        emoji =
-                            EmojiOrCustomEmoji_Emoji unicodeEmoji
-                    in
+            case
+                ( slackChannelFromWebsocket linkedUser user channel model
+                , SlackSync.emojiFromSlackName (SlackSync.teamCustomEmojis linkedUser.user.teamId model) reaction
+                )
+            of
+                ( Just guildOrDmId, Just emoji ) ->
                     case
                         updateSlackConversation
                             guildOrDmId
@@ -11890,6 +11931,90 @@ handleSlackWebsocketEvent linkedUser event model =
 
         Slack.WebsocketConversationsChanged ->
             refreshSlackConversations linkedUser model
+
+        Slack.WebsocketCustomEmojiAdded name source ->
+            let
+                teamId : Slack.Id Slack.TeamId
+                teamId =
+                    linkedUser.user.teamId
+
+                emojis :
+                    { tasks : List (Task BackendOnly Never ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+                    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+                    , workspaceEmojis : SeqDict String (Id CustomEmojiId)
+                    }
+                emojis =
+                    addSlackCustomEmojis
+                        model.serverSecret
+                        [ ( name, source ) ]
+                        { tasks = [], customEmojis = model.customEmojis, workspaceEmojis = SlackSync.teamCustomEmojis teamId model }
+            in
+            case ( SeqDict.member name (SlackSync.teamCustomEmojis teamId model), SeqDict.get name emojis.workspaceEmojis ) of
+                ( False, Just customEmojiId ) ->
+                    case SeqDict.get customEmojiId emojis.customEmojis of
+                        Just customEmoji ->
+                            let
+                                linkedTo : List (Id UserId)
+                                linkedTo =
+                                    SeqDict.foldl
+                                        (\_ userData list ->
+                                            case userData of
+                                                SlackFullData linkedUser2 ->
+                                                    if linkedUser2.user.teamId == teamId then
+                                                        linkedUser2.linkedTo :: list
+
+                                                    else
+                                                        list
+
+                                                SlackBasicData _ ->
+                                                    list
+                                        )
+                                        []
+                                        model.slackUsers
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | customEmojis = emojis.customEmojis
+                                        , slackWorkspaces =
+                                            SeqDict.updateIfExists
+                                                teamId
+                                                (\workspace -> { workspace | customEmojis = emojis.workspaceEmojis })
+                                                model.slackWorkspaces
+                                        , users =
+                                            List.foldl
+                                                (\userId users ->
+                                                    NonemptyDict.updateIfExists
+                                                        userId
+                                                        (\user -> { user | availableCustomEmojis = SeqSet.insert customEmojiId user.availableCustomEmojis })
+                                                        users
+                                                )
+                                                model.users
+                                                linkedTo
+                                    }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ Broadcast.toSlackTeam
+                                    teamId
+                                    (Server_Slack_CustomEmojiAdded teamId customEmojiId customEmoji |> ServerChange)
+                                    model2
+                                , case emojis.tasks of
+                                    [] ->
+                                        Command.none
+
+                                    _ ->
+                                        Task.sequence emojis.tasks
+                                            |> Task.andThen (\results -> Task.map (GotSlackCustomEmojis teamId results) Time.now)
+                                            |> Task.perform identity
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
 
         Slack.WebsocketChannelRenamed channelId name ->
             let
@@ -12090,14 +12215,194 @@ sendSlackMessage secretKey slackUser channelId maybeThreadId text blocks attache
 
 
 {-| Adds what loadSlackWorkspaceData loaded, keeping the messages of conversations we already had.
+The workspace's custom emoji start out loading and are copied to at-chat afterwards, so linking
+doesn't wait on them, and the at-chat user the Slack account is linked to can use all of them.
 -}
-addLoadedSlackWorkspace : Slack.Id Slack.TeamId -> Slack.Id Slack.UserId -> LoadedSlackWorkspace -> BackendModel -> BackendModel
-addLoadedSlackWorkspace teamId slackUserId { channels, dmChannels, users, selfIcon, workspaceIcon, files } model =
+addLoadedSlackWorkspace :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.UserId
+    -> LoadedSlackWorkspace
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addLoadedSlackWorkspace teamId slackUserId { channels, dmChannels, users, selfIcon, workspaceIcon, files, customEmojis } model =
     let
         slackFiles : SeqDict (Slack.Id Slack.FileId) SlackFileData
         slackFiles =
             SeqDict.union files model.slackFiles
+
+        emojis :
+            { tasks : List (Task BackendOnly Never ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+            , workspaceEmojis : SeqDict String (Id CustomEmojiId)
+            }
+        emojis =
+            addSlackCustomEmojis
+                model.serverSecret
+                customEmojis
+                { tasks = [], customEmojis = model.customEmojis, workspaceEmojis = SlackSync.teamCustomEmojis teamId model }
+
+        model2 : BackendModel
+        model2 =
+            { model
+                | customEmojis = emojis.customEmojis
+                , users =
+                    case SeqDict.get slackUserId model.slackUsers of
+                        Just (SlackFullData linkedUser) ->
+                            NonemptyDict.updateIfExists
+                                linkedUser.linkedTo
+                                (\user ->
+                                    { user
+                                        | availableCustomEmojis =
+                                            SeqDict.values emojis.workspaceEmojis
+                                                |> SeqSet.fromList
+                                                |> SeqSet.union user.availableCustomEmojis
+                                    }
+                                )
+                                model.users
+
+                        Just (SlackBasicData _) ->
+                            model.users
+
+                        Nothing ->
+                            model.users
+            }
     in
+    ( addLoadedSlackWorkspaceHelper teamId slackUserId slackFiles emojis.workspaceEmojis channels dmChannels users selfIcon workspaceIcon model2
+    , case emojis.tasks of
+        [] ->
+            Command.none
+
+        _ ->
+            Task.sequence emojis.tasks
+                |> Task.andThen (\results -> Task.map (GotSlackCustomEmojis teamId results) Time.now)
+                |> Task.perform identity
+    )
+
+
+{-| Custom emoji we haven't seen in this workspace before get an at-chat custom emoji each. Aliases
+go by the emoji they name, and aliases of Slack's standard emoji are left out.
+-}
+addSlackCustomEmojis :
+    SecretId ServerSecret
+    -> List ( String, Slack.CustomEmojiSource )
+    ->
+        { tasks : List (Task BackendOnly Never ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        , workspaceEmojis : SeqDict String (Id CustomEmojiId)
+        }
+    ->
+        { tasks : List (Task BackendOnly Never ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        , workspaceEmojis : SeqDict String (Id CustomEmojiId)
+        }
+addSlackCustomEmojis secretKey slackEmojis state =
+    let
+        state2 =
+            List.foldl
+                (\( name, source ) acc ->
+                    case source of
+                        Slack.CustomEmojiImage url ->
+                            case slackCustomEmojiName name of
+                                Just emojiName ->
+                                    if SeqDict.member name acc.workspaceEmojis || not (Slack.isCustomEmojiHostedBySlack url) then
+                                        acc
+
+                                    else
+                                        let
+                                            customEmojiId : Id CustomEmojiId
+                                            customEmojiId =
+                                                Id.nextId acc.customEmojis
+                                        in
+                                        { tasks =
+                                            (FileStatus.uploadUrl secretKey url []
+                                                |> Task.map Ok
+                                                |> Task.onError (\error -> Task.succeed (Err error))
+                                                |> Task.map (Tuple.pair customEmojiId)
+                                            )
+                                                :: acc.tasks
+                                        , customEmojis =
+                                            SeqDict.insert
+                                                customEmojiId
+                                                { url = CustomEmojiLoading
+                                                , name = emojiName
+                                                , isAnimated = String.endsWith ".gif" url
+                                                }
+                                                acc.customEmojis
+                                        , workspaceEmojis = SeqDict.insert name customEmojiId acc.workspaceEmojis
+                                        }
+
+                                Nothing ->
+                                    acc
+
+                        Slack.CustomEmojiAlias _ ->
+                            acc
+                )
+                state
+                slackEmojis
+    in
+    List.foldl
+        (\( name, source ) acc ->
+            case source of
+                Slack.CustomEmojiImage _ ->
+                    acc
+
+                Slack.CustomEmojiAlias target ->
+                    case SeqDict.get target acc.workspaceEmojis of
+                        Just customEmojiId ->
+                            { acc | workspaceEmojis = SeqDict.insert name customEmojiId acc.workspaceEmojis }
+
+                        Nothing ->
+                            acc
+        )
+        state2
+        slackEmojis
+
+
+{-| Slack's emoji names can have characters at-chat's can't, such as dashes, and can be a single
+character.
+-}
+slackCustomEmojiName : String -> Maybe EmojiName
+slackCustomEmojiName name =
+    let
+        name2 : String
+        name2 =
+            String.map
+                (\char ->
+                    if Char.isAlphaNum char || char == '_' then
+                        char
+
+                    else
+                        '_'
+                )
+                name
+                |> String.left 32
+    in
+    case CustomEmoji.emojiNameFromString name2 of
+        Ok emojiName ->
+            Just emojiName
+
+        Err () ->
+            case CustomEmoji.emojiNameFromString (name2 ++ "_") of
+                Ok emojiName ->
+                    Just emojiName
+
+                Err () ->
+                    Nothing
+
+
+addLoadedSlackWorkspaceHelper :
+    Slack.Id Slack.TeamId
+    -> Slack.Id Slack.UserId
+    -> SeqDict (Slack.Id Slack.FileId) SlackFileData
+    -> SeqDict String (Id CustomEmojiId)
+    -> List ( Slack.Channel, Slack.History )
+    -> List ( Slack.DmChannel, Slack.History )
+    -> List ( Slack.User, Maybe FileHash )
+    -> Maybe FileHash
+    -> Maybe FileHash
+    -> BackendModel
+    -> BackendModel
+addLoadedSlackWorkspaceHelper teamId slackUserId slackFiles workspaceEmojis channels dmChannels users selfIcon workspaceIcon model =
     { model
         | slackFiles = slackFiles
         , slackWorkspaces =
@@ -12106,6 +12411,7 @@ addLoadedSlackWorkspace teamId slackUserId { channels, dmChannels, users, selfIc
                 (\workspace ->
                     { workspace
                         | icon = workspaceIcon
+                        , customEmojis = workspaceEmojis
                         , channels =
                             List.foldl
                                 (\( channel, channelHistory ) dict ->
@@ -12122,7 +12428,7 @@ addLoadedSlackWorkspace teamId slackUserId { channels, dmChannels, users, selfIc
                                             Nothing ->
                                                 let
                                                     conversation =
-                                                        SlackSync.conversationFromHistory slackFiles channelHistory
+                                                        SlackSync.conversationFromHistory slackFiles workspaceEmojis channelHistory
                                                 in
                                                 { name = ChannelName.fromStringLossy channel.name
                                                 , isPrivate = channel.isPrivate
@@ -12154,7 +12460,7 @@ addLoadedSlackWorkspace teamId slackUserId { channels, dmChannels, users, selfIc
                             Nothing ->
                                 let
                                     conversation =
-                                        SlackSync.conversationFromHistory slackFiles dmHistory
+                                        SlackSync.conversationFromHistory slackFiles workspaceEmojis dmHistory
                                 in
                                 { teamId = teamId
                                 , members = dmChannel.members
@@ -12505,16 +12811,29 @@ addToSlackConversation threadRoute slackMessageId channelMessage threadMessage c
                     |> Just
 
 
-{-| Slack has no way to tell which of its custom emojis an at-chat custom emoji is.
+{-| Slack shows a message's text in notifications, where custom emojis go by their names.
 -}
-slackReactionName : EmojiOrCustomEmoji -> Maybe String
-slackReactionName emoji =
-    case emoji of
-        EmojiOrCustomEmoji_Emoji unicodeEmoji ->
-            SlackEmoji.toSlackName unicodeEmoji
+slackCustomEmojiText :
+    SeqDict (Id CustomEmojiId) String
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> String
+    -> String
+slackCustomEmojiText customEmojiNames richText text =
+    List.foldl
+        (\customEmojiId text2 ->
+            String.replace
+                (CustomEmoji.idToString customEmojiId)
+                (case SeqDict.get customEmojiId customEmojiNames of
+                    Just name ->
+                        ":" ++ name ++ ":"
 
-        EmojiOrCustomEmoji_CustomEmoji _ ->
-            Nothing
+                    Nothing ->
+                        ""
+                )
+                text2
+        )
+        text
+        (RichText.customEmojis richText)
 
 
 slackMessageTs : ThreadRouteWithMessage -> SlackConversation -> Maybe (Slack.Id Slack.MessageId)
@@ -12632,6 +12951,13 @@ addLinkedSlackUser linkedAt userId cookie token { self, team } model =
 
                             Nothing ->
                                 SeqDict.empty
+                    , customEmojis =
+                        case maybeWorkspace of
+                            Just workspace ->
+                                workspace.customEmojis
+
+                            Nothing ->
+                                SeqDict.empty
                     }
                         |> Just
                 )
@@ -12711,6 +13037,10 @@ slackLinkedUserLoaded slackUserId teamId newChannels newDmChannels model =
                     { workspaces = SlackSync.workspacesToFrontend linked model.slackWorkspaces
                     , dmChannels = SlackSync.dmChannelsToFrontend linked model.slackDmChannels
                     , users = SlackSync.usersToFrontend model.users linked model.slackUsers
+                    , customEmojis =
+                        SeqDict.values (SlackSync.teamCustomEmojis teamId model)
+                            |> List.filterMap (\customEmojiId -> SeqDict.get customEmojiId model.customEmojis |> Maybe.map (Tuple.pair customEmojiId))
+                            |> SeqDict.fromList
                     , newChannels = newChannels
                     , newDmChannels = newDmChannels
                     }

@@ -6380,10 +6380,11 @@ emojiTextWithSelection emojiData selection startIndex text =
 very old messages) fall back to their plain text.
 -}
 fromSlack :
-    String
+    SeqDict String (Id CustomEmojiId)
+    -> String
     -> List Slack.RichTextElement
     -> Maybe (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
-fromSlack text elements =
+fromSlack customEmojis2 text elements =
     case elements of
         [] ->
             String.replace "&lt;" "<" text
@@ -6397,7 +6398,7 @@ fromSlack text elements =
                 (\element revNodes ->
                     case element of
                         Slack.RichTextSection inlines ->
-                            List.reverse (List.filterMap slackInline inlines) ++ revNodes
+                            List.reverse (List.filterMap (slackInline customEmojis2) inlines) ++ revNodes
 
                         Slack.RichTextPreformatted inlines ->
                             let
@@ -6412,11 +6413,11 @@ fromSlack text elements =
                                 CodeBlock NoLanguage code :: revNodes
 
                         Slack.RichTextQuote inlines ->
-                            BlockQuote (slackLeadingLineBreak revNodes) (List.filterMap slackInline inlines)
+                            BlockQuote (slackLeadingLineBreak revNodes) (List.filterMap (slackInline customEmojis2) inlines)
                                 :: dropTrailingLineBreak revNodes
 
                         Slack.RichTextList items ->
-                            case List.Nonempty.fromList (List.map (List.filterMap slackInline) items) of
+                            case List.Nonempty.fromList (List.map (List.filterMap (slackInline customEmojis2)) items) of
                                 Just items2 ->
                                     BulletPoint (slackLeadingLineBreak revNodes) items2 :: dropTrailingLineBreak revNodes
 
@@ -6465,8 +6466,8 @@ dropTrailingLineBreak revNodes =
             revNodes
 
 
-slackInline : Slack.RichTextInline -> Maybe (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-slackInline inline =
+slackInline : SeqDict String (Id CustomEmojiId) -> Slack.RichTextInline -> Maybe (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+slackInline customEmojis2 inline =
     case inline of
         Slack.RichText_Text { text, style } ->
             if style.code then
@@ -6508,7 +6509,12 @@ slackInline inline =
 
         Slack.RichText_Emoji { name, unicode, style } ->
             (if unicode == "" then
-                slackText (":" ++ name ++ ":")
+                case SeqDict.get name customEmojis2 of
+                    Just customEmojiId ->
+                        Just (CustomEmoji customEmojiId)
+
+                    Nothing ->
+                        slackText (":" ++ name ++ ":")
 
              else
                 slackText (slackUnicode unicode)
@@ -6603,20 +6609,23 @@ slackStyle style node =
 
 
 {-| The rich\_text elements to post to Slack. Things Slack has nothing for (stickers, attached files,
-custom emojis) are left out, and underline and spoilers become plain text.
+custom emojis from elsewhere) are left out, and underline and spoilers become plain text.
 -}
-toSlack : Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)) -> List Slack.RichTextElement
-toSlack content =
+toSlack :
+    SeqDict (Id CustomEmojiId) String
+    -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> List Slack.RichTextElement
+toSlack customEmojiNames content =
     let
         ( revElements, revSection ) =
             List.foldl
                 (\node ( revElements2, revSection2 ) ->
-                    case toSlackBlock node of
+                    case toSlackBlock customEmojiNames node of
                         Just element ->
                             ( element :: closeSlackSection revSection2 revElements2, [] )
 
                         Nothing ->
-                            ( revElements2, List.reverse (toSlackInlines Slack.noStyle node) ++ revSection2 )
+                            ( revElements2, List.reverse (toSlackInlines customEmojiNames Slack.noStyle node) ++ revSection2 )
                 )
                 ( [], [] )
                 (List.Nonempty.toList content)
@@ -6624,17 +6633,17 @@ toSlack content =
     closeSlackSection revSection revElements |> List.reverse
 
 
-toSlackBlock : RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> Maybe Slack.RichTextElement
-toSlackBlock node =
+toSlackBlock : SeqDict (Id CustomEmojiId) String -> RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> Maybe Slack.RichTextElement
+toSlackBlock customEmojiNames node =
     case node of
         BlockQuote _ list ->
-            Slack.RichTextQuote (List.concatMap (toSlackInlines Slack.noStyle) list) |> Just
+            Slack.RichTextQuote (List.concatMap (toSlackInlines customEmojiNames Slack.noStyle) list) |> Just
 
         CodeBlock _ code ->
             Slack.RichTextPreformatted [ Slack.RichText_Text { text = code, style = Slack.noStyle } ] |> Just
 
         BulletPoint _ items ->
-            Slack.RichTextList (List.map (List.concatMap (toSlackInlines Slack.noStyle)) (List.Nonempty.toList items))
+            Slack.RichTextList (List.map (List.concatMap (toSlackInlines customEmojiNames Slack.noStyle)) (List.Nonempty.toList items))
                 |> Just
 
         UserMention _ ->
@@ -6698,8 +6707,12 @@ closeSlackSection revSection revElements =
         Slack.RichTextSection (List.reverse revSection) :: revElements
 
 
-toSlackInlines : Slack.Style -> RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> List Slack.RichTextInline
-toSlackInlines style node =
+toSlackInlines :
+    SeqDict (Id CustomEmojiId) String
+    -> Slack.Style
+    -> RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
+    -> List Slack.RichTextInline
+toSlackInlines customEmojiNames style node =
     case node of
         UserMention userId ->
             [ Slack.RichText_User userId ]
@@ -6711,25 +6724,25 @@ toSlackInlines style node =
             [ Slack.RichText_Text { text = String.cons char rest, style = style } ]
 
         Bold nonempty ->
-            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames { style | bold = True }) (List.Nonempty.toList nonempty)
 
         Italic nonempty ->
-            List.concatMap (toSlackInlines { style | italic = True }) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames { style | italic = True }) (List.Nonempty.toList nonempty)
 
         Underline nonempty ->
-            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty)
 
         Strikethrough nonempty ->
-            List.concatMap (toSlackInlines { style | strike = True }) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames { style | strike = True }) (List.Nonempty.toList nonempty)
 
         Spoiler nonempty ->
-            List.concatMap (toSlackInlines style) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames style) (List.Nonempty.toList nonempty)
 
         BlockQuote _ list ->
-            List.concatMap (toSlackInlines style) list
+            List.concatMap (toSlackInlines customEmojiNames style) list
 
         Heading _ _ nonempty ->
-            List.concatMap (toSlackInlines { style | bold = True }) (List.Nonempty.toList nonempty)
+            List.concatMap (toSlackInlines customEmojiNames { style | bold = True }) (List.Nonempty.toList nonempty)
 
         Hyperlink url ->
             [ Slack.RichText_Link { url = Url.toString url, text = "", style = style } ]
@@ -6752,12 +6765,17 @@ toSlackInlines style node =
         Sticker _ ->
             []
 
-        CustomEmoji _ ->
-            []
+        CustomEmoji customEmojiId ->
+            case SeqDict.get customEmojiId customEmojiNames of
+                Just name ->
+                    [ Slack.RichText_Emoji { name = name, unicode = "", style = style } ]
+
+                Nothing ->
+                    []
 
         BulletPoint _ items ->
             List.Nonempty.toList items
-                |> List.map (List.concatMap (toSlackInlines style))
+                |> List.map (List.concatMap (toSlackInlines customEmojiNames style))
                 |> List.intersperse [ Slack.RichText_Text { text = "\n", style = Slack.noStyle } ]
                 |> List.concat
 

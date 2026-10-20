@@ -12792,7 +12792,13 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
         ]
         [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
-            [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
+            [ emojiSelector
+                isMobile
+                (MessageMenu.availableCustomEmojisAndStickers (SlackGuildOrDmId guildOrDmIdNoThread) local |> Tuple.first)
+                SeqSet.empty
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -12930,7 +12936,13 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
         ]
         [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
-            [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
+            [ emojiSelector
+                isMobile
+                (MessageMenu.availableCustomEmojisAndStickers (SlackGuildOrDmId guildOrDmIdNoThread) local |> Tuple.first)
+                SeqSet.empty
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

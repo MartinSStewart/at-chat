@@ -1,8 +1,9 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackRemovePastedWorkspaceTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackRemovePastedWorkspaceTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackCustomEmojiTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
 import Codec
+import CustomEmoji
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -19,8 +20,11 @@ import IdArray
 import Json.Decode
 import Json.Encode
 import List.Extra
+import List.Nonempty
+import Local
 import Message exposing (Message(..))
 import MessageDropdown
+import MessageMenu
 import MuteSettings
 import NonemptyDict
 import NonemptySet
@@ -34,10 +38,11 @@ import SearchOverlay
 import SeqDict
 import SeqSet
 import Slack
-import SlackEmoji
+import SlackSync
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Url
 import User
 import UserOptions
 
@@ -1913,27 +1918,26 @@ slackRequestsTo endpoint data =
 -}
 codeMessageReactions : E2EHelper.BackendModel2 -> List ( String, List String )
 codeMessageReactions backend =
-    case
-        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
-            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
-            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
-    of
-        Just (UserTextMessage data) ->
-            SeqDict.toList data.reactions
-                |> List.map
-                    (\( emoji, users ) ->
-                        ( case emoji of
-                            Emoji.EmojiOrCustomEmoji_Emoji unicodeEmoji ->
-                                SlackEmoji.toSlackName unicodeEmoji |> Maybe.withDefault "unknown"
+    case SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces of
+        Just workspace ->
+            case
+                SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels
+                    |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
+            of
+                Just (UserTextMessage data) ->
+                    SeqDict.toList data.reactions
+                        |> List.map
+                            (\( emoji, users ) ->
+                                ( SlackSync.emojiToSlackName workspace.customEmojis emoji |> Maybe.withDefault "unknown"
+                                , NonemptySet.toList users |> List.map Slack.idToString |> List.sort
+                                )
+                            )
+                        |> List.sortBy Tuple.first
 
-                            Emoji.EmojiOrCustomEmoji_CustomEmoji _ ->
-                                "custom"
-                        , NonemptySet.toList users |> List.map Slack.idToString |> List.sort
-                        )
-                    )
-                |> List.sortBy Tuple.first
+                _ ->
+                    []
 
-        _ ->
+        Nothing ->
             []
 
 
@@ -1985,12 +1989,15 @@ slackReactionsAndNewThreadTest config =
                     (\backend ->
                         if
                             codeMessageReactions backend
-                                == [ ( "+1", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                                == [ ( "+1", [ "U09DK3NCPMG" ] )
+                                   , ( "partyparrot", [ "U09DK3NCPMG" ] )
+                                   , ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] )
+                                   ]
                         then
                             Ok ()
 
                         else
-                            Err "Expected the reactions from Slack's history without the custom emoji"
+                            Err "Expected the reactions from Slack's history"
                     )
                 , E2EHelper.hasExactText admin [ "👍", "👋🏼" ]
                 , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
@@ -2036,7 +2043,10 @@ slackReactionsAndNewThreadTest config =
                             (\backend ->
                                 if
                                     codeMessageReactions backend
-                                        == [ ( "tada", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                                        == [ ( "partyparrot", [ "U09DK3NCPMG" ] )
+                                           , ( "tada", [ "U09DK3NCPMG" ] )
+                                           , ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] )
+                                           ]
                                 then
                                     Ok ()
 
@@ -2861,3 +2871,266 @@ slackReloadUserTest config =
                 ]
             )
         ]
+
+
+slackCustomEmojiTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackCustomEmojiTest config =
+    E2EHelper.startTest
+        "A Slack workspace's custom emoji are copied when linking or added and work in messages and reactions both ways"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        let
+                            workspaceEmojis : SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+                            workspaceEmojis =
+                                testSlackCustomEmojis backend
+
+                            customEmoji : String -> Maybe CustomEmoji.CustomEmojiData
+                            customEmoji name =
+                                case SeqDict.get name workspaceEmojis of
+                                    Just customEmojiId ->
+                                        SeqDict.get customEmojiId (E2EHelper.unwrapBackend backend).customEmojis
+
+                                    Nothing ->
+                                        Nothing
+                        in
+                        if List.sort (SeqDict.keys workspaceEmojis) /= [ "parrot", "partyparrot", "ship-it" ] then
+                            Err ("Expected the custom emoji hosted by Slack and their aliases, got " ++ String.join ", " (SeqDict.keys workspaceEmojis))
+
+                        else if SeqDict.get "parrot" workspaceEmojis /= SeqDict.get "partyparrot" workspaceEmojis then
+                            Err "Expected an alias to be the emoji it names"
+
+                        else
+                            case ( customEmoji "partyparrot", customEmoji "ship-it" ) of
+                                ( Just partyparrot, Just shipIt ) ->
+                                    case ( partyparrot.url, partyparrot.isAnimated, CustomEmoji.emojiNameToString shipIt.name ) of
+                                        ( CustomEmoji.CustomEmojiInternal _ _, True, "ship_it" ) ->
+                                            Ok ()
+
+                                        _ ->
+                                            Err "Expected partyparrot to be copied and animated, and ship-it to be named ship_it"
+
+                                _ ->
+                                    Err "Expected the custom emoji to be in at-chat"
+                    )
+                , T.checkState 100 (adminCanUseTestSlackCustomEmojis admin [ "parrot", "partyparrot", "ship-it" ])
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get "partyparrot" (testSlackCustomEmojis backend) of
+                            Just customEmojiId ->
+                                if List.member ( "partyparrot", [ "U09DK3NCPMG" ] ) (codeMessageReactions backend) then
+                                    case
+                                        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
+                                    of
+                                        Just (UserTextMessage data) ->
+                                            if SeqDict.member (Emoji.EmojiOrCustomEmoji_CustomEmoji customEmojiId) data.reactions then
+                                                Ok ()
+
+                                            else
+                                                Err "Expected the history's partyparrot reaction to be the custom emoji"
+
+                                        _ ->
+                                            Err "Expected the code message"
+
+                                else
+                                    Err "Expected the history's partyparrot reaction to be kept"
+
+                            Nothing ->
+                                Err "Expected partyparrot"
+                    )
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Nice :partyp"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 12, end = 12 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":partyparrot:" ])
+
+                -- What picking the suggestion writes into the message is put there by js, so it's typed in.
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , T.andThen
+                    100
+                    (\data ->
+                        case SeqDict.get "partyparrot" (testSlackCustomEmojis data.backend) of
+                            Just customEmojiId ->
+                                [ admin.input 100 Pages.Guild.channelTextInputId ("Nice " ++ CustomEmoji.idToString customEmojiId)
+                                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 100 (\_ -> Err "Expected partyparrot") ]
+                    )
+                , T.checkState
+                    1000
+                    (\data ->
+                        case slackRequestsTo "chat.postMessage" data |> List.reverse of
+                            fields :: _ ->
+                                let
+                                    field : String -> String
+                                    field name =
+                                        List.filterMap
+                                            (\field2 ->
+                                                if String.startsWith (name ++ "=") field2 then
+                                                    String.dropLeft (String.length name + 1) field2 |> Url.percentDecode
+
+                                                else
+                                                    Nothing
+                                            )
+                                            fields
+                                            |> String.concat
+                                in
+                                if field "text" /= "Nice :partyparrot:" then
+                                    Err ("Expected the text to name the custom emoji, got " ++ field "text")
+
+                                else if not (String.contains "{\"type\":\"emoji\",\"name\":\"partyparrot\"" (field "blocks")) then
+                                    Err ("Expected the blocks to have the custom emoji, got " ++ field "blocks")
+
+                                else
+                                    Ok ()
+
+                            [] ->
+                                Err "Expected the message to be sent to Slack"
+                    )
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"C09DJDQSWLU","user":"U09DK3NCPMG","text":"Wow :parrot:","ts":"1791640400.000100","blocks":[{"type":"rich_text","block_id":"e1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Wow "},{"type":"emoji","name":"parrot"}]}]}]}"""
+                        , T.websocketSendString 100 connection (slackReactionEvent "reaction_added" "ship-it")
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case
+                                    ( SeqDict.get "partyparrot" (testSlackCustomEmojis backend)
+                                    , SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                        |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                        |> Maybe.andThen (\channel -> IdArray.toList channel.messages |> List.reverse |> List.head)
+                                    )
+                                of
+                                    ( Just customEmojiId, Just (UserTextMessage data) ) ->
+                                        if List.Nonempty.toList data.content.content /= [ RichText.NormalText 'W' "ow ", RichText.CustomEmoji customEmojiId ] then
+                                            Err "Expected the message from Slack to show the custom emoji"
+
+                                        else if not (List.member ( "ship-it", [ "U09DK3NCPMG" ] ) (codeMessageReactions backend)) then
+                                            Err "Expected the custom emoji reaction from Slack to be stored"
+
+                                        else
+                                            Ok ()
+
+                                    _ ->
+                                        Err "Expected the message from Slack"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"emoji_changed","subtype":"add","name":"new-one","value":"https://emoji.slack-edge.com/T09DJDQL18U/new-one/1a2b3c4d5e6f7a8b.png","event_ts":"1791640500.000100"}"""
+                        , T.checkState 1000 (adminCanUseTestSlackCustomEmojis admin [ "new-one", "parrot", "partyparrot", "ship-it" ])
+                        ]
+                    )
+                , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , admin.click 100 (Dom.id "miniView_showReactionEmojiSelector")
+                , admin.input 100 Emoji.searchInputId "partyparrot"
+                , admin.click 100 (Emoji.emojiButtonId 0)
+                , T.checkState
+                    100
+                    (\data ->
+                        if List.member [ "channel=C09DJDQSWLU", "timestamp=1791638770.000100", "name=partyparrot" ] (slackRequestsTo "reactions.add" data) then
+                            Ok ()
+
+                        else
+                            Err "Expected reacting with the custom emoji to send its Slack name"
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+testSlackCustomEmojis : E2EHelper.BackendModel2 -> SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+testSlackCustomEmojis backend =
+    case SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces of
+        Just workspace ->
+            workspace.customEmojis
+
+        Nothing ->
+            SeqDict.empty
+
+
+{-| Checks the admin can pick each of test-slack's custom emoji in #all-test-slack, and that they've
+been copied to at-chat.
+-}
+adminCanUseTestSlackCustomEmojis :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> List String
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+adminCanUseTestSlackCustomEmojis admin names data =
+    case SeqDict.get admin.clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        available : SeqSet.SeqSet (Id.Id Id.CustomEmojiId)
+                        available =
+                            MessageMenu.availableCustomEmojisAndStickers
+                                (Id.SlackGuildOrDmId
+                                    (Id.SlackGuildOrDmId_Workspace
+                                        { currentUserId = adminSlackUserId, teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+                                    )
+                                )
+                                local
+                                |> Tuple.first
+
+                        workspaceEmojis : SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+                        workspaceEmojis =
+                            testSlackCustomEmojis data.backend
+                    in
+                    if List.sort (SeqDict.keys workspaceEmojis) /= names then
+                        Err ("Expected the workspace's custom emoji to be " ++ String.join ", " names)
+
+                    else if
+                        List.all
+                            (\customEmojiId ->
+                                SeqSet.member customEmojiId available
+                                    && (case SeqDict.get customEmojiId local.localUser.customEmojis |> Maybe.map .url of
+                                            Just (CustomEmoji.CustomEmojiInternal _ _) ->
+                                                True
+
+                                            _ ->
+                                                False
+                                       )
+                            )
+                            (SeqDict.values workspaceEmojis)
+                    then
+                        Ok ()
+
+                    else
+                        Err "Expected the admin to be able to use the copied custom emoji"
+
+                _ ->
+                    Err "Expected admin to be logged in"
+
+        _ ->
+            Err "Expected admin frontend to be loaded"

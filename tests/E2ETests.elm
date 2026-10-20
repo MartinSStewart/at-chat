@@ -444,6 +444,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackLinkPreviewTest normalConfig
     , E2ESlack.slackSendFileTest imageUploadConfig
     , E2ESlack.slackReloadUserTest normalConfig
+    , E2ESlack.slackCustomEmojiTest normalConfig
     , E2ESlack.slackLinkingToggleAndLimitTest normalConfig
     , E2ESlack.slackMentionOutsideChannelTest normalConfig
     , E2ESlack.slackThreadsTest normalConfig

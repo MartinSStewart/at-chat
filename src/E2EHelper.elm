@@ -2192,6 +2192,16 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                         """{"ok":false,"error":"invalid_auth"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "emoji.list" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        slackEmojiListJson
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "reactions.add" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2387,6 +2397,14 @@ slackTestUsers =
         , ( "U09DFEXKH9T", """{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}""" )
         , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":""}}""" )
         ]
+
+
+{-| partyparrot is used in a reaction in #all-test-slack's history. The emoji on another host and
+the alias of a standard emoji are left out.
+-}
+slackEmojiListJson : String
+slackEmojiListJson =
+    """{"ok":true,"emoji":{"partyparrot":"https://emoji.slack-edge.com/T09DJDQL18U/partyparrot/2c2b9d1b8e1e0f6c.gif","ship-it":"https://emoji.slack-edge.com/T09DJDQL18U/ship-it/0a1b2c3d4e5f6a7b.png","parrot":"alias:partyparrot","thumbsup_all":"alias:+1","elsewhere":"https://example.com/elsewhere.png"},"cache_ts":"1791638000.000000"}"""
 
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
@@ -3081,6 +3099,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_Slack_LinkedUserLoaded _ _ _ ->
+                            True
+
+                        Types.Server_Slack_CustomEmojisLoaded _ ->
+                            True
+
+                        Types.Server_Slack_CustomEmojiAdded _ _ _ ->
                             True
 
                         Types.Server_Slack_AddReactionEmoji _ _ _ _ ->

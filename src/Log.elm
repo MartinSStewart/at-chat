@@ -54,6 +54,7 @@ type Log
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
     | FailedToLoadSlackConversations (Slack.Id Slack.TeamId) Slack.HttpError
+    | FailedToLoadSlackCustomEmojis (Slack.Id Slack.TeamId) (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToSendSlackMessage SlackGuildOrDmId Slack.HttpError
     | FailedToChangeSlackReaction SlackGuildOrDmId Slack.HttpError
     | FailedToDeleteSlackMessage SlackGuildOrDmId Slack.HttpError
@@ -153,6 +154,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToLoadSlackConversations _ _ ->
+            Nothing
+
+        FailedToLoadSlackCustomEmojis _ _ _ ->
             Nothing
 
         FailedToSendSlackMessage _ _ ->
@@ -580,6 +584,19 @@ logContent onPressCopy emojiData customEmojis log =
                 , fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
                 , fieldRow "Error" (Ui.text (Slack.httpErrorToString error))
                 ]
+
+        FailedToLoadSlackCustomEmojis teamId nonempty totalCustomEmojis ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                (tag errorTag "Slack custom emojis failed to load"
+                    :: fieldRow "Workspace" (Ui.text (Slack.idToString teamId))
+                    :: fieldRow "Total custom emojis" (Ui.text (String.fromInt totalCustomEmojis))
+                    :: List.map
+                        (\( customEmojiId, error ) ->
+                            fieldRow ("Custom emoji " ++ Id.toString customEmojiId) (Ui.text (httpErrorToString error))
+                        )
+                        (List.Nonempty.toList nonempty)
+                )
 
         FailedToSendSlackMessage guildOrDmId error ->
             Ui.column

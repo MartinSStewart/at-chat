@@ -968,6 +968,7 @@ type BackendMsg
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotSlackCustomEmojis (Slack.Id Slack.TeamId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageCustomEmojis MessageFromGuildOrDm (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
@@ -1051,6 +1052,7 @@ type alias LoadedSlackWorkspace =
     , selfIcon : Maybe FileHash
     , workspaceIcon : Maybe FileHash
     , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
+    , customEmojis : List ( String, Slack.CustomEmojiSource )
     }
 
 
@@ -1064,6 +1066,7 @@ type alias SlackBackendWorkspace =
     , domain : String
     , icon : Maybe FileHash
     , channels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
+    , customEmojis : SeqDict String (Id CustomEmojiId)
     }
 
 
@@ -1257,9 +1260,12 @@ type ServerChange
         { workspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
         , dmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
         , users : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
         , newChannels : List (Slack.Id Slack.ChannelId)
         , newDmChannels : List (Slack.Id Slack.DmChannelId)
         }
+    | Server_Slack_CustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
+    | Server_Slack_CustomEmojiAdded (Slack.Id Slack.TeamId) (Id CustomEmojiId) CustomEmojiData
     | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)

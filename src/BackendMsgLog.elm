@@ -84,6 +84,7 @@ type BackendMsgLog
     | BackendMsgLog_GotDiscordReadyDataStickers
     | BackendMsgLog_GotDiscordMessageStickers
     | BackendMsgLog_GotDiscordReadyDataCustomEmojis
+    | BackendMsgLog_GotSlackCustomEmojis
     | BackendMsgLog_GotDiscordMessageCustomEmojis
     | BackendMsgLog_HourlyUpdate
     | BackendMsgLog_GotDiscordStandardStickerPacks
@@ -316,6 +317,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_GotDiscordReadyDataCustomEmojis ->
             "GotDiscordReadyDataCustomEmojis"
+
+        BackendMsgLog_GotSlackCustomEmojis ->
+            "GotSlackCustomEmojis"
 
         BackendMsgLog_GotDiscordMessageCustomEmojis ->
             "GotDiscordMessageCustomEmojis"
