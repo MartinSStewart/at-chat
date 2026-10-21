@@ -41,6 +41,9 @@ module BackendExtra exposing
     , getLoginData
     , handleDrawingChange
     , invalidChangeResponse
+    , isSlackChannelVisible
+    , isSlackDmChannelVisible
+    , linkedSlackUsers
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
@@ -53,7 +56,9 @@ module BackendExtra exposing
     , sendLoginEmail
     , sessionLastActiveAt
     , shouldRateLimit
+    , slackDmChannelsToFrontend
     , slackLinkLimitReached
+    , slackWorkspacesToFrontend
     , toBackendLog
     , unreadOverviewData
     , validateAttachedFiles
@@ -95,7 +100,7 @@ import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAn
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..), SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
@@ -116,7 +121,6 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
-import SlackSync
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
@@ -124,7 +128,7 @@ import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), C
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (DiscordFrontendUser, UserSession)
+import UserSession exposing (DiscordFrontendUser, SlackFrontendUser, UserSession)
 import VisibleMessages
 import WordSpellingGame exposing (WordList(..))
 
@@ -661,9 +665,9 @@ unreadOverviewData userId user model =
                 { channels = SeqDict.empty, threads = SeqDict.empty }
                 model.dmChannels
 
-        linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
-        linkedSlackUsers =
-            SlackSync.linkedUsers userId model.slackUsers
+        linkedSlackUsers2 : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linkedSlackUsers2 =
+            linkedSlackUsers userId model.slackUsers
 
         slackWorkspaces :
             { channels :
@@ -679,7 +683,7 @@ unreadOverviewData userId user model =
             SeqDict.foldl
                 (\teamId workspace dict ->
                     -- Same choice of linked Slack user as GuildColumn.slackWorkspaceCurrentUserId
-                    case SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) linkedSlackUsers |> SeqDict.keys |> List.head of
+                    case SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) linkedSlackUsers2 |> SeqDict.keys |> List.head of
                         Just slackUserId ->
                             SeqDict.foldl
                                 (\channelId channel dict2 ->
@@ -744,7 +748,7 @@ unreadOverviewData userId user model =
                 (\channelId dmChannel dict ->
                     case
                         List.Extra.find
-                            (\slackUserId -> SeqDict.member slackUserId linkedSlackUsers)
+                            (\slackUserId -> SeqDict.member slackUserId linkedSlackUsers2)
                             (NonemptySet.toList dmChannel.members)
                     of
                         Just currentUserId ->
@@ -1038,7 +1042,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
 
 sessionLastActiveAt : UserSession -> Maybe (NonemptyDict ClientId ConnectionData) -> Time.Posix
-sessionLastActiveAt session connections =
+sessionLastActiveAt session connections2 =
     let
         lastActiveWhileDisconnected : Time.Posix
         lastActiveWhileDisconnected =
@@ -1049,8 +1053,8 @@ sessionLastActiveAt session connections =
                 Nothing ->
                     session.signedInAt
     in
-    case connections of
-        Just connections2 ->
+    case connections2 of
+        Just connections3 ->
             NonemptyDict.foldl
                 (\_ connection lastActiveAt ->
                     case connection.lastRequest of
@@ -1061,7 +1065,7 @@ sessionLastActiveAt session connections =
                             lastActiveAt
                 )
                 lastActiveWhileDisconnected
-                connections2
+                connections3
 
         Nothing ->
             lastActiveWhileDisconnected
@@ -1114,6 +1118,27 @@ validateAttachedFiles uploadedFiles dict =
         dict
 
 
+{-| The Slack accounts an at-chat user has linked, and the workspace each one is in.
+-}
+linkedSlackUsers : Id UserId -> SeqDict (Slack.Id Slack.UserId) SlackUserData -> SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+linkedSlackUsers userId slackUsers =
+    SeqDict.foldl
+        (\slackUserId userData dict ->
+            case userData of
+                SlackFullData linked ->
+                    if linked.linkedTo == userId then
+                        SeqDict.insert slackUserId linked.user.teamId dict
+
+                    else
+                        dict
+
+                SlackBasicData _ ->
+                    dict
+        )
+        SeqDict.empty
+        slackUsers
+
+
 getLoginData :
     SessionId
     -> ClientId
@@ -1129,9 +1154,9 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
         linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
 
-        linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
-        linkedSlackUsers =
-            SlackSync.linkedUsers session.userId model.slackUsers
+        linkedSlackUsers2 : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+        linkedSlackUsers2 =
+            linkedSlackUsers session.userId model.slackUsers
 
         guilds : SeqDict (Id GuildId) FrontendGuild
         guilds =
@@ -1250,11 +1275,26 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
             model.discordDmChannels
-    , slackWorkspaces = SlackSync.workspacesToFrontend linkedSlackUsers model.slackWorkspaces
-    , slackDmChannels = SlackSync.dmChannelsToFrontend linkedSlackUsers model.slackDmChannels
-    , slackUsers = SlackSync.usersToFrontend model.users linkedSlackUsers model.slackUsers
-    , linkedSlackUsers = linkedSlackUsers
-    , slackUsersNeedingAuth = SlackSync.usersNeedingAuth session.userId model.slackUsers
+    , slackWorkspaces = slackWorkspacesToFrontend linkedSlackUsers2 model.slackWorkspaces
+    , slackDmChannels = slackDmChannelsToFrontend linkedSlackUsers2 model.slackDmChannels
+    , slackUsers = SlackSync.usersToFrontend model.users linkedSlackUsers2 model.slackUsers
+    , linkedSlackUsers = linkedSlackUsers2
+    , slackUsersNeedingAuth =
+        SeqDict.foldl
+            (\slackUserId userData set ->
+                case userData of
+                    SlackFullData linked ->
+                        if linked.linkedTo == session.userId && linked.needsAuthAgain then
+                            SeqSet.insert slackUserId set
+
+                        else
+                            set
+
+                    SlackBasicData _ ->
+                        set
+            )
+            SeqSet.empty
+            model.slackUsers
     , dmChannels = dmChannels
     , user = User.backendToFrontendCurrent email user
     , otherUsers = visibleUsers session.userId guilds dmChannels model.users
@@ -1297,6 +1337,128 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
     , customEmojis = model.customEmojis
     , voiceChatPeers = getVoiceChatData clientId session model
     }
+
+
+{-| Everyone in the workspaces the at-chat user has linked a Slack account in.
+-}
+slackUsersToFrontend :
+    NonemptyDict (Id UserId) BackendUser
+    -> SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    -> SeqDict (Slack.Id Slack.UserId) SlackUserData
+    -> SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+slackUsersToFrontend users linked slackUsers =
+    let
+        teams : List (Slack.Id Slack.TeamId)
+        teams =
+            SeqDict.values linked
+    in
+    SeqDict.filterMap
+        (\_ userData ->
+            if
+                List.member
+                    (case userData of
+                        SlackBasicData { user } ->
+                            user.teamId
+
+                        SlackFullData linkedUser ->
+                            linkedUser.user.teamId
+                    )
+                    teams
+            then
+                Just (slackUserToFrontend users userData)
+
+            else
+                Nothing
+        )
+        slackUsers
+
+
+slackUserToFrontend : NonemptyDict (Id UserId) BackendUser -> SlackUserData -> SlackFrontendUser
+slackUserToFrontend users userData =
+    case userData of
+        SlackBasicData { user, icon } ->
+            basicUserToFrontend user icon
+
+        SlackFullData linkedUser ->
+            { name = userName linkedUser.user
+            , icon = linkedUser.icon
+            , color =
+                case NonemptyDict.get linkedUser.linkedTo users of
+                    Just user ->
+                        user.color
+
+                    Nothing ->
+                        RichText.defaultColor
+            , teamId = linkedUser.user.teamId
+            }
+
+
+slackDmChannelsToFrontend :
+    SeqDict (Slack.Id Slack.UserId) a
+    -> SeqDict (Slack.Id Slack.DmChannelId) SlackDmChannel
+    -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
+slackDmChannelsToFrontend linked dmChannels =
+    SeqDict.filterMap
+        (\_ dmChannel ->
+            if isSlackDmChannelVisible linked dmChannel then
+                { teamId = dmChannel.teamId
+                , members = dmChannel.members
+                , messages = DmChannel.loadThreadStarters dmChannel.threads dmChannel.messages (Thread.loadMessages False dmChannel.messages)
+                , visibleMessages = VisibleMessages.init False (IdArray.length dmChannel.messages)
+                , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) dmChannel.threads
+                }
+                    |> Just
+
+            else
+                Nothing
+        )
+        dmChannels
+
+
+slackWorkspacesToFrontend :
+    SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    -> SeqDict (Slack.Id Slack.TeamId) SlackBackendWorkspace
+    -> SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+slackWorkspacesToFrontend linked workspaces =
+    SeqDict.filterMap
+        (\teamId workspace ->
+            if List.member teamId (SeqDict.values linked) then
+                { name = workspace.name
+                , icon = workspace.icon
+                , channels =
+                    SeqDict.filterMap
+                        (\_ channel ->
+                            if isSlackChannelVisible linked channel then
+                                { name = channel.name
+                                , isPrivate = channel.isPrivate
+                                , messages = DmChannel.loadThreadStarters channel.threads channel.messages (Thread.loadMessages False channel.messages)
+                                , visibleMessages = VisibleMessages.init False (IdArray.length channel.messages)
+                                , threads = SeqDict.map (\_ thread -> Thread.slackToFrontend False thread) channel.threads
+                                }
+                                    |> Just
+
+                            else
+                                Nothing
+                        )
+                        workspace.channels
+                , customEmojis = SeqDict.values workspace.customEmojis |> SeqSet.fromList
+                }
+                    |> Just
+
+            else
+                Nothing
+        )
+        workspaces
+
+
+isSlackChannelVisible : SeqDict (Slack.Id Slack.UserId) a -> SlackBackendChannel -> Bool
+isSlackChannelVisible linked channel =
+    List.any (\slackUserId -> SeqSet.member slackUserId channel.linkedMembers) (SeqDict.keys linked)
+
+
+isSlackDmChannelVisible : SeqDict (Slack.Id Slack.UserId) a -> SlackDmChannel -> Bool
+isSlackDmChannelVisible linked dmChannel =
+    List.any (\slackUserId -> NonemptySet.member slackUserId dmChannel.members) (SeqDict.keys linked)
 
 
 {-| Only send the users this user is able to see, that is, the members of the guilds they

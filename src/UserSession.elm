@@ -48,6 +48,7 @@ import IdArray exposing (IdArray)
 import Message exposing (Message, RepliedToGame)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
+import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -292,6 +293,11 @@ type alias SlackFrontendUser =
     , color : UserColor
     , teamId : Slack.Id Slack.TeamId
     }
+
+
+slackBasicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
+slackBasicUserToFrontend user icon =
+    { name = userName user, icon = icon, color = RichText.defaultColor, teamId = user.teamId }
 
 
 type alias DiscordFrontendUser =

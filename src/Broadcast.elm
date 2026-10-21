@@ -90,7 +90,6 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
-import SlackSync
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (BackendThread)
@@ -1580,6 +1579,15 @@ slackMessageNotification time guildOrDmId threadRoute message model =
 
                 SlackGuildOrDmId_Dm _ ->
                     SeqDict.empty
+
+        userDataName : SlackUserData -> String
+        userDataName userData =
+            case userData of
+                SlackFullData linkedUser ->
+                    userName linkedUser.user |> PersonName.toString
+
+                SlackBasicData { user } ->
+                    userName user |> PersonName.toString
 
         userToString : Slack.Id Slack.UserId -> String
         userToString userId =
