@@ -19,7 +19,7 @@ import ChannelDescription
 import ChannelExport
 import ChannelImport
 import ChannelName exposing (ChannelName)
-import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..), EmojiName)
+import CustomEmoji exposing (CustomEmojiData)
 import DeleteUserAndFiles
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -39,12 +39,11 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
-import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -56,7 +55,7 @@ import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), Channe
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..), UserTextMessageData)
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -68,11 +67,10 @@ import PersonName exposing (PersonName)
 import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
-import Random
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
-import SecretId exposing (SecretId, ServerSecret)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -80,7 +78,7 @@ import Set exposing (Set)
 import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
-import Slack exposing (SlackCookie, SlackToken)
+import Slack exposing (SlackToken)
 import SlackSync
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -88,7 +86,7 @@ import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread, SlackBackendThread)
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LinkSlackWorkspaceError(..), LoadedSlackWorkspace, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackBackendChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
+import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LinkSlackWorkspaceError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
 import User exposing (BackendUser, BackendUserStatus(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SlackFrontendUser, ToBeFilledInByBackend(..), UserSession, Viewing)
@@ -1024,7 +1022,7 @@ updateHelper msg model =
                     ( model3
                     , Broadcast.toSlackTeam
                         user.teamId
-                        (Server_Slack_UserLoaded slackUserId (SlackSync.basicUserToFrontend user icon) |> ServerChange)
+                        (Server_Slack_UserLoaded slackUserId (UserSession.slackBasicUserToFrontend user icon) |> ServerChange)
                         model3
                     )
 
@@ -6444,7 +6442,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         workspaceUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
                                         workspaceUsers =
-                                            SlackSync.slackUsersToFrontend
+                                            BackendExtra.slackUsersToFrontend
                                                 model.users
                                                 (SeqDict.singleton slackUser.user.id slackUser.user.teamId)
                                                 model.slackUsers
@@ -6523,7 +6521,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             let
                                 workspaceUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
                                 workspaceUsers =
-                                    SlackSync.slackUsersToFrontend
+                                    BackendExtra.slackUsersToFrontend
                                         model.users
                                         (SeqDict.singleton slackUser.user.id slackUser.user.teamId)
                                         model.slackUsers

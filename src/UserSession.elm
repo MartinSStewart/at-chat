@@ -34,6 +34,8 @@ module UserSession exposing
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
+    , slackBasicUserToFrontend
+    , slackUserName
     , truncatePushNotificationText
     , unreadOverviewMessageLimit
     )
@@ -297,7 +299,21 @@ type alias SlackFrontendUser =
 
 slackBasicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
 slackBasicUserToFrontend user icon =
-    { name = userName user, icon = icon, color = RichText.defaultColor, teamId = user.teamId }
+    { name = slackUserName user, icon = icon, color = RichText.defaultColor, teamId = user.teamId }
+
+
+slackUserName : Slack.User -> PersonName
+slackUserName user =
+    (if user.displayName /= "" then
+        user.displayName
+
+     else if user.realName /= "" then
+        user.realName
+
+     else
+        user.name
+    )
+        |> PersonName.fromStringLossy
 
 
 type alias DiscordFrontendUser =

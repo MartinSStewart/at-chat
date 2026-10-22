@@ -1,4 +1,34 @@
-module SlackSync exposing (..)
+module SlackSync exposing
+    ( SlackConversation
+    , addLinkedSlackUser
+    , addLoadedSlackWorkspace
+    , addToSlackConversation
+    , asSlackConversationUser
+    , catchUpSlackConversations
+    , customEmojiNames
+    , deleteSlackMessage
+    , editSlackMessage
+    , emojiToSlackName
+    , handleSlackWebsocketEvent
+    , loadSlackWorkspaceData
+    , markNewSlackConversationsAsViewed
+    , newSlackConversations
+    , nextSlackReconnectDelay
+    , receivedSlackWebsocketEvent
+    , refreshSlackConversations
+    , sendSlackMessage
+    , slackAuthor
+    , slackCustomEmojiText
+    , slackLinkedUserLoaded
+    , slackMessageAdded
+    , slackMessageTs
+    , slackPendingSendKey
+    , slackThreadStarter
+    , slackUserChanged
+    , teamCustomEmojis
+    , unlinkUser
+    , updateSlackConversation
+    )
 
 import BackendExtra
 import Broadcast
@@ -16,30 +46,28 @@ import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, IsEncrypted(..))
-import Id exposing (AnyGuildOrDmId, ChannelMessageId, CustomEmojiId, Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import List.Extra
-import List.Nonempty exposing (Nonempty)
-import LocalState exposing (SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
+import List.Nonempty exposing (Nonempty(..))
+import LocalState
 import Message exposing (ChangeAttachments(..), Message(..), RepliedTo(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
-import PersonName exposing (PersonName)
 import Quantity
 import Random
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
+import SeqSet
 import Slack exposing (SlackCookie, SlackToken)
 import SlackEmoji
 import Thread exposing (SlackBackendThread)
-import Types exposing (BackendModel, BackendMsg(..), LoadedSlackWorkspace, ServerChange(..), SlackBackendChannel, SlackBackendWorkspace, SlackDmChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg(..), LoadedSlackWorkspace, LocalMsg(..), ServerChange(..), SlackBackendChannel, SlackFileData, SlackLinkedUser, SlackUserData(..), ToFrontend)
 import User exposing (BackendUser)
-import UserSession exposing (SlackFrontendUser, UserSession)
-import VisibleMessages
+import UserSession exposing (UserSession)
 
 
 newChannelMaxMessages : Int
@@ -241,20 +269,6 @@ teamCustomEmojis teamId model =
 
         Nothing ->
             SeqDict.empty
-
-
-userName : Slack.User -> PersonName
-userName user =
-    (if user.displayName /= "" then
-        user.displayName
-
-     else if user.realName /= "" then
-        user.realName
-
-     else
-        user.name
-    )
-        |> PersonName.fromStringLossy
 
 
 {-| Drops the credentials and the channel memberships. Closing the websocket is left to the caller.
@@ -1217,7 +1231,7 @@ slackUserChanged user icon model =
             ( model2
             , Broadcast.toSlackTeam
                 user.teamId
-                (Server_Slack_UserLoaded user.id (slackUserToFrontend model2.users userData2) |> ServerChange)
+                (Server_Slack_UserLoaded user.id (BackendExtra.slackUserToFrontend model2.users userData2) |> ServerChange)
                 model2
             )
 
@@ -1700,7 +1714,7 @@ slackLinkedUserLoaded slackUserId teamId markNewDmsAsViewed model =
                     teamId
                     { workspaces = BackendExtra.slackWorkspacesToFrontend linked model.slackWorkspaces
                     , dmChannels = BackendExtra.slackDmChannelsToFrontend linked model.slackDmChannels
-                    , users = slackUsersToFrontend model.users linked model.slackUsers
+                    , users = BackendExtra.slackUsersToFrontend model.users linked model.slackUsers
                     , customEmojis =
                         SeqDict.values (teamCustomEmojis teamId model)
                             |> List.filterMap (\customEmojiId -> SeqDict.get customEmojiId model.customEmojis |> Maybe.map (Tuple.pair customEmojiId))

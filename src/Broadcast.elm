@@ -1584,16 +1584,16 @@ slackMessageNotification time guildOrDmId threadRoute message model =
         userDataName userData =
             case userData of
                 SlackFullData linkedUser ->
-                    userName linkedUser.user |> PersonName.toString
+                    UserSession.slackUserName linkedUser.user |> PersonName.toString
 
                 SlackBasicData { user } ->
-                    userName user |> PersonName.toString
+                    UserSession.slackUserName user |> PersonName.toString
 
         userToString : Slack.Id Slack.UserId -> String
         userToString userId =
             case SeqDict.get userId model.slackUsers of
                 Just userData ->
-                    SlackSync.userDataName userData
+                    userDataName userData
 
                 Nothing ->
                     User.missingName
@@ -1617,7 +1617,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                             Nothing
                             userToString
                             channels
-                            (RichText.toStringWithGetter Time.utc SlackSync.userDataName True model.slackUsers channels message.content.content)
+                            (RichText.toStringWithGetter Time.utc userDataName True model.slackUsers channels message.content.content)
                             (UserTextMessage message)
                             (case guildOrDmId of
                                 SlackGuildOrDmId_Workspace { teamId, channelId } ->

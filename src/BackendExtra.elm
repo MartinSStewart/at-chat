@@ -58,6 +58,8 @@ module BackendExtra exposing
     , shouldRateLimit
     , slackDmChannelsToFrontend
     , slackLinkLimitReached
+    , slackUserToFrontend
+    , slackUsersToFrontend
     , slackWorkspacesToFrontend
     , toBackendLog
     , unreadOverviewData
@@ -1277,7 +1279,7 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
             model.discordDmChannels
     , slackWorkspaces = slackWorkspacesToFrontend linkedSlackUsers2 model.slackWorkspaces
     , slackDmChannels = slackDmChannelsToFrontend linkedSlackUsers2 model.slackDmChannels
-    , slackUsers = SlackSync.usersToFrontend model.users linkedSlackUsers2 model.slackUsers
+    , slackUsers = slackUsersToFrontend model.users linkedSlackUsers2 model.slackUsers
     , linkedSlackUsers = linkedSlackUsers2
     , slackUsersNeedingAuth =
         SeqDict.foldl
@@ -1377,10 +1379,10 @@ slackUserToFrontend : NonemptyDict (Id UserId) BackendUser -> SlackUserData -> S
 slackUserToFrontend users userData =
     case userData of
         SlackBasicData { user, icon } ->
-            basicUserToFrontend user icon
+            UserSession.slackBasicUserToFrontend user icon
 
         SlackFullData linkedUser ->
-            { name = userName linkedUser.user
+            { name = UserSession.slackUserName linkedUser.user
             , icon = linkedUser.icon
             , color =
                 case NonemptyDict.get linkedUser.linkedTo users of
