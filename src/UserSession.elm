@@ -34,6 +34,8 @@ module UserSession exposing
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
+    , slackBasicUserToFrontend
+    , slackUserName
     , truncatePushNotificationText
     , unreadOverviewMessageLimit
     )
@@ -48,9 +50,11 @@ import IdArray exposing (IdArray)
 import Message exposing (Message, RepliedToGame)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
+import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Slack
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 
@@ -72,6 +76,7 @@ type alias UserSession =
 type LastViewedGuild
     = LastViewedGuild (Id GuildId)
     | LastViewedDiscordGuild (Discord.Id Discord.GuildId)
+    | LastViewedSlackWorkspace (Slack.Id Slack.TeamId)
 
 
 type alias SheepGameQuestion =
@@ -259,6 +264,22 @@ type alias UnreadOverviewData =
             (Discord.Id Discord.PrivateChannelId)
             (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    , slackChannels :
+        SeqDict
+            ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId )
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackThreads :
+        SeqDict
+            ( Slack.Id Slack.TeamId, Slack.Id Slack.ChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackDmChannels :
+        SeqDict
+            (Slack.Id Slack.DmChannelId)
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    , slackDmThreads :
+        SeqDict
+            ( Slack.Id Slack.DmChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     }
 
 
@@ -272,7 +293,27 @@ type alias SlackFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
     , color : UserColor
+    , teamId : Slack.Id Slack.TeamId
     }
+
+
+slackBasicUserToFrontend : Slack.User -> Maybe FileHash -> SlackFrontendUser
+slackBasicUserToFrontend user icon =
+    { name = slackUserName user, icon = icon, color = RichText.defaultColor, teamId = user.teamId }
+
+
+slackUserName : Slack.User -> PersonName
+slackUserName user =
+    (if user.displayName /= "" then
+        user.displayName
+
+     else if user.realName /= "" then
+        user.realName
+
+     else
+        user.name
+    )
+        |> PersonName.fromStringLossy
 
 
 type alias DiscordFrontendUser =
@@ -536,14 +577,14 @@ setLastViewedGuild viewing session =
         Viewing_DiscordDm _ ->
             session
 
-        Viewing_SlackChannel _ ->
-            session
+        Viewing_SlackChannel data ->
+            { session | lastViewedGuild = Just (LastViewedSlackWorkspace data.id.teamId) }
 
         Viewing_SlackDm _ ->
             session
 
-        Viewing_SlackChannelThread _ ->
-            session
+        Viewing_SlackChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedSlackWorkspace data.id.teamId) }
 
         Viewing_SlackDmThread _ ->
             session

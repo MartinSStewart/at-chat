@@ -39,6 +39,8 @@ module Pages.Admin exposing
     , pendingChangesText
     , regeneratingText
     , rolesToDict
+    , slackLinkLimitId
+    , slackLinkingEnabledText
     , splitOffChunk
     , update
     , updateAdmin
@@ -175,6 +177,16 @@ discordLinkingEnabledText =
     "Discord account linking enabled"
 
 
+slackLinkLimitId : HtmlId
+slackLinkLimitId =
+    Dom.id "Admin_slackLinkLimit"
+
+
+slackLinkingEnabledText : String
+slackLinkingEnabledText =
+    "Slack account linking enabled"
+
+
 noUpdateLogsText : String
 noUpdateLogsText =
     "No ToBackend or BackendMsg logs"
@@ -201,6 +213,8 @@ type Msg
     | ToggledSignupsEnabled Bool
     | ToggledDiscordLinkingEnabled Bool
     | DiscordLinkLimitEditableMsg (Editable.Msg (Maybe Int))
+    | ToggledSlackLinkingEnabled Bool
+    | SlackLinkLimitEditableMsg (Editable.Msg (Maybe Int))
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -291,6 +305,7 @@ type alias Model =
     , openRouterKey : Editable.Model
     , postmarkKey : Editable.Model
     , discordLinkLimit : Editable.Model
+    , slackLinkLimit : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
@@ -345,6 +360,8 @@ type alias InitAdminData =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , discordLinkLimit : Maybe Int
+    , slackLinkingEnabled : Bool
+    , slackLinkLimit : Maybe Int
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
@@ -393,6 +410,8 @@ type AdminChange
     | SetSignupsEnabled Bool
     | SetDiscordLinkingEnabled Bool
     | SetDiscordLinkLimit (Maybe Int)
+    | SetSlackLinkingEnabled Bool
+    | SetSlackLinkLimit (Maybe Int)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetOpenRouterKey (Maybe String)
@@ -451,6 +470,7 @@ initForUser =
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
+    , slackLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
@@ -480,6 +500,7 @@ initForAdmin { highlightLog } =
     , openRouterKey = Editable.init
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
+    , slackLinkLimit = Editable.init
     , importBackendStatus = NotImportingBackend
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
@@ -579,6 +600,12 @@ updateAdmin changedBy change adminData local =
 
         SetDiscordLinkLimit limit ->
             { local | adminData = IsAdmin { adminData | discordLinkLimit = limit } }
+
+        SetSlackLinkingEnabled isEnabled ->
+            { local | adminData = IsAdmin { adminData | slackLinkingEnabled = isEnabled } }
+
+        SetSlackLinkLimit limit ->
+            { local | adminData = IsAdmin { adminData | slackLinkLimit = limit } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
@@ -1200,6 +1227,9 @@ update navigationKey time adminData localState msg model =
         ToggledDiscordLinkingEnabled isChecked ->
             ( model, Command.none, AdminChange (SetDiscordLinkingEnabled isChecked) )
 
+        ToggledSlackLinkingEnabled isChecked ->
+            ( model, Command.none, AdminChange (SetSlackLinkingEnabled isChecked) )
+
         ToggleIsAdmin userTableId isAdmin ->
             updateUserTable
                 (\userTableState ->
@@ -1306,6 +1336,14 @@ update navigationKey time adminData localState msg model =
 
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetDiscordLinkLimit value |> AdminChange )
+
+        SlackLinkLimitEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | slackLinkLimit = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetSlackLinkLimit value |> AdminChange )
 
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
@@ -1849,6 +1887,19 @@ pendingChangesText change =
 
         SetDiscordLinkLimit Nothing ->
             "Removed linked Discord user limit"
+
+        SetSlackLinkingEnabled isEnabled ->
+            if isEnabled then
+                "Enabled Slack account linking"
+
+            else
+                "Disabled Slack account linking"
+
+        SetSlackLinkLimit (Just limit) ->
+            "Set linked Slack user limit to " ++ String.fromInt limit
+
+        SetSlackLinkLimit Nothing ->
+            "Removed linked Slack user limit"
 
         SetPrivateVapidKey _ ->
             "Set private vapid key"
@@ -3740,6 +3791,13 @@ userSection isMobile timezone expandedSections adminData model =
                 (Dom.id "discordLinkingEnabledId")
                 []
                 (Ui.text discordLinkingEnabledText)
+
+        slackLinkingEnabledLabel : { element : Element msg, id : Ui.Input.Label }
+        slackLinkingEnabledLabel =
+            MyUi.label
+                (Dom.id "slackLinkingEnabledId")
+                []
+                (Ui.text slackLinkingEnabledText)
     in
     section
         isMobile
@@ -3782,26 +3840,7 @@ userSection isMobile timezone expandedSections adminData model =
             discordLinkLimitId
             False
             "Maximum linked Discord users (leave empty for no limit)"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    case String.toInt text2 of
-                        Just limit ->
-                            if limit < 0 then
-                                Err "Can't be negative"
-
-                            else
-                                Ok (Just limit)
-
-                        Nothing ->
-                            Err "Not a whole number"
-            )
+            parseLinkLimit
             DiscordLinkLimitEditableMsg
             (case adminData.discordLinkLimit of
                 Just limit ->
@@ -3811,6 +3850,31 @@ userSection isMobile timezone expandedSections adminData model =
                     ""
             )
             model.discordLinkLimit
+        , Ui.row
+            [ Ui.spacing 4 ]
+            [ Ui.Input.checkbox
+                []
+                { onChange = ToggledSlackLinkingEnabled
+                , checked = adminData.slackLinkingEnabled
+                , icon = Nothing
+                , label = slackLinkingEnabledLabel.id
+                }
+            , slackLinkingEnabledLabel.element
+            ]
+        , Editable.view
+            slackLinkLimitId
+            False
+            "Maximum linked Slack users (leave empty for no limit)"
+            parseLinkLimit
+            SlackLinkLimitEditableMsg
+            (case adminData.slackLinkLimit of
+                Just limit ->
+                    String.fromInt limit
+
+                Nothing ->
+                    ""
+            )
+            model.slackLinkLimit
         , case adminData.users of
             AdminDataNotLoaded ->
                 Ui.text loadingText
@@ -5863,3 +5927,25 @@ applyChangeToBackendUser change user =
 
         _ ->
             Err ()
+
+
+parseLinkLimit : String -> Result String (Maybe Int)
+parseLinkLimit text =
+    let
+        text2 =
+            String.trim text
+    in
+    if text2 == "" then
+        Ok Nothing
+
+    else
+        case String.toInt text2 of
+            Just limit ->
+                if limit < 0 then
+                    Err "Can't be negative"
+
+                else
+                    Ok (Just limit)
+
+            Nothing ->
+                Err "Not a whole number"

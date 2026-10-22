@@ -36,12 +36,17 @@ type BackendMsgLog
     | BackendMsgLog_GotVapidKeys
     | BackendMsgLog_LinkDiscordUserStep1
     | BackendMsgLog_GotSlackUser
+    | BackendMsgLog_GotChangedSlackUser
     | BackendMsgLog_SlackChangedReaction
     | BackendMsgLog_SlackDeletedMessage
     | BackendMsgLog_SlackEditedMessage
     | BackendMsgLog_SlackMessageFilesUploaded
     | BackendMsgLog_LinkSlackUserStep1
     | BackendMsgLog_LinkSlackUserStep2
+    | BackendMsgLog_RefreshedSlackConversations
+    | BackendMsgLog_CaughtUpSlackMessages
+    | BackendMsgLog_CheckedSlackAuth
+    | BackendMsgLog_SlackGotMessageEmbed
     | BackendMsgLog_SentSlackMessage
     | BackendMsgLog_SlackWebsocketCreatedHandle
     | BackendMsgLog_SlackWebsocketClosedByBackend
@@ -79,6 +84,7 @@ type BackendMsgLog
     | BackendMsgLog_GotDiscordReadyDataStickers
     | BackendMsgLog_GotDiscordMessageStickers
     | BackendMsgLog_GotDiscordReadyDataCustomEmojis
+    | BackendMsgLog_GotSlackCustomEmojis
     | BackendMsgLog_GotDiscordMessageCustomEmojis
     | BackendMsgLog_HourlyUpdate
     | BackendMsgLog_GotDiscordStandardStickerPacks
@@ -174,6 +180,9 @@ backendMsgLogToString log =
         BackendMsgLog_GotSlackUser ->
             "GotSlackUser"
 
+        BackendMsgLog_GotChangedSlackUser ->
+            "GotChangedSlackUser"
+
         BackendMsgLog_SlackChangedReaction ->
             "SlackChangedReaction"
 
@@ -191,6 +200,18 @@ backendMsgLogToString log =
 
         BackendMsgLog_LinkSlackUserStep2 ->
             "LinkSlackUserStep2"
+
+        BackendMsgLog_RefreshedSlackConversations ->
+            "RefreshedSlackConversations"
+
+        BackendMsgLog_CaughtUpSlackMessages ->
+            "CaughtUpSlackMessages"
+
+        BackendMsgLog_CheckedSlackAuth ->
+            "CheckedSlackAuth"
+
+        BackendMsgLog_SlackGotMessageEmbed ->
+            "SlackGotMessageEmbed"
 
         BackendMsgLog_SentSlackMessage ->
             "SentSlackMessage"
@@ -296,6 +317,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_GotDiscordReadyDataCustomEmojis ->
             "GotDiscordReadyDataCustomEmojis"
+
+        BackendMsgLog_GotSlackCustomEmojis ->
+            "GotSlackCustomEmojis"
 
         BackendMsgLog_GotDiscordMessageCustomEmojis ->
             "GotDiscordMessageCustomEmojis"

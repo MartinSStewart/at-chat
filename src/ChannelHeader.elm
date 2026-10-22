@@ -249,8 +249,8 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView isMobile local loggedIn model)
 
 
-slackChannel : Bool -> String -> SlackGuildOrDmId -> Element FrontendMsg_
-slackChannel isMobile name guildOrDmIdNoThread =
+slackChannel : Bool -> String -> SlackGuildOrDmId -> Route -> Element FrontendMsg_
+slackChannel isMobile name guildOrDmIdNoThread route =
     channelHeader
         isMobile
         (case guildOrDmIdNoThread of
@@ -269,6 +269,9 @@ slackChannel isMobile name guildOrDmIdNoThread =
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
+                    , Ui.el
+                        [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        (channelSettingsTab isMobile route |> Maybe.withDefault Ui.none)
                     ]
         )
         Nothing

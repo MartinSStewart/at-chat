@@ -79,7 +79,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), SlackChannelRoute(..), ThreadRouteWithFriends(..))
 import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
 import SearchOverlay
@@ -612,6 +612,24 @@ startupRoute loading loggedIn =
                                     Just discordUserId ->
                                         GuildColumn.discordGuildRoute local.localUser discordUserId guildId guild
                                             |> Route.setOverlay overlay
+
+                                    Nothing ->
+                                        loading.route
+
+                            Nothing ->
+                                loading.route
+
+                    Just (LastViewedSlackWorkspace teamId) ->
+                        case SeqDict.get teamId local.slackWorkspaces of
+                            Just workspace ->
+                                case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
+                                    Just slackUserId ->
+                                        case GuildColumn.slackWorkspaceRoute local.localUser slackUserId teamId workspace of
+                                            Just workspaceRoute ->
+                                                Route.setOverlay overlay workspaceRoute
+
+                                            Nothing ->
+                                                loading.route
 
                                     Nothing ->
                                         loading.route
@@ -1701,13 +1719,24 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 ( SlackWorkspaceRoute routeData, LoggedIn loggedIn ) ->
-                    case routeData.threadRoute of
-                        NoThreadWithMaybeMessage _ ->
+                    case routeData.channelRoute of
+                        SlackChannel_ChannelRoute channelId (NoThreadWithMaybeMessage _) _ ->
                             FrontendExtra.routePush
                                 { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                                (SlackWorkspaceRoute { routeData | threadRoute = ViewThreadWithMaybeMessage messageIndex Nothing })
+                                (SlackWorkspaceRoute
+                                    { routeData
+                                        | channelRoute =
+                                            SlackChannel_ChannelRoute
+                                                channelId
+                                                (ViewThreadWithMaybeMessage messageIndex Nothing)
+                                                HideChannelSettings
+                                    }
+                                )
 
-                        ViewThreadWithMaybeMessage _ _ ->
+                        SlackChannel_ChannelRoute _ (ViewThreadWithMaybeMessage _ _) _ ->
+                            ( model, Command.none )
+
+                        SlackChannel_WorkspaceSettingsRoute ->
                             ( model, Command.none )
 
                 ( SlackDmRoute routeData, LoggedIn loggedIn ) ->
@@ -2987,8 +3016,7 @@ updateLoaded msg model =
                                 (SlackWorkspaceRoute
                                     { currentSlackUserId = currentUserId
                                     , teamId = teamId
-                                    , channelId = channelId
-                                    , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , channelRoute = SlackChannel_ChannelRoute channelId (ViewThreadWithMaybeMessage messageId Nothing) HideChannelSettings
                                     , channelsVisible = ChannelsHiddenOnMobile
                                     , overlay = Nothing
                                     }
@@ -3367,6 +3395,17 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_SetDiscordGuildNotificationLevel userId guildId notificationLevel |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedSlackWorkspaceNotificationLevel slackUserId teamId notificationLevel ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetSlackWorkspaceNotificationLevel slackUserId teamId notificationLevel |> Just)
                         loggedIn
                         Command.none
                 )
@@ -3998,6 +4037,17 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        PressedSlackAcknowledgment checked ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Just (Local_LinkSlackAcknowledgementIsChecked checked))
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedDiscordAcknowledgment checked ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -4015,6 +4065,17 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_StartReloadingDiscordUser model.time discordUserId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedReloadSlackUser slackUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_Slack_ReloadUser slackUserId |> Just)
                         loggedIn
                         Command.none
                 )
@@ -4991,7 +5052,19 @@ updateLoaded msg model =
                                                                 )
 
                                                         SlackGuildOrDmId guildOrDmId2 ->
-                                                            Local_Slack_SendMessage model.time model.timezone guildOrDmId2 threadRoute nonempty
+                                                            Local_Slack_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                threadRoute
+                                                                nonempty
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
                                                      )
                                                         |> Just
                                                     )
@@ -5892,25 +5965,87 @@ updateLoaded msg model =
         LoadedPopSound result ->
             ( { model | popSound = result }, Command.none )
 
-        TypedFriendsSearch text ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | friendsSearch = text }, Command.none ))
-                model
+        PressedShowSearchOverlay ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
 
-        PressedClearFriendsSearch ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | friendsSearch = "" }, Command.none ))
-                model
+                        -- Inside a guild or workspace the search starts out narrowed to it
+                        query : String
+                        query =
+                            case model.route of
+                                GuildRoute guildId _ _ _ ->
+                                    case SeqDict.get guildId local.guilds of
+                                        Just guild ->
+                                            GuildName.toString guild.name ++ " "
 
-        TypedChannelSearch text ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | channelSearch = text }, Command.none ))
-                model
+                                        Nothing ->
+                                            ""
 
-        PressedClearChannelSearch ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
-                model
+                                DiscordGuildRoute data ->
+                                    case SeqDict.get data.guildId local.discordGuilds of
+                                        Just guild ->
+                                            GuildName.toString guild.name ++ " "
+
+                                        Nothing ->
+                                            ""
+
+                                SlackWorkspaceRoute data ->
+                                    case SeqDict.get data.teamId local.slackWorkspaces of
+                                        Just workspace ->
+                                            workspace.name ++ " "
+
+                                        Nothing ->
+                                            ""
+
+                                HomePageRoute _ ->
+                                    ""
+
+                                DmRoute _ ->
+                                    ""
+
+                                DiscordDmRoute _ ->
+                                    ""
+
+                                SlackDmRoute _ ->
+                                    ""
+
+                                AdminRoute _ ->
+                                    ""
+
+                                NewGuildRoute ->
+                                    ""
+
+                                AiChatRoute ->
+                                    ""
+
+                                TextEditorRoute ->
+                                    ""
+
+                                PrivacyRoute ->
+                                    ""
+
+                                LinkDiscord _ ->
+                                    ""
+
+                                PublicGoMatchRoute _ ->
+                                    ""
+
+                        route : Route
+                        route =
+                            Route.setOverlay (Just Route.SearchOverlay) model.route
+                    in
+                    if route == model.route then
+                        ( model, Command.none )
+
+                    else
+                        FrontendExtra.routePush { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = query } } route
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         TypedSearchOverlay text ->
             FrontendExtra.updateLoggedIn
@@ -6040,6 +6175,39 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_SetMuteDiscordGuild discordUserId guildId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackWorkspace slackUserId teamId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackWorkspace slackUserId teamId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackChannel slackUserId teamId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackChannel slackUserId teamId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackThread slackUserId teamId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackThread slackUserId teamId channelId threadId isMuted |> Just)
                         loggedIn
                         Command.none
                 )
@@ -6387,7 +6555,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
-                            Maybe.map (\userOptions -> { userOptions | slackTeamsJson = text }) loggedIn.userOptions
+                            Maybe.map
+                                (\userOptions -> { userOptions | slackTeamsJson = text, removedSlackTeams = SeqSet.empty })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedRemoveSlackTeam teamId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | removedSlackTeams = SeqSet.insert teamId userOptions.removedSlackTeams })
+                                loggedIn.userOptions
                       }
                     , Command.none
                     )
@@ -7290,8 +7474,14 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 |> List.isEmpty
                                                                 |> not
 
-                                                        SlackGuildOrDmId _ ->
-                                                            False
+                                                        SlackGuildOrDmId guildOrDmId2 ->
+                                                            MessageDropdown.slackUserDropdownList
+                                                                (MyUi.isMobile model)
+                                                                nameSoFar
+                                                                guildOrDmId2
+                                                                local
+                                                                |> List.isEmpty
+                                                                |> not
 
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of
@@ -7652,7 +7842,7 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         SlackWorkspaceRoute _ ->
-            ( model, Command.none )
+            FrontendExtra.routePush model (Route.setShowMembers showMembers model.route)
 
         SlackDmRoute _ ->
             ( model, Command.none )
@@ -7937,9 +8127,11 @@ addWordSpellingGameReaction guildOrDmId matchId target emoji model loggedIn =
 toggleSearchOverlay : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 toggleSearchOverlay model =
     case model.loginStatus of
-        LoggedIn _ ->
+        LoggedIn loggedIn ->
             if Route.toOverlay model.route == Just Route.SearchOverlay then
-                FrontendExtra.routePush model (Route.setOverlay Nothing model.route)
+                FrontendExtra.routePush
+                    model
+                    (Route.setOverlay Nothing model.route)
 
             else
                 let
@@ -7951,7 +8143,7 @@ toggleSearchOverlay model =
                     ( model, Command.none )
 
                 else
-                    FrontendExtra.routePush model route
+                    FrontendExtra.routePush { model | loginStatus = LoggedIn { loggedIn | searchOverlayQuery = "" } } route
 
         NotLoggedIn _ ->
             ( model, Command.none )
@@ -9234,7 +9426,7 @@ updateLoadedFromBackend msg model =
                                                             Command.none
                                             )
 
-                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content _ ->
+                                        Server_Slack_SendMessage _ guildOrDmId threadRoute content _ _ ->
                                             let
                                                 scrollsToBottom : Bool
                                                 scrollsToBottom =

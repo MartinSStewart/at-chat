@@ -54,6 +54,7 @@ module User exposing
     , setLastSlackChannelViewed
     , setLastViewedMessage
     , setName
+    , setSlackWorkspaceNotificationLevel
     , slackUserColor
     , smallDiscordProfileImage
     , smallProfileImage
@@ -126,14 +127,17 @@ type alias BackendUser =
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
+    , linkSlackAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
@@ -300,14 +304,17 @@ type alias FrontendCurrentUser =
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , linkDiscordAcknowledgementIsChecked : Bool
+    , linkSlackAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
@@ -434,14 +441,17 @@ init createdAt name email userIsAdmin =
     , lastDmViewed = NoLastDmViewed
     , lastChannelViewed = SeqDict.empty
     , lastDiscordChannelViewed = SeqDict.empty
+    , lastSlackChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
     , discordNotifyOnAllMessages = SeqSet.empty
+    , slackNotifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
     , slackDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
     , linkDiscordAcknowledgementIsChecked = False
+    , linkSlackAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
     , emojiConfig = { skinTone = Nothing, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
@@ -560,6 +570,23 @@ setDiscordGuildNotificationLevel guildId notificationLevel user =
 
                 NotifyOnMention ->
                     SeqSet.remove guildId user.discordNotifyOnAllMessages
+    }
+
+
+setSlackWorkspaceNotificationLevel :
+    Slack.Id Slack.TeamId
+    -> NotificationLevel
+    -> { a | slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId) }
+    -> { a | slackNotifyOnAllMessages : SeqSet (Slack.Id Slack.TeamId) }
+setSlackWorkspaceNotificationLevel teamId notificationLevel user =
+    { user
+        | slackNotifyOnAllMessages =
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    SeqSet.insert teamId user.slackNotifyOnAllMessages
+
+                NotifyOnMention ->
+                    SeqSet.remove teamId user.slackNotifyOnAllMessages
     }
 
 
@@ -712,13 +739,15 @@ setLastSlackChannelViewed :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
+            , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
     ->
         { a
-            | slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastSlackChannelViewed : SeqDict (Slack.Id Slack.TeamId) ( Slack.Id Slack.ChannelId, ThreadRoute )
+            , slackDirectMentions : SeqDict (Slack.Id Slack.TeamId) (NonemptyDict ( Slack.Id Slack.ChannelId, ThreadRoute ) OneOrGreater)
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
@@ -735,7 +764,9 @@ setLastSlackChannelViewed id threadRoute user =
 
         user2 =
             { user
-                | slackDirectMentions =
+                | lastSlackChannelViewed =
+                    SeqDict.insert id.teamId ( id.channelId, threadRouteNoMessage ) user.lastSlackChannelViewed
+                , slackDirectMentions =
                     SeqDict.update
                         id.teamId
                         (Maybe.andThen
@@ -949,6 +980,7 @@ type alias LocalUser =
     , discordUsers : LinkedAndOtherDiscordUsers
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
     , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    , slackUsersNeedingAuth : SeqSet (Slack.Id Slack.UserId)
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
@@ -1021,14 +1053,17 @@ backendToFrontendCurrent email user =
     , lastDmViewed = user.lastDmViewed
     , lastChannelViewed = user.lastChannelViewed
     , lastDiscordChannelViewed = user.lastDiscordChannelViewed
+    , lastSlackChannelViewed = user.lastSlackChannelViewed
     , icon = user.icon
     , notifyOnAllMessages = user.notifyOnAllMessages
     , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages
+    , slackNotifyOnAllMessages = user.slackNotifyOnAllMessages
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
     , slackDirectMentions = user.slackDirectMentions
     , lastPushNotification = user.lastPushNotification
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
+    , linkSlackAcknowledgementIsChecked = user.linkSlackAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
     , emojiConfig = user.emojiConfig
     , availableStickers = user.availableStickers

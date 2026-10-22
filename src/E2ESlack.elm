@@ -1,7 +1,9 @@
-module E2ESlack exposing (linkSlackLoadsChannelsTest, orphanedSlackWorkspacesTest, slackEditMessageTest, slackFilesTest, slackReactionsAndNewThreadTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
+module E2ESlack exposing (linkSlackLoadsChannelsTest, linkSlackRemovePastedWorkspaceTest, linkSlackWithoutOptions, orphanedSlackWorkspacesTest, slackCatchUpAfterDropTest, slackCustomEmojiTest, slackEditMessageTest, slackExpiredLoginTest, slackFilesTest, slackLinkPreviewTest, slackLinkingToggleAndLimitTest, slackMentionDropdownTest, slackMentionOutsideChannelTest, slackMuteAndNotifyAllTest, slackNewConversationsTest, slackProfileAndWorkspaceChangesTest, slackReactionsAndNewThreadTest, slackReloadUserTest, slackSendFileTest, slackThreadsTest, slackUnreadAndNotificationsTest, slackUnreadOverviewTest, slackWebsocketBackoffTest, slackWebsocketTest, unlinkSlackTest, viewAndWriteInSlackTest)
 
 import Array
 import Audio
+import Codec
+import CustomEmoji
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -17,21 +19,32 @@ import Id exposing (ChannelMessageId)
 import IdArray
 import Json.Decode
 import Json.Encode
+import List.Extra
+import List.Nonempty
+import Local
 import Message exposing (Message(..))
+import MessageDropdown
+import MessageMenu
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import OneOrGreater
 import OneToOne
 import Pages.Admin
+import Pages.Guild
 import PersonName
 import RichText
+import SearchOverlay
 import SeqDict
 import SeqSet
 import Slack
-import SlackEmoji
+import SlackSync
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Url
+import User
+import UserOptions
 
 
 messageToString : Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) -> String
@@ -80,6 +93,7 @@ linkSlackLoadsChannelsTest config =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
                 , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
                 , admin.input
                     100
@@ -165,6 +179,7 @@ linkSlackLoadsChannelsTest config =
                                    , "U09DJDQL1A8: Run `make`\n```elm make src/Main.elm```"
                                    , "U09DK3NCPMG: Before\n> Quoted\n* First item\n* Second item"
                                    , "U09DJDQL1A8: [!1]"
+                                   , "B0BOT: Deploy finished"
                                    ]
                         then
                             Ok ()
@@ -204,11 +219,25 @@ linkSlackLoadsChannelsTest config =
                                 |> List.sort
                         of
                             -- Only users found in the loaded conversations, so not the deleted bot U09DFEXKH9T
-                            [ "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
+                            [ "B0BOT", "U09DJDQL1A8 linked", "U09DK3NCPMG linked", "U0THIRD" ] ->
                                 Ok ()
 
                             slackUsers ->
                                 Err ("Unexpected Slack users: " ++ String.join ", " slackUsers)
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get (Slack.Id "B0BOT") (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackBasicData { user }) ->
+                                if user.name == "Deploy bot" && user.isBot then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the bot to be loaded with bots.info"
+
+                            _ ->
+                                Err "Expected the bot that posted without a user to be loaded"
                     )
                 , T.checkState
                     100
@@ -258,10 +287,10 @@ linkSlackLoadsChannelsTest config =
                     )
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackWorkspacesSection)
-                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 3", "slack-admin", "ziggler" ]
+                , E2EHelper.hasExactText admin [ "test-slack", "Channels: 4", "Users: 4", "slack-admin", "ziggler" ]
                 , E2EHelper.hasNotExactText admin [ "#social" ]
                 , admin.click 100 (Pages.Admin.expandSlackWorkspaceButtonId (Slack.Id "T09DJDQL18U"))
-                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 6" ]
+                , E2EHelper.hasExactText admin [ "#all-test-slack", "#social", "#newer-channel", "#secret", "Private", "Visible to:", "Messages: 7" ]
                 , admin.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.SlackDmChannelsSection)
                 , E2EHelper.hasExactText admin [ "D09DK3P5RPC", "C0AMPIM1234", "third", "Messages: 1" ]
                 , admin.click 100 (Pages.Admin.deleteSlackDmChannelButtonId (Slack.Id "C0AMPIM1234"))
@@ -296,6 +325,8 @@ linkSlack user =
     T.group
         [ user.click 1000 (Dom.id "guild_showUserOptions")
         , user.click 100 (Dom.id "userOptions_slackSection")
+        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_slackCookie" ])
+        , user.click 100 (Dom.id "userOptions_slackAcknowledgment")
         , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
         , user.input
             100
@@ -304,6 +335,59 @@ linkSlack user =
         , user.click 100 (Dom.id "userOptions_submitSlackData")
         , E2EHelper.hasExactText user [ "Loaded test-slack" ]
         ]
+
+
+{-| Links straight through the backend, skipping the user options.
+-}
+linkSlackWithoutOptions : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+linkSlackWithoutOptions user =
+    case
+        Slack.validateSlackData
+            { slackCookie = E2EHelper.legitSlackCookie
+            , slackTeamsJson = "{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}"
+            , removedSlackTeams = SeqSet.empty
+            }
+    of
+        Ok slackData ->
+            T.group
+                [ user.sendToBackend 100 (Types.LinkSlackRequest slackData)
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case SeqDict.get (Slack.Id "U09DJDQL1A8") (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData _) ->
+                                Ok ()
+
+                            _ ->
+                                Err "Expected the Slack account to be linked"
+                    )
+                , relayReady (Slack.Id "U09DJDQL1A8")
+                ]
+
+        Err () ->
+            T.checkState 0 (\_ -> Err "The Slack data should be valid")
+
+
+{-| Lets the backend send the relay its credentials, after which the websocket can be found with
+E2EHelper.slackWebsocketByToken.
+-}
+relayReady : Slack.Id Slack.UserId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+relayReady slackUserId =
+    T.andThen
+        100
+        (\data ->
+            case SeqDict.get slackUserId (E2EHelper.unwrapBackend data.backend).slackUsers of
+                Just (Types.SlackFullData { websocket }) ->
+                    case websocket of
+                        Just connection ->
+                            [ T.websocketSendString 100 connection "relay_ready" ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Expected the Slack websocket to be open") ]
+
+                _ ->
+                    [ T.checkState 0 (\_ -> Err "Expected the Slack account to be linked") ]
+        )
 
 
 lastSlackMessage :
@@ -352,23 +436,9 @@ viewAndWriteInSlackTest config =
             (\admin ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , linkSlack admin
-                ]
-            )
-        , T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ T.andThen
-                    10
-                    (\data ->
-                        [ admin.portEvent
-                            10
-                            "load_startup_data_from_js"
-                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
-                        ]
-                    )
+
+                -- What linking loaded shows up without reloading the page
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
                 , admin.click 100 (Dom.id "guild_slackFriendLabel_D09DK3P5RPC")
                 , E2EHelper.hasExactText admin [ "This is the start of your conversation with zig" ]
                 , -- The message is "Good a~~fternoon!~~" so its text is split by the strikethrough
@@ -414,6 +484,22 @@ viewAndWriteInSlackTest config =
                     )
                 , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
                 , E2EHelper.hasExactText admin [ "This is the start of #social" ]
+
+                -- The search button narrows the search overlay to the workspace and finds its channels
+                , admin.click 100 Pages.Guild.searchButtonId
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString SearchOverlay.resultsContainerId) ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "newer-channel", Test.Html.Selector.exactText "test-slack" ]
+                    )
+                , admin.input 100 SearchOverlay.inputId "zig"
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString SearchOverlay.resultsContainerId) ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.exactText "zig" ]
+                    )
                 ]
             )
         ]
@@ -806,9 +892,9 @@ shownNotificationUrls user data =
         data.portRequests
 
 
-adminSlackMentionCount : E2EHelper.BackendModel2 -> Int
-adminSlackMentionCount backend =
-    case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+slackMentionCount : Id.Id Id.UserId -> E2EHelper.BackendModel2 -> Int
+slackMentionCount userId backend =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend backend).users of
         Just user ->
             SeqDict.values user.slackDirectMentions
                 |> List.concatMap (\dict -> NonemptyDict.toList dict |> List.map Tuple.second)
@@ -895,7 +981,7 @@ slackUnreadAndNotificationsTest config =
                         , T.checkState
                             100
                             (\data ->
-                                if adminSlackMentionCount data.backend /= 1 then
+                                if slackMentionCount E2EHelper.defaultAdminId data.backend /= 1 then
                                     Err "Expected the mention to be counted"
 
                                 else
@@ -920,7 +1006,7 @@ slackUnreadAndNotificationsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend == 0 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend == 0 then
                                     Ok ()
 
                                 else
@@ -930,6 +1016,621 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+linkSlackRemovePastedWorkspaceTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+linkSlackRemovePastedWorkspaceTest config =
+    E2EHelper.startTest
+        "Pasted Slack workspaces are previewed and removed ones aren't linked"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T09DJDQL18U\":{\"name\":\"test-slack\",\"url\":\"https://testslack-kob3907.slack.com/\",\"token\":\""
+                        ++ E2EHelper.legitSlackToken
+                        ++ "\"},\"T0SECOND\":{\"name\":\"Second workspace\",\"token\":\""
+                        ++ E2EHelper.secondSlackToken
+                        ++ "\"},\"T0EXPIRED\":{\"token\":\"xoxc-expired-token\"}}"
+                    )
+                , E2EHelper.hasExactText admin [ "test-slack", "https://testslack-kob3907.slack.com/", "Second workspace", "T0EXPIRED" ]
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T0SECOND")
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T0EXPIRED")
+                , E2EHelper.hasNotExactText admin [ "Second workspace" ]
+                , E2EHelper.hasNotExactText admin [ "T0EXPIRED" ]
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "Loaded test-slack" ]
+                , E2EHelper.hasNotText admin [ "Couldn't load a workspace" ]
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case linkedSlackUserCount backend of
+                            1 ->
+                                Ok ()
+
+                            count ->
+                                Err ("Expected only the workspace that wasn't removed to be linked, got " ++ String.fromInt count)
+                    )
+                , admin.click 100 (Dom.id "userOptions_removeSlackTeam_T09DJDQL18U")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "You must include at least one workspace" ]
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+linkedSlackUserCount : E2EHelper.BackendModel2 -> Int
+linkedSlackUserCount backend =
+    SeqDict.values (E2EHelper.unwrapBackend backend).slackUsers
+        |> List.filter
+            (\slackUser ->
+                case slackUser of
+                    Types.SlackFullData _ ->
+                        True
+
+                    Types.SlackBasicData _ ->
+                        False
+            )
+        |> List.length
+
+
+slackLinkingToggleAndLimitTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackLinkingToggleAndLimitTest config =
+    E2EHelper.startTest
+        "Admins can turn Slack linking off and limit how many Slack accounts get linked"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.UsersSection)
+                        , E2EHelper.hasExactText adminPage [ Pages.Admin.slackLinkingEnabledText ]
+                        , adminPage.input 100 (Dom.id (Dom.idToString Pages.Admin.slackLinkLimitId ++ "_label")) "1"
+                        , adminPage.click 100 (Dom.id (Dom.idToString Pages.Admin.slackLinkLimitId ++ "_acceptEdit"))
+                        , adminPage.click 100 (Dom.id "slackLinkingEnabledId")
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if (E2EHelper.unwrapBackend backend).slackLinkLimit /= Just 1 then
+                                    Err "The backend didn't store the linked Slack user limit"
+
+                                else if (E2EHelper.unwrapBackend backend).slackLinkingEnabled then
+                                    Err "Slack linking should have been turned off"
+
+                                else
+                                    Ok ()
+                            )
+                        , E2EHelper.inviteUser
+                            admin
+                            (\user ->
+                                [ user.click 1000 (Dom.id "guild_showUserOptions")
+                                , user.click 100 (Dom.id "userOptions_slackSection")
+                                , user.click 100 (Dom.id "userOptions_slackAcknowledgment")
+                                , user.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                                , user.input
+                                    100
+                                    (Dom.id "userOptions_slackTeamsJson")
+                                    ("{\"T09DJDQL18U\":{\"token\":\""
+                                        ++ E2EHelper.legitSlackToken
+                                        ++ "\"},\"T0SECOND\":{\"token\":\""
+                                        ++ E2EHelper.secondSlackToken
+                                        ++ "\"}}"
+                                    )
+                                , user.click 100 (Dom.id "userOptions_submitSlackData")
+                                , E2EHelper.hasExactText user [ "Slack account linking is disabled" ]
+                                , adminPage.click 100 (Dom.id "slackLinkingEnabledId")
+                                , user.click 100 (Dom.id "userOptions_submitSlackData")
+                                , E2EHelper.hasExactText user [ "Loaded test-slack", UserOptions.slackLinkLimitReachedText ]
+                                , T.checkBackend
+                                    1000
+                                    (\backend ->
+                                        case linkedSlackUserCount backend of
+                                            1 ->
+                                                Ok ()
+
+                                            count ->
+                                                Err ("Expected the limit to stop at one linked Slack user, got " ++ String.fromInt count)
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackUnreadOverviewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackUnreadOverviewTest config =
+    let
+        overviewEntryHas : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> String -> List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        overviewEntryHas user htmlId texts =
+            user.checkView
+                100
+                (\html ->
+                    Test.Html.Query.find [ Test.Html.Selector.id ("guild_unreadOverviewOpenChannel_" ++ htmlId) ] html
+                        |> Test.Html.Query.has (List.map Test.Html.Selector.exactText texts)
+                )
+    in
+    E2EHelper.startTest
+        "Unread Slack messages show in the unread overview"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "Unread in a channel" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackDmEvent { user = "U09DK3NCPMG", ts = "1791640001.000100", text = "Unread in a DM" })
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackThreadReplyEvent { ts = "1791640002.000100", text = "Unread in a thread" })
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , overviewEntryHas admin "slack_T09DJDQL18U_C09DJDQSWLU" [ "test-slack", "all-test-slack" ]
+                        , overviewEntryHas admin "slackDm_D09DK3P5RPC" [ "zig" ]
+                        , E2EHelper.hasExactText admin [ "Unread in a channel", "Unread in a DM" ]
+                        , E2EHelper.hasText admin [ "Unread in a thread" ]
+                        , admin.click 100 (Dom.id "guild_unreadOverviewMarkAsRead_slack_T09DJDQL18U_C09DJDQSWLU")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_slack_T09DJDQL18U_C09DJDQSWLU" ])
+                        , admin.click 100 (Dom.id "guild_unreadOverviewOpenChannel_slackDm_D09DK3P5RPC")
+                        , E2EHelper.hasExactText admin [ "Unread in a DM" ]
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_slackDm_D09DK3P5RPC" ])
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+
+        -- A fresh tab still lists the unread thread
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasText admin [ "Unread in a thread" ]
+                ]
+            )
+        ]
+
+
+slackMentionDropdownTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMentionDropdownTest config =
+    E2EHelper.startTest
+        "Typing @ or # in a Slack channel suggests Slack users and channels"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zi"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id (Dom.idToString (Pages.Guild.dropdownButtonId 0)), Test.Html.Selector.exactText "zig" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi #soc"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "social" ])
+
+                -- Picking a suggestion closes the dropdown. The name it writes into the message
+                -- is put there by js, which these tests don't run, so it's typed in its place.
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zi"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hi @zig"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        case
+                            SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                |> Maybe.andThen (\channel -> IdArray.toList channel.messages |> List.reverse |> List.head)
+                        of
+                            Just (UserTextMessage data) ->
+                                if SeqSet.member (Slack.Id "U09DK3NCPMG") (RichText.mentionsUser data.content.content) then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the sent message to mention zig"
+
+                            _ ->
+                                Err "Expected the sent message to be the last in the channel"
+                    )
+                ]
+            )
+        ]
+
+
+slackProfileAndWorkspaceChangesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackProfileAndWorkspaceChangesTest config =
+    E2EHelper.startTest
+        "Slack profile changes and workspace renames show up live"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"user_change","user":{"id":"U09DK3NCPMG","team_id":"T09DJDQL18U","name":"ziggler","profile":{"real_name":"Ziggler","display_name":"zag","avatar_hash":"g5c945c6010c"}},"event_ts":"1791640000.000100"}"""
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_slackFriendLabel_D09DK3P5RPC" ] html
+                                    |> Test.Html.Query.has [ Test.Html.Selector.exactText "zag" ]
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                        , T.websocketSendString 100 connection """{"type":"team_rename","name":"renamed-slack","event_ts":"1791640001.000100"}"""
+                        , E2EHelper.hasExactText admin [ "renamed-slack" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case
+                                    ( SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                    , SeqDict.get (Slack.Id "U09DK3NCPMG") (E2EHelper.unwrapBackend backend).slackUsers
+                                    )
+                                of
+                                    ( Just workspace, Just (Types.SlackBasicData { user }) ) ->
+                                        if workspace.name /= "renamed-slack" then
+                                            Err "Expected the workspace's new name to be stored"
+
+                                        else if user.displayName /= "zag" then
+                                            Err "Expected zig's new display name to be stored"
+
+                                        else
+                                            Ok ()
+
+                                    _ ->
+                                        Err "Expected the workspace and zig to be stored"
+                            )
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackMuteAndNotifyAllTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMuteAndNotifyAllTest config =
+    let
+        adminUser : E2EHelper.BackendModel2 -> Maybe User.BackendUser
+        adminUser backend =
+            NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users
+    in
+    E2EHelper.startTest
+        "Slack workspaces can notify on every message, and workspaces and channels can be muted"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.portEvent 100 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , admin.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool False)
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , admin.click 100 Pages.Guild.slackWorkspaceSettingsButtonId
+                , E2EHelper.hasExactText admin [ "Workspace settings" ]
+                , admin.keyUp 100 Pages.Guild.slackNotificationLevelId "ArrowDown" []
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case adminUser backend of
+                            Just user ->
+                                if SeqSet.member (Slack.Id "T09DJDQL18U") user.slackNotifyOnAllMessages then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the workspace to notify on every message"
+
+                            Nothing ->
+                                Err "Admin not found"
+                    )
+                , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640000.000100", text = "For everyone" })
+                        , T.checkState
+                            100
+                            (\data ->
+                                case shownNotificationUrls admin data of
+                                    [ url ] ->
+                                        if String.endsWith "/sw/U09DJDQL1A8/T09DJDQL18U/c/C09DJDQSWLU" url then
+                                            Ok ()
+
+                                        else
+                                            Err ("The notification opens the wrong conversation: " ++ url)
+
+                                    urls ->
+                                        Err ("Expected one notification for a message nobody was mentioned in, got " ++ String.fromInt (List.length urls))
+                            )
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" (Just "1")
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQSWLU")
+                        , admin.click 100 (Dom.id "guild_showMembers")
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case adminUser backend of
+                                    Just user ->
+                                        case MuteSettings.isSlackChannelSpecificallyMuted user.muteSettings (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") of
+                                            MuteSettings.IsFullyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Err "Expected the channel to be fully muted, got partially muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the channel to be fully muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
+                        , admin.click 100 (Dom.id "guild_openSlackChannel_C09DJDQUKKN")
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackMessageEvent { user = "U09DK3NCPMG", ts = "1791640001.000100", text = "Muted message" })
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                        , admin.click 100 Pages.Guild.slackWorkspaceSettingsButtonId
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case adminUser backend of
+                                    Just user ->
+                                        case MuteSettings.isSlackWorkspaceSpecificallyMuted user.muteSettings (Slack.Id "T09DJDQL18U") of
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsFullyMuted ->
+                                                Err "Expected the workspace to be partially muted, got fully muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the workspace to be partially muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackMentionOutsideChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackMentionOutsideChannelTest config =
+    E2EHelper.startTest
+        "A Slack mention doesn't reach a linked user who isn't in the channel"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_slackSection")
+                , admin.click 100 (Dom.id "userOptions_slackAcknowledgment")
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T0SECOND\":{\"token\":\"" ++ E2EHelper.secondSlackToken ++ "\"}}")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , E2EHelper.hasExactText admin [ "Loaded test-slack" ]
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , relayReady (Slack.Id "U09DK3NCPMG")
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ linkSlackWithoutOptions user
+                        , T.andThen
+                            100
+                            (\data ->
+                                case
+                                    ( E2EHelper.slackWebsocketByToken E2EHelper.secondSlackToken data
+                                    , NonemptyDict.toList (E2EHelper.unwrapBackend data.backend).users
+                                        |> List.filter (\( _, backendUser ) -> backendUser.email == User.UserHasEmail E2EHelper.userEmail)
+                                    )
+                                of
+                                    ( Just ( connection, _ ), [ ( userId, _ ) ] ) ->
+                                        [ T.websocketSendString 100 connection """{"type":"hello"}"""
+                                        , -- Only ziggler is in #secret, so the user linked to slack-admin shouldn't hear about it.
+                                          T.websocketSendString
+                                            100
+                                            connection
+                                            (slackMentionEvent { channel = "C0SECRET123", user = "U09DK3NCPMG", ts = "1791640001.000100", mentions = "U09DJDQL1A8" })
+                                        , T.checkBackend
+                                            100
+                                            (\backend ->
+                                                case
+                                                    lastSlackMessage
+                                                        backend
+                                                        (\backend2 ->
+                                                            SeqDict.get (Slack.Id "T09DJDQL18U") backend2.slackWorkspaces
+                                                                |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C0SECRET123") workspace.channels)
+                                                        )
+                                                of
+                                                    Ok ( text, _ ) ->
+                                                        if not (String.contains "look" text) then
+                                                            Err "Expected the mention to be added to #secret"
+
+                                                        else if slackMentionCount userId backend /= 0 then
+                                                            Err "A mention in a channel the user isn't in shouldn't reach them"
+
+                                                        else
+                                                            Ok ()
+
+                                                    Err error ->
+                                                        Err error
+                                            )
+                                        , T.websocketSendString
+                                            100
+                                            connection
+                                            (slackMentionEvent { channel = "C09DJDQSWLU", user = "U09DK3NCPMG", ts = "1791640002.000100", mentions = "U09DJDQL1A8" })
+                                        , T.checkBackend
+                                            100
+                                            (\backend ->
+                                                if slackMentionCount userId backend == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "A mention in a channel both are in should reach the user"
+                                            )
+                                        ]
+
+                                    _ ->
+                                        [ T.checkState 0 (\_ -> Err "Expected ziggler's websocket and the invited user") ]
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
@@ -1058,7 +1759,7 @@ slackThreadsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend /= 1 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend /= 1 then
                                     Err "Expected the mention in the thread to be counted"
 
                                 else if allTestSlackThreadMessageCount backend /= 4 then
@@ -1072,7 +1773,7 @@ slackThreadsTest config =
                         , T.checkBackend
                             100
                             (\backend ->
-                                if adminSlackMentionCount backend == 0 then
+                                if slackMentionCount E2EHelper.defaultAdminId backend == 0 then
                                     Ok ()
 
                                 else
@@ -1217,27 +1918,26 @@ slackRequestsTo endpoint data =
 -}
 codeMessageReactions : E2EHelper.BackendModel2 -> List ( String, List String )
 codeMessageReactions backend =
-    case
-        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
-            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
-            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
-    of
-        Just (UserTextMessage data) ->
-            SeqDict.toList data.reactions
-                |> List.map
-                    (\( emoji, users ) ->
-                        ( case emoji of
-                            Emoji.EmojiOrCustomEmoji_Emoji unicodeEmoji ->
-                                SlackEmoji.toSlackName unicodeEmoji |> Maybe.withDefault "unknown"
+    case SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces of
+        Just workspace ->
+            case
+                SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels
+                    |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
+            of
+                Just (UserTextMessage data) ->
+                    SeqDict.toList data.reactions
+                        |> List.map
+                            (\( emoji, users ) ->
+                                ( SlackSync.emojiToSlackName workspace.customEmojis emoji |> Maybe.withDefault "unknown"
+                                , NonemptySet.toList users |> List.map Slack.idToString |> List.sort
+                                )
+                            )
+                        |> List.sortBy Tuple.first
 
-                            Emoji.EmojiOrCustomEmoji_CustomEmoji _ ->
-                                "custom"
-                        , NonemptySet.toList users |> List.map Slack.idToString |> List.sort
-                        )
-                    )
-                |> List.sortBy Tuple.first
+                _ ->
+                    []
 
-        _ ->
+        Nothing ->
             []
 
 
@@ -1289,12 +1989,15 @@ slackReactionsAndNewThreadTest config =
                     (\backend ->
                         if
                             codeMessageReactions backend
-                                == [ ( "+1", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                                == [ ( "+1", [ "U09DK3NCPMG" ] )
+                                   , ( "partyparrot", [ "U09DK3NCPMG" ] )
+                                   , ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] )
+                                   ]
                         then
                             Ok ()
 
                         else
-                            Err "Expected the reactions from Slack's history without the custom emoji"
+                            Err "Expected the reactions from Slack's history"
                     )
                 , E2EHelper.hasExactText admin [ "👍", "👋🏼" ]
                 , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
@@ -1340,7 +2043,10 @@ slackReactionsAndNewThreadTest config =
                             (\backend ->
                                 if
                                     codeMessageReactions backend
-                                        == [ ( "tada", [ "U09DK3NCPMG" ] ), ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] ) ]
+                                        == [ ( "partyparrot", [ "U09DK3NCPMG" ] )
+                                           , ( "tada", [ "U09DK3NCPMG" ] )
+                                           , ( "wave::skin-tone-3", [ "U09DJDQL1A8", "U09DK3NCPMG" ] )
+                                           ]
                                 then
                                     Ok ()
 
@@ -1553,19 +2259,43 @@ slackFilesTest config =
                         , T.websocketSendString
                             100
                             connection
-                            """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
+                            """{"type":"message","subtype":"file_share","channel":"C09DJDQSWLU","text":"Look at this","files":[{"id":"F0NEWFILE","name":"new.png","mimetype":"image/png","size":1234,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png"},{"id":"F0REMOTE","name":"remote.png","mimetype":"image/png","size":1234,"mode":"external","is_external":true,"url_private":"https://attacker.example/remote.png"},{"id":"F0HUGE","name":"huge.png","mimetype":"image/png","size":200000000,"mode":"hosted","url_private":"https://files.slack.com/files-pri/T09DJDQL18U-F0HUGE/huge.png"}],"user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640200.000100","ts":"1791640200.000100"}"""
                         , E2EHelper.hasExactText admin [ "Look at this" ]
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_7_image_1" ])
                         , T.checkBackend
                             100
                             (\backend ->
                                 if
-                                    allTestSlackAttachedFiles 6 backend
+                                    allTestSlackAttachedFiles 7 backend
                                         == [ ( "new.png", FileStatus.fileHash "https://files.slack.com/files-pri/T09DJDQL18U-F0NEWFILE/new.png" ) ]
                                 then
                                     Ok ()
 
                                 else
-                                    Err "Expected the file in the new message to be copied"
+                                    Err "Expected the file in the new message to be copied, and the remote and oversized ones left out"
+                            )
+                        , T.checkState
+                            100
+                            (\data ->
+                                let
+                                    uploadedUrls : List String
+                                    uploadedUrls =
+                                        List.filterMap
+                                            (\request ->
+                                                case request.body of
+                                                    T.JsonBody json ->
+                                                        Codec.decodeValue FileStatus.uploadUrlCodec json |> Result.toMaybe |> Maybe.map .url
+
+                                                    _ ->
+                                                        Nothing
+                                            )
+                                            data.httpRequests
+                                in
+                                if List.any (\url -> String.contains "attacker.example" url || String.contains "huge.png" url) uploadedUrls then
+                                    Err "The remote and oversized files shouldn't be downloaded"
+
+                                else
+                                    Ok ()
                             )
                         ]
                     )
@@ -1667,3 +2397,744 @@ slackEditMessageTest config =
                 ]
             )
         ]
+
+
+slackNewConversationsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackNewConversationsTest config =
+    E2EHelper.startTest
+        "Slack channels and DMs that show up after linking are loaded, and renamed channels update"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackNewConversationsHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"D0NEWDM","user":"U0THIRD","text":"Hi from a new DM","ts":"1791640000.000100"}"""
+                        , E2EHelper.hasExactText admin [ "fresh-channel" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case SeqDict.get (Slack.Id "D0NEWDM") (E2EHelper.unwrapBackend backend).slackDmChannels of
+                                    Just dmChannel ->
+                                        if IdArray.length dmChannel.messages == 1 then
+                                            Ok ()
+
+                                        else
+                                            Err "Expected the new DM's message to be loaded"
+
+                                    Nothing ->
+                                        Err "Expected the new DM to be loaded"
+                            )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_slackFriendLabel_D0NEWDM" ])
+                        , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"channel_rename","channel":{"id":"C09DJDQUKKN","name":"renamed-social","created":1757024114},"event_ts":"1791640001.000100"}"""
+                        , E2EHelper.hasExactText admin [ "renamed-social" ]
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Once linking has happened, Slack lists a new channel and a DM with the third person.
+-}
+slackNewConversationsHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackNewConversationsHttp handleHttpRequest ({ data, currentRequest } as request) =
+    let
+        userBootCount : Int
+        userBootCount =
+            List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                |> List.Extra.count (\customRequest -> String.endsWith "client.userBoot" customRequest.url)
+
+        formFields : List String
+        formFields =
+            case E2EHelper.decodeCustomRequest currentRequest |> Maybe.andThen .body |> Maybe.map (Json.Decode.decodeValue Json.Decode.string) of
+                Just (Ok text) ->
+                    String.split "&" text
+
+                _ ->
+                    []
+    in
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            if userBootCount < 2 || not (List.member ("token=" ++ E2EHelper.legitSlackToken) formFields) then
+                handleHttpRequest request
+
+            else if String.endsWith "users.conversations" customRequest.url && List.member "cursor=page2" formFields then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"channels":[{"id":"C0C8993MS6N","name":"newer-channel","is_channel":true,"is_private":true,"is_archived":false},{"id":"D09DK3P5RPC","is_im":true,"is_archived":false,"user":"U09DK3NCPMG"},{"id":"D09DJDQMBPW","is_im":true,"is_archived":false,"user":"U09DJDQL1A8"},{"id":"C0AMPIM1234","name":"mpdm-slack-admin--ziggler--third-1","is_channel":false,"is_group":true,"is_mpim":true,"is_private":true,"is_archived":false},{"id":"C0FRESH","name":"fresh-channel","is_channel":true,"is_private":false,"is_archived":false},{"id":"D0NEWDM","is_im":true,"is_archived":false,"user":"U0THIRD"}],"response_metadata":{"next_cursor":""}}"""
+
+            else if String.endsWith "conversations.history" customRequest.url && List.member "channel=D0NEWDM" formFields then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"messages":[{"type":"message","user":"U0THIRD","text":"Hi from a new DM","ts":"1791640000.000100"}],"has_more":false}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request
+
+
+slackCatchUpAfterDropTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackCatchUpAfterDropTest config =
+    E2EHelper.startTest
+        "Slack messages posted while the websocket was down show up once it reconnects"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackCatchUpHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed"
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , E2EHelper.hasExactText admin [ "Missed while offline" ]
+                        ]
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Slack has one message in #all-test-slack newer than the ones loaded when linking.
+-}
+slackCatchUpHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackCatchUpHttp handleHttpRequest ({ currentRequest } as request) =
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            let
+                formFields : List String
+                formFields =
+                    case Maybe.map (Json.Decode.decodeValue Json.Decode.string) customRequest.body of
+                        Just (Ok text) ->
+                            String.split "&" text
+
+                        _ ->
+                            []
+            in
+            if
+                String.endsWith "conversations.history" customRequest.url
+                    && List.member ("token=" ++ E2EHelper.legitSlackToken) formFields
+                    && List.member "channel=C09DJDQSWLU" formFields
+                    && List.any (String.startsWith "oldest=") formFields
+            then
+                E2EHelper.httpBasic
+                    currentRequest.url
+                    200
+                    """{"ok":true,"messages":[{"type":"message","user":"U09DK3NCPMG","text":"Missed while offline","ts":"1791640100.000100"}],"has_more":false}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request
+
+
+slackExpiredLoginTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackExpiredLoginTest config =
+    E2EHelper.startTest
+        "An expired Slack login stops the websocket reconnecting until it's linked again"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackExpiredLoginHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ -> [ T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed" ])
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ -> [ T.websocketClose 100 connection (Websocket.UnknownCode 4002) "Upstream failed" ])
+                , E2EHelper.hasExactText admin [ UserOptions.slackNeedsAuthAgainText ]
+                , T.checkBackend
+                    (E2EHelper.gatewayReconnectDelay * 4)
+                    (\backend ->
+                        case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData linkedUser) ->
+                                if not linkedUser.needsAuthAgain then
+                                    Err "Expected the Slack user to need linking again"
+
+                                else if linkedUser.websocket /= Nothing then
+                                    Err "Expected the Slack websocket to stay closed"
+
+                                else if SeqDict.member adminSlackUserId (E2EHelper.unwrapBackend backend).pendingSlackReconnects then
+                                    Err "Expected no reconnect to be pending"
+
+                                else
+                                    Ok ()
+
+                            _ ->
+                                Err "Expected the Slack user to still be linked"
+                    )
+                , admin.input 100 (Dom.id "userOptions_slackCookie") E2EHelper.legitSlackCookie
+                , admin.input
+                    100
+                    (Dom.id "userOptions_slackTeamsJson")
+                    ("{\"T09DJDQL18U\":{\"token\":\"" ++ E2EHelper.legitSlackToken ++ "\"}}")
+                , admin.click 100 (Dom.id "userOptions_submitSlackData")
+                , admin.checkView
+                    1000
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText UserOptions.slackNeedsAuthAgainText ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get adminSlackUserId (E2EHelper.unwrapBackend backend).slackUsers of
+                            Just (Types.SlackFullData linkedUser) ->
+                                if linkedUser.needsAuthAgain then
+                                    Err "Expected linking again to fix the login"
+
+                                else if linkedUser.websocket == Nothing then
+                                    Err "Expected the Slack websocket to be open again"
+
+                                else
+                                    Ok ()
+
+                            _ ->
+                                Err "Expected the Slack user to still be linked"
+                    )
+                ]
+            )
+        ]
+
+
+{-| The login stops working after linking, until it's linked again.
+-}
+slackExpiredLoginHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackExpiredLoginHttp handleHttpRequest ({ data, currentRequest } as request) =
+    let
+        userBootCount : Int
+        userBootCount =
+            List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                |> List.Extra.count (\customRequest -> String.endsWith "client.userBoot" customRequest.url)
+    in
+    case E2EHelper.decodeCustomRequest currentRequest of
+        Just customRequest ->
+            if String.endsWith "client.userBoot" customRequest.url && userBootCount == 1 then
+                E2EHelper.httpBasic currentRequest.url 200 """{"ok":false,"error":"invalid_auth"}"""
+
+            else
+                handleHttpRequest request
+
+        Nothing ->
+            handleHttpRequest request
+
+
+slackLinkPreviewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackLinkPreviewTest config =
+    E2EHelper.startTest
+        "Links in new Slack messages get previews"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"C09DJDQSWLU","user":"U09DK3NCPMG","text":"Look <https://example.com/page>","ts":"1791640200.000100","blocks":[{"type":"rich_text","block_id":"b1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Look "},{"type":"link","url":"https://example.com/page"}]}]}]}"""
+                        , E2EHelper.hasExactText admin [ "Title for https://example.com/page" ]
+                        ]
+                    )
+                , admin.input 100 Pages.Guild.channelTextInputId "See https://at-chat.app/about"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , E2EHelper.hasExactText admin [ "Title for https://at-chat.app/about" ]
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackSendFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackSendFileTest config =
+    E2EHelper.startTest
+        "Files attached in at-chat are uploaded to Slack with the message"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackFileUploadHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "This is the start of #all-test-slack" ]
+                , E2EHelper.uploadImageAttachment admin
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "fileStatus_delete_1" ])
+
+                -- Slack has no spoilered files
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "fileStatus_spoiler_1" ])
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        if allTestSlackAttachedFiles 7 backend /= [ ( "test-image.png", FileStatus.fileHash "123123123" ) ] then
+                            Err "Expected the sent message to keep its attached file"
+
+                        else if
+                            SeqDict.get (Slack.Id "F0UPLOADED") (E2EHelper.unwrapBackend backend).slackFiles
+                                |> Maybe.map .fileHash
+                                |> (/=) (Just (FileStatus.fileHash "123123123"))
+                        then
+                            Err "Expected the Slack file to be linked to the at-chat file"
+
+                        else
+                            case
+                                SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                    |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                    |> Maybe.andThen (\channel -> OneToOne.second (Slack.Id "1791640300.000100") channel.linkedMessageIds)
+                            of
+                                Just _ ->
+                                    Ok ()
+
+                                Nothing ->
+                                    Err "Expected the message to be linked to the one Slack shared the file in"
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        let
+                            completeUploads : List String
+                            completeUploads =
+                                List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                                    |> List.filter (\request -> String.endsWith "files.completeUploadExternal" request.url)
+                                    |> List.filterMap (\request -> Maybe.andThen (\body -> Json.Decode.decodeValue Json.Decode.string body |> Result.toMaybe) request.body)
+                        in
+                        case completeUploads of
+                            [ body ] ->
+                                if String.contains "channel_id=C09DJDQSWLU" body then
+                                    Ok ()
+
+                                else
+                                    Err ("Expected the upload to be shared in #all-test-slack, got " ++ body)
+
+                            _ ->
+                                Err "Expected one completed upload"
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+{-| Slack only says where the file was shared after the first files.info.
+-}
+slackFileUploadHttp :
+    ({ data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest } -> T.HttpResponse)
+    -> { data : T.Data FrontendModel E2EHelper.BackendModel2, currentRequest : T.HttpRequest }
+    -> T.HttpResponse
+slackFileUploadHttp handleHttpRequest ({ data, currentRequest } as request) =
+    if currentRequest.url == "https://files.slack.com/upload/v1/test-upload" then
+        E2EHelper.httpBasic currentRequest.url 200 "OK - 6"
+
+    else
+        case E2EHelper.decodeCustomRequest currentRequest of
+            Just customRequest ->
+                if String.endsWith "files.getUploadURLExternal" customRequest.url then
+                    E2EHelper.httpBasic
+                        currentRequest.url
+                        200
+                        """{"ok":true,"upload_url":"https://files.slack.com/upload/v1/test-upload","file_id":"F0UPLOADED"}"""
+
+                else if String.endsWith "files.completeUploadExternal" customRequest.url then
+                    E2EHelper.httpBasic currentRequest.url 200 """{"ok":true,"files":[{"id":"F0UPLOADED","title":"test-image.png"}]}"""
+
+                else if String.endsWith "files.info" customRequest.url then
+                    if
+                        List.filterMap E2EHelper.decodeCustomRequest data.httpRequests
+                            |> List.any (\previous -> String.endsWith "files.info" previous.url)
+                    then
+                        E2EHelper.httpBasic
+                            currentRequest.url
+                            200
+                            """{"ok":true,"file":{"id":"F0UPLOADED","shares":{"public":{"C09DJDQSWLU":[{"ts":"1791640300.000100","channel_name":"all-test-slack"}]}}}}"""
+
+                    else
+                        E2EHelper.httpBasic currentRequest.url 200 """{"ok":true,"file":{"id":"F0UPLOADED"}}"""
+
+                else
+                    handleHttpRequest request
+
+            Nothing ->
+                handleHttpRequest request
+
+
+slackReloadUserTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackReloadUserTest config =
+    E2EHelper.startTest
+        "Reloading a Slack account picks up channels and DMs it joined since linking"
+        E2EHelper.startTime
+        { config | handleHttpRequest = slackNewConversationsHttp config.handleHttpRequest }
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , admin.click 100 (Dom.id "userOptions_reloadSlack_U09DJDQL1A8")
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        if SeqDict.member (Slack.Id "D0NEWDM") (E2EHelper.unwrapBackend backend).slackDmChannels then
+                            Ok ()
+
+                        else
+                            Err "Expected reloading to load the new DM"
+                    )
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , E2EHelper.hasExactText admin [ "fresh-channel" ]
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+slackCustomEmojiTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+slackCustomEmojiTest config =
+    E2EHelper.startTest
+        "A Slack workspace's custom emoji are copied when linking or added and work in messages and reactions both ways"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , linkSlack admin
+                , T.checkBackend
+                    1000
+                    (\backend ->
+                        let
+                            workspaceEmojis : SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+                            workspaceEmojis =
+                                testSlackCustomEmojis backend
+
+                            customEmoji : String -> Maybe CustomEmoji.CustomEmojiData
+                            customEmoji name =
+                                case SeqDict.get name workspaceEmojis of
+                                    Just customEmojiId ->
+                                        SeqDict.get customEmojiId (E2EHelper.unwrapBackend backend).customEmojis
+
+                                    Nothing ->
+                                        Nothing
+                        in
+                        if List.sort (SeqDict.keys workspaceEmojis) /= [ "parrot", "partyparrot", "ship-it" ] then
+                            Err ("Expected the custom emoji hosted by Slack and their aliases, got " ++ String.join ", " (SeqDict.keys workspaceEmojis))
+
+                        else if SeqDict.get "parrot" workspaceEmojis /= SeqDict.get "partyparrot" workspaceEmojis then
+                            Err "Expected an alias to be the emoji it names"
+
+                        else
+                            case ( customEmoji "partyparrot", customEmoji "ship-it" ) of
+                                ( Just partyparrot, Just shipIt ) ->
+                                    case ( partyparrot.url, partyparrot.isAnimated, CustomEmoji.emojiNameToString shipIt.name ) of
+                                        ( CustomEmoji.CustomEmojiInternal _ _, True, "ship_it" ) ->
+                                            Ok ()
+
+                                        _ ->
+                                            Err "Expected partyparrot to be copied and animated, and ship-it to be named ship_it"
+
+                                _ ->
+                                    Err "Expected the custom emoji to be in at-chat"
+                    )
+                , T.checkState 100 (adminCanUseTestSlackCustomEmojis admin [ "parrot", "partyparrot", "ship-it" ])
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get "partyparrot" (testSlackCustomEmojis backend) of
+                            Just customEmojiId ->
+                                if List.member ( "partyparrot", [ "U09DK3NCPMG" ] ) (codeMessageReactions backend) then
+                                    case
+                                        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                            |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt 3) channel.messages)
+                                    of
+                                        Just (UserTextMessage data) ->
+                                            if SeqDict.member (Emoji.EmojiOrCustomEmoji_CustomEmoji customEmojiId) data.reactions then
+                                                Ok ()
+
+                                            else
+                                                Err "Expected the history's partyparrot reaction to be the custom emoji"
+
+                                        _ ->
+                                            Err "Expected the code message"
+
+                                else
+                                    Err "Expected the history's partyparrot reaction to be kept"
+
+                            Nothing ->
+                                Err "Expected partyparrot"
+                    )
+                , E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Nice :partyp"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 12, end = 12 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":partyparrot:" ])
+
+                -- What picking the suggestion writes into the message is put there by js, so it's typed in.
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , T.andThen
+                    100
+                    (\data ->
+                        case SeqDict.get "partyparrot" (testSlackCustomEmojis data.backend) of
+                            Just customEmojiId ->
+                                [ admin.input 100 Pages.Guild.channelTextInputId ("Nice " ++ CustomEmoji.idToString customEmojiId)
+                                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 100 (\_ -> Err "Expected partyparrot") ]
+                    )
+                , T.checkState
+                    1000
+                    (\data ->
+                        case slackRequestsTo "chat.postMessage" data |> List.reverse of
+                            fields :: _ ->
+                                let
+                                    field : String -> String
+                                    field name =
+                                        List.filterMap
+                                            (\field2 ->
+                                                if String.startsWith (name ++ "=") field2 then
+                                                    String.dropLeft (String.length name + 1) field2 |> Url.percentDecode
+
+                                                else
+                                                    Nothing
+                                            )
+                                            fields
+                                            |> String.concat
+                                in
+                                if field "text" /= "Nice :partyparrot:" then
+                                    Err ("Expected the text to name the custom emoji, got " ++ field "text")
+
+                                else if not (String.contains "{\"type\":\"emoji\",\"name\":\"partyparrot\"}" (field "blocks")) then
+                                    Err ("Expected the blocks to have the custom emoji, got " ++ field "blocks")
+
+                                else
+                                    Ok ()
+
+                            [] ->
+                                Err "Expected the message to be sent to Slack"
+                    )
+                , E2EHelper.andThenWebsocket
+                    100
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection "relay_ready"
+                        , T.websocketSendString 100 connection """{"type":"hello"}"""
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"C09DJDQSWLU","user":"U09DK3NCPMG","text":"Wow :parrot:","ts":"1791640400.000100","blocks":[{"type":"rich_text","block_id":"e1","elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"Wow "},{"type":"emoji","name":"parrot"}]}]}]}"""
+                        , T.websocketSendString 100 connection (slackReactionEvent "reaction_added" "ship-it")
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case
+                                    ( SeqDict.get "partyparrot" (testSlackCustomEmojis backend)
+                                    , SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+                                        |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+                                        |> Maybe.andThen (\channel -> IdArray.toList channel.messages |> List.reverse |> List.head)
+                                    )
+                                of
+                                    ( Just customEmojiId, Just (UserTextMessage data) ) ->
+                                        if List.Nonempty.toList data.content.content /= [ RichText.NormalText 'W' "ow ", RichText.CustomEmoji customEmojiId ] then
+                                            Err "Expected the message from Slack to show the custom emoji"
+
+                                        else if not (List.member ( "ship-it", [ "U09DK3NCPMG" ] ) (codeMessageReactions backend)) then
+                                            Err "Expected the custom emoji reaction from Slack to be stored"
+
+                                        else
+                                            Ok ()
+
+                                    _ ->
+                                        Err "Expected the message from Slack"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"emoji_changed","subtype":"add","name":"new-one","value":"https://emoji.slack-edge.com/T09DJDQL18U/new-one/1a2b3c4d5e6f7a8b.png","event_ts":"1791640500.000100"}"""
+                        , T.checkState 1000 (adminCanUseTestSlackCustomEmojis admin [ "new-one", "parrot", "partyparrot", "ship-it" ])
+                        ]
+                    )
+                , admin.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , admin.click 100 (Dom.id "miniView_showReactionEmojiSelector")
+                , admin.input 100 Emoji.searchInputId "partyparrot"
+                , admin.click 100 (Emoji.emojiButtonId 0)
+                , T.checkState
+                    100
+                    (\data ->
+                        if List.member [ "channel=C09DJDQSWLU", "timestamp=1791638770.000100", "name=partyparrot" ] (slackRequestsTo "reactions.add" data) then
+                            Ok ()
+
+                        else
+                            Err "Expected reacting with the custom emoji to send its Slack name"
+                    )
+                , E2EHelper.checkNoErrorLogs
+                ]
+            )
+        ]
+
+
+testSlackCustomEmojis : E2EHelper.BackendModel2 -> SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+testSlackCustomEmojis backend =
+    case SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces of
+        Just workspace ->
+            workspace.customEmojis
+
+        Nothing ->
+            SeqDict.empty
+
+
+{-| Checks the admin can pick each of test-slack's custom emoji in #all-test-slack, and that they've
+been copied to at-chat.
+-}
+adminCanUseTestSlackCustomEmojis :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> List String
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+adminCanUseTestSlackCustomEmojis admin names data =
+    case SeqDict.get admin.clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        available : SeqSet.SeqSet (Id.Id Id.CustomEmojiId)
+                        available =
+                            MessageMenu.availableCustomEmojisAndStickers
+                                (Id.SlackGuildOrDmId
+                                    (Id.SlackGuildOrDmId_Workspace
+                                        { currentUserId = adminSlackUserId, teamId = Slack.Id "T09DJDQL18U", channelId = Slack.Id "C09DJDQSWLU" }
+                                    )
+                                )
+                                local
+                                |> Tuple.first
+
+                        workspaceEmojis : SeqDict.SeqDict String (Id.Id Id.CustomEmojiId)
+                        workspaceEmojis =
+                            testSlackCustomEmojis data.backend
+                    in
+                    if List.sort (SeqDict.keys workspaceEmojis) /= names then
+                        Err ("Expected the workspace's custom emoji to be " ++ String.join ", " names)
+
+                    else if
+                        List.all
+                            (\customEmojiId ->
+                                SeqSet.member customEmojiId available
+                                    && (case SeqDict.get customEmojiId local.localUser.customEmojis |> Maybe.map .url of
+                                            Just (CustomEmoji.CustomEmojiInternal _ _) ->
+                                                True
+
+                                            _ ->
+                                                False
+                                       )
+                            )
+                            (SeqDict.values workspaceEmojis)
+                    then
+                        Ok ()
+
+                    else
+                        Err "Expected the admin to be able to use the copied custom emoji"
+
+                _ ->
+                    Err "Expected admin to be logged in"
+
+        _ ->
+            Err "Expected admin frontend to be loaded"

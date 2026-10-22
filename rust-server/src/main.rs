@@ -1341,8 +1341,12 @@ async fn upload_url_endpoint(
     };
 
     match http_client().get(url).headers(headers2).send().await {
-        Ok(response) => match response.bytes().await {
-            Ok(bytes) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
+        Ok(response) => match read_body_up_to(response, MAX_UPLOAD_BYTES).await {
+            Ok(Some(bytes)) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
+            Ok(None) => response_with_headers(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                String::from("File too large"),
+            ),
             Err(_) => response_with_headers(
                 StatusCode::UNAUTHORIZED,
                 String::from("Invalid permissions 2"),
@@ -1353,6 +1357,29 @@ async fn upload_url_endpoint(
             String::from("Invalid permissions 1"),
         ),
     }
+}
+
+/// Stops reading as soon as the body goes over `limit` (giving `None`), rather than holding
+/// however much the other server sends in memory.
+async fn read_body_up_to(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<Option<Bytes>, reqwest::Error> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Ok(None);
+    }
+
+    let mut body: Vec<u8> = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len() + chunk.len() > limit {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(Bytes::from(body)))
 }
 
 /// Should match RichText.maxImageHeight
@@ -2282,6 +2309,23 @@ mod tests {
         });
 
         base
+    }
+
+    #[tokio::test]
+    async fn read_body_up_to_stops_past_the_limit() {
+        let base =
+            spawn_test_server(|_base| vec![("/file", "application/octet-stream", vec![0; 10])])
+                .await;
+        let client = reqwest::Client::new();
+
+        let response = client.get(format!("{base}/file")).send().await.unwrap();
+        assert_eq!(read_body_up_to(response, 9).await.unwrap(), None);
+
+        let response = client.get(format!("{base}/file")).send().await.unwrap();
+        assert_eq!(
+            read_body_up_to(response, 10).await.unwrap(),
+            Some(Bytes::from(vec![0; 10]))
+        );
     }
 
     #[tokio::test]

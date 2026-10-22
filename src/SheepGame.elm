@@ -1796,7 +1796,7 @@ questionInput localUser loggedIn users index question =
                 fileUploadPreview
                     (PressedDeleteAttachedFile questionId)
                     (PressedViewAttachedFileInfo questionId)
-                    (PressedToggleAttachedFileSpoiler questionId)
+                    (Just (PressedToggleAttachedFileSpoiler questionId))
                     richText
                     attachedFiles
                     |> Ui.row
@@ -2283,7 +2283,7 @@ answerInput localUser loggedIn questionId answer =
                 fileUploadPreview
                     (PressedDeleteAnswerFile questionId)
                     (PressedViewAnswerFileInfo questionId)
-                    (PressedToggleAnswerFileSpoiler questionId)
+                    (Just (PressedToggleAnswerFileSpoiler questionId))
                     richText
                     attachedFiles
                     |> Ui.row
@@ -2496,7 +2496,7 @@ notesInput localUser loggedIn questionId notes =
                 fileUploadPreview
                     (PressedDeleteNotesFile questionId)
                     (PressedViewNotesFileInfo questionId)
-                    (PressedToggleNotesFileSpoiler questionId)
+                    (Just (PressedToggleNotesFileSpoiler questionId))
                     richText
                     attachedFiles
                     |> Ui.row
@@ -3514,7 +3514,7 @@ fileUploadPreviewSize =
 fileUploadPreview :
     (Id FileId -> msg)
     -> (Id FileId -> msg)
-    -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
     -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
     -> List (Element msg)
@@ -3567,39 +3567,44 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         (Ui.html Icons.delete)
                     )
                     |> Ui.inFront
-                , MyUi.elButton
-                    (Dom.id ("fileStatus_spoiler_" ++ Id.toString fileStatusId))
-                    (onPressSpoiler { fileId = fileStatusId, removeSpoiler = isSpoilered2 })
-                    [ Ui.width (Ui.px 42)
-                    , Ui.height (Ui.px 42)
-                    , Ui.rounded 16
-                    , Ui.move { x = -3, y = 40, z = 0 }
-                    , MyUi.hoverText
-                        (if isSpoilered2 then
-                            "Remove spoiler"
+                , case onPressSpoiler of
+                    Just onPressSpoiler2 ->
+                        MyUi.elButton
+                            (Dom.id ("fileStatus_spoiler_" ++ Id.toString fileStatusId))
+                            (onPressSpoiler2 { fileId = fileStatusId, removeSpoiler = isSpoilered2 })
+                            [ Ui.width (Ui.px 42)
+                            , Ui.height (Ui.px 42)
+                            , Ui.rounded 16
+                            , Ui.move { x = -3, y = 40, z = 0 }
+                            , MyUi.hoverText
+                                (if isSpoilered2 then
+                                    "Remove spoiler"
 
-                         else
-                            "Mark as spoiler"
-                        )
-                    ]
-                    (Ui.el
-                        [ Ui.width (Ui.px 34)
-                        , Ui.height (Ui.px 34)
-                        , Ui.rounded 16
-                        , Ui.contentCenterX
-                        , Ui.contentCenterY
-                        , Ui.background MyUi.buttonBackground
-                        ]
-                        (Ui.html
-                            (if isSpoilered2 then
-                                Icons.closedEye
+                                 else
+                                    "Mark as spoiler"
+                                )
+                            ]
+                            (Ui.el
+                                [ Ui.width (Ui.px 34)
+                                , Ui.height (Ui.px 34)
+                                , Ui.rounded 16
+                                , Ui.contentCenterX
+                                , Ui.contentCenterY
+                                , Ui.background MyUi.buttonBackground
+                                ]
+                                (Ui.html
+                                    (if isSpoilered2 then
+                                        Icons.closedEye
 
-                             else
-                                Icons.openEye
+                                     else
+                                        Icons.openEye
+                                    )
+                                )
                             )
-                        )
-                    )
-                    |> Ui.inFront
+                            |> Ui.inFront
+
+                    Nothing ->
+                        Ui.noAttr
                 , case fileStatus of
                     FileStatus.FileUploaded fileData ->
                         case fileData.metadata of

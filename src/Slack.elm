@@ -1,6 +1,7 @@
 module Slack exposing
     ( Channel
     , ChannelId
+    , CustomEmojiSource(..)
     , DmChannel
     , DmChannelId
     , File
@@ -12,6 +13,7 @@ module Slack exposing
     , Message
     , MessageContent(..)
     , MessageId
+    , PastedWorkspace
     , Reaction
     , RichTextElement(..)
     , RichTextInline(..)
@@ -26,19 +28,25 @@ module Slack exposing
     , UserId
     , WebsocketEvent(..)
     , addReaction
+    , customEmojis
     , deleteMessage
     , fileHeaders
     , history
     , httpErrorToString
     , idToString
+    , isCustomEmojiHostedBySlack
+    , isHostedBySlack
     , messageFiles
     , messageUserIds
+    , messagesSince
     , noStyle
     , parseWebsocketEvent
     , postMessage
+    , postMessageWithFiles
     , removeReaction
     , stringToSlackCookie
     , teamsJsonToSlackTokens
+    , teamsJsonToWorkspaces
     , updateMessage
     , userBoot
     , userConversations
@@ -49,6 +57,7 @@ module Slack exposing
     , websocketRelayUrl
     )
 
+import Bytes exposing (Bytes)
 import Duration
 import Effect.Command exposing (BackendOnly)
 import Effect.Http as Http
@@ -63,6 +72,7 @@ import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Url
 
 
@@ -98,9 +108,11 @@ type alias SlackData =
     }
 
 
-validateSlackData : { a | slackCookie : String, slackTeamsJson : String } -> Result () SlackData
-validateSlackData { slackCookie, slackTeamsJson } =
-    case ( stringToSlackCookie slackCookie, teamsJsonToSlackTokens slackTeamsJson ) of
+validateSlackData :
+    { a | slackCookie : String, slackTeamsJson : String, removedSlackTeams : SeqSet (Id TeamId) }
+    -> Result () SlackData
+validateSlackData { slackCookie, slackTeamsJson, removedSlackTeams } =
+    case ( stringToSlackCookie slackCookie, teamsJsonToSlackTokens removedSlackTeams slackTeamsJson ) of
         ( Ok cookie, Ok tokens ) ->
             Ok { cookie = cookie, tokens = tokens }
 
@@ -134,16 +146,35 @@ stringToSlackCookie text =
         Err "Cookie must start with \"xoxd-\""
 
 
+{-| A workspace from the `teams` object in the Slack web client's `localStorage.localConfig_v2`.
+-}
+type alias PastedWorkspace =
+    { teamId : Id TeamId
+    , name : Maybe String
+    , url : Maybe String
+    , token : SlackToken
+    }
+
+
 {-| Parses the `teams` object in the Slack web client's `localStorage.localConfig_v2`. It has an
 entry for every workspace the browser is signed into, each with its own token.
 -}
-teamsJsonToSlackTokens : String -> Result String (Nonempty SlackToken)
-teamsJsonToSlackTokens text =
-    case Decode.decodeString (Decode.keyValuePairs (Decode.field "token" Decode.string)) text of
+teamsJsonToWorkspaces : String -> Result String (Nonempty PastedWorkspace)
+teamsJsonToWorkspaces text =
+    case Decode.decodeString (Decode.keyValuePairs decodePastedWorkspace) text of
         Ok teams ->
-            case List.map (\( _, token ) -> stringToSlackToken token) teams |> resultCombine of
-                Ok tokens ->
-                    case List.Nonempty.fromList tokens of
+            case
+                List.map
+                    (\( teamId, workspace ) ->
+                        stringToSlackToken workspace.token
+                            |> Result.map
+                                (\token -> { teamId = Id teamId, name = workspace.name, url = workspace.url, token = token })
+                    )
+                    teams
+                    |> resultCombine
+            of
+                Ok workspaces ->
+                    case List.Nonempty.fromList workspaces of
                         Just nonempty ->
                             Ok nonempty
 
@@ -155,6 +186,40 @@ teamsJsonToSlackTokens text =
 
         Err _ ->
             Err "This isn't the teams JSON"
+
+
+decodePastedWorkspace : Decoder { name : Maybe String, url : Maybe String, token : String }
+decodePastedWorkspace =
+    Decode.map3 (\name url token -> { name = name, url = url, token = token })
+        (Decode.maybe (Decode.field "name" Decode.string))
+        (Decode.maybe (Decode.field "url" Decode.string))
+        (Decode.field "token" Decode.string)
+
+
+teamsJsonToSlackTokens : SeqSet (Id TeamId) -> String -> Result String (Nonempty SlackToken)
+teamsJsonToSlackTokens removedTeams text =
+    case teamsJsonToWorkspaces text of
+        Ok workspaces ->
+            case
+                List.Nonempty.toList workspaces
+                    |> List.filterMap
+                        (\workspace ->
+                            if SeqSet.member workspace.teamId removedTeams then
+                                Nothing
+
+                            else
+                                Just workspace.token
+                        )
+                    |> List.Nonempty.fromList
+            of
+                Just tokens ->
+                    Ok tokens
+
+                Nothing ->
+                    Err "You must include at least one workspace"
+
+        Err error ->
+            Err error
 
 
 resultCombine : List (Result e a) -> Result e (List a)
@@ -316,16 +381,53 @@ optionalString path =
     Decode.oneOf [ Decode.at path Decode.string, Decode.succeed "" ]
 
 
-userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id UserId -> Task BackendOnly HttpError User
-userInfo secretKey cookie token userId =
-    http
-        secretKey
-        cookie
-        token
-        "users.info"
-        [ ( "user", idToString userId ) ]
-        (Decode.field "user" decodeUser)
-        |> retryWhenRateLimited
+{-| Bots that post without a user of their own are given their bot ID as a user ID, and those IDs
+start with B.
+-}
+userInfo : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id TeamId -> Id UserId -> Task BackendOnly HttpError User
+userInfo secretKey cookie token teamId userId =
+    if isBotId userId then
+        http
+            secretKey
+            cookie
+            token
+            "bots.info"
+            [ ( "bot", idToString userId ) ]
+            (Decode.field
+                "bot"
+                (Decode.map3
+                    (\name image deleted ->
+                        { id = userId
+                        , teamId = teamId
+                        , name = name
+                        , realName = name
+                        , displayName = ""
+                        , image = image
+                        , isBot = True
+                        , deleted = deleted
+                        }
+                    )
+                    (Decode.field "name" Decode.string)
+                    (optionalString [ "icons", "image_72" ])
+                    (optionalBool "deleted")
+                )
+            )
+            |> retryWhenRateLimited
+
+    else
+        http
+            secretKey
+            cookie
+            token
+            "users.info"
+            [ ( "user", idToString userId ) ]
+            (Decode.field "user" decodeUser)
+            |> retryWhenRateLimited
+
+
+isBotId : Id UserId -> Bool
+isBotId (Id userId) =
+    String.startsWith "B" userId
 
 
 {-| Loads many users at once through the edge API Slack's web client uses. It isn't documented, so
@@ -340,23 +442,26 @@ usersById :
     -> List (Id UserId)
     -> Task BackendOnly x (List User)
 usersById secretKey cookie token teamId userIds =
-    List.Extra.greedyGroupsOf 100 userIds
-        |> List.map
-            (\batch ->
-                edgeUsersInfo secretKey cookie token teamId batch
-                    |> Task.onError
-                        (\_ ->
-                            List.map
-                                (\userId ->
-                                    userInfo secretKey cookie token userId
-                                        |> Task.map Just
-                                        |> Task.onError (\_ -> Task.succeed Nothing)
-                                )
-                                batch
-                                |> Task.sequence
-                                |> Task.map (List.filterMap identity)
-                        )
-            )
+    let
+        ( botIds, humanIds ) =
+            List.partition isBotId userIds
+
+        oneAtATime : List (Id UserId) -> Task BackendOnly x (List User)
+        oneAtATime userIds2 =
+            List.map
+                (\userId ->
+                    userInfo secretKey cookie token teamId userId
+                        |> Task.map Just
+                        |> Task.onError (\_ -> Task.succeed Nothing)
+                )
+                userIds2
+                |> Task.sequence
+                |> Task.map (List.filterMap identity)
+    in
+    oneAtATime botIds
+        :: List.map
+            (\batch -> edgeUsersInfo secretKey cookie token teamId batch |> Task.onError (\_ -> oneAtATime batch))
+            (List.Extra.greedyGroupsOf 100 humanIds)
         |> Task.sequence
         |> Task.map List.concat
 
@@ -587,6 +692,58 @@ newestMessages secretKey cookie token limit channelId =
         |> Task.onError (\_ -> Task.succeed [])
 
 
+{-| Oldest first. Thread replies aren't included, only messages posted to the channel itself.
+-}
+messagesSince :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Id MessageId
+    -> Task BackendOnly x (List Message)
+messagesSince secretKey cookie token channelId oldest =
+    http
+        secretKey
+        cookie
+        token
+        "conversations.history"
+        [ ( "channel", idToString channelId )
+        , ( "oldest", idToString oldest )
+        , ( "limit", "200" )
+        , ( "include_free_team_extra_messages", "true" )
+        ]
+        (Decode.field "messages" (Decode.list (Decode.maybe decodeMessage))
+            |> Decode.map (\messages -> List.filterMap identity messages |> List.reverse)
+        )
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
+{-| An alias names another emoji, which can be one of Slack's standard emoji.
+-}
+type CustomEmojiSource
+    = CustomEmojiImage String
+    | CustomEmojiAlias String
+
+
+{-| The workspace's custom emoji by name. A workspace whose emoji can't be loaded is treated as
+having none, so linking still works.
+-}
+customEmojis : SecretId ServerSecret -> SlackCookie -> SlackToken -> Task BackendOnly x (List ( String, CustomEmojiSource ))
+customEmojis secretKey cookie token =
+    http
+        secretKey
+        cookie
+        token
+        "emoji.list"
+        []
+        (Decode.field "emoji" (Decode.keyValuePairs Decode.string)
+            |> Decode.map (List.map (\( name, value ) -> ( name, customEmojiSource value )))
+        )
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
 history :
     SecretId ServerSecret
     -> SlackCookie
@@ -682,6 +839,157 @@ postMessage secretKey cookie token channelId maybeThreadId text blocks =
                )
         )
         (Decode.field "ts" decodeId)
+
+
+{-| Uploads the files and posts them as one message, like Slack's own app does. Slack shares the
+files in the channel after it has answered, so the message's ts is looked up afterwards.
+-}
+postMessageWithFiles :
+    SecretId ServerSecret
+    -> SlackCookie
+    -> SlackToken
+    -> Id channelId
+    -> Maybe (Id MessageId)
+    -> List RichTextElement
+    -> Nonempty { fileName : String, contentType : String, bytes : Bytes }
+    -> Task BackendOnly HttpError ( Id MessageId, Nonempty (Id FileId) )
+postMessageWithFiles secretKey cookie token channelId maybeThreadId blocks files =
+    List.Nonempty.toList files
+        |> List.map
+            (\file ->
+                http
+                    secretKey
+                    cookie
+                    token
+                    "files.getUploadURLExternal"
+                    [ ( "filename", file.fileName ), ( "length", String.fromInt (Bytes.width file.bytes) ) ]
+                    (Decode.map2 Tuple.pair (Decode.field "upload_url" Decode.string) (Decode.field "file_id" decodeId))
+                    |> Task.andThen
+                        (\( uploadUrl, fileId ) ->
+                            Http.task
+                                { method = "POST"
+                                , headers = []
+                                , url = uploadUrl
+                                , body = Http.bytesBody file.contentType file.bytes
+                                , resolver = Http.stringResolver resolveUpload
+                                , timeout = Just Duration.minute
+                                }
+                                |> Task.map (\() -> ( fileId, file.fileName ))
+                        )
+            )
+        |> Task.sequence
+        |> Task.andThen
+            (\uploaded ->
+                case uploaded of
+                    ( firstFileId, _ ) :: rest ->
+                        http
+                            secretKey
+                            cookie
+                            token
+                            "files.completeUploadExternal"
+                            ([ ( "files"
+                               , Json.Encode.list
+                                    (\( fileId, fileName ) ->
+                                        Json.Encode.object
+                                            [ ( "id", Json.Encode.string (idToString fileId) )
+                                            , ( "title", Json.Encode.string fileName )
+                                            ]
+                                    )
+                                    uploaded
+                                    |> Json.Encode.encode 0
+                               )
+                             , ( "channel_id", idToString channelId )
+                             ]
+                                ++ (case maybeThreadId of
+                                        Just threadId ->
+                                            [ ( "thread_ts", idToString threadId ) ]
+
+                                        Nothing ->
+                                            []
+                                   )
+                                ++ (if List.isEmpty blocks then
+                                        []
+
+                                    else
+                                        [ ( "blocks"
+                                          , Json.Encode.list
+                                                identity
+                                                [ Json.Encode.object
+                                                    [ ( "type", Json.Encode.string "rich_text" )
+                                                    , ( "elements", Json.Encode.list encodeRichTextElement blocks )
+                                                    ]
+                                                ]
+                                                |> Json.Encode.encode 0
+                                          )
+                                        ]
+                                   )
+                            )
+                            (Decode.succeed ())
+                            |> Task.andThen (\() -> sharedMessageId secretKey cookie token channelId firstFileId 5)
+                            |> Task.map (\messageId -> ( messageId, Nonempty firstFileId (List.map Tuple.first rest) ))
+
+                    [] ->
+                        Task.fail (BadBody "No files to upload")
+            )
+
+
+{-| Slack answers an upload with plain text rather than JSON.
+-}
+resolveUpload : Http.Response String -> Result HttpError ()
+resolveUpload response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            Err (BadStatus metadata.statusCode body)
+
+        Http.GoodStatus_ _ _ ->
+            Ok ()
+
+
+{-| The ts of the message a file was shared in. Slack shares it a moment after the upload completes,
+so this tries again a few times.
+-}
+sharedMessageId : SecretId ServerSecret -> SlackCookie -> SlackToken -> Id channelId -> Id FileId -> Int -> Task BackendOnly HttpError (Id MessageId)
+sharedMessageId secretKey cookie token channelId fileId triesLeft =
+    http
+        secretKey
+        cookie
+        token
+        "files.info"
+        [ ( "file", idToString fileId ) ]
+        (Decode.oneOf
+            [ Decode.at [ "file", "shares" ] (Decode.keyValuePairs (Decode.keyValuePairs (Decode.list (Decode.field "ts" decodeId))))
+            , Decode.succeed []
+            ]
+            |> Decode.map
+                (\shares ->
+                    List.concatMap Tuple.second shares
+                        |> List.Extra.find (\( sharedIn, _ ) -> sharedIn == idToString channelId)
+                        |> Maybe.andThen (\( _, messageIds ) -> List.head messageIds)
+                )
+        )
+        |> Task.andThen
+            (\maybeMessageId ->
+                case maybeMessageId of
+                    Just messageId ->
+                        Task.succeed messageId
+
+                    Nothing ->
+                        if triesLeft > 1 then
+                            Process.sleep Duration.second
+                                |> Task.andThen (\() -> sharedMessageId secretKey cookie token channelId fileId (triesLeft - 1))
+
+                        else
+                            Task.fail (BadBody "The uploaded file wasn't shared in the channel")
+            )
 
 
 addReaction :
@@ -827,8 +1135,12 @@ encodeInline inline =
             Json.Encode.object
                 (( "type", Json.Encode.string "emoji" )
                     :: ( "name", Json.Encode.string name )
-                    :: ( "unicode", Json.Encode.string unicode )
-                    :: encodeStyle style
+                    :: (if unicode == "" then
+                            encodeStyle style
+
+                        else
+                            ( "unicode", Json.Encode.string unicode ) :: encodeStyle style
+                       )
                 )
 
         RichText_User userId ->
@@ -913,6 +1225,39 @@ messageFiles message =
             []
 
 
+{-| Remote files (Google Drive and the like, or anything an app adds with files.remote.add) have
+whatever url whoever added them chose, and downloading one with `fileHeaders` would hand them the
+credentials.
+-}
+isHostedBySlack : File -> Bool
+isHostedBySlack file =
+    case Url.fromString file.url of
+        Just url ->
+            url.protocol == Url.Https && url.host == "files.slack.com" && url.port_ == Nothing
+
+        Nothing ->
+            False
+
+
+customEmojiSource : String -> CustomEmojiSource
+customEmojiSource value =
+    if String.startsWith "alias:" value then
+        CustomEmojiAlias (String.dropLeft 6 value)
+
+    else
+        CustomEmojiImage value
+
+
+isCustomEmojiHostedBySlack : String -> Bool
+isCustomEmojiHostedBySlack urlText =
+    case Url.fromString urlText of
+        Just url ->
+            url.protocol == Url.Https && url.host == "emoji.slack-edge.com" && url.port_ == Nothing
+
+        Nothing ->
+            False
+
+
 {-| Downloading a file from files.slack.com needs the same credentials as the API.
 -}
 fileHeaders : SlackCookie -> SlackToken -> List ( String, String )
@@ -920,8 +1265,33 @@ fileHeaders (SlackCookie cookie) (SlackToken token) =
     [ ( "Cookie", "d=" ++ cookie ), ( "Authorization", "Bearer " ++ token ) ]
 
 
-{-| Messages without a user (posted by integrations) and kinds of message at-chat has nothing to
-show for fail to decode.
+{-| Subtypes shown as the text Slack gives them. Bot messages without a user are shown as being
+written by the bot, whose ID starts with B instead of U. For legacy integrations that only send
+attachments, the attachments' text is shown.
+-}
+textSubtypes : List String
+textSubtypes =
+    [ ""
+    , "thread_broadcast"
+    , "file_share"
+    , "me_message"
+    , "bot_message"
+    , "channel_leave"
+    , "group_leave"
+    , "channel_topic"
+    , "group_topic"
+    , "channel_purpose"
+    , "group_purpose"
+    , "channel_name"
+    , "group_name"
+    , "channel_archive"
+    , "group_archive"
+    , "channel_unarchive"
+    , "group_unarchive"
+    ]
+
+
+{-| Kinds of message at-chat has nothing to show for fail to decode.
 -}
 decodeMessage : Decoder Message
 decodeMessage =
@@ -932,11 +1302,35 @@ decodeMessage =
                     Message
                     (Decode.field "ts" decodeId)
                     (Decode.field "ts" decodeTimestamp)
-                    (Decode.field "user" decodeId)
-                    (if List.member subtype [ "", "thread_broadcast", "file_share", "me_message" ] then
+                    (Decode.oneOf [ Decode.field "user" decodeId, Decode.field "bot_id" decodeId ])
+                    (if List.member subtype textSubtypes then
                         Decode.map3
                             (\text blocks files -> TextMessage { text = text, blocks = blocks, files = files })
-                            (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
+                            (Decode.map2
+                                (\text attachments ->
+                                    if text == "" then
+                                        String.join "\n" attachments
+
+                                    else
+                                        text
+                                )
+                                (Decode.oneOf [ Decode.field "text" Decode.string, Decode.succeed "" ])
+                                (Decode.oneOf
+                                    [ Decode.field
+                                        "attachments"
+                                        (Decode.list
+                                            (Decode.oneOf
+                                                [ Decode.field "text" Decode.string
+                                                , Decode.field "fallback" Decode.string
+                                                , Decode.succeed ""
+                                                ]
+                                            )
+                                        )
+                                        |> Decode.map (List.filter (\attachment -> attachment /= ""))
+                                    , Decode.succeed []
+                                    ]
+                                )
+                            )
                             (Decode.oneOf
                                 [ Decode.field "blocks" (Decode.list decodeBlock) |> Decode.map List.concat
                                 , Decode.succeed []
@@ -949,7 +1343,7 @@ decodeMessage =
                                 ]
                             )
 
-                     else if subtype == "channel_join" then
+                     else if subtype == "channel_join" || subtype == "group_join" then
                         Decode.succeed JoinedChannel
 
                      else
@@ -1037,6 +1431,12 @@ type WebsocketEvent
     | WebsocketMessageDeleted String (Id UserId) (Id MessageId)
     | WebsocketReactionAdded { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
     | WebsocketReactionRemoved { user : Id UserId, reaction : String, channel : String, messageId : Id MessageId }
+    | WebsocketUserChanged User
+    | WebsocketTeamRenamed String
+    | WebsocketTeamDomainChanged String
+    | WebsocketConversationsChanged
+    | WebsocketChannelRenamed (Id ChannelId) String
+    | WebsocketCustomEmojiAdded String CustomEmojiSource
     | WebsocketOtherEvent
 
 
@@ -1070,6 +1470,30 @@ decodeWebsocketEvent =
                 else if eventType == "reaction_removed" then
                     decodeReactionEvent |> Decode.map WebsocketReactionRemoved
 
+                else if eventType == "user_change" || eventType == "user_profile_changed" then
+                    Decode.field "user" decodeUser |> Decode.map WebsocketUserChanged
+
+                else if eventType == "team_rename" then
+                    Decode.field "name" Decode.string |> Decode.map WebsocketTeamRenamed
+
+                else if eventType == "team_domain_change" then
+                    Decode.field "domain" Decode.string |> Decode.map WebsocketTeamDomainChanged
+
+                else if List.member eventType conversationsChangedEvents then
+                    Decode.succeed WebsocketConversationsChanged
+
+                else if eventType == "channel_rename" || eventType == "group_rename" then
+                    Decode.map2
+                        WebsocketChannelRenamed
+                        (Decode.at [ "channel", "id" ] decodeId)
+                        (Decode.at [ "channel", "name" ] Decode.string)
+
+                else if eventType == "emoji_changed" && subtype == "add" then
+                    Decode.map2
+                        WebsocketCustomEmojiAdded
+                        (Decode.field "name" Decode.string)
+                        (Decode.field "value" Decode.string |> Decode.map customEmojiSource)
+
                 else if eventType /= "message" then
                     Decode.succeed WebsocketOtherEvent
 
@@ -1097,6 +1521,25 @@ decodeWebsocketEvent =
                         (Decode.field "channel" Decode.string)
                         decodeMessage
             )
+
+
+{-| Events where the conversations someone is in might have changed. Slack sends them for joining,
+leaving, archiving and being added to DMs.
+-}
+conversationsChangedEvents : List String
+conversationsChangedEvents =
+    [ "channel_joined"
+    , "channel_left"
+    , "channel_deleted"
+    , "channel_archive"
+    , "channel_unarchive"
+    , "group_joined"
+    , "group_left"
+    , "group_archive"
+    , "group_unarchive"
+    , "im_created"
+    , "mpim_joined"
+    ]
 
 
 {-| Reactions can also be on files, which at-chat doesn't show.

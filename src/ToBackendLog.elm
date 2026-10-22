@@ -35,6 +35,7 @@ type ToBackendLog
     | ToBackendLog_Local_Slack_SendMessage
     | ToBackendLog_Local_Slack_SendEditMessage
     | ToBackendLog_Local_Slack_UnlinkUser
+    | ToBackendLog_Local_Slack_ReloadUser
     | ToBackendLog_Local_NewChannel
     | ToBackendLog_Local_EditChannel
     | ToBackendLog_Local_DeleteChannel
@@ -77,6 +78,7 @@ type ToBackendLog
     | ToBackendLog_Local_UnlinkDiscordUser
     | ToBackendLog_Local_StartReloadingDiscordUser
     | ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
+    | ToBackendLog_Local_LinkSlackAcknowledgementIsChecked
     | ToBackendLog_Local_SetDomainWhitelist
     | ToBackendLog_Local_SetEmojiSkinTone
     | ToBackendLog_Local_SetUserColor
@@ -90,6 +92,10 @@ type ToBackendLog
     | ToBackendLog_Local_SetMuteDiscordThread
     | ToBackendLog_Local_SetMuteGuild
     | ToBackendLog_Local_SetMuteDiscordGuild
+    | ToBackendLog_Local_SetSlackWorkspaceNotificationLevel
+    | ToBackendLog_Local_SetMuteSlackWorkspace
+    | ToBackendLog_Local_SetMuteSlackChannel
+    | ToBackendLog_Local_SetMuteSlackThread
     | ToBackendLog_Local_RequestE2ee
     | ToBackendLog_Local_CancelE2eeRequest
     | ToBackendLog_Local_DeclineE2eeRequest
@@ -183,6 +189,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Slack_UnlinkUser ->
             "Local_Slack_UnlinkUser"
+
+        ToBackendLog_Local_Slack_ReloadUser ->
+            "Local_Slack_ReloadUser"
 
         ToBackendLog_Local_NewChannel ->
             "Local_NewChannel"
@@ -310,6 +319,9 @@ toBackendLogToString log =
         ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked ->
             "Local_LinkDiscordAcknowledgementIsChecked"
 
+        ToBackendLog_Local_LinkSlackAcknowledgementIsChecked ->
+            "Local_LinkSlackAcknowledgementIsChecked"
+
         ToBackendLog_Local_SetDomainWhitelist ->
             "Local_SetDomainWhitelist"
 
@@ -348,6 +360,18 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetMuteDiscordGuild ->
             "Local_SetMuteDiscordGuild"
+
+        ToBackendLog_Local_SetSlackWorkspaceNotificationLevel ->
+            "Local_SetSlackWorkspaceNotificationLevel"
+
+        ToBackendLog_Local_SetMuteSlackWorkspace ->
+            "Local_SetMuteSlackWorkspace"
+
+        ToBackendLog_Local_SetMuteSlackChannel ->
+            "Local_SetMuteSlackChannel"
+
+        ToBackendLog_Local_SetMuteSlackThread ->
+            "Local_SetMuteSlackThread"
 
         ToBackendLog_Local_RequestE2ee ->
             "Local_RequestE2ee"

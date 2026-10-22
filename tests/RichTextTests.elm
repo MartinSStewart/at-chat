@@ -11,6 +11,7 @@ import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
 import SeqSet
+import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Test.Html.Query
@@ -717,6 +718,53 @@ test =
             , timestampViewTest "A whole number of hours leaves the minutes out" 0 120 "02:00 (in 2\u{00A0}hours)"
             , timestampViewTest "Another day gets the date instead" 0 29766890 "August 6, 2026 at 10:50"
             ]
+        , Test.describe
+            "Slack spoilers"
+            [ slackFromTest
+                "Text between || becomes a spoiler"
+                [ slackTextInline "Hi ||secret|| there" ]
+                [ NormalText 'H' "i ", Spoiler (Nonempty (NormalText 's' "ecret") []), NormalText ' ' "there" ]
+            , slackFromTest
+                "A spoiler can span several elements"
+                [ slackTextInline "||a ", Slack.RichText_Text { text = "b", style = { noStyle | bold = True } }, slackTextInline "||" ]
+                [ Spoiler (Nonempty (NormalText 'a' " ") [ Bold (Nonempty (NormalText 'b' "") []) ]) ]
+            , slackFromTest
+                "An unpaired || stays as it is"
+                [ slackTextInline "a || b" ]
+                [ NormalText 'a' " || b" ]
+            , slackFromTest
+                "|||| stays as it is"
+                [ slackTextInline "a||||b" ]
+                [ NormalText 'a' "||||b" ]
+            , Test.test
+                "A spoiler is sent wrapped in ||"
+                (\_ ->
+                    RichText.toSlack SeqDict.empty (Nonempty (NormalText 'a' " ") [ Spoiler (Nonempty (NormalText 'x' "") []) ])
+                        |> Expect.equal
+                            [ Slack.RichTextSection
+                                [ slackTextInline "a "
+                                , slackTextInline "||"
+                                , slackTextInline "x"
+                                , slackTextInline "||"
+                                ]
+                            ]
+                )
+            , Test.test
+                "A timestamp is sent with a fallback, since Slack rejects an empty one"
+                (\_ ->
+                    RichText.toSlack SeqDict.empty (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])
+                        |> Expect.equal
+                            [ Slack.RichTextSection
+                                [ Slack.RichText_Date { timestamp = 29766890 * 60, fallback = "August 6, 2026 at 10:50 UTC" } ]
+                            ]
+                )
+            , Test.test
+                "A spoiler around only an attached file sends nothing"
+                (\_ ->
+                    RichText.toSlack SeqDict.empty (Nonempty (NormalText 'a' "") [ Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) []) ])
+                        |> Expect.equal [ Slack.RichTextSection [ slackTextInline "a" ] ]
+                )
+            ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
             , selectionHighlightTest "a*bold*c"
@@ -908,3 +956,28 @@ toStringTest input expected =
     Test.test
         (Debug.toString ("RichText.toString: " ++ expected))
         (\_ -> RichText.toString Time.utc False users channels input |> Expect.equal expected)
+
+
+noStyle : Slack.Style
+noStyle =
+    Slack.noStyle
+
+
+slackTextInline : String -> Slack.RichTextInline
+slackTextInline text =
+    Slack.RichText_Text { text = text, style = noStyle }
+
+
+slackFromTest :
+    String
+    -> List Slack.RichTextInline
+    -> List (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
+    -> Test
+slackFromTest name inlines expected =
+    Test.test
+        name
+        (\_ ->
+            RichText.fromSlack SeqDict.empty "" [ Slack.RichTextSection inlines ]
+                |> Maybe.map List.Nonempty.toList
+                |> Expect.equal (Just expected)
+        )

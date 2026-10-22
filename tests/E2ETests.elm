@@ -373,8 +373,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMedia.videoAttachmentTest videoUploadConfig
     , E2EMedia.audioAttachmentTest audioUploadConfig
     , E2EMisc.inviteUserAndDmChat normalConfig
-    , E2EMisc.friendsSearchTest normalConfig
-    , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.escapeClosesUserOptionsTest normalConfig
@@ -430,11 +428,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
     , E2ESlack.linkSlackLoadsChannelsTest normalConfig
+    , E2ESlack.linkSlackRemovePastedWorkspaceTest normalConfig
     , E2ESlack.viewAndWriteInSlackTest normalConfig
     , E2ESlack.slackWebsocketTest normalConfig
     , E2ESlack.slackWebsocketBackoffTest normalConfig
     , E2ESlack.unlinkSlackTest normalConfig
     , E2ESlack.slackUnreadAndNotificationsTest normalConfig
+    , E2ESlack.slackMuteAndNotifyAllTest normalConfig
+    , E2ESlack.slackUnreadOverviewTest normalConfig
+    , E2ESlack.slackMentionDropdownTest normalConfig
+    , E2ESlack.slackProfileAndWorkspaceChangesTest normalConfig
+    , E2ESlack.slackNewConversationsTest normalConfig
+    , E2ESlack.slackCatchUpAfterDropTest normalConfig
+    , E2ESlack.slackExpiredLoginTest normalConfig
+    , E2ESlack.slackLinkPreviewTest normalConfig
+    , E2ESlack.slackSendFileTest imageUploadConfig
+    , E2ESlack.slackReloadUserTest normalConfig
+    , E2ESlack.slackCustomEmojiTest normalConfig
+    , E2ESlack.slackLinkingToggleAndLimitTest normalConfig
+    , E2ESlack.slackMentionOutsideChannelTest normalConfig
     , E2ESlack.slackThreadsTest normalConfig
     , E2ESlack.slackReactionsAndNewThreadTest normalConfig
     , E2ESlack.slackFilesTest normalConfig

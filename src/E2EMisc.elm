@@ -3,7 +3,6 @@ module E2EMisc exposing
     , androidBackButtonRetracesScreensTest
     , banMemberTest
     , channelMentionInThreadPreviewTest
-    , channelSearchTest
     , channelSuggestionTest
     , codeBlockCopyButtonTest
     , codeBlockInputTest
@@ -14,7 +13,6 @@ module E2EMisc exposing
     , escapeClosesUserOptionsTest
     , exportChannelTest
     , exportDmChannelTest
-    , friendsSearchTest
     , hourlyOrphanedFilesTest
     , importChannelTest
     , inactiveDmThreadsAreHiddenTest
@@ -53,6 +51,7 @@ import DmChannelId
 import Drawing
 import Duration
 import E2EHelper
+import E2ESlack
 import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -86,6 +85,7 @@ import Route exposing (ChannelsVisibleOnMobile(..))
 import SearchOverlay
 import SeqDict
 import SeqSet
+import Slack
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
@@ -472,168 +472,6 @@ exportDmChannelTest config =
                                     Err error ->
                                         Err error
                             )
-                        ]
-                    )
-                ]
-            )
-        ]
-
-
-{-| Simulates the browser moving focus into a search input. Unlike
-`E2EHelper.focusEvent` this includes the `selectionDirection` field, which the
-focus decoder requires before it will record the input as focused.
--}
-focusSearchInput :
-    Dom.HtmlId
-    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-focusSearchInput htmlId client =
-    client.portEvent
-        100
-        "focus_changed_from_js"
-        (Json.Encode.object
-            [ ( "id", Json.Encode.string (Dom.idToString htmlId) )
-            , ( "selectionStart", Json.Encode.int 0 )
-            , ( "selectionEnd", Json.Encode.int 0 )
-            , ( "selectionDirection", Json.Encode.string "forward" )
-            ]
-        )
-
-
-friendsSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-friendsSearchTest config =
-    E2EHelper.startTest
-        "Filter friends with the direct messages search input"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , E2EHelper.inviteUser
-                    admin
-                    (\user ->
-                        [ E2EHelper.openDm user 1000 "0"
-                        , E2EHelper.writeMessage user 100 "Hello admin!"
-                        , admin.click 100 (Dom.id "guild_openChannel_0")
-                        , E2EHelper.openDm admin 100 "2"
-
-                        -- The search input is transparent until it gets focus, so its placeholder
-                        -- text is used to detect whether it is shown or not.
-                        , admin.checkView 100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.id "guild_friendLabel_0"
-                                , Test.Html.Selector.id "guild_friendLabel_2"
-                                , Test.Html.Selector.exactText Pages.Guild.directMessagesText
-                                ]
-                            )
-                        , admin.checkView 100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
-                            )
-                        , focusSearchInput Pages.Guild.friendsSearchInputId admin
-                        , admin.checkView 100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
-                            )
-                        , admin.snapshotView 100 { name = "Friends search input open" }
-                        , admin.input 100 Pages.Guild.friendsSearchInputId "sven"
-                        , admin.checkView 100
-                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_friendLabel_2" ])
-                        , admin.checkView 100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_friendLabel_0" ])
-                        , admin.snapshotView 100 { name = "Friends search input filters friends column" }
-                        , admin.input 100 Pages.Guild.friendsSearchInputId "does not match anyone"
-                        , admin.checkView 100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_friendLabel_2" ])
-
-                        -- Clearing the text shows all friends again, and the input stays visible
-                        -- because it still has focus.
-                        , admin.click 100 (Dom.id "guild_clearFriendsSearch")
-                        , admin.checkView 100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.id "guild_friendLabel_0"
-                                , Test.Html.Selector.id "guild_friendLabel_2"
-                                , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends")
-                                ]
-                            )
-
-                        -- Once the empty input loses focus it becomes transparent again.
-                        , E2EHelper.focusEvent admin 100 Nothing Nothing
-                        , admin.checkView 100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
-                            )
-                        ]
-                    )
-                ]
-            )
-        ]
-
-
-channelSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-channelSearchTest config =
-    E2EHelper.startTest
-        "Filter channels with the channel column search input"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , admin.click 100 (Dom.id "guild_createGuild")
-                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
-                , admin.click 100 (Dom.id "guild_createGuildSubmit")
-
-                -- The search row only appears for guilds with more than 6 channels.
-                , admin.checkView 100
-                    (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId) ]
-                    )
-                , List.map
-                    (\channelName ->
-                        T.group
-                            [ admin.click 100 (Dom.id "guild_newChannel")
-                            , admin.input 100 (Dom.id "newChannelName") channelName
-                            , admin.click 100 (Dom.id "guild_createChannel")
-                            ]
-                    )
-                    [ "alpha", "beta", "gamma", "delta", "epsilon", "zeta" ]
-                    |> T.group
-
-                -- With 7 channels the search row appears below the header.
-                , admin.checkView 100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId)
-                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Search channels")
-                        ]
-                    )
-                , admin.snapshotView 100 { name = "Channel search row in channel column" }
-                , admin.input 100 Pages.Guild.channelSearchInputId "zeta"
-                , admin.checkView 100
-                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_openChannel_6" ])
-                , admin.checkView 100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_0" ])
-                , admin.snapshotView 100 { name = "Channel search row filters channel column" }
-                , admin.input 100 Pages.Guild.channelSearchInputId "does not match any channel"
-                , admin.checkView 100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_6" ])
-                , admin.checkView 100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.noMatchingChannelsText ])
-
-                -- Clearing the text shows all channels again.
-                , admin.click 100 (Dom.id "guild_clearChannelSearch")
-                , admin.checkView 100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.id "guild_openChannel_0"
-                        , Test.Html.Selector.id "guild_openChannel_6"
-                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Search channels")
                         ]
                     )
                 ]
@@ -2976,6 +2814,8 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
                         , E2EHelper.linkSecondDiscordAccount E2EHelper.sessionId1 discordOp0Ready discordOp0ReadySupplemental
                         , T.checkState 1000 (checkDiscordAccountIsLinked True)
+                        , E2ESlack.linkSlackWithoutOptions user
+                        , T.checkState 100 (checkSlackAccountIsLinked True)
                         ]
                     )
                 ]
@@ -2992,9 +2832,11 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         [ T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) (checkAccountIsStillScheduled userId)
                         , T.checkState 0 (checkDeletedMessages userId 0)
                         , T.checkState 0 (checkDiscordAccountIsLinked True)
+                        , T.checkState 0 (checkSlackAccountIsLinked True)
                         , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) (checkAccountWasDeleted userId)
                         , T.checkState 0 (checkDeletedMessages userId 3)
                         , T.checkState 0 (checkDiscordAccountIsLinked False)
+                        , T.checkState 0 (checkSlackAccountIsLinked False)
                         ]
 
                     Nothing ->
@@ -3029,6 +2871,56 @@ checkDiscordAccountIsLinked isLinked data =
 
             else
                 Err "The Discord account should have been unlinked and its gateway closed"
+
+
+{-| Deleting the at-chat account a Slack account is linked to forgets its credentials, takes it out
+of its channels and closes its websocket.
+-}
+checkSlackAccountIsLinked : Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkSlackAccountIsLinked isLinked data =
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend data.backend
+
+        isChannelMember : Bool
+        isChannelMember =
+            SeqDict.values backend.slackWorkspaces
+                |> List.any (\workspace -> SeqDict.values workspace.channels |> List.any (\channel -> SeqSet.member slackUserId channel.linkedMembers))
+
+        slackUserId : Slack.Id Slack.UserId
+        slackUserId =
+            Slack.Id "U09DJDQL1A8"
+    in
+    case
+        ( SeqDict.get slackUserId backend.slackUsers
+        , E2EHelper.slackWebsocketByToken E2EHelper.legitSlackToken data
+        , isLinked
+        )
+    of
+        ( Just (Types.SlackFullData _), Just _, True ) ->
+            if isChannelMember then
+                Ok ()
+
+            else
+                Err "The linked Slack account should be in its channels"
+
+        ( Just (Types.SlackBasicData _), Nothing, False ) ->
+            if isChannelMember then
+                Err "The unlinked Slack account shouldn't be in any channel"
+
+            else
+                Ok ()
+
+        ( Nothing, _, _ ) ->
+            Err "Expected the Slack account to exist"
+
+        _ ->
+            if isLinked then
+                Err "The Slack account should be linked with its websocket open"
+
+            else
+                Err "The Slack account should have been unlinked and its websocket closed"
 
 
 userIdByEmail : EmailAddress -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.UserId, User.BackendUser )

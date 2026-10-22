@@ -6,7 +6,6 @@ module Pages.Guild exposing
     , banMemberText
     , channelDoesNotExistText
     , channelMessageHtmlId
-    , channelSearchInputId
     , channelTextInputId
     , chatWithText
     , confirmLeaveGuildText
@@ -15,7 +14,6 @@ module Pages.Guild exposing
     , decodeMessageIndex
     , decodeMessageView
     , deleteGuildText
-    , directMessagesText
     , discordGuildView
     , dropdownButtonId
     , e2eeSectionIsExpanded
@@ -24,7 +22,6 @@ module Pages.Guild exposing
     , encodeMessageIndex
     , encodeMessageView
     , friendLabel
-    , friendsSearchInputId
     , guildMembersText
     , guildNotFoundText
     , guildView
@@ -38,11 +35,13 @@ module Pages.Guild exposing
     , newGuildFormView
     , newMessagesBadgeText
     , newMessagesId
-    , noMatchingChannelsText
     , noUnreadMessagesText
     , olderUnreadMessagesText
     , profileImageButtonId
+    , searchButtonId
     , setImportChannelStatus
+    , slackNotificationLevelId
+    , slackWorkspaceSettingsButtonId
     , slackWorkspaceView
     , startOfThreadText
     , startedACallText
@@ -104,7 +103,7 @@ import PersonName exposing (PersonName)
 import QRCode
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowChannelSettings(..), SlackDmRouteData, SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowChannelSettings(..), SlackChannelRoute(..), SlackDmRouteData, SlackWorkspaceRouteData, ThreadRouteWithFriends(..))
 import Scroll
 import SecretId
 import SeqDict exposing (SeqDict)
@@ -195,11 +194,6 @@ guildNotFoundText =
 directMessagesText : String
 directMessagesText =
     "Direct messages"
-
-
-noMatchingChannelsText : String
-noMatchingChannelsText =
-    "No matching channels\u{00A0}found"
 
 
 olderUnreadMessagesText : Int -> String
@@ -400,8 +394,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             True
                             model.time
                             maybeOtherUserId
-                            loggedIn.friendsSearch
-                            (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                             local
                         ]
                     , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -422,8 +414,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 False
                                 model.time
                                 maybeOtherUserId
-                                loggedIn.friendsSearch
-                                (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -547,8 +537,8 @@ type alias UnreadOverviewChannel =
     }
 
 
-{-| Discord messages are kept apart from the rest because they are written by Discord users
-rather than our own users, and thread messages are kept apart from channel messages because
+{-| Discord and Slack messages are kept apart from the rest because they are written by Discord
+or Slack users rather than our own users, and thread messages are kept apart from channel messages because
 they are numbered separately.
 -}
 type UnreadOverviewMessages
@@ -556,6 +546,8 @@ type UnreadOverviewMessages
     | UnreadOverviewThreadMessages (Id ChannelMessageId) (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) (Id ChannelId) ))
     | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) ))
     | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) ))
+    | UnreadOverviewSlackMessages (Slack.Id Slack.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
+    | UnreadOverviewSlackThreadMessages (Id ChannelMessageId) (Slack.Id Slack.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId) ))
 
 
 unreadOverviewNotMobile : LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -853,6 +845,84 @@ unreadOverviewNotMobile local loggedIn model =
                                                     currentDiscordUserId
                                                     local.localUser
                                                     Nothing
+                                                    messageId
+                                                    message
+                                                    |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
+                                                )
+                                            )
+                                            messages
+
+                                    UnreadOverviewSlackMessages currentSlackUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedChannelSpoilers unread.guildOrDmId loggedIn
+                                        in
+                                        List.map
+                                            (\( messageId, message ) ->
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , slackMessageView
+                                                    model.time
+                                                    containerWidth
+                                                    revealedSpoilers
+                                                    NoHighlight
+                                                    currentSlackUserId
+                                                    (case unread.guildOrDmId of
+                                                        GuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        DiscordGuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        SlackGuildOrDmId guildOrDmId ->
+                                                            LocalState.slackChannelMentions guildOrDmId local
+                                                    )
+                                                    local.localUser
+                                                    Nothing
+                                                    False
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (NoThreadWithMessage messageId)
+                                                        loggedIn
+                                                    )
+                                                    messageId
+                                                    message
+                                                    |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
+                                                )
+                                            )
+                                            messages
+
+                                    UnreadOverviewSlackThreadMessages threadId currentSlackUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedThreadSpoilers unread.guildOrDmId threadId loggedIn
+                                        in
+                                        List.map
+                                            (\( messageId, message ) ->
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , slackThreadMessageView
+                                                    model.time
+                                                    containerWidth
+                                                    revealedSpoilers
+                                                    NoHighlight
+                                                    currentSlackUserId
+                                                    (case unread.guildOrDmId of
+                                                        GuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        DiscordGuildOrDmId _ ->
+                                                            SeqDict.empty
+
+                                                        SlackGuildOrDmId guildOrDmId ->
+                                                            LocalState.slackChannelMentions guildOrDmId local
+                                                    )
+                                                    local.localUser
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (ViewThreadWithMessage threadId messageId)
+                                                        loggedIn
+                                                    )
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
@@ -1168,6 +1238,181 @@ unreadOverviewChannels local allDiscordUsers =
                         Nothing
             )
             (SeqDict.toList local.discordDmChannels)
+        ++ List.concatMap
+            (\( teamId, workspace ) ->
+                case GuildColumn.slackWorkspaceCurrentUserId local.localUser teamId of
+                    Just currentSlackUserId ->
+                        List.concatMap
+                            (\( channelId, channel ) ->
+                                let
+                                    slackGuildOrDmId : SlackGuildOrDmId
+                                    slackGuildOrDmId =
+                                        SlackGuildOrDmId_Workspace { currentUserId = currentSlackUserId, teamId = teamId, channelId = channelId }
+
+                                    guildOrDmId : AnyGuildOrDmId
+                                    guildOrDmId =
+                                        SlackGuildOrDmId slackGuildOrDmId
+                                in
+                                (if showInUnreadOverview (MuteSettings.isSlackChannelMuted currentUser.muteSettings teamId channelId NoThread) (SeqSet.member teamId currentUser.slackNotifyOnAllMessages || isMentioned (SeqDict.get teamId currentUser.slackDirectMentions) ( channelId, NoThread )) then
+                                    unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
+                                        |> Maybe.map
+                                            (\unread ->
+                                                [ { source = slackChannelSource workspace.name channel.name
+                                                  , route =
+                                                        SlackWorkspaceRoute
+                                                            { currentSlackUserId = currentSlackUserId
+                                                            , teamId = teamId
+                                                            , channelRoute =
+                                                                SlackChannel_ChannelRoute
+                                                                    channelId
+                                                                    (NoThreadWithMaybeMessage Nothing)
+                                                                    HideChannelSettings
+                                                            , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
+                                                            }
+                                                  , guildOrDmId = guildOrDmId
+                                                  , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                                  , additionalUnread = unread.additionalUnread
+                                                  , oldestAt = unread.oldestAt
+                                                  , messages = UnreadOverviewSlackMessages currentSlackUserId unread.messages
+                                                  }
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+
+                                 else
+                                    []
+                                )
+                                    ++ List.filterMap
+                                        (\( threadId, thread ) ->
+                                            if showInUnreadOverview (MuteSettings.isSlackChannelMuted currentUser.muteSettings teamId channelId (ViewThread threadId)) (SeqSet.member teamId currentUser.slackNotifyOnAllMessages || isMentioned (SeqDict.get teamId currentUser.slackDirectMentions) ( channelId, ViewThread threadId )) then
+                                                unreadMessages
+                                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                                    thread
+                                                    |> Maybe.map
+                                                        (\unread ->
+                                                            { source =
+                                                                slackThreadSource
+                                                                    workspace.name
+                                                                    channel.name
+                                                                    (threadPreviewText
+                                                                        local.localUser.timezone
+                                                                        local.localUser.slackUsers
+                                                                        (LocalState.slackChannelMentions slackGuildOrDmId local)
+                                                                        threadId
+                                                                        SeqDict.empty
+                                                                        channel
+                                                                    )
+                                                            , route =
+                                                                SlackWorkspaceRoute
+                                                                    { currentSlackUserId = currentSlackUserId
+                                                                    , teamId = teamId
+                                                                    , channelRoute =
+                                                                        SlackChannel_ChannelRoute
+                                                                            channelId
+                                                                            (ViewThreadWithMaybeMessage threadId Nothing)
+                                                                            HideChannelSettings
+                                                                    , channelsVisible = ChannelsHiddenOnMobile
+                                                                    , overlay = Nothing
+                                                                    }
+                                                            , guildOrDmId = guildOrDmId
+                                                            , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
+                                                            , additionalUnread = unread.additionalUnread
+                                                            , oldestAt = unread.oldestAt
+                                                            , messages =
+                                                                UnreadOverviewSlackThreadMessages threadId currentSlackUserId unread.messages
+                                                            }
+                                                        )
+
+                                            else
+                                                Nothing
+                                        )
+                                        (SeqDict.toList channel.threads)
+                            )
+                            (SeqDict.toList workspace.channels)
+
+                    Nothing ->
+                        []
+            )
+            (SeqDict.toList local.slackWorkspaces)
+        ++ List.concatMap
+            (\( channelId, dmChannel ) ->
+                case GuildColumn.slackDmCurrentUserId local.localUser dmChannel of
+                    Just currentSlackUserId ->
+                        let
+                            guildOrDmId : AnyGuildOrDmId
+                            guildOrDmId =
+                                SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentSlackUserId, channelId = channelId })
+
+                            dmName : String
+                            dmName =
+                                slackDmMembers currentSlackUserId dmChannel
+                                    |> List.map (\userId -> User.toString userId local.localUser.slackUsers)
+                                    |> String.join ", "
+                        in
+                        (unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
+                            |> Maybe.map
+                                (\unread ->
+                                    [ { source = Ui.text dmName
+                                      , route =
+                                            SlackDmRoute
+                                                { currentSlackUserId = currentSlackUserId
+                                                , channelId = channelId
+                                                , threadRoute = NoThreadWithMaybeMessage Nothing
+                                                , channelsVisible = ChannelsHiddenOnMobile
+                                                , overlay = Nothing
+                                                }
+                                      , guildOrDmId = guildOrDmId
+                                      , threadRoute = NoThreadWithMessage unread.newestMessageId
+                                      , additionalUnread = unread.additionalUnread
+                                      , oldestAt = unread.oldestAt
+                                      , messages = UnreadOverviewSlackMessages currentSlackUserId unread.messages
+                                      }
+                                    ]
+                                )
+                            |> Maybe.withDefault []
+                        )
+                            ++ List.filterMap
+                                (\( threadId, thread ) ->
+                                    unreadMessages
+                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                        thread
+                                        |> Maybe.map
+                                            (\unread ->
+                                                { source =
+                                                    slackDmThreadSource
+                                                        dmName
+                                                        (threadPreviewText
+                                                            local.localUser.timezone
+                                                            local.localUser.slackUsers
+                                                            SeqDict.empty
+                                                            threadId
+                                                            SeqDict.empty
+                                                            dmChannel
+                                                        )
+                                                , route =
+                                                    SlackDmRoute
+                                                        { currentSlackUserId = currentSlackUserId
+                                                        , channelId = channelId
+                                                        , threadRoute = ViewThreadWithMaybeMessage threadId Nothing
+                                                        , channelsVisible = ChannelsHiddenOnMobile
+                                                        , overlay = Nothing
+                                                        }
+                                                , guildOrDmId = guildOrDmId
+                                                , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
+                                                , additionalUnread = unread.additionalUnread
+                                                , oldestAt = unread.oldestAt
+                                                , messages =
+                                                    UnreadOverviewSlackThreadMessages threadId currentSlackUserId unread.messages
+                                                }
+                                            )
+                                )
+                                (SeqDict.toList dmChannel.threads)
+
+                    Nothing ->
+                        []
+            )
+            (SeqDict.toList local.slackDmChannels)
         |> List.sortBy (\unread -> Time.posixToMillis unread.oldestAt)
 
 
@@ -1196,6 +1441,46 @@ threadSource guildName channelName threadName =
             [ Ui.text (GuildName.toString guildName)
             , Ui.text "/"
             , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+slackChannelSource : String -> ChannelName -> Element msg
+slackChannelSource workspaceName channelName =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.shrink
+        ]
+        [ Ui.text workspaceName
+        , Ui.text "/"
+        , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+        ]
+
+
+slackThreadSource : String -> ChannelName -> String -> Element msg
+slackThreadSource workspaceName channelName threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.text workspaceName
+            , Ui.text "/"
+            , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+slackDmThreadSource : String -> String -> Element msg
+slackDmThreadSource dmName threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.text dmName
             , Ui.text "/"
             ]
         , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
@@ -1759,7 +2044,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , channelColumnLazy True canScroll2 model loggedIn local.localUser local.calls guildId guild channelRoute
+                                , channelColumnLazy True canScroll2 model local.localUser local.calls guildId guild channelRoute
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1774,7 +2059,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , channelColumnLazy False True model loggedIn local.localUser local.calls guildId guild channelRoute
+                                    , channelColumnLazy False True model local.localUser local.calls guildId guild channelRoute
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -1936,7 +2221,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0, MyUi.htmlStyle "isolation" "isolate" ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
+                                , discordChannelColumnLazy True canScroll2 model local.localUser routeData guild
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1951,7 +2236,7 @@ discordGuildView model routeData loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , discordChannelColumnLazy False True model loggedIn local.localUser routeData guild
+                                    , discordChannelColumnLazy False True model local.localUser routeData guild
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -6171,7 +6456,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     fileUploadPreview
                         (PressedDeleteAttachedFile ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
                         (PressedViewAttachedFileInfo ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
-                        (PressedToggleAttachedFileSpoiler ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
+                        (Just (PressedToggleAttachedFileSpoiler ( GuildOrDmId guildOrDmIdNoThread, NoThread )))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -6357,7 +6642,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -6667,7 +6952,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -6852,7 +7137,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
-                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        (Just (PressedToggleAttachedFileSpoiler guildOrDmId))
                         draftRichText
                         filesToUpload2
                         |> Ui.inFront
@@ -7249,7 +7534,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                             fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
-                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                (Just (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId))
                                 editingRichText
                                 filesToUpload
                                 |> Ui.inFront
@@ -7415,7 +7700,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                             fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
-                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                (Just (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId))
                                 editingRichText
                                 filesToUpload
                                 |> Ui.inFront
@@ -10088,84 +10373,56 @@ channelColumnLazy :
     Bool
     -> Bool
     -> LoadedFrontend
-    -> LoggedIn2
     -> LocalUser
     -> Call.Local
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnLazy isMobile canScroll2 model loggedIn localUser calls guildId guild channelRoute =
-    if loggedIn.channelSearch /= "" then
-        -- The search text changes too often for laziness to be worth it here
-        channelColumn
-            isMobile
-            (Time.millisToPosix (nearestHour model.time))
-            localUser
-            calls
-            guildId
-            guild
-            channelRoute
-            canScroll2
-            loggedIn.channelSearch
+channelColumnLazy isMobile canScroll2 model localUser calls guildId guild channelRoute =
+    Ui.Lazy.lazy6
+        (if isMobile then
+            if canScroll2 then
+                channelColumnCanScrollMobile
 
-    else
-        Ui.Lazy.lazy6
-            (if isMobile then
-                if canScroll2 then
-                    channelColumnCanScrollMobile
+            else
+                channelColumnCannotScrollMobile
 
-                else
-                    channelColumnCannotScrollMobile
-
-             else
-                channelColumnNotMobile
-            )
-            localUser
-            calls
-            (nearestHour model.time)
-            guildId
-            guild
-            channelRoute
+         else
+            channelColumnNotMobile
+        )
+        localUser
+        calls
+        (nearestHour model.time)
+        guildId
+        guild
+        channelRoute
 
 
 discordChannelColumnLazy :
     Bool
     -> Bool
     -> LoadedFrontend
-    -> LoggedIn2
     -> LocalUser
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
-discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData guild =
-    if loggedIn.channelSearch /= "" then
-        -- The search text changes too often for laziness to be worth it here
-        discordChannelColumn
-            isMobile
-            (Time.millisToPosix (nearestHour model.time))
-            localUser
-            routeData
-            guild
-            canScroll2
-            loggedIn.channelSearch
+discordChannelColumnLazy isMobile canScroll2 model localUser routeData guild =
+    Ui.Lazy.lazy4
+        (if isMobile then
+            if canScroll2 then
+                discordChannelColumnCanScrollMobile
 
-    else
-        Ui.Lazy.lazy4
-            (if isMobile then
-                if canScroll2 then
-                    discordChannelColumnCanScrollMobile
+            else
+                discordChannelColumnCannotScrollMobile
 
-                else
-                    discordChannelColumnCannotScrollMobile
-
-             else
-                discordChannelColumnNotMobile
-            )
-            (nearestHour model.time)
-            localUser
-            routeData
-            guild
+         else
+            discordChannelColumnNotMobile
+        )
+        (nearestHour model.time)
+        localUser
+        routeData
+        guild
 
 
 channelColumnNotMobile :
@@ -10177,7 +10434,7 @@ channelColumnNotMobile :
     -> ChannelRoute
     -> Element FrontendMsg_
 channelColumnNotMobile localUser calls time guildId guild channelRoute =
-    channelColumn False (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
+    channelColumn False (Time.millisToPosix time) localUser calls guildId guild channelRoute True
 
 
 discordChannelColumnNotMobile :
@@ -10187,7 +10444,7 @@ discordChannelColumnNotMobile :
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
 discordChannelColumnNotMobile time localUser routeData guild =
-    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild True ""
+    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild True
 
 
 channelColumnCanScrollMobile :
@@ -10199,7 +10456,7 @@ channelColumnCanScrollMobile :
     -> ChannelRoute
     -> Element FrontendMsg_
 channelColumnCanScrollMobile localUser calls time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute True
 
 
 channelColumnCannotScrollMobile :
@@ -10211,7 +10468,7 @@ channelColumnCannotScrollMobile :
     -> ChannelRoute
     -> Element FrontendMsg_
 channelColumnCannotScrollMobile localUser calls time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute False ""
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute False
 
 
 discordChannelColumnCanScrollMobile :
@@ -10221,7 +10478,7 @@ discordChannelColumnCanScrollMobile :
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
 discordChannelColumnCanScrollMobile time localUser guildId guild =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild True ""
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild True
 
 
 discordChannelColumnCannotScrollMobile :
@@ -10231,11 +10488,11 @@ discordChannelColumnCannotScrollMobile :
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
 discordChannelColumnCannotScrollMobile time localUser guildId guild =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild False ""
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild False
 
 
-channelColumnContainer : Int -> List (Element msg) -> Element msg -> Element msg -> Element msg
-channelColumnContainer safeAreaInsetTop header subHeader content =
+channelColumnContainer : Int -> List (Element msg) -> Element msg -> Element msg
+channelColumnContainer safeAreaInsetTop header content =
     Ui.el
         [ Ui.height Ui.fill, Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 } ]
         (Ui.column
@@ -10257,10 +10514,30 @@ channelColumnContainer safeAreaInsetTop header subHeader content =
                 , Ui.clipWithEllipsis
                 ]
                 header
-            , subHeader
             , content
             ]
         )
+
+
+searchButtonId : HtmlId
+searchButtonId =
+    Dom.id "guild_showSearchOverlay"
+
+
+searchIcon : Bool -> Element FrontendMsg_
+searchIcon isMobile =
+    MyUi.elButton
+        searchButtonId
+        PressedShowSearchOverlay
+        [ Ui.Font.color MyUi.font3
+        , Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.paddingXY 4 0
+        , Ui.alignRight
+        , Ui.width Ui.shrink
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+        ]
+        (Ui.html Icons.magnifyingGlass)
 
 
 channelColumn :
@@ -10272,9 +10549,8 @@ channelColumn :
     -> FrontendGuild
     -> ChannelRoute
     -> Bool
-    -> String
     -> Element FrontendMsg_
-channelColumn isMobile time localUser calls guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser calls guildId guild channelRoute canScroll2 =
     let
         channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
@@ -10283,18 +10559,6 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
         guildName : String
         guildName =
             GuildName.toString guild.name
-
-        showSearch : Bool
-        showSearch =
-            SeqDict.size guild.channels > channelSearchMinChannels
-
-        searchFilter : String
-        searchFilter =
-            if showSearch then
-                String.trim channelSearch |> String.toLower
-
-            else
-                ""
 
         directMentions : Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
@@ -10330,26 +10594,17 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
-        , GuildColumn.elLinkButton
+        [ GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute ChannelsHiddenOnMobile Nothing)
             [ Ui.Font.color MyUi.font2
-            , Ui.width (Ui.px 40)
-            , Ui.alignRight
-            , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
-            , MyUi.hoverText "Invite users"
+            , MyUi.hoverText guildName
             ]
-            (Ui.html Icons.gear)
+            (Ui.text guildName)
+        , searchIcon isMobile
         ]
-        (if showSearch then
-            channelSearchRow isMobile channelSearch
-
-         else
-            Ui.none
-        )
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -10358,7 +10613,6 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
             , MyUi.bounceScroll isMobile
             ]
             ((SeqDict.toList guild.channels
-                |> List.filter (\( _, channel ) -> channelMatchesSearch searchFilter channel)
                 |> List.map
                     (\( channelId, channel ) ->
                         let
@@ -10438,14 +10692,8 @@ channelColumn isMobile time localUser calls guildId guild channelRoute canScroll
                     )
                 |> List.sortBy Tuple.first
                 |> List.map Tuple.second
-                |> channelColumnNoResults searchFilter
              )
-                ++ (if searchFilter == "" then
-                        [ newChannelButton ]
-
-                    else
-                        []
-                   )
+                ++ [ newChannelButton ]
             )
         )
 
@@ -10474,103 +10722,6 @@ channelSortName notifications channel =
         ++ ChannelName.toString channel.name
 
 
-{-| The channel search input is only shown for guilds with more channels than this.
--}
-channelSearchMinChannels : Int
-channelSearchMinChannels =
-    6
-
-
-channelSearchInputId : HtmlId
-channelSearchInputId =
-    Dom.id "guild_channelSearchInput"
-
-
-channelMatchesSearch : String -> { a | name : ChannelName } -> Bool
-channelMatchesSearch searchFilter channel =
-    (searchFilter == "")
-        || String.contains searchFilter (String.toLower (ChannelName.toString channel.name))
-
-
-channelColumnNoResults : String -> List (Element FrontendMsg_) -> List (Element FrontendMsg_)
-channelColumnNoResults searchFilter channelRows =
-    if (searchFilter /= "") && List.isEmpty channelRows then
-        [ Ui.Prose.paragraph
-            [ Ui.Font.italic
-            , Ui.Font.lineHeight 1.5
-            , Ui.Font.color MyUi.font2
-            , Ui.paddingXY 8 8
-            ]
-            [ Ui.text noMatchingChannelsText ]
-        ]
-
-    else
-        channelRows
-
-
-{-| Sits in its own row below the channel column header's bottom border. It is part of
-the fixed header area, not the scrollable channel list.
--}
-channelSearchRow : Bool -> String -> Element FrontendMsg_
-channelSearchRow isMobile channelSearch =
-    let
-        clearPaddingX =
-            12
-    in
-    Ui.el
-        [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border1
-        , MyUi.noShrinking
-        , Ui.spacing 4
-        , if channelSearch == "" then
-            Ui.el
-                [ Ui.Font.color MyUi.font3
-                , Ui.height Ui.fill
-                , Ui.contentCenterY
-                , Ui.paddingXY clearPaddingX 0
-                , MyUi.noPointerEvents
-                , Ui.alignRight
-                ]
-                (Ui.html Icons.magnifyingGlass)
-                |> Ui.inFront
-
-          else
-            MyUi.elButton
-                (Dom.id "guild_clearChannelSearch")
-                PressedClearChannelSearch
-                [ Ui.Font.color MyUi.font3
-                , Ui.width Ui.shrink
-                , Ui.height Ui.fill
-                , Ui.contentCenterY
-                , Ui.paddingXY clearPaddingX 0
-                , Ui.background MyUi.inputBackground
-                , Ui.alignRight
-                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
-                , MyUi.hoverText "Clear search"
-                ]
-                (Ui.html Icons.x)
-                |> Ui.el
-                    [ -- Don't cover up the input focus outline
-                      Ui.padding 2
-                    , Ui.height Ui.fill
-                    ]
-                |> Ui.inFront
-        ]
-        (Ui.Input.text
-            [ Ui.id (Dom.idToString channelSearchInputId)
-            , Ui.background (Ui.rgba 0 0 0 0)
-            , Ui.border 0
-            , Ui.paddingWith { left = 8, top = 8, bottom = 8, right = clearPaddingX * 2 + 24 + 8 }
-            , Ui.Font.color MyUi.font1
-            ]
-            { onChange = TypedChannelSearch
-            , text = channelSearch
-            , placeholder = Just "Search channels"
-            , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
-            }
-        )
-
-
 discordChannelColumn :
     Bool
     -> Time.Posix
@@ -10578,9 +10729,8 @@ discordChannelColumn :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Bool
-    -> String
     -> Element FrontendMsg_
-discordChannelColumn isMobile time localUser routeData guild canScroll2 channelSearch =
+discordChannelColumn isMobile time localUser routeData guild canScroll2 =
     let
         channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
@@ -10590,32 +10740,13 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
         guildName =
             GuildName.toString guild.name
 
-        showSearch : Bool
-        showSearch =
-            SeqDict.size guild.channels > channelSearchMinChannels
-
-        searchFilter : String
-        searchFilter =
-            if showSearch then
-                String.trim channelSearch |> String.toLower
-
-            else
-                ""
-
         directMentions : Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ Ui.row
-            [ MyUi.hoverText guildName
-            , Ui.spacing 4
-            ]
-            [ GuildIcon.discordLogo
-            , Ui.text guildName
-            ]
-        , GuildColumn.elLinkButton
+        [ GuildColumn.rowLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
@@ -10626,21 +10757,14 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                 }
             )
             [ Ui.Font.color MyUi.font2
-            , Ui.width (Ui.px 40)
-            , Ui.alignRight
-            , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
-            , MyUi.hoverText "Invite users"
+            , Ui.spacing 4
+            , MyUi.hoverText guildName
             ]
-            (Ui.html Icons.gear)
+            [ GuildIcon.discordLogo, Ui.text guildName ]
+        , searchIcon isMobile
         ]
-        (if showSearch then
-            channelSearchRow isMobile channelSearch
-
-         else
-            Ui.none
-        )
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -10649,7 +10773,6 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
             , MyUi.bounceScroll isMobile
             ]
             (SeqDict.toList guild.channels
-                |> List.filter (\( _, channel ) -> channelMatchesSearch searchFilter channel)
                 |> List.map
                     (\( channelId, channel ) ->
                         let
@@ -10727,7 +10850,6 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                     )
                 |> List.sortBy Tuple.first
                 |> List.map Tuple.second
-                |> channelColumnNoResults searchFilter
             )
         )
 
@@ -11232,11 +11354,9 @@ friendsColumnLazy :
     -> Bool
     -> Time.Posix
     -> DmChannelSelection
-    -> String
-    -> Bool
     -> LocalState
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
     let
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
@@ -11246,76 +11366,61 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
         packed =
             encodeFriendsColumn canScroll2 currentTimeRoundedToMinute
     in
-    if (friendsSearch /= "") || friendsSearchHasFocus then
-        -- The search text changes too often for laziness to be worth it here
-        friendsColumn
-            canScroll2
-            isMobile
-            currentTimeRoundedToMinute
-            friendsSearch
-            friendsSearchHasFocus
-            openedOtherUserId
-            local.dmChannels
-            local.discordDmChannels
-            local.slackDmChannels
-            local.localUser
+    case openedOtherUserId of
+        NoDmChannelSelected ->
+            Ui.Lazy.lazy6
+                friendsColumn_NoDmChannelSelected
+                packed
+                isMobile
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-    else
-        case openedOtherUserId of
-            NoDmChannelSelected ->
-                Ui.Lazy.lazy6
-                    friendsColumn_NoDmChannelSelected
-                    packed
-                    isMobile
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedDmChannel dmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDmChannel_Mobile
 
-            SelectedDmChannel dmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedDmChannel_Mobile
+                 else
+                    friendsColumn_SelectedDmChannel_NotMobile
+                )
+                packed
+                dmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-                     else
-                        friendsColumn_SelectedDmChannel_NotMobile
-                    )
-                    packed
-                    dmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedSlackDmChannel slackDmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedSlackDmChannel_Mobile
 
-            SelectedSlackDmChannel slackDmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedSlackDmChannel_Mobile
+                 else
+                    friendsColumn_SelectedSlackDmChannel_NotMobile
+                )
+                packed
+                slackDmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
-                     else
-                        friendsColumn_SelectedSlackDmChannel_NotMobile
-                    )
-                    packed
-                    slackDmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+        SelectedDiscordDmChannel discordDmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDiscordDmChannel_Mobile
 
-            SelectedDiscordDmChannel discordDmRouteData ->
-                Ui.Lazy.lazy6
-                    (if isMobile then
-                        friendsColumn_SelectedDiscordDmChannel_Mobile
-
-                     else
-                        friendsColumn_SelectedDiscordDmChannel_NotMobile
-                    )
-                    packed
-                    discordDmRouteData
-                    local.dmChannels
-                    local.discordDmChannels
-                    local.slackDmChannels
-                    local.localUser
+                 else
+                    friendsColumn_SelectedDiscordDmChannel_NotMobile
+                )
+                packed
+                discordDmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.slackDmChannels
+                local.localUser
 
 
 friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11324,7 +11429,7 @@ friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels s
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll isMobile time NoDmChannelSelected dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedSlackDmChannel_Mobile : Int -> SlackDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11333,7 +11438,7 @@ friendsColumn_SelectedSlackDmChannel_Mobile packed slackDmRoute dmChannels disco
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedSlackDmChannel_NotMobile : Int -> SlackDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11342,7 +11447,7 @@ friendsColumn_SelectedSlackDmChannel_NotMobile packed slackDmRoute dmChannels di
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedSlackDmChannel slackDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11351,7 +11456,7 @@ friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels d
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11360,7 +11465,7 @@ friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannel
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11369,7 +11474,7 @@ friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChanne
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll True time (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel -> LocalUser -> Element FrontendMsg_
@@ -11378,22 +11483,20 @@ friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmCha
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
+    friendsColumn canScroll False time (SelectedDmChannel dmRoute) dmChannels discordDmChannels slackDmChannels localUser
 
 
 friendsColumn :
     Bool
     -> Bool
     -> Int
-    -> String
-    -> Bool
     -> DmChannelSelection
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels slackDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime dmChannelSelection dmChannels discordDmChannels slackDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -11406,348 +11509,212 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         discordDmChannelsIncludingLinkedUsers =
             discordDmChannels
 
-        searchIsVisible : Bool
-        searchIsVisible =
-            friendsSearchHasFocus || (friendsSearch /= "")
-
-        searchFilter : String
-        searchFilter =
-            String.trim friendsSearch |> String.toLower
-
-        matchesSearch : PersonName -> Bool
-        matchesSearch name =
-            String.contains searchFilter (String.toLower (PersonName.toString name))
-
         columnItems : List ( Time.Posix, Element FrontendMsg_ )
         columnItems =
             List.filterMap
                 (\( otherUserId, dmChannel ) ->
                     case User.getUser otherUserId localUser of
                         Just otherUser ->
-                            if matchesSearch otherUser.name then
-                                let
-                                    -- The route being viewed in this DM, or Nothing when the
-                                    -- open DM belongs to somebody else
-                                    threadRoute : Maybe ThreadRouteWithFriends
-                                    threadRoute =
-                                        case dmChannelSelection of
-                                            SelectedDmChannel dmRoute ->
-                                                if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
-                                                    Just dmRoute.threadRoute
-
-                                                else
-                                                    Nothing
-
-                                            SelectedDiscordDmChannel _ ->
-                                                Nothing
-
-                                            SelectedSlackDmChannel _ ->
-                                                Nothing
-
-                                            NoDmChannelSelected ->
-                                                Nothing
-                                in
-                                ( case MessageArray.last dmChannel.messages of
-                                    Just message2 ->
-                                        Message.createdAt message2
-
-                                    _ ->
-                                        Time.millisToPosix 0
-                                , Ui.column
-                                    []
-                                    [ Ui.Lazy.lazy5
-                                        (if isMobile then
-                                            friendLabelMobile
-
-                                         else
-                                            friendLabelNotMobile
-                                        )
-                                        (encodeFriendLabel
-                                            (case threadRoute of
-                                                Just (NoThreadWithFriends _ _) ->
-                                                    True
-
-                                                _ ->
-                                                    False
-                                            )
-                                            currentTime
-                                        )
-                                        localUser
-                                        otherUserId
-                                        otherUser
-                                        dmChannel
-                                    , dmColumnThreads
-                                        isMobile
-                                        (Time.millisToPosix currentTime)
-                                        threadRoute
-                                        localUser
-                                        otherUserId
-                                        dmChannel
-                                        (case threadRoute of
-                                            -- A thread that was just opened isn't in the local
-                                            -- state yet but still belongs in the list
-                                            Just (ViewThreadWithFriends threadMessageIndex _ _) ->
-                                                SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
-
-                                            _ ->
-                                                dmChannel.threads
-                                        )
-                                    ]
-                                )
-                                    |> Just
-
-                            else
-                                Nothing
-
-                        Nothing ->
-                            Nothing
-                )
-                (SeqDict.toList dmChannelsIncludingCurrentUser)
-                ++ List.filterMap
-                    (\( channelId, dmChannel ) ->
-                        if
-                            (searchFilter == "")
-                                || List.any
-                                    (\( userId, _ ) ->
-                                        case User.getDiscordUser userId localUser of
-                                            Just discordUser ->
-                                                matchesSearch discordUser.name
-
-                                            Nothing ->
-                                                False
-                                    )
-                                    (NonemptyDict.toList dmChannel.members)
-                        then
-                            ( case MessageArray.last dmChannel.messages of
-                                Just message2 ->
-                                    Message.createdAt message2
-
-                                _ ->
-                                    Time.millisToPosix 0
-                            , Ui.Lazy.lazy5
-                                (if isMobile then
-                                    discordFriendLabelMobile
-
-                                 else
-                                    discordFriendLabelNotMobile
-                                )
-                                currentTime
-                                (case dmChannelSelection of
-                                    SelectedDiscordDmChannel routeData ->
-                                        routeData.channelId == channelId
-
-                                    _ ->
-                                        False
-                                )
-                                channelId
-                                dmChannel
-                                localUser
-                            )
-                                |> Just
-
-                        else
-                            Nothing
-                    )
-                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
-                ++ List.filterMap
-                    (\( channelId, dmChannel ) ->
-                        if
-                            (searchFilter == "")
-                                || List.any
-                                    (\userId ->
-                                        case SeqDict.get userId localUser.slackUsers of
-                                            Just slackUser ->
-                                                matchesSearch slackUser.name
-
-                                            Nothing ->
-                                                False
-                                    )
-                                    (NonemptySet.toList dmChannel.members)
-                        then
-                            ( case MessageArray.last dmChannel.messages of
-                                Just message2 ->
-                                    Message.createdAt message2
-
-                                _ ->
-                                    Time.millisToPosix 0
-                            , let
-                                -- The thread being viewed in this DM, or Nothing when another
-                                -- conversation is open
-                                threadRoute : Maybe ThreadRouteWithMaybeMessage
+                            let
+                                -- The route being viewed in this DM, or Nothing when the
+                                -- open DM belongs to somebody else
+                                threadRoute : Maybe ThreadRouteWithFriends
                                 threadRoute =
                                     case dmChannelSelection of
-                                        SelectedSlackDmChannel routeData ->
-                                            if routeData.channelId == channelId then
-                                                Just routeData.threadRoute
+                                        SelectedDmChannel dmRoute ->
+                                            if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
+                                                Just dmRoute.threadRoute
 
                                             else
                                                 Nothing
 
-                                        SelectedDmChannel _ ->
+                                        SelectedDiscordDmChannel _ ->
                                             Nothing
 
-                                        SelectedDiscordDmChannel _ ->
+                                        SelectedSlackDmChannel _ ->
                                             Nothing
 
                                         NoDmChannelSelected ->
                                             Nothing
-                              in
-                              Ui.column
+                            in
+                            ( case MessageArray.last dmChannel.messages of
+                                Just message2 ->
+                                    Message.createdAt message2
+
+                                _ ->
+                                    Time.millisToPosix 0
+                            , Ui.column
                                 []
                                 [ Ui.Lazy.lazy5
                                     (if isMobile then
-                                        slackFriendLabelMobile
+                                        friendLabelMobile
 
                                      else
-                                        slackFriendLabelNotMobile
+                                        friendLabelNotMobile
                                     )
-                                    currentTime
-                                    (case threadRoute of
-                                        Just (NoThreadWithMaybeMessage _) ->
-                                            True
+                                    (encodeFriendLabel
+                                        (case threadRoute of
+                                            Just (NoThreadWithFriends _ _) ->
+                                                True
 
-                                        Just (ViewThreadWithMaybeMessage _ _) ->
-                                            False
-
-                                        Nothing ->
-                                            False
+                                            _ ->
+                                                False
+                                        )
+                                        currentTime
                                     )
-                                    channelId
-                                    dmChannel
                                     localUser
-                                , slackDmColumnThreads
+                                    otherUserId
+                                    otherUser
+                                    dmChannel
+                                , dmColumnThreads
                                     isMobile
                                     (Time.millisToPosix currentTime)
                                     threadRoute
                                     localUser
-                                    channelId
+                                    otherUserId
                                     dmChannel
                                     (case threadRoute of
-                                        Just (ViewThreadWithMaybeMessage threadId _) ->
-                                            SeqDict.update
-                                                threadId
-                                                (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
-                                                dmChannel.threads
+                                        -- A thread that was just opened isn't in the local
+                                        -- state yet but still belongs in the list
+                                        Just (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                            SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
 
-                                        Just (NoThreadWithMaybeMessage _) ->
-                                            dmChannel.threads
-
-                                        Nothing ->
+                                        _ ->
                                             dmChannel.threads
                                     )
                                 ]
                             )
                                 |> Just
 
-                        else
+                        Nothing ->
                             Nothing
+                )
+                (SeqDict.toList dmChannelsIncludingCurrentUser)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        ( case MessageArray.last dmChannel.messages of
+                            Just message2 ->
+                                Message.createdAt message2
+
+                            _ ->
+                                Time.millisToPosix 0
+                        , Ui.Lazy.lazy5
+                            (if isMobile then
+                                discordFriendLabelMobile
+
+                             else
+                                discordFriendLabelNotMobile
+                            )
+                            currentTime
+                            (case dmChannelSelection of
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
+
+                                _ ->
+                                    False
+                            )
+                            channelId
+                            dmChannel
+                            localUser
+                        )
+                    )
+                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        ( case MessageArray.last dmChannel.messages of
+                            Just message2 ->
+                                Message.createdAt message2
+
+                            _ ->
+                                Time.millisToPosix 0
+                        , let
+                            -- The thread being viewed in this DM, or Nothing when another
+                            -- conversation is open
+                            threadRoute : Maybe ThreadRouteWithMaybeMessage
+                            threadRoute =
+                                case dmChannelSelection of
+                                    SelectedSlackDmChannel routeData ->
+                                        if routeData.channelId == channelId then
+                                            Just routeData.threadRoute
+
+                                        else
+                                            Nothing
+
+                                    SelectedDmChannel _ ->
+                                        Nothing
+
+                                    SelectedDiscordDmChannel _ ->
+                                        Nothing
+
+                                    NoDmChannelSelected ->
+                                        Nothing
+                          in
+                          Ui.column
+                            []
+                            [ Ui.Lazy.lazy5
+                                (if isMobile then
+                                    slackFriendLabelMobile
+
+                                 else
+                                    slackFriendLabelNotMobile
+                                )
+                                currentTime
+                                (case threadRoute of
+                                    Just (NoThreadWithMaybeMessage _) ->
+                                        True
+
+                                    Just (ViewThreadWithMaybeMessage _ _) ->
+                                        False
+
+                                    Nothing ->
+                                        False
+                                )
+                                channelId
+                                dmChannel
+                                localUser
+                            , slackDmColumnThreads
+                                isMobile
+                                (Time.millisToPosix currentTime)
+                                threadRoute
+                                localUser
+                                channelId
+                                dmChannel
+                                (case threadRoute of
+                                    Just (ViewThreadWithMaybeMessage threadId _) ->
+                                        SeqDict.update
+                                            threadId
+                                            (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
+                                            dmChannel.threads
+
+                                    Just (NoThreadWithMaybeMessage _) ->
+                                        dmChannel.threads
+
+                                    Nothing ->
+                                        dmChannel.threads
+                                )
+                            ]
+                        )
                     )
                     (SeqDict.toList slackDmChannels)
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
         [ Ui.el
-            [ Ui.height Ui.fill
-            , -- The search input is always in the DOM, invisible and covering the magnifying glass
-              -- icon so that clicking the icon focuses it. It has to stay in the DOM while hidden
-              -- because recreating it on press would drop the browser focus that reveals it.
-              Ui.inFront
-                (Ui.row
-                    [ Ui.height Ui.fill ]
-                    [ Ui.Input.text
-                        (Ui.id (Dom.idToString friendsSearchInputId)
-                            :: (if searchIsVisible then
-                                    [ Ui.background MyUi.background2
-                                    , Ui.border 0
-                                    , Ui.rounded 4
-                                    , Ui.paddingXY 8 4
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.centerY
-                                    ]
-
-                                else
-                                    [ Ui.opacity 0
-                                    , Ui.border 0
-                                    , Ui.width (Ui.px 40)
-                                    , Ui.alignRight
-                                    , Ui.height Ui.fill
-                                    , Ui.pointer
-                                    ]
-                               )
-                        )
-                        { onChange = TypedFriendsSearch
-                        , text = friendsSearch
-                        , placeholder =
-                            if searchIsVisible then
-                                Just "Filter friends"
-
-                            else
-                                Nothing
-                        , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
-                        }
-                    , if searchIsVisible then
-                        MyUi.elButton
-                            (Dom.id "guild_clearFriendsSearch")
-                            PressedClearFriendsSearch
-                            [ Ui.Font.color MyUi.font2
-                            , Ui.width (Ui.px 40)
-                            , Ui.paddingXY 8 0
-                            , Ui.height Ui.fill
-                            , Ui.contentCenterY
-                            , MyUi.hoverText "Clear search"
-                            ]
-                            (Ui.html Icons.x)
-
-                      else
-                        Ui.none
-                    ]
-                )
+            [ Ui.Font.bold
+            , Ui.paddingXY 0 8
+            , Ui.Font.color MyUi.font2
             ]
-            (Ui.row
-                [ Ui.height Ui.fill
-                , Ui.attrIf searchIsVisible (Ui.opacity 0)
-                ]
-                [ Ui.el
-                    [ Ui.Font.bold
-                    , Ui.paddingXY 8 8
-                    , Ui.Font.color MyUi.font1
-                    ]
-                    (Ui.text directMessagesText)
-                , Ui.el
-                    [ Ui.Font.color MyUi.font2
-                    , Ui.width (Ui.px 40)
-                    , Ui.alignRight
-                    , Ui.paddingXY 8 0
-                    , Ui.height Ui.fill
-                    , Ui.contentCenterY
-                    ]
-                    (Ui.html Icons.magnifyingGlass)
-                ]
-            )
+            (Ui.text directMessagesText)
+        , searchIcon isMobile
         ]
-        Ui.none
         (case columnItems of
-            [] ->
-                Ui.Prose.paragraph
-                    [ Ui.Font.italic
-                    , Ui.Font.lineHeight 1.5
-                    , Ui.paddingXY 16 20
-                    ]
-                    [ Ui.text "No results found for "
-                    , Ui.el [ Ui.Font.bold ] (Ui.text friendsSearch)
-                    ]
-
             [ ( _, single ) ] ->
                 Ui.column
                     [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
                     [ single
-                    , if searchIsVisible then
-                        Ui.none
-
-                      else
-                        Ui.el
-                            [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
-                            (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
+                    , Ui.el
+                        [ Ui.Font.size 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                        (Ui.text "Join a guild and then click on someone's profile image to start a chat!")
                     ]
 
             _ ->
@@ -11755,11 +11722,6 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     |> List.map Tuple.second
                     |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
         )
-
-
-friendsSearchInputId : HtmlId
-friendsSearchInputId =
-    Dom.id "guild_friendsSearchInput"
 
 
 friendLabelMobile :
@@ -12389,7 +12351,7 @@ guildNameInput form =
 fileUploadPreview :
     (Id FileId -> msg)
     -> (Id FileId -> msg)
-    -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
     -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
     -> Element msg
@@ -12423,6 +12385,35 @@ slackWorkspaceView model routeData loggedIn local =
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , MyUi.unscrollable
+                            , (case ( Route.toShowMembersTabVisible loggedIn model.route, routeData.channelRoute ) of
+                                ( ( ShowChannelSettings, _ ), SlackChannel_ChannelRoute channelId threadRoute _ ) ->
+                                    Ui.Lazy.lazy6
+                                        slackChannelSettingsMobile
+                                        (MyUi.canScroll True model.drag)
+                                        local.localUser
+                                        routeData.currentSlackUserId
+                                        routeData.teamId
+                                        channelId
+                                        threadRoute
+                                        |> Ui.el
+                                            [ Ui.height Ui.fill
+                                            , Ui.background MyUi.background3
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            , Ui.move
+                                                { x = Call.memberColumnOffset loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
+                                            , Ui.heightMin 0
+                                            ]
+
+                                ( ( ShowChannelSettings, _ ), SlackChannel_WorkspaceSettingsRoute ) ->
+                                    Ui.none
+
+                                ( ( HideChannelSettings, _ ), _ ) ->
+                                    Ui.none
+                              )
+                                |> Ui.inFront
                             , slackChannelView routeData workspace loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
@@ -12478,6 +12469,26 @@ slackWorkspaceView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
+                            , case ( Route.toShowMembersTabVisible loggedIn model.route, routeData.channelRoute ) of
+                                ( ( ShowChannelSettings, _ ), SlackChannel_ChannelRoute channelId threadRoute _ ) ->
+                                    Ui.Lazy.lazy5
+                                        slackChannelSettingsNotMobile
+                                        local.localUser
+                                        routeData.currentSlackUserId
+                                        routeData.teamId
+                                        channelId
+                                        threadRoute
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            ]
+
+                                ( ( ShowChannelSettings, _ ), SlackChannel_WorkspaceSettingsRoute ) ->
+                                    Ui.none
+
+                                ( ( HideChannelSettings, _ ), _ ) ->
+                                    Ui.none
                             ]
 
                 Nothing ->
@@ -12486,43 +12497,185 @@ slackWorkspaceView model routeData loggedIn local =
 
 slackChannelView : SlackWorkspaceRouteData -> SlackFrontendWorkspace -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 slackChannelView routeData workspace loggedIn local model =
-    case SeqDict.get routeData.channelId workspace.channels of
-        Just channel ->
-            let
-                guildOrDmId : SlackGuildOrDmId
-                guildOrDmId =
-                    SlackGuildOrDmId_Workspace
-                        { currentUserId = routeData.currentSlackUserId
-                        , teamId = routeData.teamId
-                        , channelId = routeData.channelId
-                        }
-            in
-            case routeData.threadRoute of
-                NoThreadWithMaybeMessage maybeMessageId ->
-                    slackConversationView
-                        routeData.currentSlackUserId
-                        guildOrDmId
-                        maybeMessageId
-                        loggedIn
-                        model
-                        local
-                        (ChannelName.toString channel.name)
-                        channel
+    case routeData.channelRoute of
+        SlackChannel_ChannelRoute channelId threadRoute _ ->
+            case SeqDict.get channelId workspace.channels of
+                Just channel ->
+                    let
+                        guildOrDmId : SlackGuildOrDmId
+                        guildOrDmId =
+                            SlackGuildOrDmId_Workspace
+                                { currentUserId = routeData.currentSlackUserId
+                                , teamId = routeData.teamId
+                                , channelId = channelId
+                                }
+                    in
+                    case threadRoute of
+                        NoThreadWithMaybeMessage maybeMessageId ->
+                            slackConversationView
+                                routeData.currentSlackUserId
+                                guildOrDmId
+                                maybeMessageId
+                                loggedIn
+                                model
+                                local
+                                (ChannelName.toString channel.name)
+                                channel
 
-                ViewThreadWithMaybeMessage threadId maybeMessageId ->
-                    slackThreadConversationView
-                        routeData.currentSlackUserId
-                        guildOrDmId
-                        threadId
-                        maybeMessageId
-                        loggedIn
-                        model
-                        local
-                        (ChannelName.toString channel.name)
-                        channel
+                        ViewThreadWithMaybeMessage threadId maybeMessageId ->
+                            slackThreadConversationView
+                                routeData.currentSlackUserId
+                                guildOrDmId
+                                threadId
+                                maybeMessageId
+                                loggedIn
+                                model
+                                local
+                                (ChannelName.toString channel.name)
+                                channel
 
-        Nothing ->
-            pageMissing channelDoesNotExistText
+                Nothing ->
+                    pageMissing channelDoesNotExistText
+
+        SlackChannel_WorkspaceSettingsRoute ->
+            slackWorkspaceSettingsView model routeData.currentSlackUserId routeData.teamId local
+
+
+slackWorkspaceSettingsView :
+    LoadedFrontend
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> LocalState
+    -> Element FrontendMsg_
+slackWorkspaceSettingsView model currentUserId teamId local =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.Font.color MyUi.font1 ]
+        [ ChannelHeader.channelHeader isMobile (Ui.text "Workspace settings") Nothing
+        , Ui.column
+            [ Ui.spacing 16
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = local.localUser.safeAreaInsetBottom + 16 }
+            ]
+            [ Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MyUi.radioColumn
+                    slackNotificationLevelId
+                    (PressedSlackWorkspaceNotificationLevel currentUserId teamId)
+                    (if SeqSet.member teamId local.localUser.user.slackNotifyOnAllMessages then
+                        Just NotifyOnEveryMessage
+
+                     else
+                        Just NotifyOnMention
+                    )
+                    (Ui.text "Workspace notifications")
+                    [ ( NotifyOnMention, "Only when mentioned" )
+                    , ( NotifyOnEveryMessage, "On every message" )
+                    ]
+                )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteSlackWorkspace currentUserId teamId)
+                    (MuteSettings.isSlackWorkspaceSpecificallyMuted local.localUser.user.muteSettings teamId)
+                )
+            ]
+        ]
+
+
+slackNotificationLevelId : HtmlId
+slackNotificationLevelId =
+    Dom.id "guild_slackNotificationLevel"
+
+
+slackWorkspaceSettingsButtonId : HtmlId
+slackWorkspaceSettingsButtonId =
+    Dom.id "guild_slackWorkspaceSettings"
+
+
+slackChannelSettingsNotMobile :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsNotMobile localUser currentSlackUserId teamId channelId threadRoute =
+    memberColumnContainerNotMobile
+        (case threadRoute of
+            NoThreadWithMaybeMessage _ ->
+                False
+
+            ViewThreadWithMaybeMessage _ _ ->
+                True
+        )
+        [ slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute ]
+
+
+slackChannelSettingsMobile :
+    Bool
+    -> LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsMobile canScroll2 localUser currentSlackUserId teamId channelId threadRoute =
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , case threadRoute of
+                ViewThreadWithMaybeMessage _ _ ->
+                    Ui.text "Thread settings"
+
+                NoThreadWithMaybeMessage _ ->
+                    Ui.text "Channel settings"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute ]
+        ]
+
+
+slackChannelSettingsForm :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.TeamId
+    -> Slack.Id Slack.ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackChannelSettingsForm localUser currentSlackUserId teamId channelId threadRoute =
+    (case threadRoute of
+        NoThreadWithMaybeMessage _ ->
+            MuteSettings.view
+                (PressedMuteSlackChannel currentSlackUserId teamId channelId)
+                (MuteSettings.isSlackChannelSpecificallyMuted localUser.user.muteSettings teamId channelId)
+
+        ViewThreadWithMaybeMessage threadId _ ->
+            MuteSettings.view
+                (PressedMuteSlackThread currentSlackUserId teamId channelId threadId)
+                (MuteSettings.isSlackThreadSpecificallyMuted localUser.user.muteSettings teamId channelId threadId)
+    )
+        |> Ui.el [ Ui.Font.color MyUi.font1, Ui.padding 8 ]
 
 
 slackDmChannelView : SlackDmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -12637,9 +12790,15 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread
+        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
-            [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
+            [ emojiSelector
+                isMobile
+                (MessageMenu.availableCustomEmojisAndStickers (SlackGuildOrDmId guildOrDmIdNoThread) local |> Tuple.first)
+                SeqSet.empty
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -12690,6 +12849,18 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
             [ Ui.paddingXY 2 0
             , Ui.heightMin 0
             , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        Nothing
+                        draftRichText
+                        filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
             ]
             [ newMessagesView model loggedIn channel
             , MessageInput.view
@@ -12709,7 +12880,13 @@ slackConversationView currentSlackUserId guildOrDmIdNoThread maybeUrlMessageId l
                 (RichText.maxLength - String.length draft)
                 draft
                 draftRichText
-                SeqDict.empty
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+
+                    Nothing ->
+                        SeqDict.empty
+                )
                 local.localUser
                 loggedIn
                 local.localUser.slackUsers
@@ -12775,9 +12952,15 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread
+        [ ChannelHeader.slackChannel isMobile name guildOrDmIdNoThread model.route
         , Ui.el
-            [ emojiSelector isMobile SeqSet.empty SeqSet.empty local loggedIn model
+            [ emojiSelector
+                isMobile
+                (MessageMenu.availableCustomEmojisAndStickers (SlackGuildOrDmId guildOrDmIdNoThread) local |> Tuple.first)
+                SeqSet.empty
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -12846,6 +13029,18 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
             [ Ui.paddingXY 2 0
             , Ui.heightMin 0
             , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        Nothing
+                        draftRichText
+                        filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
             ]
             [ newMessagesView model loggedIn thread
             , MessageInput.view
@@ -12857,7 +13052,13 @@ slackThreadConversationView currentSlackUserId guildOrDmIdNoThread threadId mayb
                 (RichText.maxLength - String.length draft)
                 draft
                 draftRichText
-                SeqDict.empty
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+
+                    Nothing ->
+                        SeqDict.empty
+                )
                 local.localUser
                 loggedIn
                 local.localUser.slackUsers
@@ -13747,16 +13948,25 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
     in
     channelColumnContainer
         localUser.safeAreaInsetTop
-        [ --Ui.el [ MyUi.hoverText workspace.name ] (Ui.text workspace.name)
-          Ui.row
-            [ MyUi.hoverText workspace.name
+        [ GuildColumn.rowLinkButton
+            slackWorkspaceSettingsButtonId
+            (SlackWorkspaceRoute
+                { currentSlackUserId = routeData.currentSlackUserId
+                , teamId = routeData.teamId
+                , channelRoute = SlackChannel_WorkspaceSettingsRoute
+                , channelsVisible = ChannelsHiddenOnMobile
+                , overlay = Nothing
+                }
+            )
+            [ Ui.Font.color MyUi.font2
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
             , Ui.spacing 6
+            , MyUi.hoverText workspace.name
             ]
-            [ Ui.html (Icons.slack 16)
-            , Ui.text workspace.name
-            ]
+            [ Ui.html (Icons.slack 16), Ui.text workspace.name ]
+        , searchIcon isMobile
         ]
-        Ui.none
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -13765,7 +13975,6 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
             , MyUi.bounceScroll isMobile
             ]
             (SeqDict.toList workspace.channels
-                |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name)
                 |> List.map
                     (\( channelId, channel ) ->
                         let
@@ -13775,20 +13984,51 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                     (SlackGuildOrDmId_Workspace
                                         { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId }
                                     )
-                        in
-                        Ui.column
-                            []
-                            [ slackChannelColumnRow
-                                isMobile
-                                (GuildColumn.channelOrThreadHasNotifications
-                                    IsNotMuted
+
+                            channelMuted : IsMuted
+                            channelMuted =
+                                MuteSettings.isSlackChannelMuted
+                                    localUser.user.muteSettings
+                                    routeData.teamId
+                                    channelId
+                                    NoThread
+
+                            hasNotifications : ChannelNotificationType
+                            hasNotifications =
+                                GuildColumn.channelOrThreadHasNotifications
+                                    channelMuted
                                     directMentions
-                                    False
+                                    (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
                                     channelId
                                     NoThread
                                     (SeqDict.get guildOrDmId localUser.user.lastViewedMessage)
                                     channel
-                                )
+
+                            threadNotifications : List ChannelNotificationType
+                            threadNotifications =
+                                SeqDict.toList channel.threads
+                                    |> List.map
+                                        (\( threadId, thread ) ->
+                                            GuildColumn.channelOrThreadHasNotifications
+                                                (MuteSettings.isSlackChannelMuted localUser.user.muteSettings routeData.teamId channelId (ViewThread threadId))
+                                                directMentions
+                                                (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
+                                                channelId
+                                                (ViewThread threadId)
+                                                (SeqDict.get
+                                                    ( guildOrDmId, threadId )
+                                                    localUser.user.lastViewedThreadMessage
+                                                )
+                                                thread
+                                        )
+                        in
+                        ( channelSortName (hasNotifications :: threadNotifications) channel
+                        , Ui.column
+                            []
+                            [ slackChannelColumnRow
+                                isMobile
+                                channelMuted
+                                hasNotifications
                                 routeData
                                 channelId
                                 channel
@@ -13801,9 +14041,9 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                 channelNames
                                 channelId
                                 channel
-                                (case routeData.threadRoute of
-                                    ViewThreadWithMaybeMessage threadId _ ->
-                                        if routeData.channelId == channelId then
+                                (case routeData.channelRoute of
+                                    SlackChannel_ChannelRoute selectedChannelId (ViewThreadWithMaybeMessage threadId _) _ ->
+                                        if selectedChannelId == channelId then
                                             SeqDict.update
                                                 threadId
                                                 (\maybeThread -> Maybe.withDefault Thread.frontendInit maybeThread |> Just)
@@ -13812,11 +14052,17 @@ slackChannelColumn isMobile canScroll2 time localUser routeData workspace =
                                         else
                                             channel.threads
 
-                                    NoThreadWithMaybeMessage _ ->
+                                    SlackChannel_ChannelRoute _ (NoThreadWithMaybeMessage _) _ ->
+                                        channel.threads
+
+                                    SlackChannel_WorkspaceSettingsRoute ->
                                         channel.threads
                                 )
                             ]
+                        )
                     )
+                |> List.sortBy Tuple.first
+                |> List.map Tuple.second
             )
         )
 
@@ -13834,26 +14080,37 @@ slackChannelColumnThreads :
     -> Element FrontendMsg_
 slackChannelColumnThreads isMobile now routeData directMentions localUser channels channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
                     let
                         isSelected : Bool
                         isSelected =
-                            case routeData.threadRoute of
-                                ViewThreadWithMaybeMessage threadId _ ->
-                                    routeData.channelId == channelId && threadId == threadMessageIndex
+                            case routeData.channelRoute of
+                                SlackChannel_ChannelRoute selectedChannelId (ViewThreadWithMaybeMessage threadId _) _ ->
+                                    selectedChannelId == channelId && threadId == threadMessageIndex
 
-                                NoThreadWithMaybeMessage _ ->
+                                SlackChannel_ChannelRoute _ (NoThreadWithMaybeMessage _) _ ->
                                     False
+
+                                SlackChannel_WorkspaceSettingsRoute ->
+                                    False
+
+                        isMuted : IsMuted
+                        isMuted =
+                            MuteSettings.isSlackChannelMuted
+                                localUser.user.muteSettings
+                                routeData.teamId
+                                channelId
+                                (ViewThread threadMessageIndex)
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
-                                IsNotMuted
+                                isMuted
                                 directMentions
-                                False
+                                (SeqSet.member routeData.teamId localUser.user.slackNotifyOnAllMessages)
                                 channelId
                                 (ViewThread threadMessageIndex)
                                 (SeqDict.get
@@ -13868,19 +14125,19 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
                                 thread
                     in
                     if isSelected || hasNotifications /= NoNotification then
-                        Just ( threadMessageIndex, hasNotifications, isSelected )
+                        Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                     else
                         case MessageArray.last thread.messages of
                             Just message ->
                                 if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                    Just ( threadMessageIndex, hasNotifications, isSelected )
+                                    Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                                 else
                                     Nothing
 
                             Nothing ->
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -13889,11 +14146,11 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
-                IsNotMuted
+                isMuted
                 hasNotifications
                 index
                 count
@@ -13901,8 +14158,7 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
                 (SlackWorkspaceRoute
                     { currentSlackUserId = routeData.currentSlackUserId
                     , teamId = routeData.teamId
-                    , channelId = channelId
-                    , threadRoute = ViewThreadWithMaybeMessage threadMessageIndex Nothing
+                    , channelRoute = SlackChannel_ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing) HideChannelSettings
                     , channelsVisible = ChannelsHiddenOnMobile
                     , overlay = Nothing
                     }
@@ -13915,20 +14171,24 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
 
 slackChannelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> SlackWorkspaceRouteData
     -> Slack.Id Slack.ChannelId
     -> SlackFrontendChannel
     -> Element FrontendMsg_
-slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
+slackChannelColumnRow isMobile isMuted hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
-            case routeData.threadRoute of
-                NoThreadWithMaybeMessage _ ->
-                    routeData.channelId == channelId
+            case routeData.channelRoute of
+                SlackChannel_ChannelRoute selectedChannelId (NoThreadWithMaybeMessage _) _ ->
+                    selectedChannelId == channelId
 
-                ViewThreadWithMaybeMessage _ _ ->
+                SlackChannel_ChannelRoute _ (ViewThreadWithMaybeMessage _ _) _ ->
+                    False
+
+                SlackChannel_WorkspaceSettingsRoute ->
                     False
     in
     GuildColumn.rowLinkButton
@@ -13936,8 +14196,7 @@ slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
         (SlackWorkspaceRoute
             { currentSlackUserId = routeData.currentSlackUserId
             , teamId = routeData.teamId
-            , channelId = channelId
-            , threadRoute = NoThreadWithMaybeMessage Nothing
+            , channelRoute = SlackChannel_ChannelRoute channelId (NoThreadWithMaybeMessage Nothing) HideChannelSettings
             , channelsVisible = ChannelsHiddenOnMobile
             , overlay = Nothing
             }
@@ -13975,7 +14234,9 @@ slackChannelColumnRow isMobile hasNotifications routeData channelId channel =
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ Ui.text (ChannelName.toString channel.name) ]
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
 
 
 slackDmColumnThreads :

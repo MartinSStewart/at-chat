@@ -812,6 +812,7 @@ previewLoginData userAgent =
     , slackDmChannels = SeqDict.empty
     , slackUsers = SeqDict.empty
     , linkedSlackUsers = SeqDict.empty
+    , slackUsersNeedingAuth = SeqSet.empty
     , user = previewUser
     , otherUsers = previewOtherUsers
     , discordUsers = previewDiscordUsers

@@ -105,6 +105,7 @@ module E2EHelper exposing
     , sessionIdAttacker
     , setIphone14SafeAreaInsets
     , slackFormFields
+    , slackWebsocketByToken
     , startTest
     , startTime
     , startupDataJson
@@ -1667,6 +1668,26 @@ websocketByDiscordToken token data =
         |> List.head
 
 
+{-| The open Slack relay websocket that was asked to connect with this token.
+-}
+slackWebsocketByToken :
+    String
+    -> T.Data frontendModel backendModel
+    -> Maybe ( Websocket.Connection, T.WebsocketState )
+slackWebsocketByToken token data =
+    SeqDict.toList data.websockets
+        |> List.filter
+            (\( ( requestedBy, _ ), websocketState ) ->
+                (requestedBy == RequestedByBackend)
+                    && (websocketState.closedAt == Nothing)
+                    && List.any
+                        (\msg -> String.contains ("token=" ++ Url.percentEncode token) msg.data)
+                        (Array.toList websocketState.dataSent)
+            )
+        |> List.head
+        |> Maybe.map (\( ( _, connection ), websocketState ) -> ( connection, websocketState ))
+
+
 discordUserAuth : Discord.UserAuth
 discordUserAuth =
     { token = "legit-token"
@@ -2129,6 +2150,19 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                             """{"ok":false,"error":"invalid_arguments"}"""
                     )
 
+            ( "POST", [ "slack.com", "api", "bots.info" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if not (isLegitSlackRequest headers body || isSecondSlackUserRequest headers body) then
+                        """{"ok":false,"error":"invalid_auth"}"""
+
+                     else if List.member "bot=B0BOT" (slackFormFields body) then
+                        """{"ok":true,"bot":{"id":"B0BOT","deleted":false,"name":"Deploy bot","app_id":"A0BOT","icons":{"image_36":"https://a.slack-edge.com/bot_36.png","image_48":"https://a.slack-edge.com/bot_48.png","image_72":"https://a.slack-edge.com/bot_72.png"}}}"""
+
+                     else
+                        """{"ok":false,"error":"bot_not_found"}"""
+                    )
+
             ( "POST", [ "slack.com", "api", "users.info" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -2153,6 +2187,16 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                     (if isLegitSlackRequest headers body then
                         """{"ok":true,"channel":"C09DJDQSWLU","ts":"1791638900.000100"}"""
+
+                     else
+                        """{"ok":false,"error":"invalid_auth"}"""
+                    )
+
+            ( "POST", [ "slack.com", "api", "emoji.list" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if isLegitSlackRequest headers body then
+                        slackEmojiListJson
 
                      else
                         """{"ok":false,"error":"invalid_auth"}"""
@@ -2298,7 +2342,7 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 
 
 {-| The newest message first, the way Slack sends them. Besides the messages people wrote it has
-one from an integration (no user) and one with only a file, which are both left out.
+one from an integration (no user, so it's shown as written by the bot) and one with only a file.
 -}
 slackChannelHistory : String
 slackChannelHistory =
@@ -2353,6 +2397,14 @@ slackTestUsers =
         , ( "U09DFEXKH9T", """{"id":"U09DFEXKH9T","team_id":"T09DJDQL18U","name":"atchat","deleted":true,"is_bot":true,"profile":{"real_name":"at-chat","display_name":""}}""" )
         , ( "U0NEWCOMER", """{"id":"U0NEWCOMER","team_id":"T09DJDQL18U","name":"newcomer","deleted":false,"is_bot":false,"profile":{"real_name":"New Comer","display_name":""}}""" )
         ]
+
+
+{-| partyparrot is used in a reaction in #all-test-slack's history. The emoji on another host and
+the alias of a standard emoji are left out.
+-}
+slackEmojiListJson : String
+slackEmojiListJson =
+    """{"ok":true,"emoji":{"partyparrot":"https://emoji.slack-edge.com/T09DJDQL18U/partyparrot/2c2b9d1b8e1e0f6c.gif","ship-it":"https://emoji.slack-edge.com/T09DJDQL18U/ship-it/0a1b2c3d4e5f6a7b.png","parrot":"alias:partyparrot","thumbsup_all":"alias:+1","elsewhere":"https://example.com/elsewhere.png"},"cache_ts":"1791638000.000000"}"""
 
 
 isLegitSlackRequest : List ( String, String ) -> Maybe Json.Decode.Value -> Bool
@@ -2737,13 +2789,16 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Discord_SendMessage _ _ _ _ _ _ ->
                     True
 
-                Local_Slack_SendMessage _ _ _ _ _ ->
+                Local_Slack_SendMessage _ _ _ _ _ _ ->
                     True
 
                 Local_Slack_SendEditMessage _ _ _ _ _ ->
                     True
 
                 Local_Slack_UnlinkUser _ ->
+                    True
+
+                Local_Slack_ReloadUser _ ->
                     True
 
                 Local_Slack_LoadChannelMessages _ _ _ ->
@@ -2874,6 +2929,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetDiscordGuildNotificationLevel _ _ _ ->
                     True
 
+                Local_SetSlackWorkspaceNotificationLevel _ _ _ ->
+                    True
+
                 Local_SetNotificationMode _ ->
                     False
 
@@ -2913,6 +2971,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_LinkDiscordAcknowledgementIsChecked _ ->
                     False
 
+                Local_LinkSlackAcknowledgementIsChecked _ ->
+                    False
+
                 Local_SetDomainWhitelist _ _ ->
                     False
 
@@ -2950,6 +3011,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     True
 
                 Local_SetMuteDiscordGuild _ _ _ ->
+                    True
+
+                Local_SetMuteSlackWorkspace _ _ _ ->
+                    True
+
+                Local_SetMuteSlackChannel _ _ _ _ ->
+                    True
+
+                Local_SetMuteSlackThread _ _ _ _ _ ->
                     True
 
                 Local_RequestE2ee _ ->
@@ -3001,7 +3071,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_Slack_SendMessage _ _ _ _ _ ->
+                        Types.Server_Slack_SendMessage _ _ _ _ _ _ ->
                             True
 
                         Types.Server_Slack_EditMessage _ _ _ _ _ ->
@@ -3014,6 +3084,27 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_Slack_UserLoaded _ _ ->
+                            True
+
+                        Types.Server_Slack_WorkspaceRenamed _ _ ->
+                            True
+
+                        Types.Server_Slack_ChannelRenamed _ _ _ ->
+                            True
+
+                        Types.Server_Slack_NeedsAuthAgain _ ->
+                            True
+
+                        Types.Server_Slack_GotMessageEmbed _ _ _ ->
+                            True
+
+                        Types.Server_Slack_LinkedUserLoaded _ _ _ ->
+                            True
+
+                        Types.Server_Slack_CustomEmojisLoaded _ ->
+                            True
+
+                        Types.Server_Slack_CustomEmojiAdded _ _ _ ->
                             True
 
                         Types.Server_Slack_AddReactionEmoji _ _ _ _ ->
@@ -3127,6 +3218,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetDiscordGuildNotificationLevel _ _ ->
+                            True
+
+                        Types.Server_SetSlackWorkspaceNotificationLevel _ _ ->
                             True
 
                         Types.Server_PushNotificationFailed _ _ ->
@@ -3258,6 +3352,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteDiscordGuild _ _ ->
                             True
 
+                        Types.Server_SetMuteSlackWorkspace _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackThread _ _ _ _ ->
+                            True
+
                         Types.Server_DiscordAvatarsLoaded _ _ ->
                             True
 
@@ -3333,7 +3436,7 @@ allAttackerToBackendChanges =
     , ReloadDataRequest InitialLoadRequested_None
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
     , LinkSlackRequest
-        (case Slack.validateSlackData { slackCookie = "xoxd-attacker-cookie", slackTeamsJson = "{\"T0\":{\"token\":\"xoxc-attacker-token\"}}" } of
+        (case Slack.validateSlackData { slackCookie = "xoxd-attacker-cookie", slackTeamsJson = "{\"T0\":{\"token\":\"xoxc-attacker-token\"}}", removedSlackTeams = SeqSet.empty } of
             Ok slackData ->
                 slackData
 
@@ -3479,9 +3582,9 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_workspace (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_Slack_LoadChannelMessages slackGuildOrDmId_dm (PageBefore (Id.fromInt 0)) EmptyPlaceholder
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText
-    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace NoThread normalText SeqDict.empty
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_dm NoThread normalText SeqDict.empty
+    , Local_Slack_SendMessage messageTime Time.utc slackGuildOrDmId_workspace (ViewThread (Id.fromInt 0)) normalText SeqDict.empty
     , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_workspace threadRouteWithMessage normalText
     , Local_Slack_SendEditMessage messageTime Time.utc slackGuildOrDmId_dm threadRouteWithMessage normalText
     , Local_Slack_LoadThreadMessages slackGuildOrDmId_workspace (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
@@ -3505,6 +3608,11 @@ allAttackerLocalChanges =
             EmptyPlaceholder
         )
     , Local_Slack_UnlinkUser (Slack.Id "U09DJDQL1A8")
+    , Local_Slack_ReloadUser (Slack.Id "U09DJDQL1A8")
+    , Local_SetSlackWorkspaceNotificationLevel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") User.NotifyOnEveryMessage
+    , Local_SetMuteSlackWorkspace (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackChannel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackThread (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") (Id.fromInt 0) MuteSettings.IsFullyMuted
     , Local_CurrentlyViewing
         { markMessagesAsViewed = True }
         (ViewSlackChannel
@@ -3529,6 +3637,7 @@ allAttackerLocalChanges =
     , Local_Invalid
     , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LinkSlackAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (PageBefore (Id.fromInt 0)) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
@@ -3571,6 +3680,7 @@ allAttackerLocalChanges =
     , Local_UnlinkDiscordUser discordUserId
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LinkSlackAcknowledgementIsChecked True
     , Local_SetDomainWhitelist False brokenDomain
     , Local_SetDomainWhitelist True brokenDomain
     , Local_SetEmojiSkinTone Nothing

@@ -27,8 +27,10 @@ module Types exposing
     , LastBackupData
     , LinkDiscordFailure(..)
     , LinkSlackResult(..)
+    , LinkSlackWorkspaceError(..)
     , LoadStatus(..)
     , LoadedFrontend
+    , LoadedSlackWorkspace
     , LoadingFrontend
     , LocalChange(..)
     , LocalMsg(..)
@@ -286,8 +288,6 @@ type alias LoggedIn2 =
       -- the drawing tab held the scroll position
       newMessagesWhileNotScrolledToBottom : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
-    , friendsSearch : String
-    , channelSearch : String
     , searchOverlayQuery : String
     , searchOverlaySelection : Int
     , showNewPrivateKey : Maybe X25519.PrivateKey
@@ -393,6 +393,7 @@ type alias UserOptionsModel =
       privateKeyText : String
     , slackCookie : String
     , slackTeamsJson : String
+    , removedSlackTeams : SeqSet (Slack.Id Slack.TeamId)
     , pressedSubmitSlackData : Bool
     , linkSlackResult : Maybe LinkSlackResult
     }
@@ -512,6 +513,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
     , discordLinkLimit : Maybe Int
+    , slackLinkLimit : Maybe Int
     , downloadBackupState : Maybe BackupTransfer
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
@@ -533,8 +535,8 @@ type alias BackendModel =
     , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
     , pendingSlackSends : SeqDict ( Slack.Id Slack.UserId, String ) Int
     , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
+    , refreshingSlackConversations : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
-    , dummyField : Int
     }
 
 
@@ -691,6 +693,7 @@ type FrontendMsg_
     | PressedCloseAccountDeletionBanner
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
+    | PressedSlackWorkspaceNotificationLevel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) NotificationLevel
     | GotStartupData (Result String Ports.StartupData)
     | GotDevicePixelRatio Float
     | PressedCloseImageInfo
@@ -713,6 +716,7 @@ type FrontendMsg_
     | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
+    | PressedSlackAcknowledgment Bool
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
     | PressedDiscordGuildMemberLabel
@@ -752,10 +756,7 @@ type FrontendMsg_
     | DrawingMsg Drawing.Msg
     | PressedNewMessagesWarning
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
-    | TypedFriendsSearch String
-    | PressedClearFriendsSearch
-    | TypedChannelSearch String
-    | PressedClearChannelSearch
+    | PressedShowSearchOverlay
     | TypedSearchOverlay String
     | PressedSearchOverlayArrowKey Int
     | PressedSearchOverlayEnter
@@ -768,14 +769,19 @@ type FrontendMsg_
     | PressedMarkAllChannelsAsRead (List ( AnyGuildOrDmId, ThreadRouteWithMessage ))
     | PressedMuteGuild (Id GuildId) IsMuted
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | PressedMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
+    | PressedMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | PressedMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
     | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))))
     | TypedSlackCookie String
     | TypedSlackTeamsJson String
+    | PressedRemoveSlackTeam (Slack.Id Slack.TeamId)
     | PressedSubmitSlackData
     | PressedUnlinkSlackUser (Slack.Id Slack.UserId)
+    | PressedReloadSlackUser (Slack.Id Slack.UserId)
 
 
 type alias NewChannelForm =
@@ -868,7 +874,7 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
-    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Result Slack.HttpError (Slack.Id Slack.MessageId))
+    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) FileData) (Result Slack.HttpError ( Slack.Id Slack.MessageId, List ( Slack.Id Slack.FileId, FileData ) ))
     | SlackWebsocketCreatedHandle (Slack.Id Slack.UserId) Websocket.Connection
     | SlackWebsocketClosedByBackend
     | SlackWebsocketMsg (Slack.Id Slack.UserId) (Result ( Websocket.CloseEventCode, String ) String)
@@ -888,25 +894,16 @@ type BackendMsg
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackUser (Slack.Id Slack.UserId) (Result Slack.HttpError ( Slack.User, Maybe FileHash ))
+    | GotChangedSlackUser Slack.User (Maybe FileHash)
     | SlackMessageFilesUploaded (Slack.Id Slack.UserId) Slack.WebsocketEvent (SeqDict (Slack.Id Slack.FileId) SlackFileData)
     | SlackChangedReaction Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackDeletedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | SlackEditedMessage Time.Posix SlackGuildOrDmId (Result Slack.HttpError ())
     | LinkSlackUserStep1 Time.Posix ClientId (Id UserId) SlackCookie (Nonempty ( SlackToken, Result Slack.HttpError Slack.UserBoot ))
-    | LinkSlackUserStep2
-        Time.Posix
-        (Slack.Id Slack.TeamId)
-        (Slack.Id Slack.UserId)
-        (Result
-            Slack.HttpError
-            { channels : List ( Slack.Channel, Slack.History )
-            , dmChannels : List ( Slack.DmChannel, Slack.History )
-            , users : List ( Slack.User, Maybe FileHash )
-            , selfIcon : Maybe FileHash
-            , workspaceIcon : Maybe FileHash
-            , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
-            }
-        )
+    | LinkSlackUserStep2 Time.Posix (Slack.Id Slack.TeamId) (Slack.Id Slack.UserId) (Result Slack.HttpError LoadedSlackWorkspace)
+    | CaughtUpSlackMessages (Slack.Id Slack.UserId) (List Slack.WebsocketEvent)
+    | CheckedSlackAuth (Slack.Id Slack.UserId) (Result Slack.HttpError Slack.UserBoot)
+    | RefreshedSlackConversations (Slack.Id Slack.UserId) (Result ( Time.Posix, Slack.HttpError ) ( Slack.Id Slack.TeamId, LoadedSlackWorkspace ))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -949,6 +946,7 @@ type BackendMsg
     | GotTimeForDiscordForumPostRenamed Discord.Channel Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
+    | SlackGotMessageEmbed SlackGuildOrDmId ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | DiscordGotGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )
     | DiscordGotDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result Http.Error EmbedData )
     | DiscordGotDataForJoinedOrCreatedGuild
@@ -970,6 +968,7 @@ type BackendMsg
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotSlackCustomEmojis (Slack.Id Slack.TeamId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageCustomEmojis MessageFromGuildOrDm (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
@@ -1043,7 +1042,23 @@ type LinkDiscordFailure
 
 type LinkSlackResult
     = SlackLinkingDisabled
-    | LoadedSlackWorkspaces (Nonempty (Result Slack.HttpError String))
+    | LoadedSlackWorkspaces (Nonempty (Result LinkSlackWorkspaceError String))
+
+
+type alias LoadedSlackWorkspace =
+    { channels : List ( Slack.Channel, Slack.History )
+    , dmChannels : List ( Slack.DmChannel, Slack.History )
+    , users : List ( Slack.User, Maybe FileHash )
+    , selfIcon : Maybe FileHash
+    , workspaceIcon : Maybe FileHash
+    , files : SeqDict (Slack.Id Slack.FileId) SlackFileData
+    , customEmojis : List ( String, Slack.CustomEmojiSource )
+    }
+
+
+type LinkSlackWorkspaceError
+    = SlackWorkspaceHttpError Slack.HttpError
+    | SlackLinkLimitReached
 
 
 type alias SlackBackendWorkspace =
@@ -1051,6 +1066,7 @@ type alias SlackBackendWorkspace =
     , domain : String
     , icon : Maybe FileHash
     , channels : SeqDict (Slack.Id Slack.ChannelId) SlackBackendChannel
+    , customEmojis : SeqDict String (Id CustomEmojiId)
     }
 
 
@@ -1102,6 +1118,7 @@ type alias SlackLinkedUser =
     , cookie : SlackCookie
     , websocket : Maybe Websocket.Connection
     , reconnect : { failedAttempts : Int, seed : Int }
+    , needsAuthAgain : Bool
     }
 
 
@@ -1185,6 +1202,7 @@ type alias LoginData =
     , slackDmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
     , slackUsers : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
     , linkedSlackUsers : SeqDict (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId)
+    , slackUsersNeedingAuth : SeqSet (Slack.Id Slack.UserId)
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers
@@ -1227,11 +1245,26 @@ type ServerChange
         , stickers : SeqDict (Id StickerId) StickerData
         , repliedToData : RepliedToData
         }
-    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) FileData) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_EditMessage Time.Posix (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Server_Slack_UserLoaded (Slack.Id Slack.UserId) SlackFrontendUser
+    | Server_Slack_WorkspaceRenamed (Slack.Id Slack.TeamId) String
+    | Server_Slack_ChannelRenamed (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) ChannelName
+    | Server_Slack_NeedsAuthAgain (Slack.Id Slack.UserId)
+    | Server_Slack_GotMessageEmbed SlackGuildOrDmId ThreadRouteWithMessage ( Url, Result () EmbedData )
+    | Server_Slack_LinkedUserLoaded
+        (Slack.Id Slack.UserId)
+        (Slack.Id Slack.TeamId)
+        { workspaces : SeqDict (Slack.Id Slack.TeamId) SlackFrontendWorkspace
+        , dmChannels : SeqDict (Slack.Id Slack.DmChannelId) SlackFrontendDmChannel
+        , users : SeqDict (Slack.Id Slack.UserId) SlackFrontendUser
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        , markNewDmsAsViewed : Bool
+        }
+    | Server_Slack_CustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
+    | Server_Slack_CustomEmojiAdded (Slack.Id Slack.TeamId) (Id CustomEmojiId) CustomEmojiData
     | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
@@ -1278,6 +1311,7 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
+    | Server_SetSlackWorkspaceNotificationLevel (Slack.Id Slack.TeamId) NotificationLevel
     | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
@@ -1329,6 +1363,9 @@ type ServerChange
     | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
+    | Server_SetMuteSlackWorkspace (Slack.Id Slack.TeamId) IsMuted
+    | Server_SetMuteSlackChannel (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | Server_SetMuteSlackThread (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
       -- The DM is named from the point of view of whoever is receiving this, so the user
       -- that asked for encryption is named separately.
@@ -1357,9 +1394,10 @@ type LocalChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
     | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString
+    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (SeqDict (Id FileId) FileData)
     | Local_Slack_SendEditMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRouteWithMessage NonemptyString
     | Local_Slack_UnlinkUser (Slack.Id Slack.UserId)
+    | Local_Slack_ReloadUser (Slack.Id Slack.UserId)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -1389,6 +1427,7 @@ type LocalChange
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (PageRequest ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
+    | Local_SetSlackWorkspaceNotificationLevel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection { collapseOthers : Bool }
     | Local_CollapseUserOptionSection UserOptionSection
@@ -1402,6 +1441,7 @@ type LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
+    | Local_LinkSlackAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_SetUserColor UserColor
@@ -1415,6 +1455,9 @@ type LocalChange
     | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_SetMuteGuild (Id GuildId) IsMuted
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | Local_SetMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
+    | Local_SetMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
+    | Local_SetMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_RequestE2ee Viewing_DmId
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
