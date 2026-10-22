@@ -3363,6 +3363,7 @@ type EmbedType
     | EmbedType_Article
     | EmbedType_AutoModerationMessage
     | EmbedType_AutoModerationNotification
+    | EmbedType_Components
     | EmbedType_Gift
     | EmbedType_Gifv
     | EmbedType_Image
@@ -3391,6 +3392,9 @@ decodeEmbedType =
 
                 "auto_moderation_notification" ->
                     JD.succeed EmbedType_AutoModerationNotification
+
+                "components" ->
+                    JD.succeed EmbedType_Components
 
                 "gift" ->
                     JD.succeed EmbedType_Gift
