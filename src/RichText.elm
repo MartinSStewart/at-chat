@@ -6892,6 +6892,7 @@ fromDiscord :
     String
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
+    -> Discord.OptionalData (List Discord.Component)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     ->
         SeqDict
@@ -6900,7 +6901,7 @@ fromDiscord :
     -> List (Id StickerId)
     -> Discord.OptionalData (List Discord.MessageSnapshot)
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-fromDiscord text attachments2 embeds customEmojis2 channels stickers2 messageSnapshots =
+fromDiscord text attachments2 embeds components customEmojis2 channels stickers2 messageSnapshots =
     let
         messageSnapshots3 : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         messageSnapshots3 =
@@ -6913,6 +6914,7 @@ fromDiscord text attachments2 embeds customEmojis2 channels stickers2 messageSna
                                 -- TODO: Handle attachments for message snapshots
                                 SeqDict.empty
                                 (Discord.Included snapshot.embeds)
+                                snapshot.components
                                 -- TODO: Handle stickers for message snapshots
                                 customEmojis2
                                 []
@@ -6923,7 +6925,7 @@ fromDiscord text attachments2 embeds customEmojis2 channels stickers2 messageSna
                 Discord.Missing ->
                     []
     in
-    (fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 ++ messageSnapshots3)
+    (fromDiscordHelper text attachments2 embeds components customEmojis2 stickers2 ++ messageSnapshots3)
         |> List.Nonempty.fromList
         |> Maybe.withDefault emptyPlaceholder
         |> mapChannelMention (discordThreadMention channels)
@@ -6969,10 +6971,11 @@ fromDiscordHelper :
     String
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
+    -> Discord.OptionalData (List Discord.Component)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (Id StickerId)
     -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
+fromDiscordHelper text attachments2 embeds components customEmojis2 stickers2 =
     let
         ( urlEmbeds, richTextEmbeds ) =
             List.foldl
@@ -7060,12 +7063,23 @@ fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
                 )
                 (SeqDict.toList attachments2)
 
+        extraText : List String
+        extraText =
+            richTextEmbeds
+                ++ (case components of
+                        Discord.Included components2 ->
+                            List.concatMap discordComponentText components2
+
+                        Discord.Missing ->
+                            []
+                   )
+
         text2 =
             if String.isEmpty text then
-                String.join "\n" richTextEmbeds |> String.trim
+                String.join "\n" extraText |> String.trim
 
             else
-                text ++ "\n" ++ String.join "\n" richTextEmbeds |> String.trimRight
+                text ++ "\n" ++ String.join "\n" extraText |> String.trimRight
     in
     case String.Nonempty.fromString text2 of
         Just nonempty ->
@@ -7119,6 +7133,43 @@ fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
                         |> List.map Hyperlink
                         |> List.intersperse (NormalText ' ' "")
                         |> applyStickers
+
+
+discordComponentText : Discord.Component -> List String
+discordComponentText component =
+    case component of
+        Discord.Component_ActionRow components ->
+            case List.concatMap discordComponentText components of
+                [] ->
+                    []
+
+                texts ->
+                    [ String.join " " texts ]
+
+        Discord.Component_Button button ->
+            case button.label of
+                Discord.Included label ->
+                    case button.url of
+                        Discord.Included url ->
+                            [ "[" ++ label ++ "](" ++ url ++ ")" ]
+
+                        Discord.Missing ->
+                            [ "`" ++ String.replace "`" "" label ++ "`" ]
+
+                Discord.Missing ->
+                    []
+
+        Discord.Component_Section section ->
+            List.concatMap discordComponentText section.components ++ discordComponentText section.accessory
+
+        Discord.Component_TextDisplay content ->
+            [ content ]
+
+        Discord.Component_Container components ->
+            List.concatMap discordComponentText components
+
+        Discord.Component_Unknown _ ->
+            []
 
 
 emptyPlaceholder : Nonempty (RichText userId channelId)

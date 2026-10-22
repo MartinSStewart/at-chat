@@ -262,6 +262,7 @@ handleDiscordDmEditMessage edit attachments model =
                                 edit.content
                                 attachments
                                 (Included edit.embeds)
+                                edit.components
                                 model.discordCustomEmojis
                                 SeqDict.empty
                                 (case edit.stickerItems of
@@ -413,6 +414,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                 edit.content
                 attachments
                 (Included edit.embeds)
+                edit.components
                 model.discordCustomEmojis
                 guild.channels
                 (case edit.stickerItems of
@@ -788,6 +790,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis channels discordS
                     message.content
                     attachments
                     message.embeds
+                    message.components
                     customEmojis
                     channels
                     (case message.stickerItems of
@@ -997,6 +1000,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                     discordMessage.content
                                     attachments
                                     discordMessage.embeds
+                                    discordMessage.components
                                     model.discordCustomEmojis
                                     SeqDict.empty
                                     (case discordMessage.stickerItems of
@@ -1364,6 +1368,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                             content
                                             attachments
                                             discordMessage.embeds
+                                            discordMessage.components
                                             model.discordCustomEmojis
                                             guild.channels
                                             (case discordMessage.stickerItems of
@@ -1721,7 +1726,7 @@ addForumPost authentication post guild channel model =
 
         richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
-            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
+            RichText.fromDiscord post.name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
@@ -1828,7 +1833,7 @@ handleForumPostRenamed thread time model =
                             let
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
+                                    RichText.fromDiscord name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
                             in
                             case
                                 LocalState.editMessageHelper
@@ -4089,6 +4094,7 @@ forumPostTitleMessage post firstMessage =
         , stickerItems = Included []
         , stickers = Included []
         , messageSnapshots = Included []
+        , components = Included []
     }
 
 

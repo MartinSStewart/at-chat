@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildDelete, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, GuildUpdate, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), Component(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildDelete, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, GuildUpdate, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3304,6 +3304,7 @@ type alias Message =
     , stickerItems : OptionalData (List StickerItem)
     , stickers : OptionalData (List Sticker)
     , messageSnapshots : OptionalData (List MessageSnapshot)
+    , components : OptionalData (List Component)
     }
 
 
@@ -3316,6 +3317,7 @@ type alias MessageSnapshot =
     , type_ : MessageType
     , flags : MessageFlags
     , stickerItems : OptionalData (List StickerItem)
+    , components : OptionalData (List Component)
     }
 
 
@@ -3332,6 +3334,7 @@ decodeMessageSnapshot =
             |> JD.andMap (JD.field "type" decodeMessageType)
             |> JD.andMap (JD.field "flags" decodeMessageFlags)
             |> JD.andMap (decodeOptionalData "stickerItems" (JD.list decodeStickerItem))
+            |> JD.andMap (decodeOptionalData "components" (JD.list decodeComponent))
         )
 
 
@@ -3430,6 +3433,51 @@ decodeEmbedType =
                     JD.fail ("Unknown embed type: " ++ text)
         )
         JD.string
+
+
+{-| Only the component types that carry text are decoded. Component\_Unknown holds the type number of anything else, so that new component types don't stop the whole message from decoding.
+-}
+type Component
+    = Component_ActionRow (List Component)
+    | Component_Button { label : OptionalData String, url : OptionalData String }
+    | Component_Section { components : List Component, accessory : Component }
+    | Component_TextDisplay String
+    | Component_Container (List Component)
+    | Component_Unknown Int
+
+
+decodeComponent : JD.Decoder Component
+decodeComponent =
+    JD.field "type" JD.int
+        |> JD.andThen
+            (\componentType ->
+                case componentType of
+                    1 ->
+                        JD.field "components" (JD.list (JD.lazy (\() -> decodeComponent)))
+                            |> JD.map Component_ActionRow
+
+                    2 ->
+                        JD.map2
+                            (\label url -> Component_Button { label = label, url = url })
+                            (decodeOptionalData "label" JD.string)
+                            (decodeOptionalData "url" JD.string)
+
+                    9 ->
+                        JD.map2
+                            (\components accessory -> Component_Section { components = components, accessory = accessory })
+                            (JD.field "components" (JD.list (JD.lazy (\() -> decodeComponent))))
+                            (JD.field "accessory" (JD.lazy (\() -> decodeComponent)))
+
+                    10 ->
+                        JD.field "content" JD.string |> JD.map Component_TextDisplay
+
+                    17 ->
+                        JD.field "components" (JD.list (JD.lazy (\() -> decodeComponent)))
+                            |> JD.map Component_Container
+
+                    _ ->
+                        JD.succeed (Component_Unknown componentType)
+            )
 
 
 decodeEmbed : JD.Decoder Embed
@@ -3892,6 +3940,7 @@ decodeMessage =
         |> JD.andMap (decodeOptionalData "sticker_items" (JD.list decodeStickerItem))
         |> JD.andMap (decodeOptionalData "stickers" (JD.list decodeSticker))
         |> JD.andMap (decodeOptionalData "message_snapshots" (JD.list decodeMessageSnapshot))
+        |> JD.andMap (decodeOptionalData "components" (JD.list decodeComponent))
 
 
 decodeMessageType : JD.Decoder MessageType
@@ -5495,6 +5544,7 @@ type alias UserMessageUpdate =
     , stickerItems : OptionalData (List StickerItem)
     , stickers : OptionalData (List Sticker)
     , messageSnapshots : OptionalData (List MessageSnapshot)
+    , components : OptionalData (List Component)
     }
 
 
@@ -5597,6 +5647,7 @@ decodeUserMessageUpdate =
         |> JD.andMap (decodeOptionalData "sticker_items" (JD.list decodeStickerItem))
         |> JD.andMap (decodeOptionalData "stickers" (JD.list decodeSticker))
         |> JD.andMap (decodeOptionalData "message_snapshots" (JD.list decodeMessageSnapshot))
+        |> JD.andMap (decodeOptionalData "components" (JD.list decodeComponent))
 
 
 decodeGatewayEvent : (String -> JD.Decoder event) -> JD.Decoder (GatewayEvent event)
