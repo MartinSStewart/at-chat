@@ -2354,7 +2354,7 @@ groupingView isMobile time contentWidth localUser loggedIn setup shared model =
             [ Ui.Font.color MyUi.font3 ]
             [ Ui.text "Answers sharing a letter score together. Change a letter to split an answer off or to merge it with another." ]
         , Ui.column
-            [ Ui.spacing 16 ]
+            [ Ui.spacing 48 ]
             (List.indexedMap
                 (groupingQuestionView isMobile time contentWidth localUser loggedIn shared model (players shared))
                 (List.Nonempty.toList setup.questions)
