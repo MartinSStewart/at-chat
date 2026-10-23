@@ -1340,7 +1340,11 @@ async fn upload_url_endpoint(
         }
     };
 
-    match http_client().get(url).headers(headers2).send().await {
+    match get_keeping_headers(&url, headers2).await {
+        Ok(response) if !response.status().is_success() => response_with_headers(
+            StatusCode::BAD_GATEWAY,
+            format!("Answered {}", response.status()),
+        ),
         Ok(response) => match read_body_up_to(response, MAX_UPLOAD_BYTES).await {
             Ok(Some(bytes)) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
             Ok(None) => response_with_headers(
@@ -1352,10 +1356,83 @@ async fn upload_url_endpoint(
                 String::from("Invalid permissions 2"),
             ),
         },
-        Err(_) => response_with_headers(
+        Err(error) => response_with_headers(
             StatusCode::UNAUTHORIZED,
-            String::from("Invalid permissions 1"),
+            format!("Invalid permissions 1: {error}"),
         ),
+    }
+}
+
+const MAX_REDIRECTS: usize = 10;
+
+/// files.slack.com answers with a redirect to files-origin.slack.com, and reqwest drops the
+/// Cookie and Authorization headers whenever a redirect changes host. The origin then sees a
+/// request without credentials and sends its sign-in page, which got stored as the file. Here
+/// redirects are followed by hand instead, and the headers go along to any https host under the
+/// same parent domain as the first one.
+async fn get_keeping_headers(
+    url: &str,
+    headers: HeaderMap<http::HeaderValue>,
+) -> Result<reqwest::Response, String> {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    let client: reqwest::Client = CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap_or_default()
+        })
+        .clone();
+
+    let first_url: reqwest::Url = reqwest::Url::parse(url).map_err(|error| error.to_string())?;
+    let mut current_url: reqwest::Url = first_url.clone();
+
+    for _ in 0..=MAX_REDIRECTS {
+        let request = if may_receive_headers(&first_url, &current_url) {
+            client.get(current_url.clone()).headers(headers.clone())
+        } else {
+            client.get(current_url.clone())
+        };
+
+        let response: reqwest::Response =
+            request.send().await.map_err(|error| error.to_string())?;
+
+        if !response.status().is_redirection() {
+            // Without access to a file, Slack redirects to the workspace's sign-in page with the
+            // file's path in `redir`. That page is not the file, so it shouldn't be stored as one.
+            return if current_url != first_url
+                && current_url.query_pairs().any(|(key, _)| key == "redir")
+            {
+                Err(String::from("Redirected to a sign-in page"))
+            } else {
+                Ok(response)
+            };
+        }
+
+        current_url = response
+            .headers()
+            .get(http::header::LOCATION)
+            .and_then(|location| location.to_str().ok())
+            .and_then(|location| current_url.join(location).ok())
+            .ok_or_else(|| String::from("Redirect without a valid location"))?;
+    }
+
+    Err(String::from("Too many redirects"))
+}
+
+fn may_receive_headers(first_url: &reqwest::Url, url: &reqwest::Url) -> bool {
+    match (first_url.host_str(), url.host_str()) {
+        (Some(first_host), Some(host)) => {
+            first_url.scheme() == url.scheme()
+                && first_url.port() == url.port()
+                && (host == first_host
+                    || first_host.split_once('.').is_some_and(|(_, parent)| {
+                        parent.contains('.') && host.ends_with(&format!(".{parent}"))
+                    }))
+        }
+        _ => false,
     }
 }
 
@@ -2215,6 +2292,85 @@ pub struct UploadUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slack_credentials_follow_redirects_to_other_slack_hosts_only() {
+        let first = reqwest::Url::parse("https://files.slack.com/files-pri/T1-F1/a.png").unwrap();
+        let may = |url: &str| may_receive_headers(&first, &reqwest::Url::parse(url).unwrap());
+
+        assert!(may("https://files.slack.com/files-pri/T1-F1/a.png"));
+        assert!(may("https://files-origin.slack.com/files-pri/T1-F1/a.png"));
+        assert!(may(
+            "https://team.slack.com/?redir=%2Ffiles-pri%2FT1-F1%2Fa.png"
+        ));
+        assert!(!may("http://files-origin.slack.com/files-pri/T1-F1/a.png"));
+        assert!(!may(
+            "https://files-origin.slack.com:8443/files-pri/T1-F1/a.png"
+        ));
+        assert!(!may("https://evilslack.com/"));
+        assert!(!may("https://slack.com.evil.com/"));
+        assert!(!may("https://example.com/"));
+
+        let two_labels = reqwest::Url::parse("https://example.com/a.png").unwrap();
+        assert!(!may_receive_headers(
+            &two_labels,
+            &reqwest::Url::parse("https://other.com/").unwrap()
+        ));
+    }
+
+    #[tokio::test]
+    async fn get_keeping_headers_sends_the_headers_after_a_redirect() {
+        use axum::response::IntoResponse;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let router = axum::Router::new()
+            .route(
+                "/start",
+                get(async || {
+                    (StatusCode::FOUND, [(http::header::LOCATION, "/file")]).into_response()
+                }),
+            )
+            .route(
+                "/file",
+                get(async |headers: HeaderMap| {
+                    if headers
+                        .get("cookie")
+                        .is_some_and(|cookie| cookie == "d=the-cookie")
+                    {
+                        (StatusCode::OK, "the file").into_response()
+                    } else {
+                        (
+                            StatusCode::FOUND,
+                            [(http::header::LOCATION, "/?redir=%2Ffile")],
+                        )
+                            .into_response()
+                    }
+                }),
+            )
+            .route("/", get(async || "sign in page"));
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        let headers = vec_to_headermap(vec![Header {
+            key: String::from("Cookie"),
+            value: String::from("d=the-cookie"),
+        }])
+        .unwrap();
+        let response = get_keeping_headers(&format!("http://{address}/start"), headers)
+            .await
+            .unwrap();
+
+        assert_eq!(response.text().await.unwrap(), "the file");
+
+        let no_headers = vec_to_headermap(vec![]).unwrap();
+        assert!(
+            get_keeping_headers(&format!("http://{address}/start"), no_headers)
+                .await
+                .is_err()
+        );
+    }
 
     // The host goes straight into the DuckDuckGo url, so anything that could
     // change its path or point it somewhere else has to be turned away.

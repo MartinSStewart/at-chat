@@ -5,13 +5,14 @@ import Effect.Time as Time
 import Expect
 import FileName
 import FileStatus
-import Id exposing (ChannelId, Id, UserId)
+import Id exposing (ChannelId, Id, StickerId, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import RichText
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SheepGame exposing (Action(..), Phase(..))
+import Sticker
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 
@@ -145,10 +146,35 @@ revealed questionsRevealed model =
         |> Tuple.mapFirst .newQuestionRevealed
 
 
+{-| The stickers in a setup's only question once it has been validated.
+-}
+questionStickers : String -> Result String (List (Id StickerId))
+questionStickers text =
+    SheepGame.validateSetup
+        Time.utc
+        SeqDict.empty
+        host
+        { questions = IdArray.fromList [ { text = text, attachedFiles = SeqDict.empty } ]
+        , error = Nothing
+        , pressedSubmit = True
+        }
+        |> Result.map (\validated -> RichText.stickers (List.Nonempty.head validated.questions).text)
+
+
 tests : Test
 tests =
     Test.describe "Sheep game"
-        [ Test.test "The first reveal is the scoring explanation rather than a question"
+        [ Test.test "A question that is only a sticker keeps the sticker"
+            (\_ ->
+                questionStickers (Sticker.idToString (Id.fromInt 5))
+                    |> Expect.equal (Ok [ Id.fromInt 5 ])
+            )
+        , Test.test "A sticker at the end of a question is kept"
+            (\_ ->
+                questionStickers ("Which one is this?" ++ Sticker.idToString (Id.fromInt 2))
+                    |> Expect.equal (Ok [ Id.fromInt 2 ])
+            )
+        , Test.test "The first reveal is the scoring explanation rather than a question"
             (\_ ->
                 watching ScrolledToBottom 0
                     |> revealed 1
