@@ -715,6 +715,10 @@ exports.init = async function init(app) {
         const playPromise = videoNode.play();
         if (playPromise && typeof playPromise.catch === "function") {
             playPromise.catch(function (err) {
+                // Starting a call swaps the preview's stream for the call's
+                // straight after opening the call view started it, which
+                // rejects the first play() on purpose.
+                if (err && err.name === "AbortError") return;
                 console.error("local-video: play() rejected", err);
             });
         }
