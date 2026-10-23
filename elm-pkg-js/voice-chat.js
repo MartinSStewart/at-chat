@@ -19,7 +19,7 @@
 // authenticated instead of trusting this field.
 
 const AUDIO_SAMPLE_RATE = 48000;
-const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
+const AUDIO_BLOCK_FRAMES = 960; // 20ms at 48kHz, which is the frame size opus wants.
 
 // Loud enough to count as speaking, as a mean sample amplitude between 0 and 1.
 // One number for our own mic and for everyone else, which is only possible
@@ -191,9 +191,14 @@ exports.init = async function init(app) {
             return;
         }
 
-        // Pinned to opus's sample rate so the encoder never has to resample, and
-        // shared with playback so every peer mixes into the same context.
-        const audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
+        // Left at the browser's own rate rather than pinned to opus's 48kHz,
+        // because Firefox refuses to connect a mic to a context at any other
+        // rate than its own ("Connecting AudioNodes from AudioContexts with
+        // different sample-rate is currently not supported"), which left
+        // Firefox on a 44.1kHz output device sending no audio at all. The
+        // encoder resamples instead. Shared with playback so every peer mixes
+        // into the same context.
+        const audioContext = new AudioContext();
         audioContext.resume().catch(function () {});
 
         const state = {
@@ -319,7 +324,7 @@ exports.init = async function init(app) {
             });
             audioEncoder.configure({
                 codec: "opus",
-                sampleRate: AUDIO_SAMPLE_RATE,
+                sampleRate: state.audioContext.sampleRate,
                 numberOfChannels: 1,
                 bitrate: 64000,
             });
@@ -454,10 +459,10 @@ exports.init = async function init(app) {
             const samples = event.data;
             const audioData = new AudioData({
                 format: "f32-planar",
-                sampleRate: AUDIO_SAMPLE_RATE,
+                sampleRate: context.sampleRate,
                 numberOfFrames: samples.length,
                 numberOfChannels: 1,
-                timestamp: Math.round((state.framesCaptured / AUDIO_SAMPLE_RATE) * 1e6),
+                timestamp: Math.round((state.framesCaptured / context.sampleRate) * 1e6),
                 data: samples,
             });
             state.framesCaptured += samples.length;
