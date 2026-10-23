@@ -2356,8 +2356,8 @@ groupingView isMobile time contentWidth localUser loggedIn setup shared model =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.indexedMap
-                (groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared model)
-                (resultsData setup shared).questions
+                (groupingQuestionView isMobile time contentWidth localUser loggedIn shared model (players shared))
+                (List.Nonempty.toList setup.questions)
             )
         , Ui.row
             [ Ui.spacing 8 ]
@@ -2386,50 +2386,62 @@ groupingQuestionView :
     -> Int
     -> LocalUser
     -> LoggedIn a
-    -> ValidatedSetup
     -> Shared
     -> GameData
+    -> List (Id UserId)
     -> Int
-    -> QuestionResult
+    -> ValidatedInput
     -> Element GameMsg
-groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared model questionIndex result =
+groupingQuestionView isMobile time contentWidth localUser loggedIn shared model playerIds questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
             Id.fromInt questionIndex
+
+        answers : List ( Id UserId, ValidatedInput )
+        answers =
+            List.filterMap
+                (\userId ->
+                    case answerFor userId questionId shared of
+                        Just answer ->
+                            Just ( userId, answer )
+
+                        Nothing ->
+                            Nothing
+                )
+                playerIds
+
+        minutes : Int
+        minutes =
+            toMinutes time
     in
     Ui.column
         [ Ui.spacing 8 ]
-        [ Ui.el
-            [ Ui.Font.weight 600 ]
-            (questionView
-                time
-                contentWidth
-                localUser
-                model.hoveredQuestion
-                questionId
-                (Dom.id ("sheepGame_groupingQuestion_" ++ Id.toString questionId))
-                result.question
-            )
+        [ Ui.Lazy.lazy6
+            groupingQuestionText
+            minutes
+            contentWidth
+            localUser
+            (model.hoveredQuestion == Just questionId)
+            questionIndex
+            question
         , Ui.column
             [ Ui.spacing 4 ]
-            (players shared
-                |> List.filterMap
-                    (\userId ->
-                        Maybe.map
-                            (groupingAnswerView time contentWidth localUser questionId userId shared)
-                            (answerFor userId questionId shared)
-                    )
+            (List.map
+                (\( userId, answer ) -> groupingAnswerView minutes contentWidth localUser questionId userId shared answer)
+                answers
             )
         , Ui.column
             [ Ui.spacing 2 ]
             [ Ui.el
                 [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                 (Ui.text "Notes")
-            , notesInput
+            , Ui.Lazy.lazy5
+                notesInput
                 localUser
-                loggedIn
-                questionId
+                loggedIn.typedTextCounter
+                loggedIn.textInputFocus
+                questionIndex
                 (IdArray.get questionId model.noteDrafts |> Maybe.withDefault emptyInput)
             ]
         , Ui.column
@@ -2439,43 +2451,132 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                 (Ui.text "Preview")
             , Ui.column
                 [ Ui.spacing 16 ]
-                [ answerGroupsView isMobile time localUser contentWidth Nothing Nothing questionId result.answers
-                , case validatedDraft localUser questionId model.noteDrafts of
-                    Just notes ->
-                        messageWithProfile
-                            setup.createdBy
-                            localUser
-                            (contentView
-                                time
-                                contentWidth
-                                localUser
-                                False
-                                (Dom.id ("sheepGame_groupingNotesPreview_" ++ Id.toString questionId))
-                                notes.attachedFiles
-                                notes.text
+                [ List.map
+                    (\( userId, answer ) ->
+                        ( userId, SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault "", answer )
+                    )
+                    answers
+                    |> answerGroups
+                    |> List.map
+                        (List.map
+                            (\( userId, answer ) ->
+                                Ui.Lazy.lazy6
+                                    groupingPreviewAnswer
+                                    minutes
+                                    contentWidth
+                                    localUser
+                                    questionIndex
+                                    (Id.toInt userId)
+                                    answer
                             )
-                            |> reactableResult
-                                (paddingX isMobile)
-                                localUser
-                                contentWidth
-                                (NotesReaction questionId)
-                                Nothing
-                                Nothing
-                                notes.reactions
-
-                    Nothing ->
-                        Ui.none
+                        )
+                    |> answerGroupsColumn isMobile
+                , Ui.Lazy.lazy6
+                    groupingNotesPreview
+                    isMobile
+                    minutes
+                    contentWidth
+                    localUser
+                    questionIndex
+                    (IdArray.get questionId model.noteDrafts |> Maybe.withDefault emptyInput)
                 ]
             ]
         ]
 
 
+{-| The lazily drawn parts of the grouping screen get the time in whole minutes. A `Time.Posix`
+is a new value every second, so passing it along as it is would redraw them all whenever the
+clock ticks.
+-}
+toMinutes : Time.Posix -> Int
+toMinutes time =
+    Time.posixToMillis time // 60000
+
+
+fromMinutes : Int -> Time.Posix
+fromMinutes minutes =
+    Time.millisToPosix (minutes * 60000)
+
+
+groupingQuestionText : Int -> Int -> LocalUser -> Bool -> Int -> ValidatedInput -> Element GameMsg
+groupingQuestionText minutes contentWidth localUser isHovered questionIndex question =
+    Ui.el
+        [ Ui.Font.weight 600 ]
+        (questionView
+            (fromMinutes minutes)
+            contentWidth
+            localUser
+            (if isHovered then
+                Just (Id.fromInt questionIndex)
+
+             else
+                Nothing
+            )
+            (Id.fromInt questionIndex)
+            (Dom.id ("sheepGame_groupingQuestion_" ++ String.fromInt questionIndex))
+            question
+        )
+
+
+groupingPreviewAnswer : Int -> Int -> LocalUser -> Int -> Int -> ValidatedInput -> Element GameMsg
+groupingPreviewAnswer minutes contentWidth localUser questionIndex userIdInt answer =
+    answerResultView
+        (fromMinutes minutes)
+        localUser
+        contentWidth
+        Nothing
+        Nothing
+        (Id.fromInt questionIndex)
+        (Id.fromInt userIdInt)
+        answer
+
+
+{-| Only the host sees the grouping screen, so they're the one who wrote the notes.
+-}
+groupingNotesPreview : Bool -> Int -> Int -> LocalUser -> Int -> UnvalidatedInput -> Element GameMsg
+groupingNotesPreview isMobile minutes contentWidth localUser questionIndex draft =
+    case validateInput localUser.timezone (User.allUsers localUser) draft of
+        Ok toNotes ->
+            let
+                notes : ValidatedInput
+                notes =
+                    toNotes ()
+            in
+            messageWithProfile
+                localUser.session.userId
+                localUser
+                (contentView
+                    (fromMinutes minutes)
+                    contentWidth
+                    localUser
+                    False
+                    (Dom.id ("sheepGame_groupingNotesPreview_" ++ String.fromInt questionIndex))
+                    notes.attachedFiles
+                    notes.text
+                )
+                |> reactableResult
+                    (paddingX isMobile)
+                    localUser
+                    contentWidth
+                    (NotesReaction (Id.fromInt questionIndex))
+                    Nothing
+                    Nothing
+                    notes.reactions
+
+        Err _ ->
+            Ui.none
+
+
 {-| The host's comment on a question, written in the same input an answer is so that it can
 say the same kinds of things.
 -}
-notesInput : LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
-notesInput localUser loggedIn questionId notes =
+notesInput : LocalUser -> Int -> Maybe TextInputFocus -> Int -> UnvalidatedInput -> Element GameMsg
+notesInput localUser typedTextCounter textInputFocus questionIndex notes =
     let
+        questionId : Id QuestionId
+        questionId =
+            Id.fromInt questionIndex
+
         htmlId : HtmlId
         htmlId =
             inputId (NotesInput questionId)
@@ -2521,7 +2622,7 @@ notesInput localUser loggedIn questionId notes =
                 richText
                 notes.attachedFiles
                 localUser
-                loggedIn
+                { typedTextCounter = typedTextCounter, textInputFocus = textInputFocus }
                 users
                 SeqDict.empty
                 |> Ui.html
@@ -2537,7 +2638,7 @@ notesInput localUser loggedIn questionId notes =
 
 
 groupingAnswerView :
-    Time.Posix
+    Int
     -> Int
     -> LocalUser
     -> Id QuestionId
@@ -2545,7 +2646,7 @@ groupingAnswerView :
     -> Shared
     -> ValidatedInput
     -> Element GameMsg
-groupingAnswerView time contentWidth localUser questionId userId shared answer =
+groupingAnswerView minutes contentWidth localUser questionId userId shared answer =
     let
         groupLabel2 : { element : Element GameMsg, id : Ui.Input.Label }
         groupLabel2 =
@@ -2578,15 +2679,27 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
                 [ Ui.Font.weight 600, Ui.width Ui.shrink, MyUi.noShrinking ]
                 (Ui.text (User.toStringAlt userId localUser))
             ]
-        , contentView
-            time
+        , Ui.Lazy.lazy6
+            groupingAnswerContent
+            minutes
             contentWidth
             localUser
-            False
-            (Dom.id ("sheepGame_groupingAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
-            answer.attachedFiles
-            answer.text
+            (Id.toInt questionId)
+            (Id.toInt userId)
+            answer
         ]
+
+
+groupingAnswerContent : Int -> Int -> LocalUser -> Int -> Int -> ValidatedInput -> Element GameMsg
+groupingAnswerContent minutes contentWidth localUser questionIndex userIdInt answer =
+    contentView
+        (fromMinutes minutes)
+        contentWidth
+        localUser
+        False
+        (Dom.id ("sheepGame_groupingAnswer_" ++ String.fromInt questionIndex ++ "_" ++ String.fromInt userIdInt))
+        answer.attachedFiles
+        answer.text
 
 
 {-| Which way someone moved on the scoreboard when a question was revealed.
@@ -2990,62 +3103,44 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedR
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
         )
         answers
+        |> answerGroups
+        |> List.map
+            (List.map
+                (\( userId, answer ) ->
+                    answerResultView time localUser contentWidth hoveredResult highlightedResult questionId userId answer
+                )
+            )
+        |> answerGroupsColumn isMobile
+
+
+{-| Answers bucketed by the group the host put them in, smallest groups first.
+-}
+answerGroups : List ( Id UserId, String, ValidatedInput ) -> List (List ( Id UserId, ValidatedInput ))
+answerGroups answers =
+    answers
         |> List.Extra.gatherEqualsBy (\( _, group, _ ) -> group)
         |> List.sortBy (\( _, rest ) -> List.length rest)
-        |> List.map
-            (\( first, rest ) ->
-                List.map
-                    (\( userId, _, answer ) ->
-                        (if RichText.hasLargeContent answer.text then
-                            Ui.column
-                                [ Ui.spacing 8, Ui.widthMin 200 ]
+        |> List.map (\( first, rest ) -> List.map (\( userId, _, answer ) -> ( userId, answer )) (first :: rest))
 
-                         else
-                            Ui.row
-                                [ Ui.spacing 8, Ui.widthMin 200 ]
-                        )
-                            [ Ui.el
-                                [ Ui.widthMax (toFloat contentWidth * 0.5 |> round)
-                                , Ui.width Ui.shrink
-                                , Ui.Font.bold
-                                , Ui.Font.color (userColor userId localUser)
-                                , Ui.alignTop
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text (User.toStringAlt userId localUser))
-                            , contentView
-                                time
-                                (min 300 (contentWidth - answerGroupPaddingX * 2))
-                                localUser
-                                (hoveredResult == Just (AnswerReaction userId questionId))
-                                (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
-                                answer.attachedFiles
-                                answer.text
-                            ]
-                            |> reactableResult
-                                answerGroupPaddingX
-                                localUser
-                                contentWidth
-                                (AnswerReaction userId questionId)
-                                hoveredResult
-                                highlightedResult
-                                answer.reactions
-                    )
-                    (first :: rest)
-                    |> Ui.column
-                        [ MyUi.htmlStyle
-                            "outline"
-                            ("solid "
-                                ++ String.fromInt answerGroupOutlineWidth
-                                ++ "px "
-                                ++ MyUi.colorToStyle answerGroupOutlineColor
-                            )
-                        , MyUi.htmlStyle "outline-offset" (String.fromInt answerGroupOutlineOffset ++ "px")
-                        , Ui.rounded 3
-                        , Ui.width Ui.shrink
-                        , Ui.background MyUi.background2
-                        ]
-            )
+
+answerGroupsColumn : Bool -> List (List (Element GameMsg)) -> Element GameMsg
+answerGroupsColumn isMobile groups =
+    List.map
+        (Ui.column
+            [ MyUi.htmlStyle
+                "outline"
+                ("solid "
+                    ++ String.fromInt answerGroupOutlineWidth
+                    ++ "px "
+                    ++ MyUi.colorToStyle answerGroupOutlineColor
+                )
+            , MyUi.htmlStyle "outline-offset" (String.fromInt answerGroupOutlineOffset ++ "px")
+            , Ui.rounded 3
+            , Ui.width Ui.shrink
+            , Ui.background MyUi.background2
+            ]
+        )
+        groups
         |> Ui.column
             [ Ui.paddingWith
                 { left = paddingX isMobile + answerGroupOutlineWidth + answerGroupOutlineOffset
@@ -3054,6 +3149,53 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedR
                 , bottom = 0
                 }
             ]
+
+
+answerResultView :
+    Time.Posix
+    -> LocalUser
+    -> Int
+    -> Maybe ReactionTarget
+    -> Maybe ReactionTarget
+    -> Id QuestionId
+    -> Id UserId
+    -> ValidatedInput
+    -> Element GameMsg
+answerResultView time localUser contentWidth hoveredResult highlightedResult questionId userId answer =
+    (if RichText.hasLargeContent answer.text then
+        Ui.column
+            [ Ui.spacing 8, Ui.widthMin 200 ]
+
+     else
+        Ui.row
+            [ Ui.spacing 8, Ui.widthMin 200 ]
+    )
+        [ Ui.el
+            [ Ui.widthMax (toFloat contentWidth * 0.5 |> round)
+            , Ui.width Ui.shrink
+            , Ui.Font.bold
+            , Ui.Font.color (userColor userId localUser)
+            , Ui.alignTop
+            , Ui.clipWithEllipsis
+            ]
+            (Ui.text (User.toStringAlt userId localUser))
+        , contentView
+            time
+            (min 300 (contentWidth - answerGroupPaddingX * 2))
+            localUser
+            (hoveredResult == Just (AnswerReaction userId questionId))
+            (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
+            answer.attachedFiles
+            answer.text
+        ]
+        |> reactableResult
+            answerGroupPaddingX
+            localUser
+            contentWidth
+            (AnswerReaction userId questionId)
+            hoveredResult
+            highlightedResult
+            answer.reactions
 
 
 answerGroupOutlineWidth : number
