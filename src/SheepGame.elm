@@ -462,10 +462,13 @@ validateInput : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInpu
 validateInput timezone users question =
     case
         ( String.trim question.text |> String.Nonempty.fromString
+          -- Only trimmed to check it isn't blank. A sticker is written as line breaks around
+          -- it, so trimming what gets parsed loses any sticker at the start or end.
+        , String.Nonempty.fromString question.text
         , FileStatus.hasUploadingFile question.attachedFiles
         )
     of
-        ( Just content, False ) ->
+        ( Just _, Just content, False ) ->
             -- Lazy so we can show error messages without having to parse everything
             (\() ->
                 { text = RichText.fromNonemptyString timezone users SeqDict.empty content
@@ -475,10 +478,13 @@ validateInput timezone users question =
             )
                 |> Ok
 
-        ( Nothing, _ ) ->
+        ( Nothing, _, _ ) ->
             Err emptyQuestionError
 
-        ( _, True ) ->
+        ( _, Nothing, _ ) ->
+            Err emptyQuestionError
+
+        ( _, _, True ) ->
             Err "Attached files not finished uploading"
 
 
@@ -1532,7 +1538,7 @@ sheepEmoji =
 
 replyPreviewText : ValidatedInput -> String
 replyPreviewText input =
-    RichText.toString Time.utc False SeqDict.empty SeqDict.empty input.text |> String.trim
+    RichText.toString Time.utc True SeqDict.empty SeqDict.empty input.text |> String.trim
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with
