@@ -120,7 +120,7 @@ codeBackground =
 
 codeBorder : String
 codeBorder =
-    "rgb(37,41,51)"
+    "rgb(49, 54, 67)"
 
 
 {-| The border and left/right padding of a code block. Named because scaling ascii art has

@@ -141,6 +141,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Shadow
 
 
@@ -2027,6 +2028,6 @@ userLabelFontColor =
 --lazyChangedValueHelper name value =
 --    let
 --        _ =
---            Debug.log ("Lazy change: " ++ name) ()
+--            Debug.log ("Lazy change: " ++ name) value
 --    in
 --    Ui.none

@@ -67,6 +67,7 @@ before revealing the questions one at a time.
 -}
 
 import Array
+import Bitwise
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -1990,6 +1991,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
             [ Ui.background MyUi.background1
             , MyUi.scrollable (MyUi.canScroll (MyUi.isMobileAlt windowSize) drag)
             , Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+            , Ui.heightMin 0
             , Ui.id (Dom.idToString gameViewId)
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
 
@@ -2020,7 +2022,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
                         (groupingView isMobile time contentWidth localUser loggedIn setup shared model)
 
                 Revealing ->
-                    Ui.column
+                    Ui.el
                         [ Ui.paddingWith
                             { left = 0
                             , right = 0
@@ -2035,11 +2037,130 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
                             }
                         , Ui.centerX
                         , Ui.widthMax maxWidth
-                        , Ui.spacing 16
                         ]
-                        (revealingView isMobile time contentWidth localUser highlightedResult setup shared model)
+                        (case highlightedResult of
+                            Nothing ->
+                                Ui.Lazy.lazy5
+                                    revealingView_NoHighlight
+                                    (encodeContentWidthAndTime isMobile time contentWidth)
+                                    localUser
+                                    setup
+                                    shared
+                                    model
+
+                            Just (NotesReaction questionId) ->
+                                Ui.Lazy.lazy6
+                                    revealingView_HighlightNotes
+                                    (encodeContentWidthAndTime isMobile time contentWidth)
+                                    questionId
+                                    localUser
+                                    setup
+                                    shared
+                                    model
+
+                            Just (AnswerReaction userId questionId) ->
+                                Ui.Lazy.lazy6
+                                    revealingView_HighlightAnswer
+                                    (encodeContentWidthAndTime isMobile time contentWidth)
+                                    (encodeUserIdAndQuestionId userId questionId)
+                                    localUser
+                                    setup
+                                    shared
+                                    model
+                        )
             )
         )
+
+
+{-| Question ids get the low 6 bits since there are at most `maxQuestions` of them, which
+leaves user ids room to grow.
+-}
+encodeUserIdAndQuestionId : Id UserId -> Id QuestionId -> Int
+encodeUserIdAndQuestionId userId questionId =
+    Id.toInt questionId + Bitwise.shiftLeftBy 6 (Id.toInt userId)
+
+
+decodeUserIdAndQuestionId : Int -> { questionId : Id QuestionId, userId : Id UserId }
+decodeUserIdAndQuestionId value =
+    { questionId = Bitwise.and (Bitwise.shiftLeftBy 6 1 - 1) value |> Id.fromInt
+    , userId = Bitwise.shiftRightZfBy 6 value |> Id.fromInt
+    }
+
+
+encodeContentWidthAndTime : Bool -> Time.Posix -> Int -> Int
+encodeContentWidthAndTime isMobile time contentWidth =
+    Bitwise.shiftLeftBy 1 contentWidth
+        + (Time.posixToMillis time // (1000 * 60))
+        * 8192
+        * 2
+        + (if isMobile then
+            1
+
+           else
+            0
+          )
+
+
+decodeContentWidthAndTime : Int -> { time : Time.Posix, contentWidth : Int, isMobile : Bool }
+decodeContentWidthAndTime value =
+    { time = 1000 * 60 * (value // (8192 * 2)) |> Time.millisToPosix
+    , contentWidth = Bitwise.and (8192 - 1) (Bitwise.shiftRightZfBy 1 value)
+    , isMobile = Bitwise.and 1 value == 1
+    }
+
+
+revealingView_NoHighlight : Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+revealingView_NoHighlight value localUser setup shared model =
+    let
+        { isMobile, contentWidth, time } =
+            decodeContentWidthAndTime value
+    in
+    revealingView
+        isMobile
+        time
+        contentWidth
+        localUser
+        Nothing
+        setup
+        shared
+        model
+
+
+revealingView_HighlightNotes : Int -> Id QuestionId -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+revealingView_HighlightNotes value questionId localUser setup shared model =
+    let
+        { isMobile, contentWidth, time } =
+            decodeContentWidthAndTime value
+    in
+    revealingView
+        isMobile
+        time
+        contentWidth
+        localUser
+        (NotesReaction questionId |> Just)
+        setup
+        shared
+        model
+
+
+revealingView_HighlightAnswer : Int -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+revealingView_HighlightAnswer value userIdAndQuestionId localUser setup shared model =
+    let
+        { isMobile, contentWidth, time } =
+            decodeContentWidthAndTime value
+
+        { userId, questionId } =
+            decodeUserIdAndQuestionId userIdAndQuestionId
+    in
+    revealingView
+        isMobile
+        time
+        contentWidth
+        localUser
+        (AnswerReaction userId questionId |> Just)
+        setup
+        shared
+        model
 
 
 {-| Questions and answers are drawn the same way a message is, so that a file attached to a
@@ -2907,7 +3028,16 @@ placeIn userId scores =
         |> List.length
 
 
-revealingView : Bool -> Time.Posix -> Int -> LocalUser -> Maybe ReactionTarget -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView :
+    Bool
+    -> Time.Posix
+    -> Int
+    -> LocalUser
+    -> Maybe ReactionTarget
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> Element GameMsg
 revealingView isMobile time contentWidth localUser highlightedResult setup shared model =
     let
         questionCount : Int
@@ -2921,77 +3051,79 @@ revealingView isMobile time contentWidth localUser highlightedResult setup share
         padding =
             Ui.paddingXY (paddingX isMobile) 0
     in
-    [ Ui.el
-        [ Ui.Font.bold
-        , Ui.Font.size 28
-        , padding
-        , Ui.Font.color MyUi.font2
-        , Ui.attrIf isMobile Ui.Font.center
-        ]
-        (Ui.text "Sheep game results")
-    , if shared.questionsRevealed == 0 then
-        Ui.column
-            [ Ui.Font.size 20
-            , Ui.Font.center
-            , Ui.padding 16
-            , MyUi.fadeIn
+    Ui.column
+        [ Ui.spacing 16 ]
+        [ Ui.el
+            [ Ui.Font.bold
+            , Ui.Font.size 28
             , padding
-            , Ui.spacing 16
+            , Ui.Font.color MyUi.font2
+            , Ui.attrIf isMobile Ui.Font.center
             ]
-            [ Ui.image
-                [ Ui.widthMax 502 ]
-                { source = "/cacheable/sheep-game.webp"
-                , description = "A sheep with a laptop and wearing headphones"
-                , onLoad = Nothing
-                }
-            , Ui.text "Stay tuned. The results will be revealed shortly."
-            ]
-
-      else
-        Ui.column
-            [ Ui.spacing 32 ]
-            (Ui.column
-                [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
-                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text scoringText)
-                , Ui.column
-                    [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
-                    [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
-                    , Ui.text "The person with the most points at the end wins!"
-                    ]
+            (Ui.text "Sheep game results")
+        , if shared.questionsRevealed == 0 then
+            Ui.column
+                [ Ui.Font.size 20
+                , Ui.Font.center
+                , Ui.padding 16
+                , MyUi.fadeIn
+                , padding
+                , Ui.spacing 16
                 ]
-                :: List.indexedMap
-                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredQuestion model.hoveredResult highlightedResult results.maxPoints)
-                    (List.take (shared.questionsRevealed - 1) results.questions)
-            )
-    , if shared.questionsRevealed > questionCount then
-        Ui.column
-            [ Ui.spacing 32
-            , Ui.paddingWith { left = paddingX isMobile, right = paddingX isMobile, top = 32, bottom = 0 }
-            , MyUi.fadeIn
-            ]
-            [ Ui.el
-                [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
-                Ui.none
-            , finalResultsView localUser results.winners
-            , if SeqDict.size shared.answers > 2 then
-                Ui.column
-                    [ Ui.spacing 16 ]
-                    [ Ui.el
-                        [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
-                        (Ui.text "Statistics: Which players think most alike?")
-                    , resultsGridView isMobile localUser setup shared model.gridHovered
+                [ Ui.image
+                    [ Ui.widthMax 502 ]
+                    { source = "/cacheable/sheep-game.webp"
+                    , description = "A sheep with a laptop and wearing headphones"
+                    , onLoad = Nothing
+                    }
+                , Ui.text "Stay tuned. The results will be revealed shortly."
+                ]
+
+          else
+            Ui.column
+                [ Ui.spacing 32 ]
+                (Ui.column
+                    [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
+                    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text scoringText)
+                    , Ui.column
+                        [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                        [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
+                        , Ui.text "The person with the most points at the end wins!"
+                        ]
                     ]
+                    :: List.indexedMap
+                        (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredQuestion model.hoveredResult highlightedResult results.maxPoints)
+                        (List.take (shared.questionsRevealed - 1) results.questions)
+                )
+        , if shared.questionsRevealed > questionCount then
+            Ui.column
+                [ Ui.spacing 32
+                , Ui.paddingWith { left = paddingX isMobile, right = paddingX isMobile, top = 32, bottom = 0 }
+                , MyUi.fadeIn
+                ]
+                [ Ui.el
+                    [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
+                    Ui.none
+                , finalResultsView localUser results.winners
+                , if SeqDict.size shared.answers > 2 then
+                    Ui.column
+                        [ Ui.spacing 16 ]
+                        [ Ui.el
+                            [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
+                            (Ui.text "Statistics: Which players think most alike?")
+                        , resultsGridView isMobile localUser setup shared model.gridHovered
+                        ]
 
-              else
-                Ui.none
-            , Ui.el
-                [ Ui.Font.size 12, Ui.Font.center, Ui.Font.color MyUi.font3 ]
-                (Ui.text "No sheep were impersonated in the playing of this game.")
-            ]
+                  else
+                    Ui.none
+                , Ui.el
+                    [ Ui.Font.size 12, Ui.Font.center, Ui.Font.color MyUi.font3 ]
+                    (Ui.text "No sheep were impersonated in the playing of this game.")
+                ]
 
-      else
-        Ui.none
-    ]
+          else
+            Ui.none
+        ]
 
 
 scoringId : HtmlId
@@ -3418,7 +3550,16 @@ resultsGridView isMobile localUser setup shared gridHovered =
             SeqDict.values overlap |> List.maximum |> Maybe.withDefault 0
     in
     Ui.row
-        [ Ui.spacing 16 ]
+        [ Ui.spacing 16
+        , Ui.paddingXY
+            0
+            (if isMobile then
+                100
+
+             else
+                32
+            )
+        ]
         [ Ui.column
             [ Ui.width Ui.shrink
             , Ui.Font.bold

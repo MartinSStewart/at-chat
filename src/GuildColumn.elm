@@ -745,7 +745,9 @@ newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageI
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
-            MessageArray.length channel.messages - 1 - Id.toInt lastViewed
+            -- The last viewed message can end up past the newest message this tab has, and a negative
+            -- count would cancel out other conversations' unread messages wherever counts are added up.
+            MessageArray.length channel.messages - 1 - Id.toInt lastViewed |> max 0
 
         Nothing ->
             MessageArray.length channel.messages
