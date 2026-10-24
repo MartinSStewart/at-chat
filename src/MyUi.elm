@@ -141,7 +141,6 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import Ui.Lazy
 import Ui.Shadow
 
 
