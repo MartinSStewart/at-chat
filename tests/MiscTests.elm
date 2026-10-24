@@ -16,11 +16,13 @@ import Expect
 import FileName
 import FileStatus
 import Fuzz
+import GuildColumn
 import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import LocalState
 import Message exposing (Message(..), RepliedTo(..))
+import MessageArray
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import RichText exposing (RichText(..))
 import SeqDict
@@ -382,11 +384,27 @@ messageViewFuzzer =
         )
 
 
+newMessageCountTests : Test
+newMessageCountTests =
+    Test.describe
+        "Unread message counts"
+        [ Test.test "Messages after the last viewed one are unread" <|
+            \_ ->
+                GuildColumn.newMessageCount (Just (Id.fromInt 0)) { messages = MessageArray.fromArray 3 (Id.fromInt 0) Array.empty }
+                    |> Expect.equal 2
+        , Test.test "A last viewed message past the newest one leaves nothing unread instead of a negative count" <|
+            \_ ->
+                GuildColumn.newMessageCount (Just (Id.fromInt 5)) { messages = MessageArray.fromArray 2 (Id.fromInt 0) Array.empty }
+                    |> Expect.equal 0
+        ]
+
+
 tests : Test
 tests =
     Test.describe
         "Misc tests"
         [ redactPrivateKeysTests
+        , newMessageCountTests
         , attachmentUrlTests
         , uploadedFileMetadataTests
         , backendMsgLogTests
