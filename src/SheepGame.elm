@@ -1990,6 +1990,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
             [ Ui.background MyUi.background1
             , MyUi.scrollable (MyUi.canScroll (MyUi.isMobileAlt windowSize) drag)
             , Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+            , Ui.heightMin 0
             , Ui.id (Dom.idToString gameViewId)
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
 
