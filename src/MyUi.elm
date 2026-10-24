@@ -66,6 +66,7 @@ module MyUi exposing
     , isMobile
     , isMobileAlt
     , label
+    , lazyChangedValue
     , lazyLoading
     , memberColumnWidth
     , mentionColor
@@ -141,6 +142,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Shadow
 
 
@@ -2017,16 +2019,15 @@ userLabelFontColor =
     Ui.rgb 215 235 255
 
 
+lazyChangedValue : String -> b -> Element msg
+lazyChangedValue name value =
+    Ui.Lazy.lazy2 lazyChangedValueHelper name value
 
---lazyChangedValue : String -> b -> Element msg
---lazyChangedValue name value =
---    Ui.Lazy.lazy2 lazyChangedValueHelper name value
---
---
---lazyChangedValueHelper : String -> b -> Element msg
---lazyChangedValueHelper name value =
---    let
---        _ =
---            Debug.log ("Lazy change: " ++ name) ()
---    in
---    Ui.none
+
+lazyChangedValueHelper : String -> b -> Element msg
+lazyChangedValueHelper name value =
+    let
+        _ =
+            Debug.log ("Lazy change: " ++ name) value
+    in
+    Ui.none
