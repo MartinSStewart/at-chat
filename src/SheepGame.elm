@@ -2058,11 +2058,11 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
                                     shared
                                     model
 
-                            Just (AnswerReaction questionId answerId) ->
+                            Just (AnswerReaction userId questionId) ->
                                 Ui.Lazy.lazy6
                                     revealingView_HighlightAnswer
                                     (encodeContentWidthAndTime isMobile time contentWidth)
-                                    (encodeQuestionIdAndAnswerId questionId answerId)
+                                    (encodeUserIdAndQuestionId userId questionId)
                                     localUser
                                     setup
                                     shared
@@ -2072,15 +2072,18 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
         )
 
 
-encodeQuestionIdAndAnswerId : Id UserId -> Id QuestionId -> Int
-encodeQuestionIdAndAnswerId userId questionId =
-    Id.toInt userId + Bitwise.shiftLeftBy 10 (Id.toInt questionId)
+{-| Question ids get the low 6 bits since there are at most `maxQuestions` of them, which
+leaves user ids room to grow.
+-}
+encodeUserIdAndQuestionId : Id UserId -> Id QuestionId -> Int
+encodeUserIdAndQuestionId userId questionId =
+    Id.toInt questionId + Bitwise.shiftLeftBy 6 (Id.toInt userId)
 
 
-decodeQuestionIdAndAnswerId : Int -> { questionId : Id QuestionId, userId : Id UserId }
-decodeQuestionIdAndAnswerId value =
-    { questionId = Bitwise.shiftRightZfBy 10 value |> Id.fromInt
-    , userId = Bitwise.and (Bitwise.shiftLeftBy 10 1 - 1) value |> Id.fromInt
+decodeUserIdAndQuestionId : Int -> { questionId : Id QuestionId, userId : Id UserId }
+decodeUserIdAndQuestionId value =
+    { questionId = Bitwise.and (Bitwise.shiftLeftBy 6 1 - 1) value |> Id.fromInt
+    , userId = Bitwise.shiftRightZfBy 6 value |> Id.fromInt
     }
 
 
@@ -2100,14 +2103,9 @@ encodeContentWidthAndTime isMobile time contentWidth =
 
 decodeContentWidthAndTime : Int -> { time : Time.Posix, contentWidth : Int, isMobile : Bool }
 decodeContentWidthAndTime value =
-    { time = 1000 * 60 * (value // 8192) |> Time.millisToPosix
+    { time = 1000 * 60 * (value // (8192 * 2)) |> Time.millisToPosix
     , contentWidth = Bitwise.and (8192 - 1) (Bitwise.shiftRightZfBy 1 value)
-    , isMobile =
-        if Bitwise.and 1 value == 1 then
-            True
-
-        else
-            False
+    , isMobile = Bitwise.and 1 value == 1
     }
 
 
@@ -2146,13 +2144,13 @@ revealingView_HighlightNotes value questionId localUser setup shared model =
 
 
 revealingView_HighlightAnswer : Int -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
-revealingView_HighlightAnswer value questionIdAndAnswerId localUser setup shared model =
+revealingView_HighlightAnswer value userIdAndQuestionId localUser setup shared model =
     let
         { isMobile, contentWidth, time } =
             decodeContentWidthAndTime value
 
         { userId, questionId } =
-            decodeQuestionIdAndAnswerId questionIdAndAnswerId
+            decodeUserIdAndQuestionId userIdAndQuestionId
     in
     revealingView
         isMobile
