@@ -83,7 +83,7 @@ placeholder emojiSize yOffset =
         , Html.Attributes.style "height" emojiSize
         , Html.Attributes.style "display" "inline-block"
         , Html.Attributes.style "background-color" "gray"
-        , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
+        , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
         ]
         []
 
@@ -218,7 +218,7 @@ viewHelper emojiSize yOffset customEmoji animationMode =
                 , Html.Attributes.style "height" emojiSize
                 , Html.Attributes.style "background-color" "gray"
                 , Html.Attributes.style "display" "inline-block"
-                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
+                , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
                 ]
                 []
 
