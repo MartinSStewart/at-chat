@@ -2409,7 +2409,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
-        "A muted Discord channel sends no push notifications even when the guild notifies on every message"
+        "A muted Discord channel sends no push notifications even when the guild notifies on every message, and a partially muted one only for mentions"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.linkDiscordAndLogin
@@ -2457,11 +2457,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , discordGuildMessage connection "<@184437096813953035> mentioned while muted"
                         , E2EHelper.checkNoNotification "@at28727 mentioned while muted"
 
-                        -- A partial mute only hides the white dot, and every message in this
-                        -- guild gets a red one, so they still notify.
+                        -- A partial mute only lets mentions and replies through, ignoring that the
+                        -- guild notifies on every message.
                         , muteChannel MuteSettings.IsPartiallyMuted
                         , discordGuildMessage connection "While partially muted"
-                        , E2EHelper.checkNotification "at0232" "While partially muted"
+                        , E2EHelper.checkNoNotification "While partially muted"
+                        , discordGuildMessage connection "<@184437096813953035> mentioned while partially muted"
+                        , E2EHelper.checkNotification "at0232" "@at28727 mentioned while partially muted"
                         ]
                     )
                 ]

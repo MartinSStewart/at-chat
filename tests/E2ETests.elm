@@ -2507,7 +2507,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
-        "A muted channel sends no push notifications even when the guild notifies on every message"
+        "A muted channel sends no push notifications even when the guild notifies on every message, and a partially muted one only for mentions"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
@@ -2520,6 +2520,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsFullyMuted))
                 , E2EHelper.writeMessage admin 100 "While muted"
                 , E2EHelper.checkNoNotification "While muted"
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsPartiallyMuted))
+                , E2EHelper.writeMessage admin 100 "While partially muted"
+                , E2EHelper.checkNoNotification "While partially muted"
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve mentioned while partially muted"
+                , E2EHelper.checkNotification E2EHelper.adminName "@Stevie Steve mentioned while partially muted"
                 , user.update
                     100
                     (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsNotMuted))

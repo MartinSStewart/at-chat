@@ -1556,12 +1556,13 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId } ->
                             SeqSet.member guildId local.localUser.user.notifyOnAllMessages
+                                && not (MuteSettings.hidesWhiteDot muteLevel)
 
                         GuildOrDmId_Dm _ ->
                             True
 
-                isMuted : Bool
-                isMuted =
+                muteLevel : IsMuted
+                muteLevel =
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             MuteSettings.isChannelMuted
@@ -1569,14 +1570,12 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 guildId
                                 channelId
                                 (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
-                                |> MuteSettings.hidesRedDot
 
                         GuildOrDmId_Dm { otherUserId } ->
                             MuteSettings.isDmMuted
                                 local.localUser.user.muteSettings
                                 otherUserId
                                 (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
-                                |> MuteSettings.hidesRedDot
 
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
@@ -1587,7 +1586,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                 threadRouteWithFriends =
                     Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
-            if not model.pageHasFocus && not isMuted && (alwaysNotify || isMentionedOrRepliedTo) then
+            if not model.pageHasFocus && not (MuteSettings.hidesRedDot muteLevel) && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
                     , case model.startupData.notificationPermission of
@@ -1691,7 +1690,10 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                         Just mentioned
 
                                     Nothing ->
-                                        if SeqSet.member teamId local.localUser.user.slackNotifyOnAllMessages then
+                                        if
+                                            SeqSet.member teamId local.localUser.user.slackNotifyOnAllMessages
+                                                && not (MuteSettings.hidesWhiteDot muteLevel)
+                                        then
                                             SeqDict.filter (\_ linkedTeamId -> linkedTeamId == teamId) local.localUser.linkedSlackUsers
                                                 |> SeqDict.keys
                                                 |> List.head
@@ -1707,19 +1709,18 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                                 |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
                                         )
 
-                isMuted : Bool
-                isMuted =
+                muteLevel : IsMuted
+                muteLevel =
                     case guildOrDmId of
                         SlackGuildOrDmId_Workspace { teamId, channelId } ->
                             MuteSettings.isSlackChannelMuted local.localUser.user.muteSettings teamId channelId threadRoute
-                                |> MuteSettings.hidesRedDot
 
                         SlackGuildOrDmId_Dm _ ->
-                            False
+                            MuteSettings.IsNotMuted
             in
             case recipient of
                 Just currentUserId ->
-                    if model.pageHasFocus || isMuted then
+                    if model.pageHasFocus || MuteSettings.hidesRedDot muteLevel then
                         Command.none
 
                     else
@@ -1795,12 +1796,13 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { guildId } ->
                             SeqSet.member guildId local.localUser.user.discordNotifyOnAllMessages
+                                && not (MuteSettings.hidesWhiteDot muteLevel)
 
                         DiscordGuildOrDmId_Dm _ ->
                             False
 
-                isMuted : Bool
-                isMuted =
+                muteLevel : IsMuted
+                muteLevel =
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild { guildId, channelId } ->
                             MuteSettings.isDiscordChannelMuted
@@ -1808,11 +1810,9 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                                 guildId
                                 channelId
                                 (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
-                                |> MuteSettings.hidesRedDot
 
                         DiscordGuildOrDmId_Dm { channelId } ->
                             MuteSettings.isDiscordDmMuted local.localUser.user.muteSettings channelId
-                                |> MuteSettings.hidesRedDot
 
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
@@ -1831,7 +1831,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                 threadRouteWithFriends =
                     Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
-            if not model.pageHasFocus && not isMuted && (alwaysNotify || isMentionedOrRepliedTo) then
+            if not model.pageHasFocus && not (MuteSettings.hidesRedDot muteLevel) && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
                     , case model.startupData.notificationPermission of

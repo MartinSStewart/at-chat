@@ -639,6 +639,10 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                     case NonemptyDict.get userId model.users of
                         Just user ->
                             SeqSet.member id.guildId user.notifyOnAllMessages
+                                && not
+                                    (MuteSettings.isChannelMuted user.muteSettings id.guildId id.channelId threadRoute
+                                        |> MuteSettings.hidesWhiteDot
+                                    )
 
                         Nothing ->
                             False
@@ -759,6 +763,10 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                             case NonemptyDict.get discordUser.linkedTo model.users of
                                 Just user ->
                                     SeqSet.member guildId user.discordNotifyOnAllMessages
+                                        && not
+                                            (MuteSettings.isDiscordChannelMuted user.muteSettings guildId channelId threadRoute
+                                                |> MuteSettings.hidesWhiteDot
+                                            )
 
                                 Nothing ->
                                     False
@@ -1581,6 +1589,10 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                                                         case NonemptyDict.get linkedUser.linkedTo model.users of
                                                             Just user ->
                                                                 SeqSet.member teamId user.slackNotifyOnAllMessages
+                                                                    && not
+                                                                        (MuteSettings.isSlackChannelMuted user.muteSettings teamId channelId threadRoute
+                                                                            |> MuteSettings.hidesWhiteDot
+                                                                        )
 
                                                             Nothing ->
                                                                 False
@@ -2410,7 +2422,7 @@ gameStartedGuildNotification time sender id gameType members model =
                         case NonemptyDict.get userId2 model.users of
                             Just user ->
                                 MuteSettings.isChannelMuted user.muteSettings id.guildId id.channelId NoThread
-                                    |> MuteSettings.hidesRedDot
+                                    |> MuteSettings.hidesWhiteDot
 
                             Nothing ->
                                 False
