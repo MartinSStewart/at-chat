@@ -68,6 +68,22 @@ None of this has been run against BrowserStack yet: it follows their documentati
 (`wss://cdp.browserstack.com/playwright?caps=...`, `args` for Chromium-based browsers,
 `firefox_user_prefs` for Firefox). Expect the first run to need adjusting.
 
+## Checking codecs on many devices
+
+`probe.js` opens at-chat.app on a list of BrowserStack machines and real phones, and on
+each one checks getUserMedia, the AudioContext's sample rate, and a real encode and decode
+of a few VP8, H.264 and opus frames. Asking `isConfigSupported` alone isn't enough: the
+Linux Mint bug was a codec that said yes and then failed. It doesn't log in or join a call,
+so it needs no saved logins, and each machine takes about 20 seconds.
+
+```
+node probe.js                  # the default list in probe.js
+node probe.js platforms.json   # your own list, in the same shape as that default list
+```
+
+Device and OS names are the ones BrowserStack's capability builder uses. Unlike the
+Playwright bots it also reaches real iPhones.
+
 ## Reading the results
 
 The table goes to the terminal and to `results/<time>/summary.txt`, with every number in
