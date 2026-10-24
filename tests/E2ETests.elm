@@ -2507,6 +2507,28 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "A muted channel sends no push notifications even when the guild notifies on every message"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.update 100 (Audio.userMsg (Types.PressedGuildNotificationLevel (Id.fromInt 1) User.NotifyOnEveryMessage))
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsFullyMuted))
+                , E2EHelper.writeMessage admin 100 "While muted"
+                , E2EHelper.checkNoNotification "While muted"
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsNotMuted))
+                , E2EHelper.writeMessage admin 100 "After unmuting"
+                , E2EHelper.checkNotification E2EHelper.adminName "After unmuting"
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Push notification sent when a game is started"
         E2EHelper.startTime
         normalConfig

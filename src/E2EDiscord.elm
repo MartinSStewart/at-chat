@@ -35,6 +35,7 @@ import MembersAndOwner
 import Message
 import MessageArray
 import MessageInput
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -2402,6 +2403,65 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         -- username of the sender and the body is the message text.
                         , discordGuildMessage connection "<@184437096813953035> check the notification"
                         , E2EHelper.checkNotification "at0232" "@at28727 check the notification"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A muted Discord channel sends no push notifications even when the guild notifies on every message"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        let
+                            muteChannel : MuteSettings.IsMuted -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                            muteChannel isMuted =
+                                admin.update
+                                    100
+                                    (Audio.userMsg
+                                        (Types.PressedMuteDiscordChannel
+                                            E2EHelper.currentDiscordUserId
+                                            E2EHelper.botTestGuild
+                                            E2EHelper.botTestGuild_ChannelA
+                                            isMuted
+                                        )
+                                    )
+                        in
+                        [ -- Linking expanded only the Discord section of user options, which collapsed the notification setting
+                          admin.click 100 (Dom.id "userOptions_settings")
+                        , E2EHelper.enableNotifications False admin
+                        , E2EHelper.checkNotification "Success!" "Push notifications enabled"
+                        , admin.update
+                            100
+                            (Audio.userMsg
+                                (Types.PressedDiscordGuildNotificationLevel
+                                    E2EHelper.currentDiscordUserId
+                                    E2EHelper.botTestGuild
+                                    User.NotifyOnEveryMessage
+                                )
+                            )
+                        , discordGuildMessage connection "Before muting"
+                        , E2EHelper.checkNotification "at0232" "Before muting"
+                        , muteChannel MuteSettings.IsFullyMuted
+                        , discordGuildMessage connection "While muted"
+                        , E2EHelper.checkNoNotification "While muted"
+                        , discordGuildMessage connection "<@184437096813953035> mentioned while muted"
+                        , E2EHelper.checkNoNotification "@at28727 mentioned while muted"
+
+                        -- A partial mute only hides the white dot, and every message in this
+                        -- guild gets a red one, so they still notify.
+                        , muteChannel MuteSettings.IsPartiallyMuted
+                        , discordGuildMessage connection "While partially muted"
+                        , E2EHelper.checkNotification "at0232" "While partially muted"
                         ]
                     )
                 ]

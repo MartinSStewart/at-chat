@@ -1560,6 +1560,24 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                         GuildOrDmId_Dm _ ->
                             True
 
+                isMuted : Bool
+                isMuted =
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            MuteSettings.isChannelMuted
+                                local.localUser.user.muteSettings
+                                guildId
+                                channelId
+                                (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
+                                |> MuteSettings.hidesRedDot
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            MuteSettings.isDmMuted
+                                local.localUser.user.muteSettings
+                                otherUserId
+                                (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
+                                |> MuteSettings.hidesRedDot
+
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
@@ -1569,7 +1587,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                 threadRouteWithFriends =
                     Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
-            if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
+            if not model.pageHasFocus && not isMuted && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
                     , case model.startupData.notificationPermission of
@@ -1688,10 +1706,20 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                             NonemptySet.toList dmChannel.members
                                                 |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
                                         )
+
+                isMuted : Bool
+                isMuted =
+                    case guildOrDmId of
+                        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+                            MuteSettings.isSlackChannelMuted local.localUser.user.muteSettings teamId channelId threadRoute
+                                |> MuteSettings.hidesRedDot
+
+                        SlackGuildOrDmId_Dm _ ->
+                            False
             in
             case recipient of
                 Just currentUserId ->
-                    if model.pageHasFocus then
+                    if model.pageHasFocus || isMuted then
                         Command.none
 
                     else
@@ -1771,6 +1799,21 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         DiscordGuildOrDmId_Dm _ ->
                             False
 
+                isMuted : Bool
+                isMuted =
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild { guildId, channelId } ->
+                            MuteSettings.isDiscordChannelMuted
+                                local.localUser.user.muteSettings
+                                guildId
+                                channelId
+                                (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
+                                |> MuteSettings.hidesRedDot
+
+                        DiscordGuildOrDmId_Dm { channelId } ->
+                            MuteSettings.isDiscordDmMuted local.localUser.user.muteSettings channelId
+                                |> MuteSettings.hidesRedDot
+
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
@@ -1788,7 +1831,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                 threadRouteWithFriends =
                     Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
-            if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
+            if not model.pageHasFocus && not isMuted && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
                     , case model.startupData.notificationPermission of

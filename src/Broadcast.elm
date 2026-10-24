@@ -76,6 +76,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), ThreadRouteWithRepliedTo(..), UserTextMessageData)
+import MuteSettings
 import MyUi
 import NonemptyDict
 import NonemptySet
@@ -673,8 +674,18 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                         False
                             )
                             (userGetAllConnections userId2 model)
+
+                    isMuted : Bool
+                    isMuted =
+                        case NonemptyDict.get userId2 model.users of
+                            Just user ->
+                                MuteSettings.isChannelMuted user.muteSettings id.guildId id.channelId threadRoute
+                                    |> MuteSettings.hidesRedDot
+
+                            Nothing ->
+                                False
                 in
-                if isViewing then
+                if isViewing || isMuted then
                     ( sessions, cmds )
 
                 else
@@ -789,8 +800,18 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                                 False
                                     )
                                     (userGetAllConnections discordUser.linkedTo model)
+
+                            isMuted : Bool
+                            isMuted =
+                                case NonemptyDict.get discordUser.linkedTo model.users of
+                                    Just user ->
+                                        MuteSettings.isDiscordChannelMuted user.muteSettings guildId channelId threadRoute
+                                            |> MuteSettings.hidesRedDot
+
+                                    Nothing ->
+                                        False
                         in
-                        if isViewing then
+                        if isViewing || isMuted then
                             ( sessions, cmds )
 
                         else
@@ -1385,6 +1406,16 @@ isViewingDiscordDm channelId userId2 model =
         (userGetAllConnections userId2 model)
 
 
+isDiscordDmMuted : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
+isDiscordDmMuted channelId userId2 model =
+    case NonemptyDict.get userId2 model.users of
+        Just user ->
+            MuteSettings.isDiscordDmMuted user.muteSettings channelId |> MuteSettings.hidesRedDot
+
+        Nothing ->
+            False
+
+
 discordDmNotification :
     Time.Posix
     -> Discord.Id Discord.PrivateChannelId
@@ -1411,7 +1442,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                                 else
                                     case SeqDict.get member model.discordUsers of
                                         Just (FullData discordUser) ->
-                                            if isViewingDiscordDm channelId discordUser.linkedTo model then
+                                            if isViewingDiscordDm channelId discordUser.linkedTo model || isDiscordDmMuted channelId discordUser.linkedTo model then
                                                 Nothing
 
                                             else
@@ -1483,6 +1514,22 @@ slackMentionedMembers teamId channelId content model =
 {-| Linked accounts hear about every message in a Slack DM, and about the messages that mention
 them in a channel they're in. `guildOrDmId` is the author's.
 -}
+isSlackConversationMuted : SlackGuildOrDmId -> ThreadRoute -> Id UserId -> BackendModel -> Bool
+isSlackConversationMuted guildOrDmId threadRoute userId model =
+    case guildOrDmId of
+        SlackGuildOrDmId_Workspace { teamId, channelId } ->
+            case NonemptyDict.get userId model.users of
+                Just user ->
+                    MuteSettings.isSlackChannelMuted user.muteSettings teamId channelId threadRoute
+                        |> MuteSettings.hidesRedDot
+
+                Nothing ->
+                    False
+
+        SlackGuildOrDmId_Dm _ ->
+            False
+
+
 slackMessageNotification :
     Time.Posix
     -> SlackGuildOrDmId
@@ -1606,6 +1653,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                         (recipient == author)
                             || (Just linkedUser.linkedTo == authorLinkedTo)
                             || List.member linkedUser.linkedTo viewers
+                            || isSlackConversationMuted guildOrDmId threadRoute linkedUser.linkedTo model
                     then
                         ( sessions, cmds )
 
@@ -1980,6 +2028,16 @@ repliedToData guildOrDmId goMatchPublicIds channel threadRoute =
             NoReplyData
 
 
+isDmMuted : Id UserId -> Id UserId -> ThreadRoute -> BackendModel -> Bool
+isDmMuted userToNotify otherUserId threadRoute model =
+    case NonemptyDict.get userToNotify model.users of
+        Just user ->
+            MuteSettings.isDmMuted user.muteSettings otherUserId threadRoute |> MuteSettings.hidesRedDot
+
+        Nothing ->
+            False
+
+
 broadcastDm :
     ChangeId
     -> Time.Posix
@@ -2032,7 +2090,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                 (userGetAllConnections otherUserId model)
 
         ( sessions, cmds ) =
-            if userId == otherUserId || isViewing then
+            if userId == otherUserId || isViewing || isDmMuted otherUserId userId (Message.threadRouteWithoutRepliedTo threadRouteWithReplyTo) model then
                 ( model.sessions, [] )
 
             else
@@ -2130,7 +2188,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                 )
                 (userGetAllConnections otherUserId model)
     in
-    if senderId == otherUserId || isViewing then
+    if senderId == otherUserId || isViewing || isDmMuted otherUserId senderId NoThread model then
         ( model.sessions, Command.none )
 
     else
@@ -2202,7 +2260,7 @@ encryptedDmNotification time senderId { otherUserId } notificationText model =
                 )
                 (userGetAllConnections otherUserId model)
     in
-    if senderId == otherUserId || isViewing then
+    if senderId == otherUserId || isViewing || isDmMuted otherUserId senderId NoThread model then
         ( model.sessions, Command.none )
 
     else
@@ -2346,8 +2404,18 @@ gameStartedGuildNotification time sender id gameType members model =
                                         False
                             )
                             (userGetAllConnections userId2 model)
+
+                    isMuted : Bool
+                    isMuted =
+                        case NonemptyDict.get userId2 model.users of
+                            Just user ->
+                                MuteSettings.isChannelMuted user.muteSettings id.guildId id.channelId NoThread
+                                    |> MuteSettings.hidesRedDot
+
+                            Nothing ->
+                                False
                 in
-                if isViewing then
+                if isViewing || isMuted then
                     ( sessions, cmds )
 
                 else
