@@ -42,8 +42,31 @@ node run.js --target https://at-chat.app --channel-url https://at-chat.app/g/<gu
 Join the same call yourself from a phone or another browser to hear what it's like with the
 bots in it. Each bot sends a tone at its own pitch, and in WebKit a canvas in its own colour.
 
-Until the Permissions-Policy header on at-chat.app allows the microphone and camera,
-Chromium bots can't get either there, so use `--browsers firefox,webkit`.
+## On BrowserStack
+
+Any entry in `--browsers` of the form `bs:<browser>@<os>/<version>` runs that bot on
+BrowserStack, in its own session, so each such bot is a separate machine. Local and
+BrowserStack bots can share one call, which helps when the plan has fewer parallel
+sessions than you want bots.
+
+```
+export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=...
+node run.js --target https://at-chat.app --channel-url https://at-chat.app/g/<guild>/c/<channel> \
+  --browsers "bs:chrome@Windows/11,bs:edge@Windows/10,bs:playwright-firefox@OS X/Sonoma,bs:playwright-webkit@OS X/Ventura,bs:android@Samsung Galaxy S23/13.0,chromium,firefox,webkit"
+```
+
+- `bs:chrome`, `bs:edge`, `bs:playwright-chromium`, `bs:playwright-firefox` and
+  `bs:playwright-webkit` run on Windows or macOS VMs (`Windows/10`, `Windows/11`,
+  `OS X/Ventura`, `OS X/Sonoma` and so on, as BrowserStack's capability builder lists
+  them). The VMs have no camera or mic, so they get the same fake devices as local bots.
+- `bs:android@<device>/<os version>` is Chrome on a real Android phone, which uses its own
+  camera and mic. BrowserStack calls this beta. Playwright can't drive real iPhones.
+- They can't reach `lamdera live` on your machine, so `--target` has to be a deployed
+  at-chat, with saved logins as above.
+
+None of this has been run against BrowserStack yet: it follows their documentation
+(`wss://cdp.browserstack.com/playwright?caps=...`, `args` for Chromium-based browsers,
+`firefox_user_prefs` for Firefox). Expect the first run to need adjusting.
 
 ## Reading the results
 

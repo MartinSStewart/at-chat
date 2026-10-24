@@ -63,6 +63,19 @@ const isLocal = (target) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(ta
 // through the real getUserMedia path. WebKit has none, so instrument.js stands
 // in a canvas and a tone for it (fakeMedia below).
 
+const CHROMIUM_FAKE_MEDIA_ARGS = [
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+    "--autoplay-policy=no-user-gesture-required",
+];
+
+const FIREFOX_FAKE_MEDIA_PREFS = {
+    "media.navigator.streams.fake": true,
+    "media.navigator.permission.disabled": true,
+    "media.autoplay.default": 0,
+    "media.autoplay.block-webaudio": false,
+};
+
 const launched = {};
 
 async function browserFor(name, args) {
@@ -73,21 +86,12 @@ async function browserFor(name, args) {
         browser = await playwright.chromium.launch({
             headless,
             executablePath: process.env.CHROMIUM_PATH || undefined,
-            args: [
-                "--use-fake-ui-for-media-stream",
-                "--use-fake-device-for-media-stream",
-                "--autoplay-policy=no-user-gesture-required",
-            ],
+            args: CHROMIUM_FAKE_MEDIA_ARGS,
         });
     } else if (name === "firefox") {
         browser = await playwright.firefox.launch({
             headless,
-            firefoxUserPrefs: {
-                "media.navigator.streams.fake": true,
-                "media.navigator.permission.disabled": true,
-                "media.autoplay.default": 0,
-                "media.autoplay.block-webaudio": false,
-            },
+            firefoxUserPrefs: FIREFOX_FAKE_MEDIA_PREFS,
         });
     } else if (name === "webkit") {
         browser = await playwright.webkit.launch({ headless });
@@ -98,20 +102,103 @@ async function browserFor(name, args) {
     return browser;
 }
 
-async function newBotPage(browserName, index, args, storageState) {
-    const browser = await browserFor(browserName, args);
-    const context = await browser.newContext({
+// --- BrowserStack ---
+//
+// A browser name like "bs:chrome@Windows/11" runs that bot on BrowserStack
+// instead of here: one remote session per bot, so every bot is its own
+// machine. "bs:android@Samsung Galaxy S23/13.0" is Chrome on a real Android
+// phone. The desktops are VMs with no camera or mic, so they get the same fake
+// devices as the local browsers; the phones use their own.
+
+function parseCloudBrowser(name) {
+    const match = /^bs:([^@]+)@([^/]+)\/(.+)$/.exec(name);
+    if (!match) return null;
+    const [, browser, platform, version] = match;
+    if (browser === "android") return { android: true, device: platform, osVersion: version };
+    const engine = browser === "playwright-firefox" ? "firefox" : browser === "playwright-webkit" ? "webkit" : "chromium";
+    return { android: false, browser, engine, os: platform, osVersion: version };
+}
+
+function engineOf(browserName) {
+    const cloud = parseCloudBrowser(browserName);
+    if (!cloud) return browserName;
+    return cloud.android ? "chromium" : cloud.engine;
+}
+
+function browserStackEndpoint(cloud, label) {
+    const username = process.env.BROWSERSTACK_USERNAME;
+    const accessKey = process.env.BROWSERSTACK_ACCESS_KEY;
+    if (!username || !accessKey) {
+        throw new Error("BrowserStack bots need BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY");
+    }
+    const caps = {
+        "browserstack.username": username,
+        "browserstack.accessKey": accessKey,
+        "client.playwrightVersion": require("playwright/package.json").version,
+        build: "at-chat voice chat stress test",
+        name: label,
+    };
+    if (cloud.android) {
+        Object.assign(caps, {
+            browserName: "chrome",
+            deviceName: cloud.device,
+            osVersion: cloud.osVersion,
+            realMobile: "true",
+        });
+    } else {
+        Object.assign(caps, {
+            browser: cloud.browser,
+            browser_version: "latest",
+            os: cloud.os,
+            os_version: cloud.osVersion,
+        });
+        if (cloud.engine === "chromium") caps.args = CHROMIUM_FAKE_MEDIA_ARGS;
+        if (cloud.engine === "firefox") caps.firefox_user_prefs = FIREFOX_FAKE_MEDIA_PREFS;
+    }
+    return "wss://cdp.browserstack.com/playwright?caps=" + encodeURIComponent(JSON.stringify(caps));
+}
+
+// Remote sessions to close at the end, alongside the local browsers.
+const remote = [];
+
+async function cloudContext(cloud, label, storageState) {
+    const endpoint = browserStackEndpoint(cloud, label);
+    if (cloud.android) {
+        const device = await playwright._android.connect(endpoint);
+        remote.push(device);
+        const context = await device.launchBrowser({ permissions: ["microphone", "camera"] });
+        if (storageState) await context.addCookies(storageState.cookies);
+        return context;
+    }
+    const browser = await playwright[cloud.engine].connect(endpoint);
+    remote.push(browser);
+    return browser.newContext({
         viewport: { width: 1280, height: 800 },
         storageState: storageState || undefined,
-        permissions: browserName === "chromium" ? ["microphone", "camera", "clipboard-read", "clipboard-write"] : [],
+        permissions: cloud.engine === "chromium" ? ["microphone", "camera"] : [],
     });
-    const label = "bot" + index + " " + browserName;
+}
+
+async function newBotPage(browserName, index, args, storageState) {
+    const cloud = parseCloudBrowser(browserName);
+    let context;
+    if (cloud) {
+        context = await cloudContext(cloud, "bot" + index + " " + browserName.slice(3), storageState);
+    } else {
+        const browser = await browserFor(browserName, args);
+        context = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            storageState: storageState || undefined,
+            permissions: browserName === "chromium" ? ["microphone", "camera", "clipboard-read", "clipboard-write"] : [],
+        });
+    }
+    const label = "bot" + index + " " + (cloud ? browserName.slice(3) : browserName);
     await context.addInitScript(
         "(" +
             instrumentSource.trim().replace(/;$/, "") +
             ")(" +
             JSON.stringify({
-                fakeMedia: browserName === "webkit",
+                fakeMedia: engineOf(browserName) === "webkit",
                 noVideo: !args.video,
                 // Spread over an octave and a half so no two bots share a pitch.
                 toneHz: 220 * Math.pow(2, index / 6),
@@ -349,7 +436,9 @@ function summarise(results, args, cpuPercent) {
             "s warm-up, target " +
             args.target
     );
-    lines.push("Machine: " + os.cpus().length + " cores, CPU busy " + cpuPercent.toFixed(0) + "% while measuring");
+    lines.push(
+        "This machine: " + os.cpus().length + " cores, CPU busy " + cpuPercent.toFixed(0) + "% while measuring (BrowserStack bots run elsewhere)"
+    );
     lines.push("");
     lines.push(
         "Expected per listener: " +
@@ -359,8 +448,9 @@ function summarise(results, args, cpuPercent) {
     );
     lines.push("");
 
+    const labelWidth = Math.max(18, ...results.map(({ bot }) => bot.label.length + 2));
     const header = [
-        pad("bot", 18),
+        pad("bot", labelWidth),
         pad("sent a/v per s", 15),
         pad("recv audio/s per sender (min-max)", 34),
         pad("recv video/s", 13),
@@ -389,7 +479,7 @@ function summarise(results, args, cpuPercent) {
         if (stats.errors.length > 0) notes.push(stats.errors.slice(0, 2).join("; ").slice(0, 80));
         lines.push(
             [
-                pad(bot.label, 18),
+                pad(bot.label, labelWidth),
                 pad((stats.sent.audio / seconds).toFixed(0) + "/" + (stats.sent.video / seconds).toFixed(0), 15),
                 pad(
                     senders.length === 0
@@ -471,6 +561,9 @@ async function stopProfiling({ bot, session }, args) {
 async function run(args) {
     fs.mkdirSync(args.out, { recursive: true });
     const local = isLocal(args.target) && !args.useSavedLogins;
+    if (isLocal(args.target) && args.browsers.some(parseCloudBrowser)) {
+        throw new Error("BrowserStack bots can't reach localhost; point --target at a deployed at-chat");
+    }
 
     let bots = [];
     if (local) {
@@ -533,12 +626,12 @@ async function run(args) {
     }
     log("results in " + args.out);
 
-    for (const browser of Object.values(launched)) await browser.close();
+    for (const browser of Object.values(launched).concat(remote)) await browser.close();
 }
 
 const args = parseArgs(process.argv);
 (args.command === "login" ? loginCommand(args) : run(args)).catch(async (error) => {
     console.error(error);
-    for (const browser of Object.values(launched)) await browser.close().catch(() => {});
+    for (const browser of Object.values(launched).concat(remote)) await browser.close().catch(() => {});
     process.exit(1);
 });
