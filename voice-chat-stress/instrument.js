@@ -55,7 +55,7 @@
     // Same layout as voice-chat.js's packet(): sender length, sender, kind, key
     // frame flag. Only what's needed to tell the streams apart is read.
     function recordReceived(data) {
-        if (!(data instanceof ArrayBuffer) || data.byteLength < 3) return;
+        if (!isArrayBuffer(data) || data.byteLength < 3) return;
         const view = new DataView(data);
         const senderLength = view.getUint8(0);
         if (data.byteLength < 1 + senderLength + 2) return;
@@ -90,9 +90,15 @@
         }
     }
 
+    // Not instanceof: Firefox's WebDriver runs injected scripts in a sandbox
+    // whose ArrayBuffer and Uint8Array aren't the page's.
+    function isArrayBuffer(data) {
+        return Object.prototype.toString.call(data) === "[object ArrayBuffer]";
+    }
+
     function recordSent(data) {
-        const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
-        if (!(bytes instanceof Uint8Array) || bytes.byteLength < 3) return;
+        const bytes = isArrayBuffer(data) ? new Uint8Array(data) : data;
+        if (Object.prototype.toString.call(bytes) !== "[object Uint8Array]" || bytes.byteLength < 3) return;
         const senderLength = bytes[0];
         const kind = bytes[1 + senderLength] === 0 ? "video" : "audio";
         stress.sent[kind] += 1;

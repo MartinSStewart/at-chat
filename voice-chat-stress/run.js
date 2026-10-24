@@ -629,9 +629,13 @@ async function run(args) {
     for (const browser of Object.values(launched).concat(remote)) await browser.close();
 }
 
-const args = parseArgs(process.argv);
-(args.command === "login" ? loginCommand(args) : run(args)).catch(async (error) => {
-    console.error(error);
-    for (const browser of Object.values(launched).concat(remote)) await browser.close().catch(() => {});
-    process.exit(1);
-});
+module.exports = { summarise, log };
+
+if (require.main === module) {
+    const args = parseArgs(process.argv);
+    (args.command === "login" ? loginCommand(args) : run(args)).catch(async (error) => {
+        console.error(error);
+        for (const browser of Object.values(launched).concat(remote)) await browser.close().catch(() => {});
+        process.exit(1);
+    });
+}

@@ -84,6 +84,26 @@ node probe.js platforms.json   # your own list, in the same shape as that defaul
 Device and OS names are the ones BrowserStack's capability builder uses. Unlike the
 Playwright bots it also reaches real iPhones.
 
+## A call on BrowserStack machines and real phones
+
+`callbots.js` puts five bots in one at-chat.app call, by default Chrome and Firefox on
+Windows 11, Safari on macOS, and Safari and Chrome on a real iPhone and Galaxy, and prints
+the same table as `run.js`. It drives them over Selenium, so unlike the Playwright bots it
+only needs plain HTTPS to BrowserStack and runs fine behind a proxy that blocks websockets.
+
+```
+export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=...
+node callbots.js                       # 60s measured after 15s warm-up
+node callbots.js --duration 120 --no-video
+node callbots.js --platforms platforms.json   # same shape as DEFAULT_PLATFORMS
+```
+
+The first run signs each bot up with a throwaway Guerrilla Mail address and reads its
+login code from there, and the first bot makes a guild called "Call bot test" that the
+rest join. The accounts, their sessions and the guild's invite are kept in
+`logins/callbots.json` (gitignored), so later runs log straight back in. Join that guild
+yourself to be in the call with them.
+
 ## Reading the results
 
 The table goes to the terminal and to `results/<time>/summary.txt`, with every number in
