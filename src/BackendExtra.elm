@@ -3211,10 +3211,10 @@ backendMsgLog msg =
         EditedDiscordDmMessage _ _ _ _ _ ->
             BackendMsgLog_EditedDiscordDmMessage
 
-        DiscordAddedReactionToGuildMessage _ _ _ _ _ _ _ _ ->
+        DiscordAddedReactionToGuildMessage _ _ _ _ _ _ _ ->
             BackendMsgLog_DiscordAddedReactionToGuildMessage
 
-        DiscordAddedReactionToDmMessage _ _ _ _ _ _ _ ->
+        DiscordAddedReactionToDmMessage _ _ _ _ _ _ ->
             BackendMsgLog_DiscordAddedReactionToDmMessage
 
         DiscordRemovedReactionToGuildMessage _ _ _ _ _ _ _ ->

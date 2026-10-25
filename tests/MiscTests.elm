@@ -401,9 +401,6 @@ newMessageCountTests =
         ]
 
 
-{-| Reacting with a custom emoji from a server you aren't in gets a 400 back, and the backend
-takes the reaction away again only if it can tell that's what the 400 was about.
--}
 discordBadRequestTests : Test
 discordBadRequestTests =
     let
