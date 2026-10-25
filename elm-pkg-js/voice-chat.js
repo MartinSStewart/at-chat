@@ -39,6 +39,13 @@ const SCREEN_BITRATE = 2_500_000;
 const SCREEN_KEY_FRAME_INTERVAL_MS = 2000;
 const SCREEN_IDLE_FRAME_MS = 1000;
 
+// Firefox never ends the track when the window being shared is closed: it stays
+// live and just stops producing frames. An open window keeps producing them in
+// Firefox even when nothing in it changes, so going quiet this long means it's
+// gone. Chrome does end the track, and sends nothing for a still screen, so the
+// same rule would end its shares for no reason.
+const SCREEN_GONE_MS = 5000;
+
 // Must match Call.localScreenShareNodeId.
 const LOCAL_SCREEN_NODE_ID = "local-screen-share";
 
@@ -88,6 +95,7 @@ exports.init = async function init(app) {
     //   screen          the screen being shared, see startScreenShare
     let call = null;
     let localStreamPreview = null;
+    const screenFramesStopWhenGone = /Firefox\//.test(navigator.userAgent);
 
     // Must match Call.connectionIdToString, which the peer's <canvas> id is
     // built from: "<dmOtherUserId> <peerUserId> <peerClientId>". `senderKey` is
@@ -574,6 +582,11 @@ exports.init = async function init(app) {
             outgoing: outgoingVideo(SCREEN, picked),
             lastKeyFrameTime: null,
             lastFrameTime: null,
+            // Frames the browser actually produced, as opposed to ones the
+            // idle timer took by hand.
+            browserFrames: 0,
+            lastBrowserFrameTime: performance.now(),
+            trackEvents: [],
             lastTimestamp: -1,
             idleTimer: null,
             stopped: false,
@@ -600,6 +613,11 @@ exports.init = async function init(app) {
         // track without asking us.
         track.addEventListener("ended", function () {
             if (state.screen === screen) stopScreenShare(state);
+        });
+        ["ended", "mute", "unmute"].forEach(function (name) {
+            track.addEventListener(name, function () {
+                screen.trackEvents.push(name + " at " + (performance.now() / 1000).toFixed(1) + "s");
+            });
         });
         app.ports.voice_chat_from_js.send({ tag: "screen-share-started", args: [] });
         pumpScreen(state, screen);
@@ -647,6 +665,8 @@ exports.init = async function init(app) {
 
         function onFrame(now) {
             if (screen.stopped) return;
+            screen.browserFrames += 1;
+            screen.lastBrowserFrameTime = now;
             encodeFrame(now);
             videoElement.requestVideoFrameCallback(onFrame);
         }
@@ -660,6 +680,16 @@ exports.init = async function init(app) {
                 return;
             }
             const now = performance.now();
+            if (screenFramesStopWhenGone) {
+                // Frames come through rVFC, which doesn't run while the page
+                // isn't drawn, so that time doesn't count.
+                if (document.hidden) {
+                    screen.lastBrowserFrameTime = now;
+                } else if (now - screen.lastBrowserFrameTime >= SCREEN_GONE_MS) {
+                    if (state.screen === screen) stopScreenShare(state);
+                    return;
+                }
+            }
             if (screen.lastFrameTime === null || now - screen.lastFrameTime >= SCREEN_IDLE_FRAME_MS) {
                 encodeFrame(now);
             }
@@ -1214,6 +1244,25 @@ exports.init = async function init(app) {
             sections.push(streamSection("Call stream", state.stream));
             if (state.screen) {
                 sections.push(outgoingSection("Screen share", state.screen.outgoing));
+                sections.push({
+                    title: "Screen share capture",
+                    rows: [
+                        row("frames from the browser", state.screen.browserFrames),
+                        row(
+                            "last one",
+                            ((performance.now() - state.screen.lastBrowserFrameTime) / 1000).toFixed(1) + "s ago"
+                        ),
+                        row("track events", state.screen.trackEvents.join(", ") || "none"),
+                        row("now", (performance.now() / 1000).toFixed(1) + "s"),
+                        row(
+                            "capture video",
+                            state.screen.captureVideo.videoWidth + "x" + state.screen.captureVideo.videoHeight +
+                                " readyState=" + state.screen.captureVideo.readyState +
+                                " paused=" + state.screen.captureVideo.paused +
+                                " ended=" + state.screen.captureVideo.ended
+                        ),
+                    ],
+                });
                 sections.push(streamSection("Screen share stream", state.screen.stream));
             } else {
                 sections.push({
