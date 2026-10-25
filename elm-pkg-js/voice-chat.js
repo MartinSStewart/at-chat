@@ -85,6 +85,291 @@ class CaptureProcessor extends AudioWorkletProcessor {
 registerProcessor("capture-processor", CaptureProcessor);
 `;
 
+// --- recording file formats ---
+//
+// A recording is kept as plain files that video editors open directly: H.264 in
+// fragmented MP4 for the camera and a shared screen, and 16 bit PCM WAV for the
+// mic. Fragmented MP4 is the one MP4 layout that can be written front to back
+// without going back to fix up an index, so a tab that closes mid-recording
+// leaves a file that plays up to its last fragment.
+
+const RECORDING_TIMESCALE = 90000;
+const RECORDING_KEY_FRAME_INTERVAL_MS = 2000;
+
+function concatBytes(parts) {
+    let length = 0;
+    parts.forEach(function (part) { length += part.byteLength; });
+    const out = new Uint8Array(length);
+    let offset = 0;
+    parts.forEach(function (part) {
+        out.set(part, offset);
+        offset += part.byteLength;
+    });
+    return out;
+}
+
+function uint(byteCount, value) {
+    const out = new Uint8Array(byteCount);
+    const view = new DataView(out.buffer);
+    if (byteCount === 1) view.setUint8(0, value);
+    else if (byteCount === 2) view.setUint16(0, value);
+    else if (byteCount === 4) view.setUint32(0, value);
+    else view.setBigUint64(0, BigInt(Math.round(value)));
+    return out;
+}
+
+function ascii(text) {
+    const out = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i);
+    return out;
+}
+
+function mp4Box(type, parts) {
+    const payload = concatBytes(parts);
+    return concatBytes([uint(4, payload.byteLength + 8), ascii(type), payload]);
+}
+
+function mp4FullBox(type, version, flags, parts) {
+    return mp4Box(type, [uint(1, version), uint(1, flags >> 16), uint(2, flags & 0xffff)].concat(parts));
+}
+
+const MP4_MATRIX = [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].map(function (n) { return uint(4, n); });
+
+// What the encoder hands back as `description` is already the avcC box's body
+// for H.264. VP9 has no description, so its vpcC is written out from the codec
+// string the encoder was set up with: vp09.<profile>.<level>.<bitDepth>.
+function mp4SampleEntry(codec, width, height, description) {
+    const visual = [
+        new Uint8Array(6),
+        uint(2, 1),
+        new Uint8Array(16),
+        uint(2, width),
+        uint(2, height),
+        uint(4, 0x00480000),
+        uint(4, 0x00480000),
+        uint(4, 0),
+        uint(2, 1),
+        new Uint8Array(32),
+        uint(2, 0x0018),
+        uint(2, 0xffff),
+    ];
+    if (codec.startsWith("avc1")) {
+        return mp4Box("avc1", visual.concat([mp4Box("avcC", [description])]));
+    }
+    const fields = codec.split(".");
+    const bitDepth = parseInt(fields[3] || "8", 10);
+    const vpcC = mp4FullBox("vpcC", 1, 0, [
+        uint(1, parseInt(fields[1] || "0", 10)),
+        uint(1, parseInt(fields[2] || "10", 10)),
+        // bit depth, 4:2:0 chroma with colocated samples, limited range
+        uint(1, (bitDepth << 4) | (1 << 1)),
+        uint(1, 1),
+        uint(1, 1),
+        uint(1, 1),
+        uint(2, 0),
+    ]);
+    return mp4Box("vp09", visual.concat([vpcC]));
+}
+
+function mp4InitSegment(codec, width, height, description) {
+    const ftyp = mp4Box("ftyp", [ascii("isom"), uint(4, 0x200), ascii("isom"), ascii("iso6"), ascii("iso2"), ascii("mp41")]);
+    const mvhd = mp4FullBox("mvhd", 0, 0, [
+        uint(4, 0),
+        uint(4, 0),
+        uint(4, 1000),
+        uint(4, 0),
+        uint(4, 0x00010000),
+        uint(2, 0x0100),
+        new Uint8Array(10),
+    ].concat(MP4_MATRIX, [new Uint8Array(24), uint(4, 2)]));
+    const tkhd = mp4FullBox("tkhd", 0, 3, [
+        uint(4, 0),
+        uint(4, 0),
+        uint(4, 1),
+        uint(4, 0),
+        uint(4, 0),
+        new Uint8Array(8),
+        uint(2, 0),
+        uint(2, 0),
+        uint(2, 0),
+        uint(2, 0),
+    ].concat(MP4_MATRIX, [uint(4, width * 0x10000), uint(4, height * 0x10000)]));
+    const mdhd = mp4FullBox("mdhd", 0, 0, [
+        uint(4, 0),
+        uint(4, 0),
+        uint(4, RECORDING_TIMESCALE),
+        uint(4, 0),
+        // "und"
+        uint(2, 0x55c4),
+        uint(2, 0),
+    ]);
+    const hdlr = mp4FullBox("hdlr", 0, 0, [uint(4, 0), ascii("vide"), new Uint8Array(12), ascii("VideoHandler\0")]);
+    const stbl = mp4Box("stbl", [
+        mp4FullBox("stsd", 0, 0, [uint(4, 1), mp4SampleEntry(codec, width, height, description)]),
+        mp4FullBox("stts", 0, 0, [uint(4, 0)]),
+        mp4FullBox("stsc", 0, 0, [uint(4, 0)]),
+        mp4FullBox("stsz", 0, 0, [uint(4, 0), uint(4, 0)]),
+        mp4FullBox("stco", 0, 0, [uint(4, 0)]),
+    ]);
+    const minf = mp4Box("minf", [
+        mp4FullBox("vmhd", 0, 1, [new Uint8Array(8)]),
+        mp4Box("dinf", [mp4FullBox("dref", 0, 0, [uint(4, 1), mp4FullBox("url ", 0, 1, [])])]),
+        stbl,
+    ]);
+    const trak = mp4Box("trak", [tkhd, mp4Box("mdia", [mdhd, hdlr, minf])]);
+    const mvex = mp4Box("mvex", [mp4FullBox("trex", 0, 0, [uint(4, 1), uint(4, 1), uint(4, 0), uint(4, 0), uint(4, 0)])]);
+    return concatBytes([ftyp, mp4Box("moov", [mvhd, trak, mvex])]);
+}
+
+// One moof and mdat holding `samples`, each { data, time, duration, key } with
+// times in RECORDING_TIMESCALE units from the start of the file.
+function mp4Fragment(sequenceNumber, samples) {
+    const trunEntries = [];
+    samples.forEach(function (sample) {
+        trunEntries.push(uint(4, sample.duration));
+        trunEntries.push(uint(4, sample.data.byteLength));
+        // A key frame depends on nothing; anything else depends on what came
+        // before and can't be seeked to.
+        trunEntries.push(uint(4, sample.key ? 0x02000000 : 0x01010000));
+    });
+
+    function build(dataOffset) {
+        const trun = mp4FullBox("trun", 0, 0x000701, [uint(4, samples.length), uint(4, dataOffset)].concat(trunEntries));
+        const traf = mp4Box("traf", [
+            // default-base-is-moof, so data offsets count from the moof
+            mp4FullBox("tfhd", 0, 0x020000, [uint(4, 1)]),
+            mp4FullBox("tfdt", 1, 0, [uint(8, samples[0].time)]),
+            trun,
+        ]);
+        return mp4Box("moof", [mp4FullBox("mfhd", 0, 0, [uint(4, sequenceNumber)]), traf]);
+    }
+
+    const moofSize = build(0).byteLength;
+    const media = concatBytes(samples.map(function (sample) { return sample.data; }));
+    return concatBytes([build(moofSize + 8), uint(4, media.byteLength + 8), ascii("mdat"), media]);
+}
+
+// Builds an avcC box body out of the SPS and PPS NAL units in front of an H.264
+// key frame, which is in the 4 byte length prefixed form WebCodecs uses for
+// format "avc". Null when the frame doesn't carry both.
+function avcDecoderConfigFromKeyFrame(data) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const spsList = [];
+    const ppsList = [];
+    let offset = 0;
+    while (offset + 4 <= data.byteLength) {
+        const length = view.getUint32(offset);
+        const start = offset + 4;
+        if (length === 0 || start + length > data.byteLength) break;
+        const nal = data.subarray(start, start + length);
+        const type = nal[0] & 0x1f;
+        if (type === 7) spsList.push(nal);
+        else if (type === 8) ppsList.push(nal);
+        offset = start + length;
+    }
+    if (spsList.length === 0 || ppsList.length === 0) return null;
+    const sps = spsList[0];
+    const parts = [Uint8Array.of(1, sps[1], sps[2], sps[3], 0xff, 0xe0 | spsList.length)];
+    spsList.forEach(function (nal) { parts.push(uint(2, nal.byteLength), nal); });
+    parts.push(Uint8Array.of(ppsList.length));
+    ppsList.forEach(function (nal) { parts.push(uint(2, nal.byteLength), nal); });
+    return concatBytes(parts);
+}
+
+function wavHeader(sampleRate, dataBytes) {
+    return concatBytes([
+        ascii("RIFF"),
+        littleEndian(4, 36 + dataBytes),
+        ascii("WAVE"),
+        ascii("fmt "),
+        littleEndian(4, 16),
+        // PCM, mono
+        littleEndian(2, 1),
+        littleEndian(2, 1),
+        littleEndian(4, sampleRate),
+        littleEndian(4, sampleRate * 2),
+        littleEndian(2, 2),
+        littleEndian(2, 16),
+        ascii("data"),
+        littleEndian(4, dataBytes),
+    ]);
+}
+
+function littleEndian(byteCount, value) {
+    const out = new Uint8Array(byteCount);
+    const view = new DataView(out.buffer);
+    if (byteCount === 2) view.setUint16(0, value, true);
+    else view.setUint32(0, value, true);
+    return out;
+}
+
+function pcm16(samples) {
+    const out = new Uint8Array(samples.length * 2);
+    const view = new DataView(out.buffer);
+    for (let i = 0; i < samples.length; i++) {
+        const clamped = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(i * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    }
+    return out;
+}
+
+// Writes go through a worker because createSyncAccessHandle only exists in
+// workers, and it is the only way of writing to the origin private file system
+// that lands on disk as it goes. createWritable() keeps everything in a swap
+// file until close(), which a crash or a closed tab never gets to.
+const recordingFileWorker = `
+let root = null;
+const files = new Map();
+const queue = [];
+let busy = false;
+
+onmessage = function (event) {
+    queue.push(event.data);
+    pump();
+};
+
+async function pump() {
+    if (busy) return;
+    busy = true;
+    while (queue.length > 0) {
+        const message = queue.shift();
+        try {
+            await handle(message);
+        } catch (e) {
+            postMessage({ type: "error", file: message.file, message: String(e) });
+        }
+    }
+    busy = false;
+}
+
+async function handle(message) {
+    if (message.type === "open") {
+        if (!root) root = await navigator.storage.getDirectory();
+        const recordings = await root.getDirectoryHandle("recordings", { create: true });
+        const directory = await recordings.getDirectoryHandle(message.directory, { create: true });
+        const fileHandle = await directory.getFileHandle(message.name, { create: true });
+        const access = await fileHandle.createSyncAccessHandle();
+        files.set(message.file, { access, size: access.getSize() });
+        return;
+    }
+    const file = files.get(message.file);
+    if (!file) return;
+    if (message.type === "append") {
+        file.access.write(message.bytes, { at: file.size });
+        file.size += message.bytes.byteLength;
+    } else if (message.type === "write-at") {
+        file.access.write(message.bytes, { at: message.at });
+    } else if (message.type === "flush") {
+        file.access.flush();
+    } else if (message.type === "close") {
+        file.access.flush();
+        file.access.close();
+        files.delete(message.file);
+        postMessage({ type: "closed", file: message.file, size: file.size });
+    }
+}
+`;
+
 exports.init = async function init(app) {
     // The call we are in, or null. Shape:
     //   socket, stream, captureVideo, audioContext
@@ -451,6 +736,7 @@ exports.init = async function init(app) {
             // encoder was set up for. The callback below stays registered, so
             // capture picks up again on the first frame after it comes back.
             if (!state.videoInputEnabled) {
+                recordCameraOff();
                 videoElement.requestVideoFrameCallback(onFrame);
                 return;
             }
@@ -461,6 +747,7 @@ exports.init = async function init(app) {
                 const frame = new VideoFrame(videoElement, {
                     timestamp: Math.round((now - state.camera.startTime) * 1000),
                 });
+                recordCameraFrame(frame, now);
                 if (readyToSend(state)) encode(frame);
                 frame.close();
             } catch (e) {
@@ -492,8 +779,9 @@ exports.init = async function init(app) {
         });
 
         capture.port.onmessage = function (event) {
-            if (!readyToSend(state)) return;
             const samples = event.data;
+            if (!state.stopped) recordAudio(samples);
+            if (!readyToSend(state)) return;
             const audioData = new AudioData({
                 format: "f32-planar",
                 sampleRate: AUDIO_SAMPLE_RATE,
@@ -629,7 +917,7 @@ exports.init = async function init(app) {
 
         function encodeFrame(now) {
             showScreenPreview(screen.stream);
-            if (!readyToSend(state)) return;
+            if (state.stopped || (!readyToSend(state) && !recorder)) return;
             if (outgoing.startTime === null) outgoing.startTime = now;
             screen.lastFrameTime = now;
 
@@ -645,6 +933,11 @@ exports.init = async function init(app) {
                 frame = new VideoFrame(videoElement, { timestamp });
             } catch (e) {
                 fail("screen capture: " + e);
+                return;
+            }
+            recordScreenFrame(frame, now);
+            if (!readyToSend(state)) {
+                frame.close();
                 return;
             }
             const encoder = videoEncoderFor(state, outgoing, frame.displayWidth, frame.displayHeight);
@@ -719,6 +1012,7 @@ exports.init = async function init(app) {
         const preview = document.getElementById(LOCAL_SCREEN_NODE_ID);
         if (preview && preview.srcObject === screen.stream) preview.srcObject = null;
         screen.stream.getTracks().forEach(function (track) { track.stop(); });
+        recordScreenStopped();
         screenShareStopped();
     }
 
@@ -936,6 +1230,7 @@ exports.init = async function init(app) {
         call = null;
         if (!state) return;
         state.stopped = true;
+        stopRecording();
 
         stopScreenShare(state);
         for (const senderKey of [...state.peers.keys()]) {
@@ -1113,6 +1408,332 @@ exports.init = async function init(app) {
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
         startLocalSpeaking(localStreamPreview);
+    }
+
+    // --- recording ---
+    //
+    // While the call is being recorded, everything this device captures is also
+    // encoded a second time at a higher quality and saved, separately from what
+    // goes out over the call. Each person keeps their own camera, mic and screen,
+    // and they're lined up afterwards by the times in their file names.
+    //
+    // A camera file ends when the camera is turned off or changes size, and a
+    // screen file when the share stops or the shared window is resized, since
+    // one MP4 track can't change size partway. The next frame starts a new file.
+    //
+    // Shape of `recorder`:
+    //   id          the recording's id, the directory its files go in
+    //   userName    for the file names
+    //   camera      the camera's open file, see recordingVideoFile
+    //   screen      likewise for a shared screen
+    //   audio       the mic's open file, see recordingAudioFile
+    //   files       every file started, for the debug panel
+    let recorder = null;
+    let recordingWorker = null;
+    let nextRecordingFile = 1;
+    // Codecs an encoder has failed with on this device. Linux in particular can
+    // report H.264 as supported and then fail on the first frame.
+    const failedRecordingCodecs = new Set();
+
+    // H.264 High, Main and Baseline at level 5.1, which covers up to 4K, then
+    // VP9 for browsers without an H.264 encoder.
+    const RECORDING_CODECS = ["avc1.640033", "avc1.4d0033", "avc1.420033", "vp09.00.51.08"];
+
+    function startRecording(args) {
+        if (recorder && recorder.id === args.recordingId) return;
+        stopRecording();
+        recorder = { id: args.recordingId, userName: args.userName, camera: null, screen: null, audio: null, files: [] };
+        // Without this the browser may clear the origin's storage to make room
+        // for something else, recording included.
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+    }
+
+    function stopRecording() {
+        const stopping = recorder;
+        recorder = null;
+        if (!stopping) return;
+        if (stopping.camera) closeRecordingVideoFile(stopping.camera);
+        if (stopping.screen) closeRecordingVideoFile(stopping.screen);
+        if (stopping.audio) closeRecordingAudioFile(stopping.audio);
+    }
+
+    function postToRecordingWorker(message, transfer) {
+        if (!recordingWorker) {
+            const url = URL.createObjectURL(new Blob([recordingFileWorker], { type: "application/javascript" }));
+            recordingWorker = new Worker(url);
+            URL.revokeObjectURL(url);
+            recordingWorker.onmessage = function (event) {
+                if (event.data.type === "error") fail("recording: " + event.data.message);
+            };
+        }
+        recordingWorker.postMessage(message, transfer || []);
+    }
+
+    function appendToRecordingFile(file, bytes) {
+        file.bytes += bytes.byteLength;
+        postToRecordingWorker({ type: "append", file: file.handle, bytes }, [bytes.buffer]);
+    }
+
+    function twoDigits(n) {
+        return String(n).padStart(2, "0");
+    }
+
+    // VIDEO_Martin_2026-10-25_20-31-07.250.mp4, in local time, since that's
+    // what the person editing it will think of the call as having started at.
+    function recordingFileName(kind, userName, extension) {
+        const now = new Date();
+        const safeName = userName.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "unknown";
+        return (
+            kind + "_" + safeName + "_" +
+            now.getFullYear() + "-" + twoDigits(now.getMonth() + 1) + "-" + twoDigits(now.getDate()) + "_" +
+            twoDigits(now.getHours()) + "-" + twoDigits(now.getMinutes()) + "-" + twoDigits(now.getSeconds()) +
+            "." + String(now.getMilliseconds()).padStart(3, "0") + "." + extension
+        );
+    }
+
+    function openRecordingFile(owner, kind, extension) {
+        const file = {
+            handle: nextRecordingFile,
+            name: recordingFileName(kind, owner.userName, extension),
+            opened: false,
+            bytes: 0,
+        };
+        nextRecordingFile += 1;
+        owner.files.push(file);
+        return file;
+    }
+
+    function ensureRecordingFileOpen(owner, file) {
+        if (file.opened) return;
+        file.opened = true;
+        postToRecordingWorker({ type: "open", file: file.handle, directory: owner.id, name: file.name });
+    }
+
+    async function pickRecordingCodec(width, height, framerate, bitrate) {
+        for (const codec of RECORDING_CODECS) {
+            if (failedRecordingCodecs.has(codec)) continue;
+            const config = { codec, width, height, framerate, bitrate, latencyMode: "quality" };
+            if (codec.startsWith("avc1")) config.avc = { format: "avc" };
+            try {
+                const support = await VideoEncoder.isConfigSupported(config);
+                if (support.supported) return config;
+            } catch (e) {
+                // Unsupported codec strings can throw rather than report false.
+            }
+        }
+        return null;
+    }
+
+    // One MP4 file being written:
+    //   file        see openRecordingFile
+    //   encoder     null until a codec has been picked, which is async
+    //   pending     encoded frames waiting for the next key frame, which is
+    //               where a fragment ends
+    function recordingVideoFile(owner, kind, width, height, framerate, bitrate) {
+        const video = {
+            owner,
+            file: openRecordingFile(owner, kind, "mp4"),
+            width,
+            height,
+            framerate,
+            codec: null,
+            description: null,
+            encoder: null,
+            failed: false,
+            closed: false,
+            startNow: null,
+            lastTimestamp: -1,
+            lastKeyFrameNow: null,
+            wroteInit: false,
+            pending: [],
+            sequenceNumber: 1,
+            frames: 0,
+        };
+        pickRecordingCodec(width, height, framerate, bitrate).then(function (config) {
+            if (video.closed) return;
+            if (!config) {
+                video.failed = true;
+                fail("No video codec this browser can record with.");
+                return;
+            }
+            video.codec = config.codec;
+            video.encoder = new VideoEncoder({
+                output: function (chunk, metadata) {
+                    recordingVideoChunk(video, chunk, metadata);
+                },
+                error: function (e) {
+                    console.error("recording encoder", config.codec, e);
+                    failedRecordingCodecs.add(config.codec);
+                    video.failed = true;
+                },
+            });
+            video.encoder.configure(config);
+        });
+        return video;
+    }
+
+    function recordingVideoFrame(video, frame, now) {
+        if (!video.encoder || video.failed || video.closed || video.encoder.state !== "configured") return;
+        // Recording is meant to be the best copy, but a software encoder that
+        // can't keep up only builds a backlog, so frames are dropped instead.
+        if (video.encoder.encodeQueueSize > 4) return;
+        if (video.startNow === null) video.startNow = now;
+        const timestamp = Math.max(video.lastTimestamp + 1, Math.round((now - video.startNow) * 1000));
+        const keyFrame =
+            video.lastKeyFrameNow === null || now - video.lastKeyFrameNow >= RECORDING_KEY_FRAME_INTERVAL_MS;
+        if (keyFrame) video.lastKeyFrameNow = now;
+        video.lastTimestamp = timestamp;
+        const copy = new VideoFrame(frame, { timestamp });
+        video.encoder.encode(copy, { keyFrame });
+        copy.close();
+    }
+
+    function recordingVideoChunk(video, chunk, metadata) {
+        if (metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
+            const description = metadata.decoderConfig.description;
+            video.description = new Uint8Array(
+                ArrayBuffer.isView(description) ? description.buffer.slice(description.byteOffset, description.byteOffset + description.byteLength) : description.slice(0)
+            );
+        }
+        const time = Math.round((chunk.timestamp * RECORDING_TIMESCALE) / 1e6);
+        const key = chunk.type === "key";
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        if (!video.wroteInit) {
+            if (!key) return;
+            if (video.codec.startsWith("avc1")) {
+                // Firefox's description has the wrong lengths in it, which
+                // leaves players unable to find the SPS. It does repeat the SPS
+                // and PPS in front of every key frame, so those are used when
+                // they're there.
+                video.description = avcDecoderConfigFromKeyFrame(data) || video.description;
+                if (!video.description) return;
+            }
+            ensureRecordingFileOpen(video.owner, video.file);
+            appendToRecordingFile(video.file, mp4InitSegment(video.codec, video.width, video.height, video.description));
+            video.wroteInit = true;
+        }
+        if (key && video.pending.length > 0) writeRecordingFragment(video, time);
+        video.pending.push({ data, time, key });
+        video.frames += 1;
+    }
+
+    function writeRecordingFragment(video, endTime) {
+        const samples = video.pending;
+        video.pending = [];
+        samples.forEach(function (sample, index) {
+            const next = index + 1 < samples.length ? samples[index + 1].time : endTime;
+            sample.duration = Math.max(1, next - sample.time);
+        });
+        appendToRecordingFile(video.file, mp4Fragment(video.sequenceNumber, samples));
+        video.sequenceNumber += 1;
+        postToRecordingWorker({ type: "flush", file: video.file.handle });
+    }
+
+    async function closeRecordingVideoFile(video) {
+        if (video.closed) return;
+        video.closed = true;
+        if (video.encoder && video.encoder.state === "configured") {
+            try {
+                await video.encoder.flush();
+            } catch (e) {
+                // Whatever was encoded before it failed is still worth keeping.
+            }
+        }
+        if (video.encoder && video.encoder.state !== "closed") video.encoder.close();
+        if (video.pending.length > 0) {
+            const last = video.pending[video.pending.length - 1];
+            writeRecordingFragment(video, last.time + Math.round(RECORDING_TIMESCALE / video.framerate));
+        }
+        if (video.file.opened) postToRecordingWorker({ type: "close", file: video.file.handle });
+    }
+
+    function recordingBitrate(width, height, framerate, bitsPerPixel) {
+        return Math.round(Math.min(12_000_000, Math.max(2_000_000, width * height * framerate * bitsPerPixel)));
+    }
+
+    function recordCameraFrame(frame, now) {
+        if (!recorder) return;
+        const width = frame.displayWidth;
+        const height = frame.displayHeight;
+        let video = recorder.camera;
+        if (video && (video.failed || video.width !== width || video.height !== height)) {
+            closeRecordingVideoFile(video);
+            video = null;
+        }
+        if (!video) {
+            video = recordingVideoFile(recorder, "VIDEO", width, height, 30, recordingBitrate(width, height, 30, 0.12));
+            recorder.camera = video;
+        }
+        recordingVideoFrame(video, frame, now);
+    }
+
+    function recordCameraOff() {
+        if (!recorder || !recorder.camera) return;
+        closeRecordingVideoFile(recorder.camera);
+        recorder.camera = null;
+    }
+
+    function recordScreenFrame(frame, now) {
+        if (!recorder) return;
+        const width = frame.displayWidth;
+        const height = frame.displayHeight;
+        let video = recorder.screen;
+        if (video && (video.failed || video.width !== width || video.height !== height)) {
+            closeRecordingVideoFile(video);
+            video = null;
+        }
+        if (!video) {
+            video = recordingVideoFile(
+                recorder,
+                "SCREEN",
+                width,
+                height,
+                SCREEN_FRAME_RATE,
+                recordingBitrate(width, height, SCREEN_FRAME_RATE, 0.15)
+            );
+            recorder.screen = video;
+        }
+        recordingVideoFrame(video, frame, now);
+    }
+
+    function recordScreenStopped() {
+        if (!recorder || !recorder.screen) return;
+        closeRecordingVideoFile(recorder.screen);
+        recorder.screen = null;
+    }
+
+    // The header's sizes are rewritten every few seconds, so a file cut short
+    // by a crash is at most that much shorter than what's actually in it.
+    const WAV_HEADER_INTERVAL_MS = 5000;
+
+    function recordAudio(samples) {
+        if (!recorder) return;
+        let audio = recorder.audio;
+        if (!audio) {
+            audio = { file: openRecordingFile(recorder, "AUDIO", "wav"), dataBytes: 0, lastHeaderTime: performance.now() };
+            ensureRecordingFileOpen(recorder, audio.file);
+            appendToRecordingFile(audio.file, wavHeader(AUDIO_SAMPLE_RATE, 0));
+            recorder.audio = audio;
+        }
+        const bytes = pcm16(samples);
+        audio.dataBytes += bytes.byteLength;
+        appendToRecordingFile(audio.file, bytes);
+        const now = performance.now();
+        if (now - audio.lastHeaderTime >= WAV_HEADER_INTERVAL_MS) {
+            audio.lastHeaderTime = now;
+            writeWavHeader(audio);
+            postToRecordingWorker({ type: "flush", file: audio.file.handle });
+        }
+    }
+
+    function writeWavHeader(audio) {
+        postToRecordingWorker({ type: "write-at", file: audio.file.handle, at: 0, bytes: wavHeader(AUDIO_SAMPLE_RATE, audio.dataBytes) });
+    }
+
+    function closeRecordingAudioFile(audio) {
+        writeWavHeader(audio);
+        postToRecordingWorker({ type: "close", file: audio.file.handle });
     }
 
     // --- debug data ---
@@ -1298,6 +1919,21 @@ exports.init = async function init(app) {
         sections.push(streamSection("Preview stream", localStreamPreview));
 
         sections.push({
+            title: "Recording",
+            rows: recorder
+                ? [
+                      row("recording", recorder.id),
+                      row("camera codec", recorder.camera ? recorder.camera.codec + " " + recorder.camera.frames + " frames" : "none"),
+                      row("screen codec", recorder.screen ? recorder.screen.codec + " " + recorder.screen.frames + " frames" : "none"),
+                  ].concat(
+                      recorder.files.map(function (file) {
+                          return row(file.name, (file.bytes / 1e6).toFixed(1) + " MB");
+                      })
+                  )
+                : [row("recording", false)],
+        });
+
+        sections.push({
             title: "Local mic level",
             rows: localSpeaking
                 ? [
@@ -1365,6 +2001,10 @@ exports.init = async function init(app) {
             await startLocalStream(msg.args[0]);
         } else if (msg.tag === "stop-local-stream") {
             await stopLocalStream();
+        } else if (msg.tag === "start-recording") {
+            startRecording(msg.args[0]);
+        } else if (msg.tag === "stop-recording") {
+            stopRecording();
         } else if (msg.tag === "debug-data-request") {
             app.ports.voice_chat_from_js.send({ tag: "debug-data", args: [debugSections()] });
         }

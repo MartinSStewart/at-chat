@@ -73,6 +73,7 @@ import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pages.Privacy
 import Pagination
+import PersonName
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
@@ -720,6 +721,7 @@ update _ msg model =
                         [ cmd
                         , checkCallDisplayModeChange loaded loadedNew
                         , checkCallPreviewShown loaded loadedNew
+                        , checkCallRecordingChange loaded loadedNew
                         ]
                     , Audio.cmdNone
                     )
@@ -734,6 +736,7 @@ update _ msg model =
                         [ cmd
                         , checkCallDisplayModeChange loaded loadedNew
                         , checkCallPreviewShown loaded loadedNew
+                        , checkCallRecordingChange loaded loadedNew
                         ]
                     , Audio.cmdNone
                     )
@@ -7069,6 +7072,46 @@ checkCallDisplayModeChange modelOld modelNew =
             Command.none
 
 
+checkCallRecordingChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallRecordingChange modelOld modelNew =
+    case ( modelOld.loginStatus, modelNew.loginStatus ) of
+        ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+
+                localNew =
+                    Local.model loggedInNew.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localNew.localUser.user.name)
+                (Call.recordingId localOld.localUser.session.userId localOld.calls)
+                (Call.recordingId localNew.localUser.session.userId localNew.calls)
+
+        ( NotLoggedIn _, LoggedIn loggedInNew ) ->
+            let
+                localNew =
+                    Local.model loggedInNew.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localNew.localUser.user.name)
+                Nothing
+                (Call.recordingId localNew.localUser.session.userId localNew.calls)
+
+        ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localOld.localUser.user.name)
+                (Call.recordingId localOld.localUser.session.userId localOld.calls)
+                Nothing
+
+        ( NotLoggedIn _, NotLoggedIn _ ) ->
+            Command.none
+
+
 {-| The preview's video nodes are new and blank each time it's shown, so the images are sent again.
 -}
 checkCallPreviewShown : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
@@ -8758,7 +8801,7 @@ updateFromBackend _ msg model =
                         )
             in
             ( Loaded loadedNew
-            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew ]
+            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew, checkCallRecordingChange loaded loadedNew ]
             , Audio.cmdNone
             )
 

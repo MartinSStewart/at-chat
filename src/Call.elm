@@ -20,6 +20,7 @@ port module Call exposing
     , SharedCallId(..)
     , StartCallData
     , StartLocalStreamData
+    , StartRecordingData
     , ToJs(..)
     , canShareScreen
     , connectionIdToString
@@ -41,6 +42,8 @@ port module Call exposing
     , leaveVoiceChatCmds
     , localVideoNodeId
     , memberColumnOffset
+    , recordingChangeCmd
+    , recordingId
     , recordingNoticeView
     , serverChangeCmd
     , startCallCmd
@@ -1859,6 +1862,72 @@ type ToJs
     | ToJs_StopLocalStream
     | ToJs_SetVolume ConnectionId Float
     | ToJs_DebugDataRequest
+    | ToJs_StartRecording StartRecordingData
+    | ToJs_StopRecording
+
+
+{-| `recordingId` is the same for everyone in the recording, and files from one person
+are grouped under it on their device.
+-}
+type alias StartRecordingData =
+    { recordingId : String
+    , userName : String
+    }
+
+
+startRecordingDataCodec : Codec StartRecordingData
+startRecordingDataCodec =
+    Codec.object StartRecordingData
+        |> Codec.field "recordingId" .recordingId Codec.string
+        |> Codec.field "userName" .userName Codec.string
+        |> Codec.buildObject
+
+
+{-| The recording this device should be saving its camera, microphone and screen into,
+if any.
+-}
+recordingId : Id UserId -> Local -> Maybe String
+recordingId currentUserId local =
+    case local.currentRoom of
+        Just callId ->
+            case SeqDict.get callId local.recordings of
+                Just (RecordingSince since) ->
+                    (case toSharedCallId currentUserId callId of
+                        SharedDmCall dmChannelId ->
+                            "dm-" ++ DmChannelId.toString dmChannelId
+
+                        SharedGuildCall id ->
+                            "guild-" ++ Id.toString id.guildId ++ "-" ++ Id.toString id.channelId
+                    )
+                        ++ "-"
+                        ++ String.fromInt (Time.posixToMillis since)
+                        |> Just
+
+                Just (AskingToRecord _) ->
+                    Nothing
+
+                Just (RecordingDeclined _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+recordingChangeCmd : String -> Maybe String -> Maybe String -> Command FrontendOnly toMsg msg
+recordingChangeCmd userName recordingIdOld recordingIdNew =
+    if recordingIdOld == recordingIdNew then
+        Command.none
+
+    else
+        case recordingIdNew of
+            Just recordingId2 ->
+                toJs (ToJs_StartRecording { recordingId = recordingId2, userName = userName })
+
+            Nothing ->
+                toJs ToJs_StopRecording
 
 
 type alias StartLocalStreamData =
@@ -1937,7 +2006,7 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eA eB eC eD eF eG eH eI eO eP eJ eK eL eM eN value ->
+        (\eA eB eC eD eF eG eH eI eO eP eJ eK eL eM eN eQ eR value ->
             case value of
                 ToJs_StartCall a ->
                     eA a
@@ -1983,6 +2052,12 @@ voiceChatToJsCodec =
 
                 ToJs_DebugDataRequest ->
                     eN
+
+                ToJs_StartRecording a ->
+                    eQ a
+
+                ToJs_StopRecording ->
+                    eR
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
@@ -1999,6 +2074,8 @@ voiceChatToJsCodec =
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
         |> Codec.variant0 "debug-data-request" ToJs_DebugDataRequest
+        |> Codec.variant1 "start-recording" ToJs_StartRecording startRecordingDataCodec
+        |> Codec.variant0 "stop-recording" ToJs_StopRecording
         |> Codec.buildCustom
 
 
