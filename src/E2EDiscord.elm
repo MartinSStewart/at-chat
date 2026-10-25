@@ -798,6 +798,44 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Someone else's reaction with another server's custom emoji can't be joined"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-29T00:00:00.000000+00:00\",\"pinned\":false,\"nonce\":\"1500000000000000000\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1500000000000000001\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"React to this\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString 100 connection (reactEmojiReactionAdd (reactingUserId 1))
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+                        , T.websocketSendString
+                            100
+                            connection
+                            ("{\"t\":\"MESSAGE_REACTION_ADD\",\"s\":6,\"op\":0,\"d\":{\"user_id\":\""
+                                ++ reactingUserId 1
+                                ++ "\",\"message_id\":\"1500000000000000001\",\"emoji\":{\"id\":\"888159336168300574\",\"name\":\"elm\"},\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"burst\":false}}"
+                            )
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Got spoilered image"
         E2EHelper.startTime
         normalConfig
