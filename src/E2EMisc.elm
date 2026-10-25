@@ -25,6 +25,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , notificationClickOpensConversationTest
+    , notifyAdminsTest
     , openLastViewedGuildOnStartupTest
     , orphanedFilesTest
     , profileImageOpensDm
@@ -1515,6 +1516,39 @@ notificationClickOpensConversationTest config =
                                     (\_ -> Err ("Expected one notification but found " ++ String.fromInt (List.length urls)))
                                 ]
                     )
+                ]
+            )
+        ]
+
+
+{-| `_r/notify-admins` is how a Claude thread tells Martin it's waiting on him. The request itself
+needs a token from `Env`, so this starts from the message it turns into.
+-}
+notifyAdminsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+notifyAdminsTest config =
+    E2EHelper.startTest
+        "Notifying the admins DMs them from the bot account"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.enableNotifications False admin
+                , T.andThen
+                    100
+                    (\data ->
+                        [ T.backendUpdate
+                            100
+                            (Types.Rpc_NotifyAdmins data.time (Id.fromInt 2) (String.Nonempty.NonemptyString 'W' "aiting on you"))
+                        ]
+                    )
+                , E2EHelper.checkNotification E2EHelper.userName "Waiting on you"
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.hasText admin [ "Waiting on you" ]
+                , E2EHelper.openDm user 100 "0"
+                , E2EHelper.hasText user [ "Waiting on you" ]
                 ]
             )
         ]

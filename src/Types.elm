@@ -982,6 +982,7 @@ type BackendMsg
     | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
+    | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
 
 
 type MessageFromGuildOrDm

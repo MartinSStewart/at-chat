@@ -2758,6 +2758,9 @@ updateHelper msg model =
                 Call.GuildRoomId id ->
                     joinGuildVoiceChat sessionId clientId time id model userId
 
+        Rpc_NotifyAdmins time botUserId text ->
+            BackendExtra.notifyAdmins time botUserId text model
+
 
 gotDiscordStickers :
     List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )
