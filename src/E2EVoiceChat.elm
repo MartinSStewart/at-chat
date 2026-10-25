@@ -420,6 +420,19 @@ dmCallTest isMobile normalConfig =
                                         )
                         )
                     , E2EHelper.tallSnapshot user 100 { name = "Joined a DM call" }
+                    , if isMobile then
+                        T.group []
+
+                      else
+                        T.group
+                            [ admin.click 100 (Dom.id "guild_voiceChatScreenShare")
+                            , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Your screen" ])
+                            , user.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "'s screen" ])
+                            , E2EHelper.tallSnapshot user 0 { name = "Watching a shared screen" }
+                            , admin.click 100 (Dom.id "guild_voiceChatScreenShare")
+                            , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Your screen" ])
+                            , user.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.text "'s screen" ])
+                            ]
                     , T.checkBackend 500
                         (\m ->
                             case

@@ -1409,7 +1409,7 @@ view loaded =
                                             (\peer ->
                                                 ( peer
                                                 , if peer == previewCallMutedPeer then
-                                                    { audioInputEnabled = False, videoInputEnabled = True }
+                                                    { audioInputEnabled = False, videoInputEnabled = True, screenShareEnabled = False }
 
                                                   else
                                                     Call.defaultRemoteCallData

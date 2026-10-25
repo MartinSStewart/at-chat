@@ -5311,6 +5311,12 @@ updateLoaded msg model =
                                     , Command.none
                                     )
 
+                                Call.FromJs_ScreenShareStarted ->
+                                    setScreenShareEnabled model.time True loggedIn
+
+                                Call.FromJs_ScreenShareStopped ->
+                                    setScreenShareEnabled model.time False loggedIn
+
                                 Call.FromJs_DebugData sections ->
                                     let
                                         voiceChat : Call.Model
@@ -5530,6 +5536,20 @@ updateLoaded msg model =
                                         { voiceChat | remoteCallData = { remoteCallData | videoInputEnabled = videoInputEnabled } }
                                 }
                                 (Call.toJs (Call.ToJs_SetVideoInputEnabled videoInputEnabled))
+                        )
+                        model
+
+                Call.PressedToggleScreenShare ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            if loggedIn.voiceChat.remoteCallData.screenShareEnabled then
+                                setScreenShareEnabled model.time False loggedIn
+                                    |> Tuple.mapSecond (\cmd -> Command.batch [ cmd, Call.toJs Call.ToJs_StopScreenShare ])
+
+                            else
+                                -- Nobody is told until JS says the browser's picker produced a stream,
+                                -- since the user can still back out of it
+                                ( loggedIn, Call.toJs Call.ToJs_StartScreenShare )
                         )
                         model
 
@@ -6972,6 +6992,34 @@ updateDrawing drawingMsg model =
                     ( loggedIn, Command.none )
         )
         model
+
+
+setScreenShareEnabled : Time.Posix -> Bool -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend msg )
+setScreenShareEnabled time screenShareEnabled loggedIn =
+    let
+        voiceChat : Call.Model
+        voiceChat =
+            loggedIn.voiceChat
+
+        remoteCallData : Call.RemoteCallData
+        remoteCallData =
+            voiceChat.remoteCallData
+    in
+    if remoteCallData.screenShareEnabled == screenShareEnabled then
+        ( loggedIn, Command.none )
+
+    else
+        FrontendExtra.handleLocalChange
+            time
+            (Call.Local_SetRemoteCallData { remoteCallData | screenShareEnabled = screenShareEnabled }
+                |> Local_VoiceChatChange
+                |> Just
+            )
+            { loggedIn
+                | voiceChat =
+                    { voiceChat | remoteCallData = { remoteCallData | screenShareEnabled = screenShareEnabled } }
+            }
+            Command.none
 
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
