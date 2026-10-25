@@ -757,6 +757,7 @@ tabBodyView isMobile local loggedIn model =
                         ChannelHeaderTab_VoiceChat ->
                             Call.view
                                 local.localUser.user.isAdmin
+                                (Call.canShareScreen model.startupData.userAgent)
                                 model.windowSize
                                 (GuildRoomId { guildId = guildId, channelId = channelId })
                                 local.calls
@@ -811,6 +812,7 @@ tabBodyView isMobile local loggedIn model =
                         Just ChannelHeaderTab_VoiceChat ->
                             Call.view
                                 local.localUser.user.isAdmin
+                                (Call.canShareScreen model.startupData.userAgent)
                                 model.windowSize
                                 (DmRoomId { otherUserId = otherUserId })
                                 local.calls

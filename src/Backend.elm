@@ -9590,7 +9590,17 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
         connections =
             SeqDict.updateIfExists
                 sessionId
-                (NonemptyDict.updateIfExists clientId (\connection -> { connection | call = NotInCall }))
+                (NonemptyDict.updateIfExists
+                    clientId
+                    (\connection ->
+                        let
+                            remoteCallData : RemoteCallData
+                            remoteCallData =
+                                connection.remoteCallData
+                        in
+                        { connection | call = NotInCall, remoteCallData = { remoteCallData | screenShareEnabled = False } }
+                    )
+                )
                 model.connections
     in
     ( case roomId of

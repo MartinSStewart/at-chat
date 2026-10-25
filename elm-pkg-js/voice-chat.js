@@ -26,6 +26,22 @@ const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
 // because both are measured the same way; see "who is speaking" below.
 const SPEAKING_THRESHOLD = 0.02;
 
+// A shared screen is mostly text, which needs more pixels than a face does and
+// rarely moves, so it trades frame rate for resolution.
+const SCREEN_MAX_WIDTH = 1920;
+const SCREEN_MAX_HEIGHT = 1080;
+const SCREEN_FRAME_RATE = 15;
+const SCREEN_BITRATE = 2_500_000;
+
+// A screen that isn't changing produces few or no frames, so its key frames go
+// by the clock instead of by counting frames the way the camera's do, and a
+// frame is taken off the screen by hand whenever it has gone quiet this long.
+const SCREEN_KEY_FRAME_INTERVAL_MS = 2000;
+const SCREEN_IDLE_FRAME_MS = 1000;
+
+// Must match Call.localScreenShareNodeId.
+const LOCAL_SCREEN_NODE_ID = "local-screen-share";
+
 // A peer that has sent nothing for this long is treated as silent. Without it a
 // peer that stops sending mid-word stays outlined as speaking forever.
 const SPEAKING_TIMEOUT_MS = 400;
@@ -68,7 +84,8 @@ exports.init = async function init(app) {
     //   selfId          "<userId> <clientId>", the label on everything we send
     //   roomId          the Call.CallId string, for building peer node ids
     //   peers           Map<senderKey, peer>, see addPeer
-    //   encoders        video and audio encoders, closed on stop
+    //   camera          the camera's outgoing video, see outgoingVideo
+    //   screen          the screen being shared, see startScreenShare
     let call = null;
     let localStreamPreview = null;
 
@@ -88,7 +105,7 @@ exports.init = async function init(app) {
     // Every chunk is one binary message:
     //   byte 0        length of the sender label in bytes
     //   bytes 1..n    the sender label, "<userId> <clientId>"
-    //   next byte     kind, 0 = video and 1 = audio
+    //   next byte     kind, 0 = camera, 1 = audio and 2 = shared screen
     //   next byte     1 when this is a key frame
     //   next byte     which video codec encoded it, ignored for audio
     //   next 8 bytes  the chunk's own timestamp, which the decoder needs back
@@ -99,8 +116,12 @@ exports.init = async function init(app) {
     // the wrong one produces no picture and no error worth acting on.
     const VIDEO = 0;
     const AUDIO = 1;
+    const SCREEN = 2;
     // vp8 goes first because on Linux Mint OS Xfce avc1 will be reported as supported and then fail when used.
-    const CODECS = ["vp8","avc1.42001E"];
+    // The last one is H.264 at level 4.0, the lowest that fits a 1080p screen.
+    const CODECS = ["vp8", "avc1.42001E", "avc1.420028"];
+    const CAMERA_CODECS = [0, 1];
+    const SCREEN_CODECS = [0, 2];
     const HEADER_AFTER_SENDER = 11;
 
     const textEncoder = new TextEncoder();
@@ -141,18 +162,10 @@ exports.init = async function init(app) {
     // H.264 in annexb and VP8 both decode without a codec description, which
     // saves having to ship the encoder's metadata over the wire. Safari only has
     // the first, Chrome has both.
-    async function pickVideoCodec(width, height) {
-        const candidates = [
-            { codec: CODECS[0] },
-            { codec: CODECS[1], avc: { format: "annexb" } },
-        ];
-        for (let index = 0; index < candidates.length; index++) {
-            const config = Object.assign({
-                width,
-                height,
-                bitrate: 1_000_000,
-                framerate: 30,
-            }, candidates[index]);
+    async function pickVideoCodec(codecIndices, baseConfig) {
+        for (const index of codecIndices) {
+            const config = Object.assign({}, baseConfig, { codec: CODECS[index] });
+            if (CODECS[index].startsWith("avc1")) config.avc = { format: "annexb" };
             try {
                 const support = await VideoEncoder.isConfigSupported(config);
                 if (support.supported) return { config, index };
@@ -161,6 +174,27 @@ exports.init = async function init(app) {
             }
         }
         return null;
+    }
+
+    // Everything about one video stream we send, which the camera and a shared
+    // screen each have one of:
+    //   kind            VIDEO or SCREEN, stamped onto every chunk
+    //   codec           which of CODECS the encoder settled on, likewise
+    //   config          the encoder config, kept so the encoder can be set up
+    //                   again at a different size
+    //   encoder, size   the live encoder and the size it was set up for
+    //   startTime       the frame clock's zero, see pumpVideo
+    //   forceKeyFrame   set when the next frame has to be a key frame
+    function outgoingVideo(kind, picked) {
+        return {
+            kind,
+            codec: picked.index,
+            config: picked.config,
+            encoder: null,
+            size: null,
+            startTime: null,
+            forceKeyFrame: false,
+        };
     }
 
     function fail(message) {
@@ -209,19 +243,14 @@ exports.init = async function init(app) {
             senderBytes: textEncoder.encode(args.selfId),
             roomId: args.roomId,
             peers: new Map(),
-            // Which of CODECS our video encoder settled on, stamped onto
-            // everything we send. Stays 0 when there is no camera, where it is
-            // never read because no video is sent.
-            videoCodec: 0,
             videoInputEnabled: args.videoInputEnabled,
-            forceKeyFrame: false,
-            videoEncoder: null,
+            // Stays null when there is no camera.
+            camera: null,
+            screen: null,
+            // True while the browser's screen picker is open, so a second press
+            // doesn't open another.
+            screenRequested: false,
             audioEncoder: null,
-            // The encoder config, kept so the encoder can be set up again at a
-            // different size, and the size it was last set up for.
-            videoConfig: null,
-            videoSize: null,
-            videoStartTime: null,
             audioNodes: [],
             framesCaptured: 0,
             stopped: false,
@@ -282,14 +311,19 @@ exports.init = async function init(app) {
     async function startEncoding(state, args) {
         const videoTrack = state.stream.getVideoTracks()[0];
         const settings = videoTrack ? videoTrack.getSettings() : {};
-        const videoConfig = await pickVideoCodec(settings.width || 640, settings.height || 480);
+        const videoConfig = await pickVideoCodec(CAMERA_CODECS, {
+            width: settings.width || 640,
+            height: settings.height || 480,
+            bitrate: 1_000_000,
+            framerate: 30,
+        });
         if (state.stopped) return;
 
         if (videoTrack && !videoConfig) {
             fail("No supported video codec found (tried H.264 and VP8).");
         } else if (videoTrack) {
-            state.videoConfig = videoConfig.config;
-            state.videoCodec = videoConfig.index;
+            const camera = outgoingVideo(VIDEO, videoConfig);
+            state.camera = camera;
 
             // A decoder can do nothing with delta frames until it has seen a
             // key frame, so one goes out every 2s to bound how long recovering
@@ -297,10 +331,10 @@ exports.init = async function init(app) {
             // making them wait out the interval staring at nothing.
             let frameCount = 0;
             pumpVideo(state, function (frame) {
-                const encoder = videoEncoderFor(state, frame.displayWidth, frame.displayHeight);
+                const encoder = videoEncoderFor(state, camera, frame.displayWidth, frame.displayHeight);
                 if (!encoder) return;
-                const forced = state.forceKeyFrame;
-                state.forceKeyFrame = false;
+                const forced = camera.forceKeyFrame;
+                camera.forceKeyFrame = false;
                 encoder.encode(frame, { keyFrame: forced || frameCount % 60 === 0 });
                 frameCount += 1;
             });
@@ -311,7 +345,7 @@ exports.init = async function init(app) {
             // AudioData the worklet produces to a single plane.
             const audioEncoder = new AudioEncoder({
                 output: function (chunk) {
-                    send(state, AUDIO, chunk);
+                    send(state, AUDIO, 0, chunk);
                 },
                 error: function (e) {
                     fail("audio encoder: " + e);
@@ -344,45 +378,45 @@ exports.init = async function init(app) {
     // encoder rather than another configure() call on the live one. Configuring
     // twice is allowed by the spec, but Firefox's H.264 encoder answers it with
     // NotSupportedError, and building a new encoder is supported everywhere.
-    function videoEncoderFor(state, width, height) {
+    function videoEncoderFor(state, outgoing, width, height) {
         if (width === 0 || height === 0) return null;
 
         const wrongSize =
-            state.videoSize && (state.videoSize.width !== width || state.videoSize.height !== height);
+            outgoing.size && (outgoing.size.width !== width || outgoing.size.height !== height);
 
-        if (state.videoEncoder && (state.videoEncoder.state === "closed" || wrongSize)) {
-            if (state.videoEncoder.state !== "closed") state.videoEncoder.close();
-            state.videoEncoder = null;
+        if (outgoing.encoder && (outgoing.encoder.state === "closed" || wrongSize)) {
+            if (outgoing.encoder.state !== "closed") outgoing.encoder.close();
+            outgoing.encoder = null;
         }
 
-        if (!state.videoEncoder) {
-            state.videoEncoder = new VideoEncoder({
+        if (!outgoing.encoder) {
+            outgoing.encoder = new VideoEncoder({
                 output: function (chunk) {
-                    send(state, VIDEO, chunk);
+                    send(state, outgoing.kind, outgoing.codec, chunk);
                 },
                 error: function (e) {
                     fail("video encoder: " + e);
                 },
             });
-            state.videoEncoder.configure(
-                Object.assign({}, state.videoConfig, { width, height })
+            outgoing.encoder.configure(
+                Object.assign({}, outgoing.config, { width, height })
             );
-            state.videoSize = { width, height };
+            outgoing.size = { width, height };
             // A new encoder starts a new stream, which no decoder can join
             // partway through.
-            state.forceKeyFrame = true;
+            outgoing.forceKeyFrame = true;
         }
 
-        return state.videoEncoder;
+        return outgoing.encoder;
     }
 
     function readyToSend(state) {
         return !state.stopped && state.socket && state.socket.readyState === WebSocket.OPEN;
     }
 
-    function send(state, kind, chunk) {
+    function send(state, kind, codec, chunk) {
         if (!readyToSend(state)) return;
-        state.socket.send(packet(state.senderBytes, kind, state.videoCodec, chunk));
+        state.socket.send(packet(state.senderBytes, kind, codec, chunk));
     }
 
     // Takes each new camera frame off the capture element. The frame has to be
@@ -413,11 +447,11 @@ exports.init = async function init(app) {
                 return;
             }
 
-            if (state.videoStartTime === null) state.videoStartTime = now;
+            if (state.camera.startTime === null) state.camera.startTime = now;
 
             try {
                 const frame = new VideoFrame(videoElement, {
-                    timestamp: Math.round((now - state.videoStartTime) * 1000),
+                    timestamp: Math.round((now - state.camera.startTime) * 1000),
                 });
                 if (readyToSend(state)) encode(frame);
                 frame.close();
@@ -476,6 +510,192 @@ exports.init = async function init(app) {
         state.audioNodes = [source, capture, silence];
     }
 
+    // --- sharing our screen ---
+
+    async function startScreenShare() {
+        const state = call;
+        if (!state || state.screen || state.screenRequested) return;
+
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== "function") {
+            fail("This browser can't share its screen.");
+            screenShareStopped();
+            return;
+        }
+
+        state.screenRequested = true;
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    width: { max: SCREEN_MAX_WIDTH },
+                    height: { max: SCREEN_MAX_HEIGHT },
+                    frameRate: { max: SCREEN_FRAME_RATE },
+                },
+                audio: false,
+            });
+        } catch (e) {
+            state.screenRequested = false;
+            // Closing the picker without choosing anything also lands here,
+            // and isn't worth an error box.
+            if (e.name !== "NotAllowedError" && e.name !== "AbortError") fail("screen share: " + e);
+            screenShareStopped();
+            return;
+        }
+        state.screenRequested = false;
+
+        const track = stream.getVideoTracks()[0];
+        if (state.stopped || !track) {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            screenShareStopped();
+            return;
+        }
+        // Tells the encoder to keep text sharp rather than motion smooth.
+        if ("contentHint" in track) track.contentHint = "detail";
+
+        const settings = track.getSettings();
+        const picked = await pickVideoCodec(SCREEN_CODECS, {
+            width: settings.width || SCREEN_MAX_WIDTH,
+            height: settings.height || SCREEN_MAX_HEIGHT,
+            bitrate: SCREEN_BITRATE,
+            framerate: SCREEN_FRAME_RATE,
+        });
+        if (state.stopped || !picked) {
+            if (!picked) fail("No supported video codec found for screen sharing.");
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            screenShareStopped();
+            return;
+        }
+
+        const screen = {
+            stream,
+            // Same reason as the camera's capture element: it has to keep
+            // producing frames whatever Elm is drawing.
+            captureVideo: document.createElement("video"),
+            outgoing: outgoingVideo(SCREEN, picked),
+            lastKeyFrameTime: null,
+            lastFrameTime: null,
+            lastTimestamp: -1,
+            idleTimer: null,
+            stopped: false,
+        };
+        screen.captureVideo.muted = true;
+        screen.captureVideo.playsInline = true;
+        screen.captureVideo.srcObject = stream;
+        try {
+            await screen.captureVideo.play();
+        } catch (e) {
+            fail("could not start screen capture: " + e);
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            screenShareStopped();
+            return;
+        }
+        if (state.stopped) {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            screenShareStopped();
+            return;
+        }
+
+        state.screen = screen;
+        // The browser shows its own "stop sharing" control, which ends the
+        // track without asking us.
+        track.addEventListener("ended", function () {
+            if (state.screen === screen) stopScreenShare(state);
+        });
+        app.ports.voice_chat_from_js.send({ tag: "screen-share-started", args: [] });
+        pumpScreen(state, screen);
+    }
+
+    function pumpScreen(state, screen) {
+        const videoElement = screen.captureVideo;
+        const outgoing = screen.outgoing;
+
+        function encodeFrame(now) {
+            showScreenPreview(screen.stream);
+            if (!readyToSend(state)) return;
+            if (outgoing.startTime === null) outgoing.startTime = now;
+            screen.lastFrameTime = now;
+
+            // The idle timer's clock and rVFC's are close but not the same, and
+            // an encoder rejects a timestamp that doesn't increase.
+            const timestamp = Math.max(
+                screen.lastTimestamp + 1,
+                Math.round((now - outgoing.startTime) * 1000)
+            );
+
+            let frame;
+            try {
+                frame = new VideoFrame(videoElement, { timestamp });
+            } catch (e) {
+                fail("screen capture: " + e);
+                return;
+            }
+            const encoder = videoEncoderFor(state, outgoing, frame.displayWidth, frame.displayHeight);
+            // Encoding a 1080p screen in software can fall behind, and frames
+            // that queue up only add delay, so they are dropped instead.
+            if (encoder && encoder.encodeQueueSize <= 2) {
+                const keyFrame =
+                    outgoing.forceKeyFrame ||
+                    screen.lastKeyFrameTime === null ||
+                    now - screen.lastKeyFrameTime >= SCREEN_KEY_FRAME_INTERVAL_MS;
+                outgoing.forceKeyFrame = false;
+                if (keyFrame) screen.lastKeyFrameTime = now;
+                screen.lastTimestamp = timestamp;
+                encoder.encode(frame, { keyFrame });
+            }
+            frame.close();
+        }
+
+        function onFrame(now) {
+            if (screen.stopped) return;
+            encodeFrame(now);
+            videoElement.requestVideoFrameCallback(onFrame);
+        }
+
+        videoElement.requestVideoFrameCallback(onFrame);
+        screen.idleTimer = setInterval(function () {
+            if (screen.stopped) return;
+            // In case the browser ended the track without an "ended" event.
+            if (screen.stream.getVideoTracks().every(function (t) { return t.readyState === "ended"; })) {
+                if (state.screen === screen) stopScreenShare(state);
+                return;
+            }
+            const now = performance.now();
+            if (screen.lastFrameTime === null || now - screen.lastFrameTime >= SCREEN_IDLE_FRAME_MS) {
+                encodeFrame(now);
+            }
+        }, SCREEN_IDLE_FRAME_MS);
+    }
+
+    // Elm only draws the preview while the call is on screen, and draws a new
+    // element when it comes back, so this is checked again on every frame.
+    function showScreenPreview(stream) {
+        const videoNode = document.getElementById(LOCAL_SCREEN_NODE_ID);
+        if (!videoNode || videoNode.srcObject === stream) return;
+        videoNode.muted = true;
+        videoNode.srcObject = stream;
+        videoNode.play().catch(function () {});
+    }
+
+    function stopScreenShare(state) {
+        const screen = state.screen;
+        if (!screen) return;
+        state.screen = null;
+        screen.stopped = true;
+        clearInterval(screen.idleTimer);
+        if (screen.outgoing.encoder && screen.outgoing.encoder.state !== "closed") {
+            screen.outgoing.encoder.close();
+        }
+        screen.captureVideo.srcObject = null;
+        const preview = document.getElementById(LOCAL_SCREEN_NODE_ID);
+        if (preview && preview.srcObject === screen.stream) preview.srcObject = null;
+        screen.stream.getTracks().forEach(function (track) { track.stop(); });
+        screenShareStopped();
+    }
+
+    function screenShareStopped() {
+        app.ports.voice_chat_from_js.send({ tag: "screen-share-stopped", args: [] });
+    }
+
     // --- receiving peers ---
 
     function receive(state, buffer) {
@@ -486,25 +706,26 @@ exports.init = async function init(app) {
         const peer = state.peers.get(message.sender) || addPeer(state, message.sender);
         if (!peer) return;
 
-        if (message.kind === VIDEO) {
-            if (peer.videoCodec !== message.codec) {
-                configurePeerVideo(state, peer, message.codec);
+        if (message.kind === VIDEO || message.kind === SCREEN) {
+            const video = message.kind === VIDEO ? peer.camera : peer.screen;
+            if (video.codec !== message.codec) {
+                configurePeerVideo(video, message.codec);
             }
-            if (!peer.videoDecoder) return;
+            if (!video.decoder) return;
             // A decoder that starts mid-stream has to wait for a key frame.
-            if (!peer.videoReady && message.type !== "key") return;
-            peer.videoReady = true;
+            if (!video.ready && message.type !== "key") return;
+            video.ready = true;
             try {
-                peer.videoDecoder.decode(new EncodedVideoChunk({
+                video.decoder.decode(new EncodedVideoChunk({
                     type: message.type,
                     timestamp: message.timestamp,
                     data: message.data,
                 }));
             } catch (e) {
                 // The decoder died between the error callback firing and now.
-                dropPeerVideo(peer);
+                dropPeerVideo(video);
             }
-        } else {
+        } else if (message.kind === AUDIO) {
             try {
                 peer.audioDecoder.decode(new EncodedAudioChunk({
                     type: message.type,
@@ -527,14 +748,14 @@ exports.init = async function init(app) {
         gain.gain.value = 1;
         gain.connect(context.destination);
 
+        const nodeId = peerNodeId(state.roomId, senderKey);
         const peer = {
             senderKey,
-            canvas: null,
+            camera: peerVideo(nodeId),
+            // Must match Call.screenShareNodeId.
+            screen: peerVideo(nodeId + " screen"),
             gain,
             playheadSeconds: 0,
-            videoReady: false,
-            videoCodec: null,
-            videoDecoder: null,
             audioDecoder: null,
             // What updateSpeaking works on: who this loudness belongs to, and
             // whether Elm has been told they are speaking.
@@ -560,13 +781,19 @@ exports.init = async function init(app) {
         return peer;
     }
 
+    // One video stream a peer sends us, their camera or their screen, and the
+    // <canvas> Elm renders for it.
+    function peerVideo(nodeId) {
+        return { nodeId, canvas: null, ready: false, codec: null, decoder: null };
+    }
+
     // A decoder that errors is closed for good, so recovering from one means
     // building another. That makes this the one path for both the first chunk a
     // peer sends and every rebuild after, and it remembers which codec it was
     // last asked for so an unsupported one is not retried on every frame.
-    function configurePeerVideo(state, peer, codec) {
-        dropPeerVideo(peer);
-        peer.videoCodec = codec;
+    function configurePeerVideo(video, codec) {
+        dropPeerVideo(video);
+        video.codec = codec;
 
         const name = CODECS[codec];
         if (!name) return;
@@ -574,30 +801,30 @@ exports.init = async function init(app) {
         try {
             const decoder = new VideoDecoder({
                 output: function (frame) {
-                    drawFrame(state, peer, frame);
+                    drawFrame(video, frame);
                     frame.close();
                 },
                 // Asking for the codec again is what rebuilds this decoder, so
                 // forgetting it is what lets the next chunk do that.
                 error: function () {
-                    dropPeerVideo(peer);
+                    dropPeerVideo(video);
                 },
             });
             decoder.configure({ codec: name });
-            peer.videoDecoder = decoder;
+            video.decoder = decoder;
         } catch (e) {
             // This browser cannot decode what the peer encoded with. Their audio
             // still works, so the call carries on without their picture.
         }
     }
 
-    function dropPeerVideo(peer) {
-        if (peer.videoDecoder && peer.videoDecoder.state !== "closed") {
-            peer.videoDecoder.close();
+    function dropPeerVideo(video) {
+        if (video.decoder && video.decoder.state !== "closed") {
+            video.decoder.close();
         }
-        peer.videoDecoder = null;
-        peer.videoCodec = null;
-        peer.videoReady = false;
+        video.decoder = null;
+        video.codec = null;
+        video.ready = false;
     }
 
     // Clearing rather than painting black leaves the canvas transparent, and the
@@ -609,20 +836,20 @@ exports.init = async function init(app) {
         if (context) context.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    function drawFrame(state, peer, frame) {
+    function drawFrame(video, frame) {
         // Elm renders the peer's canvas only once it knows the peer is in the
-        // call, which can be after their first frame arrives, so it is looked up
-        // again until it appears.
-        if (!peer.canvas || !peer.canvas.isConnected) {
-            peer.canvas = document.getElementById(peerNodeId(state.roomId, peer.senderKey));
+        // call, or sharing their screen, which can be after their first frame
+        // arrives, so it is looked up again until it appears.
+        if (!video.canvas || !video.canvas.isConnected) {
+            video.canvas = document.getElementById(video.nodeId);
         }
-        if (!peer.canvas) return;
+        if (!video.canvas) return;
 
-        const context = peer.canvas.getContext("2d");
+        const context = video.canvas.getContext("2d");
         if (!context) return;
-        if (peer.canvas.width !== frame.displayWidth || peer.canvas.height !== frame.displayHeight) {
-            peer.canvas.width = frame.displayWidth;
-            peer.canvas.height = frame.displayHeight;
+        if (video.canvas.width !== frame.displayWidth || video.canvas.height !== frame.displayHeight) {
+            video.canvas.width = frame.displayWidth;
+            video.canvas.height = frame.displayHeight;
         }
         context.drawImage(frame, 0, 0);
     }
@@ -665,11 +892,12 @@ exports.init = async function init(app) {
         const peer = state.peers.get(senderKey);
         if (!peer) return;
         updateSpeaking(peer, 0);
-        [peer.videoDecoder, peer.audioDecoder].forEach(function (decoder) {
-            if (decoder && decoder.state !== "closed") decoder.close();
-        });
+        dropPeerVideo(peer.camera);
+        dropPeerVideo(peer.screen);
+        if (peer.audioDecoder.state !== "closed") peer.audioDecoder.close();
         try { peer.gain.disconnect(); } catch (e) {}
-        clearCanvas(peer.canvas);
+        clearCanvas(peer.camera.canvas);
+        clearCanvas(peer.screen.canvas);
         state.peers.delete(senderKey);
     }
 
@@ -679,13 +907,14 @@ exports.init = async function init(app) {
         if (!state) return;
         state.stopped = true;
 
+        stopScreenShare(state);
         for (const senderKey of [...state.peers.keys()]) {
             removePeer(state, senderKey);
         }
         state.audioNodes.forEach(function (node) {
             try { node.disconnect(); } catch (e) {}
         });
-        [state.videoEncoder, state.audioEncoder].forEach(function (encoder) {
+        [state.camera && state.camera.encoder, state.audioEncoder].forEach(function (encoder) {
             if (encoder && encoder.state !== "closed") encoder.close();
         });
         if (state.socket) state.socket.close();
@@ -734,7 +963,7 @@ exports.init = async function init(app) {
             call.stream.getVideoTracks().forEach(function (t) { t.enabled = enabled; });
             // Nobody has had a frame from us while the camera was off, so what
             // they need first when it returns is a key frame.
-            if (enabled && !call.videoInputEnabled) call.forceKeyFrame = true;
+            if (enabled && !call.videoInputEnabled && call.camera) call.camera.forceKeyFrame = true;
             call.videoInputEnabled = enabled;
         }
         if (localStreamPreview) {
@@ -913,6 +1142,20 @@ exports.init = async function init(app) {
         return { title: title, rows: tracks.map(trackRow) };
     }
 
+    function outgoingSection(title, outgoing) {
+        if (!outgoing) return { title: title, rows: [row("encoding", false)] };
+        return {
+            title: title,
+            rows: [
+                row("codec", codecName(outgoing.codec)),
+                row("force key frame", outgoing.forceKeyFrame),
+                encoderRow("encoder", outgoing.encoder),
+                row("encoder size", outgoing.size ? outgoing.size.width + "x" + outgoing.size.height : "none"),
+                row("clock start", outgoing.startTime === null ? "no frames yet" : outgoing.startTime.toFixed(0) + "ms"),
+            ],
+        };
+    }
+
     function canvasValue(canvas) {
         if (!canvas) return "not found yet";
         return canvas.width + "x" + canvas.height + " inDocument=" + canvas.isConnected;
@@ -952,15 +1195,7 @@ exports.init = async function init(app) {
                             : "none"
                     ),
                     row("peers", state.peers.size),
-                    row("video codec", codecName(state.videoCodec)),
                     row("video input enabled", state.videoInputEnabled),
-                    row("force key frame", state.forceKeyFrame),
-                    encoderRow("video encoder", state.videoEncoder),
-                    row(
-                        "video encoder size",
-                        state.videoSize ? state.videoSize.width + "x" + state.videoSize.height : "none"
-                    ),
-                    row("video clock start", state.videoStartTime === null ? "no frames yet" : state.videoStartTime.toFixed(0) + "ms"),
                     encoderRow("audio encoder", state.audioEncoder),
                     row("audio frames captured", state.framesCaptured),
                     row("audio nodes", state.audioNodes.length),
@@ -975,16 +1210,30 @@ exports.init = async function init(app) {
                 ],
             });
 
+            sections.push(outgoingSection("Camera", state.camera));
             sections.push(streamSection("Call stream", state.stream));
+            if (state.screen) {
+                sections.push(outgoingSection("Screen share", state.screen.outgoing));
+                sections.push(streamSection("Screen share stream", state.screen.stream));
+            } else {
+                sections.push({
+                    title: "Screen share",
+                    rows: [row("sharing", false), row("picker open", state.screenRequested)],
+                });
+            }
 
             state.peers.forEach(function (peer, senderKey) {
                 sections.push({
                     title: "Peer " + senderKey,
                     rows: [
-                        row("video codec", codecName(peer.videoCodec)),
-                        decoderRow("video decoder", peer.videoDecoder),
-                        row("seen a key frame", peer.videoReady),
-                        row("canvas", canvasValue(peer.canvas)),
+                        row("video codec", codecName(peer.camera.codec)),
+                        decoderRow("video decoder", peer.camera.decoder),
+                        row("seen a key frame", peer.camera.ready),
+                        row("canvas", canvasValue(peer.camera.canvas)),
+                        row("screen codec", codecName(peer.screen.codec)),
+                        decoderRow("screen decoder", peer.screen.decoder),
+                        row("screen seen a key frame", peer.screen.ready),
+                        row("screen canvas", canvasValue(peer.screen.canvas)),
                         decoderRow("audio decoder", peer.audioDecoder),
                         row("volume", peer.gain.gain.value),
                         row(
@@ -1021,7 +1270,8 @@ exports.init = async function init(app) {
             // Their decoder has nothing to show until a key frame reaches it.
             // Building their side of the connection waits for their first chunk,
             // which is the only moment we know what codec they are sending.
-            if (call) call.forceKeyFrame = true;
+            if (call && call.camera) call.camera.forceKeyFrame = true;
+            if (call && call.screen) call.screen.outgoing.forceKeyFrame = true;
         } else if (msg.tag === "peer-left") {
             peerLeft(msg.args[0]);
         } else if (msg.tag === "set-audio-input-enabled") {
@@ -1039,9 +1289,13 @@ exports.init = async function init(app) {
                 const senderKey = msg.args[0].otherClientId;
                 const peer = call.peers.get(senderKey);
                 clearCanvas(
-                    (peer && peer.canvas) || document.getElementById(peerNodeId(call.roomId, senderKey))
+                    (peer && peer.camera.canvas) || document.getElementById(peerNodeId(call.roomId, senderKey))
                 );
             }
+        } else if (msg.tag === "start-screen-share") {
+            await startScreenShare();
+        } else if (msg.tag === "stop-screen-share") {
+            if (call) stopScreenShare(call);
         } else if (msg.tag === "set-volume") {
             const peer = call && call.peers.get(msg.args[0].otherClientId);
             if (peer) peer.gain.gain.value = msg.args[1];

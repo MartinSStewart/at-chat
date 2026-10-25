@@ -20,6 +20,7 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , canShareScreen
     , connectionIdToString
     , conversationOffset
     , debugDataSubscription
@@ -82,6 +83,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Url
 import User exposing (LocalUser)
+import UserAgent exposing (Device(..), UserAgent)
 import UserSession exposing (ChannelHeaderTab(..))
 
 
@@ -102,6 +104,7 @@ type Msg
     | SelectedVideoInputDevice (IdString MediaDeviceId)
     | PressedToggleMute
     | PressedTogglePauseVideo
+    | PressedToggleScreenShare
     | PressedJoinCall CallId
     | PressedLeaveCall
     | PressedDownloadRecording CallId
@@ -121,12 +124,12 @@ type alias Local =
 
 
 type alias RemoteCallData =
-    { audioInputEnabled : Bool, videoInputEnabled : Bool }
+    { audioInputEnabled : Bool, videoInputEnabled : Bool, screenShareEnabled : Bool }
 
 
 defaultRemoteCallData : RemoteCallData
 defaultRemoteCallData =
-    { audioInputEnabled = True, videoInputEnabled = True }
+    { audioInputEnabled = True, videoInputEnabled = True, screenShareEnabled = False }
 
 
 type alias Model =
@@ -475,6 +478,20 @@ localVideoNodeId =
     "local-video"
 
 
+{-| Must match LOCAL\_SCREEN\_NODE\_ID in voice-chat.js.
+-}
+localScreenShareNodeId : String
+localScreenShareNodeId =
+    "local-screen-share"
+
+
+{-| Must match the screen's nodeId in voice-chat.js's addPeer.
+-}
+screenShareNodeId : ConnectionId -> String
+screenShareNodeId connectionId =
+    connectionIdToString connectionId ++ " screen"
+
+
 speakingOutline : Bool -> String
 speakingOutline isSpeaking =
     if isSpeaking then
@@ -599,27 +616,19 @@ videoNodes localUser config loggedIn local =
             ]
 
         ShowLocalVideo ->
-            [ videoNode
-                localUser.session.userId
-                localUser
-                IsLocal
-                model.remoteCallData
-                VideoNodeFullSize
-                (getPosAndSize 0 (posAndSizes 1))
-                model.localIsSpeaking
-                model
-            ]
-
-        ShowLocalVideoAndCall callId ->
             let
-                total : Int
-                total =
-                    List.length sessions + 1
+                tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+                tiles =
+                    localTiles localUser model
 
                 list : List ( Coord CssPixels, Int )
                 list =
-                    posAndSizes total
+                    posAndSizes (List.length tiles)
+            in
+            List.indexedMap (\index tile -> tile (getPosAndSize index list)) tiles
 
+        ShowLocalVideoAndCall callId ->
+            let
                 sessions : List ( ( Id UserId, ClientId ), RemoteCallData )
                 sessions =
                     case SeqDict.get callId local.voiceChats of
@@ -628,34 +637,42 @@ videoNodes localUser config loggedIn local =
 
                         Nothing ->
                             []
+
+                tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+                tiles =
+                    localTiles localUser model
+                        ++ List.concatMap
+                            (\( session, data ) ->
+                                let
+                                    connectionId : ConnectionId
+                                    connectionId =
+                                        { roomId = callId, otherClientId = session }
+
+                                    cameraTile : ( Coord CssPixels, Int ) -> ( String, Html Msg )
+                                    cameraTile posAndSize =
+                                        videoNode
+                                            (Tuple.first session)
+                                            localUser
+                                            (IsConnection connectionId)
+                                            data
+                                            VideoNodeFullSize
+                                            posAndSize
+                                            (SeqSet.member connectionId model.isSpeaking)
+                                            model
+                                in
+                                if data.screenShareEnabled then
+                                    [ cameraTile, screenShareNode localUser (IsConnection connectionId) ]
+
+                                else
+                                    [ cameraTile ]
+                            )
+                            sessions
+
+                list : List ( Coord CssPixels, Int )
+                list =
+                    posAndSizes (List.length tiles)
             in
-            videoNode
-                localUser.session.userId
-                localUser
-                IsLocal
-                model.remoteCallData
-                VideoNodeFullSize
-                (getPosAndSize 0 list)
-                model.localIsSpeaking
-                model
-                :: List.indexedMap
-                    (\index ( session, data ) ->
-                        let
-                            connectionId : ConnectionId
-                            connectionId =
-                                { roomId = callId, otherClientId = session }
-                        in
-                        videoNode
-                            (Tuple.first session)
-                            localUser
-                            (IsConnection connectionId)
-                            data
-                            VideoNodeFullSize
-                            (getPosAndSize (index + 1) list)
-                            (SeqSet.member connectionId model.isSpeaking)
-                            model
-                    )
-                    sessions
+            List.indexedMap (\index tile -> tile (getPosAndSize index list)) tiles
 
         ShowLocalVideoAndCallThumbnail callId ->
             let
@@ -727,6 +744,28 @@ videoNodes localUser config loggedIn local =
                 []
            )
         |> Html.Keyed.node "div" []
+
+
+localTiles : LocalUser -> Model -> List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+localTiles localUser model =
+    let
+        cameraTile : ( Coord CssPixels, Int ) -> ( String, Html Msg )
+        cameraTile posAndSize =
+            videoNode
+                localUser.session.userId
+                localUser
+                IsLocal
+                model.remoteCallData
+                VideoNodeFullSize
+                posAndSize
+                model.localIsSpeaking
+                model
+    in
+    if model.remoteCallData.screenShareEnabled then
+        [ cameraTile, screenShareNode localUser IsLocal ]
+
+    else
+        [ cameraTile ]
 
 
 {-| Drawn as part of the video layer rather than inside the voice chat panel,
@@ -1188,6 +1227,84 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
     )
 
 
+{-| A shared screen can be any shape, so it's fitted inside the tile rather than
+cropped to fill it the way a camera is.
+-}
+screenShareNode : LocalUser -> LocalOrConnection -> ( Coord CssPixels, Int ) -> ( String, Html Msg )
+screenShareNode localUser id ( position, width ) =
+    let
+        height : Float
+        height =
+            toFloat width / aspectRatio
+
+        idString : String
+        idString =
+            case id of
+                IsLocal ->
+                    localScreenShareNodeId
+
+                IsConnection connectionId ->
+                    screenShareNodeId connectionId
+
+        mediaAttributes : List (Html.Attribute msg)
+        mediaAttributes =
+            [ Html.Attributes.id idString
+            , Html.Attributes.style "background-color" "rgba(0,0,0)"
+            , Html.Attributes.style "width" (String.fromInt width ++ "px")
+            , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+            , Html.Attributes.style "border-radius" "8px"
+            , Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.style "object-fit" "contain"
+            ]
+    in
+    ( idString
+    , Html.div
+        [ Html.Attributes.style "width" (String.fromInt width ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
+        , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position) ++ "px")
+        , Html.Attributes.style "pointer-events" "auto"
+        ]
+        [ case id of
+            IsLocal ->
+                Html.video
+                    (Html.Attributes.attribute "playsinline" ""
+                        :: Html.Attributes.attribute "webkit-playsinline" ""
+                        :: mediaAttributes
+                    )
+                    []
+
+            IsConnection _ ->
+                Html.canvas mediaAttributes []
+        , Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" "8px"
+            , Html.Attributes.style "bottom" "8px"
+            , Html.Attributes.style "padding" "2px 6px"
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "background-color" "rgba(0,0,0,0.6)"
+            , Html.Attributes.style "color" "white"
+            , Html.Attributes.style "font-size" "14px"
+            , Html.Attributes.style "max-width" "calc(100% - 28px)"
+            , Html.Attributes.style "white-space" "nowrap"
+            , Html.Attributes.style "overflow" "hidden"
+            , Html.Attributes.style "text-overflow" "ellipsis"
+            , Html.Attributes.style "pointer-events" "none"
+            ]
+            [ Html.text
+                (case id of
+                    IsLocal ->
+                        "Your screen"
+
+                    IsConnection connectionId ->
+                        User.toStringAlt (Tuple.first connectionId.otherClientId) localUser ++ "'s screen"
+                )
+            ]
+        ]
+    )
+
+
 green : Ui.Color
 green =
     Ui.rgb 60 160 70
@@ -1208,8 +1325,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
-view isAdmin windowSize roomId calls model =
+view : Bool -> Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
+view isAdmin canShareScreen2 windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
         ongoingCall =
@@ -1336,6 +1453,11 @@ view isAdmin windowSize roomId calls model =
                             (Ui.html (Icons.camera 24))
                             model.remoteCallData.videoInputEnabled
                             PressedTogglePauseVideo
+                        , if hasJoined2 && canShareScreen2 then
+                            screenShareButton model.remoteCallData.screenShareEnabled
+
+                          else
+                            Ui.none
                         ]
                     ]
                 ]
@@ -1383,6 +1505,79 @@ voiceChatControlButton htmlId title iconHtml isEnabled onPress =
                 )
         ]
         iconHtml
+
+
+{-| Neither iOS nor Android browsers implement getDisplayMedia.
+-}
+canShareScreen : UserAgent -> Bool
+canShareScreen userAgent =
+    case userAgent.device of
+        IPhone ->
+            False
+
+        IPad ->
+            False
+
+        AndroidPhone ->
+            False
+
+        AndroidTablet ->
+            False
+
+        Mobile ->
+            False
+
+        Tablet ->
+            False
+
+        Windows ->
+            True
+
+        MacOS ->
+            True
+
+        ChromeOS ->
+            True
+
+        Linux ->
+            True
+
+        Desktop ->
+            True
+
+
+{-| Not sharing is the usual state, so unlike the mute and camera buttons it isn't
+drawn as something switched off.
+-}
+screenShareButton : Bool -> Element Msg
+screenShareButton isSharing =
+    MyUi.elButton
+        (Dom.id "guild_voiceChatScreenShare")
+        PressedToggleScreenShare
+        [ Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.rounded 20
+        , MyUi.hoverText
+            (if isSharing then
+                "Stop sharing screen"
+
+             else
+                "Share screen"
+            )
+        , Ui.border 1
+        , Ui.borderColor MyUi.inputBorder
+        , Ui.background
+            (if isSharing then
+                green
+
+             else
+                Ui.rgb 42 50 78
+            )
+        , Ui.Font.color MyUi.white
+        ]
+        (Ui.html Icons.screenShare)
 
 
 hasJoined : CallId -> Local -> Bool
@@ -1449,6 +1644,8 @@ type ToJs
     | ToJs_SetInput Bool (IdString MediaDeviceId)
     | ToJs_SetVideoInputEnabled Bool
     | ToJs_SetPeerVideoInputEnabled ConnectionId Bool
+    | ToJs_StartScreenShare
+    | ToJs_StopScreenShare
     | ToJs_GetMediaDevices
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
@@ -1532,7 +1729,7 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eA eB eC eD eF eG eH eI eJ eK eL eM eN value ->
+        (\eA eB eC eD eF eG eH eI eO eP eJ eK eL eM eN value ->
             case value of
                 ToJs_StartCall a ->
                     eA a
@@ -1558,6 +1755,12 @@ voiceChatToJsCodec =
                 ToJs_SetPeerVideoInputEnabled a b ->
                     eI a b
 
+                ToJs_StartScreenShare ->
+                    eO
+
+                ToJs_StopScreenShare ->
+                    eP
+
                 ToJs_GetMediaDevices ->
                     eJ
 
@@ -1581,6 +1784,8 @@ voiceChatToJsCodec =
         |> Codec.variant2 "set-input" ToJs_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" ToJs_SetVideoInputEnabled Codec.bool
         |> Codec.variant2 "set-peer-video-input-enabled" ToJs_SetPeerVideoInputEnabled connectionIdCodec Codec.bool
+        |> Codec.variant0 "start-screen-share" ToJs_StartScreenShare
+        |> Codec.variant0 "stop-screen-share" ToJs_StopScreenShare
         |> Codec.variant0 "get-media-devices" ToJs_GetMediaDevices
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
@@ -1638,6 +1843,8 @@ type FromJs
     | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
     | FromJs_DebugData (List DebugSection)
+    | FromJs_ScreenShareStarted
+    | FromJs_ScreenShareStopped
 
 
 type LocalOrConnection
@@ -1664,7 +1871,7 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\cEncoder dEncoder eEncoder fEncoder gEncoder value ->
+        (\cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder iEncoder value ->
             case value of
                 FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
@@ -1680,12 +1887,20 @@ voiceChatFromJsCodec =
 
                 FromJs_DebugData a ->
                     gEncoder a
+
+                FromJs_ScreenShareStarted ->
+                    hEncoder
+
+                FromJs_ScreenShareStopped ->
+                    iEncoder
         )
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
         |> Codec.variant1 "debug-data" FromJs_DebugData (Codec.list debugSectionCodec)
+        |> Codec.variant0 "screen-share-started" FromJs_ScreenShareStarted
+        |> Codec.variant0 "screen-share-stopped" FromJs_ScreenShareStopped
         |> Codec.buildCustom
 
 
@@ -1952,6 +2167,9 @@ isPressMsg msg =
             True
 
         PressedTogglePauseVideo ->
+            True
+
+        PressedToggleScreenShare ->
             True
 
         PressedJoinCall _ ->

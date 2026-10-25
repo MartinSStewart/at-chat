@@ -924,6 +924,13 @@ mockVoiceChatPorts request =
                     -- JS clears that peer's canvas. No response.
                     Nothing
 
+                Call.ToJs_StartScreenShare ->
+                    -- As if the user picked a screen in the browser's picker.
+                    fromJsEvent Call.FromJs_ScreenShareStarted
+
+                Call.ToJs_StopScreenShare ->
+                    Nothing
+
                 Call.ToJs_GetMediaDevices ->
                     fromJsEvent
                         (Call.FromJs_GotUserMediaDevices
