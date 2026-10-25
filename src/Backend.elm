@@ -260,6 +260,8 @@ init =
             else
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , openRouterKey = Nothing
+      , notifyAdminsToken = Nothing
+      , notifyAdminsBotEmail = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -10666,6 +10668,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetOpenRouterKey openRouterKey ->
             ( { model | openRouterKey = openRouterKey }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetNotifyAdminsToken notifyAdminsToken ->
+            ( { model | notifyAdminsToken = notifyAdminsToken }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetNotifyAdminsBotEmail notifyAdminsBotEmail ->
+            ( { model | notifyAdminsBotEmail = notifyAdminsBotEmail }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

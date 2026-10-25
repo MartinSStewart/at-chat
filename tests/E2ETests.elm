@@ -3938,6 +3938,12 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                                 else
                                                                     [ "OpenRouter key was modified by attacker" ]
                                                                )
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).notifyAdminsToken == (E2EHelper.unwrapBackend after.backend).notifyAdminsToken then
+                                                                    []
+
+                                                                else
+                                                                    [ "Notify admins token was modified by attacker" ]
+                                                               )
                                                             ++ (if (E2EHelper.unwrapBackend before.backend).emailNotificationsEnabled == (E2EHelper.unwrapBackend after.backend).emailNotificationsEnabled then
                                                                     []
 

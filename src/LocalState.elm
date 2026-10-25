@@ -192,6 +192,7 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
+import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
@@ -1066,6 +1067,8 @@ type alias AdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , openRouterKey : Maybe String
+    , notifyAdminsToken : Maybe String
+    , notifyAdminsBotEmail : Maybe EmailAddress
     , postmarkKey : Postmark.ApiKey
     , dmChannels : AdminDataStatus (SeqDict DmChannelId AdminData_DmChannel)
     , discordDmChannels :

@@ -1,4 +1,4 @@
-module RPC exposing (checkFileUpload, lamdera_handleEndpoints, roomIdFromString)
+module RPC exposing (checkFileUpload, lamdera_handleEndpoints, notifyAdmins, roomIdFromString)
 
 import BackendExtra
 import Call
@@ -7,8 +7,6 @@ import Coord
 import Dict
 import DmChannelId
 import Effect.Lamdera exposing (ClientId)
-import EmailAddress
-import Env
 import FileStatus
 import Http
 import Id exposing (Id, UserId)
@@ -206,13 +204,14 @@ run somewhere that can't open the websocket the app needs, but can make plain HT
 notifyAdmins : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
 notifyAdmins _ model headers text =
     case
-        ( Dict.get "x-notify-token" headers
-        , String.Nonempty.fromString (String.trim text)
-        , EmailAddress.fromString Env.notifyBotEmail
-        )
+        T4
+            (Dict.get "x-notify-token" headers)
+            (String.Nonempty.fromString (String.trim text))
+            model.notifyAdminsToken
+            model.notifyAdminsBotEmail
     of
-        ( Just token, Just text2, Just botEmail ) ->
-            if Env.notifyToken /= "" && token == Env.notifyToken && String.Nonempty.length text2 <= RichText.maxLength then
+        T4 (Just token) (Just text2) (Just notifyAdminsToken) (Just botEmail) ->
+            if token == notifyAdminsToken && String.Nonempty.length text2 <= RichText.maxLength then
                 case List.Extra.find (\( _, user ) -> user.email == UserHasEmail botEmail) (NonemptyDict.toList model.users) of
                     Just ( botUserId, _ ) ->
                         ( Ok "sent"

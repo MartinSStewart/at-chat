@@ -25,16 +25,3 @@ isProduction =
 secretKey : String
 secretKey =
     "123ABCabc"
-
-
-{-| Whoever sends this in the `x-notify-token` header of `_r/notify-admins` can DM every admin
-from the `notifyBotEmail` account. Left empty, the endpoint refuses everyone.
--}
-notifyToken : String
-notifyToken =
-    ""
-
-
-notifyBotEmail : String
-notifyBotEmail =
-    ""

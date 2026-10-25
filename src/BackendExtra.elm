@@ -1890,6 +1890,8 @@ adminData model lastLogPageViewed =
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , openRouterKey = model.openRouterKey
+    , notifyAdminsToken = model.notifyAdminsToken
+    , notifyAdminsBotEmail = model.notifyAdminsBotEmail
     , postmarkApiKey = model.postmarkApiKey
     , loadingDiscordChannels =
         SeqDict.map
