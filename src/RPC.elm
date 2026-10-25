@@ -13,7 +13,6 @@ import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
-import List.Extra
 import NonemptyDict
 import RichText
 import SecretId
@@ -23,7 +22,6 @@ import Task
 import Time
 import Toop exposing (T4(..))
 import Types exposing (BackendModel, BackendMsg(..))
-import User exposing (BackendUserStatus(..))
 
 
 {-| Only the Rust server is allowed to ask this. It knows the server secret, and
@@ -208,19 +206,18 @@ notifyAdmins _ model headers text =
             (Dict.get "x-notify-token" headers)
             (String.Nonempty.fromString (String.trim text))
             model.notifyAdminsToken
-            model.notifyAdminsBotEmail
+            model.notifyAdminsBotUserId
     of
-        T4 (Just token) (Just text2) (Just notifyAdminsToken) (Just botEmail) ->
-            if token == notifyAdminsToken && String.Nonempty.length text2 <= RichText.maxLength then
-                case List.Extra.find (\( _, user ) -> user.email == UserHasEmail botEmail) (NonemptyDict.toList model.users) of
-                    Just ( botUserId, _ ) ->
-                        ( Ok "sent"
-                        , model
-                        , Task.perform (\time -> Rpc_NotifyAdmins time botUserId text2) Time.now
-                        )
-
-                    Nothing ->
-                        ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+        T4 (Just token) (Just text2) (Just notifyAdminsToken) (Just botUserId) ->
+            if
+                (token == notifyAdminsToken)
+                    && (String.Nonempty.length text2 <= RichText.maxLength)
+                    && NonemptyDict.member botUserId model.users
+            then
+                ( Ok "sent"
+                , model
+                , Task.perform (\time -> Rpc_NotifyAdmins time botUserId text2) Time.now
+                )
 
             else
                 ( Err (Http.BadBody "Invalid request"), model, Cmd.none )

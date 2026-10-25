@@ -1891,7 +1891,7 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , openRouterKey = model.openRouterKey
     , notifyAdminsToken = model.notifyAdminsToken
-    , notifyAdminsBotEmail = model.notifyAdminsBotEmail
+    , notifyAdminsBotUserId = model.notifyAdminsBotUserId
     , postmarkApiKey = model.postmarkApiKey
     , loadingDiscordChannels =
         SeqDict.map

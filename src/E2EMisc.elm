@@ -1557,8 +1557,8 @@ notifyAdminsTest config =
                 , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
                 , admin.input 100 (Dom.id "admin_notifyAdminsToken_label") "test-token"
                 , admin.click 100 (Dom.id "admin_notifyAdminsToken_acceptEdit")
-                , admin.input 100 (Dom.id "admin_notifyAdminsBotEmail_label") (EmailAddress.toString E2EHelper.userEmail)
-                , admin.click 100 (Dom.id "admin_notifyAdminsBotEmail_acceptEdit")
+                , admin.input 100 (Dom.id "admin_notifyAdminsBotUserId_label") "2"
+                , admin.click 100 (Dom.id "admin_notifyAdminsBotUserId_acceptEdit")
                 , T.checkState 100 (checkNotifyAdminsRequest "wrong-token" "Hello" (Err "Expected a wrong token to be refused"))
                 , T.checkState 100 (checkNotifyAdminsRequest "test-token" "  " (Err "Expected an empty message to be refused"))
                 , T.checkState 100 (checkNotifyAdminsRequest "test-token" "Hello" (Ok ()))

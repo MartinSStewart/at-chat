@@ -261,7 +261,7 @@ init =
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , openRouterKey = Nothing
       , notifyAdminsToken = Nothing
-      , notifyAdminsBotEmail = Nothing
+      , notifyAdminsBotUserId = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -10676,8 +10676,8 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
-        Pages.Admin.SetNotifyAdminsBotEmail notifyAdminsBotEmail ->
-            ( { model | notifyAdminsBotEmail = notifyAdminsBotEmail }
+        Pages.Admin.SetNotifyAdminsBotUserId notifyAdminsBotUserId ->
+            ( { model | notifyAdminsBotUserId = notifyAdminsBotUserId }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
