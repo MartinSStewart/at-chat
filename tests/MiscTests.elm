@@ -7,6 +7,8 @@ import Bytes.Encode
 import ChannelName
 import Coord
 import CssPixels exposing (CssPixels)
+import Dict
+import Discord
 import DiscordSync
 import Duration
 import Effect.Lamdera as Lamdera exposing (SessionId)
@@ -399,6 +401,40 @@ newMessageCountTests =
         ]
 
 
+{-| Reacting with a custom emoji from a server you aren't in gets a 400 back, and the backend
+takes the reaction away again only if it can tell that's what the 400 was about.
+-}
+discordBadRequestTests : Test
+discordBadRequestTests =
+    let
+        badRequest : String -> Result Discord.HttpError ()
+        badRequest body =
+            Discord.handleBadStatus
+                { url = "https://discord.com/api/v9/channels/1/messages/2/reactions/rainbow_heart%3A3/@me"
+                , statusCode = 400
+                , statusText = "Bad Request"
+                , headers = Dict.empty
+                }
+                body
+    in
+    Test.describe
+        "Discord 400 responses"
+        [ Test.test "An unknown emoji is told apart from other errors" <|
+            \_ ->
+                badRequest "{\"message\": \"Unknown Emoji\", \"code\": 10014}"
+                    |> Expect.equal (Err (Discord.BadRequest400 Discord.UnknownEmoji10014))
+        , Test.test "A 400 without an error code keeps its body" <|
+            \_ ->
+                badRequest "{\"avatar\": [\"You are changing your avatar too fast. Try again later.\"]}"
+                    |> Expect.equal
+                        (Err
+                            (Discord.UnexpectedError
+                                "Unexpected status code 400. Body: {\"avatar\": [\"You are changing your avatar too fast. Try again later.\"]}"
+                            )
+                        )
+        ]
+
+
 tests : Test
 tests =
     Test.describe
@@ -410,6 +446,7 @@ tests =
         , backendMsgLogTests
         , sessionExpiryTests
         , threadMentionOnBackendTest
+        , discordBadRequestTests
         , Test.fuzz messageViewFuzzer "Round trip message view encoding" <|
             \input ->
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time

@@ -886,8 +886,8 @@ type BackendMsg
     | DeletedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
-    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
-    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
+    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
+    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
     | DiscordTypingIndicatorSent

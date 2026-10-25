@@ -744,18 +744,54 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToEditDiscordDmMessage channelId messageId discordMessageId error) model
 
-        DiscordAddedReactionToGuildMessage time guildId channelId threadRoute discordMessageId emoji result ->
+        DiscordAddedReactionToGuildMessage time currentUserId guildId channelId threadRoute discordMessageId emoji result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
+
+                Err (Discord.BadRequest400 Discord.UnknownEmoji10014) ->
+                    -- The custom emoji is from a server the user isn't in (or needs Nitro to use) so the reaction
+                    -- never made it to Discord. Take it back out so at-chat matches what Discord has.
+                    ( { model
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (LocalState.removeReactionEmoji emoji currentUserId threadRoute)
+                                    channelId
+                                )
+                                model.discordGuilds
+                      }
+                    , Broadcast.toDiscordGuildChannel
+                        guildId
+                        channelId
+                        (Server_DiscordRemoveReactionGuildEmoji currentUserId guildId channelId threadRoute emoji
+                            |> ServerChange
+                        )
+                        model
+                    )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
 
-        DiscordAddedReactionToDmMessage time channelId messageId discordMessageId emoji result ->
+        DiscordAddedReactionToDmMessage time currentUserId channelId messageId discordMessageId emoji result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
+
+                Err (Discord.BadRequest400 Discord.UnknownEmoji10014) ->
+                    ( { model
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.removeReactionEmojiHelper emoji currentUserId messageId)
+                                model.discordDmChannels
+                      }
+                    , Broadcast.toDiscordDmChannel
+                        channelId
+                        (Server_DiscordRemoveReactionDmEmoji currentUserId channelId messageId emoji |> ServerChange)
+                        model
+                    )
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
@@ -4569,6 +4605,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             |> Task.attempt
                                                                 (DiscordAddedReactionToGuildMessage
                                                                     time
+                                                                    id.currentUserId
                                                                     id.guildId
                                                                     id.channelId
                                                                     threadRoute
@@ -4626,6 +4663,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             |> Task.attempt
                                                                 (DiscordAddedReactionToDmMessage
                                                                     time
+                                                                    data.currentUserId
                                                                     data.channelId
                                                                     messageId
                                                                     discordMessageId

@@ -2180,8 +2180,15 @@ handleBadStatus metadata body =
         304 ->
             decodeErrorCode_ NotModified304
 
-        --400 ->
-        --    BadRequest400 errorData
+        400 ->
+            -- Some 400 responses, like changing your avatar too fast, have no error code
+            case JD.decodeString decodeErrorCode body of
+                Ok errorCode ->
+                    BadRequest400 errorCode
+
+                Err _ ->
+                    "Unexpected status code 400. Body: " ++ body |> UnexpectedError
+
         401 ->
             decodeErrorCode_ Unauthorized401
 
@@ -2280,8 +2287,9 @@ httpErrorToString httpError =
         NotModified304 errorCode ->
             statusCodeText 304 errorCode
 
-        --BadRequest400 { headers, body } ->
-        --    statusCodeText 400 ++ ": " ++ body
+        BadRequest400 errorCode ->
+            statusCodeText 400 errorCode
+
         Unauthorized401 errorCode ->
             statusCodeText 401 errorCode
 
@@ -2338,6 +2346,8 @@ type OptionalData a
 {-| These are possible error responses you can get when making an HTTP request.
 
   - `NotModified304`: The entity was not modified (no action was taken).
+  - `BadRequest400`: The request was improperly formatted, or the server couldn't understand it.
+    A 400 response without an error code, such as changing your avatar too fast, is an `UnexpectedError` instead.
   - `Unauthorized401`: The `Authorization` header was missing or invalid.
   - `Forbidden403`: The `Authorization` token you passed did not have permission to the resource.
   - `NotFound404`: The resource at the location specified doesn't exist.
@@ -2352,16 +2362,7 @@ type OptionalData a
 -}
 type HttpError
     = NotModified304 ErrorCode
-      {- This is disabled because, provided there are no bugs in this package, this should never happen.
-
-         One caveat to this is changing the user avatar which can trigger a 400 status and return this body
-         { "avatar": [ "You are changing your avatar too fast. Try again later." ]}
-
-         This is something that can happen even if this package is bug free.
-         For now it will just end up as UnexpectedError though because it doesn't fit well with other errors since it's missing an error code.
-
-      -}
-      --| BadRequest400 ErrorCode
+    | BadRequest400 ErrorCode
     | Unauthorized401 ErrorCode
     | Forbidden403 ErrorCode
     | NotFound404 ErrorCode
