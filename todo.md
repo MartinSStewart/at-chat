@@ -29,6 +29,7 @@
 * For Discord guilds, the delete message button appears for any message you have a linked account for. But it will
   silently fail if you try to delete a message from a user that isn't the currentDiscordUser
 * Discord user profiles should have the user color outline
+* Prevent multiple touches from creating very jittery drawings
 
 Won't do:
 
