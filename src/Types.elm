@@ -539,6 +539,7 @@ type alias BackendModel =
     , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
     , refreshingSlackConversations : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
+    , callRecordings : SeqDict Call.SharedCallId Call.RecordingStatus
     }
 
 
@@ -870,6 +871,7 @@ type BackendMsg
     | UserConnected SessionId ClientId
     | UserDisconnected SessionId ClientId
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
+    | RecordingRequestTick Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | SentNotificationEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
@@ -1215,6 +1217,7 @@ type alias LoginData =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , voiceChatPeers : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+    , callRecordings : SeqDict CallId Call.RecordingStatus
     }
 
 

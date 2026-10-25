@@ -822,6 +822,7 @@ previewLoginData userAgent =
     , stickers = SeqDict.empty
     , customEmojis = SeqDict.empty
     , voiceChatPeers = SeqDict.empty
+    , callRecordings = SeqDict.empty
     }
 
 
@@ -1418,6 +1419,7 @@ view loaded =
                                             previewCallPeers
                                             |> NonemptyDict.fromNonemptyList
                                             |> SeqDict.singleton previewCallId
+                                    , recordings = SeqDict.empty
                                     }
                             }
                     in

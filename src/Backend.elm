@@ -298,6 +298,7 @@ init =
       , pendingSlackUserLookups = SeqSet.empty
       , refreshingSlackConversations = SeqSet.empty
       , pendingSlackReconnects = SeqDict.empty
+      , callRecordings = SeqDict.empty
       }
     , Command.none
     )
@@ -374,6 +375,25 @@ subscriptions model =
 
             Nothing ->
                 Subscription.none
+        , if
+            List.any
+                (\status ->
+                    case status of
+                        Call.AskingToRecord _ ->
+                            True
+
+                        Call.RecordingDeclined _ ->
+                            False
+
+                        Call.RecordingSince _ ->
+                            False
+                )
+                (SeqDict.values model.callRecordings)
+          then
+            Time.every (Duration.seconds 1) RecordingRequestTick
+
+          else
+            Subscription.none
         , if SeqDict.isEmpty model.pendingGatewayReconnects then
             Subscription.none
 
@@ -486,6 +506,31 @@ updateHelper msg model =
 
         UserDisconnectedWithTime sessionId clientId time ->
             disconnectClient time sessionId clientId model
+
+        RecordingRequestTick time ->
+            SeqDict.foldl
+                (\sharedCallId status ( model2, cmds ) ->
+                    case status of
+                        Call.AskingToRecord asking ->
+                            if Duration.from asking.requestedAt time |> Quantity.lessThan recordingRequestTimeout then
+                                ( model2, cmds )
+
+                            else
+                                Call.RecordingDeclined
+                                    { requestedBy = asking.requestedBy, declinedBy = Nothing, declinedAt = time }
+                                    |> Just
+                                    |> setRecordingStatus time sharedCallId model2
+                                    |> Tuple.mapSecond (\cmd -> cmd :: cmds)
+
+                        Call.RecordingDeclined _ ->
+                            ( model2, cmds )
+
+                        Call.RecordingSince _ ->
+                            ( model2, cmds )
+                )
+                ( model, [] )
+                model.callRecordings
+                |> Tuple.mapSecond Command.batch
 
         BackendGotTime sessionId clientId toBackend time ->
             case RateLimit.checkAndUpdateSessionRateLimit time sessionId model.sessionRateLimits of
@@ -3167,15 +3212,24 @@ disconnectClient time sessionId clientId model =
                                 (\session2 -> { session2 | lastClientDisconnect = Just time })
                                 model2.sessions
                     }
+
+                ( model4, recordingCmd ) =
+                    case removedConnection.call of
+                        ConnectedToCall callId ->
+                            settleCallRecording time (Call.toSharedCallId session.userId callId) model3
+
+                        NotInCall ->
+                            ( model3, Command.none )
             in
-            ( model3
+            ( model4
             , Command.batch
-                [ Broadcast.toUser
+                [ recordingCmd
+                , Broadcast.toUser
                     Nothing
                     Nothing
                     session.userId
                     (Server_ClientDisconnected session.sessionIdHash clientId time |> ServerChange)
-                    model3
+                    model4
                 , case removedConnection.call of
                     ConnectedToCall (Call.DmRoomId id) ->
                         Broadcast.toDmChannel
@@ -3189,7 +3243,7 @@ disconnectClient time sessionId clientId model =
                                     }
                                     |> Server_VoiceChatChange
                             )
-                            model3
+                            model4
 
                     ConnectedToCall (Call.GuildRoomId id) ->
                         Broadcast.toGuild
@@ -3202,7 +3256,7 @@ disconnectClient time sessionId clientId model =
                                 |> Server_VoiceChatChange
                                 |> ServerChange
                             )
-                            model3
+                            model4
 
                     NotInCall ->
                         Command.none
@@ -9503,6 +9557,245 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_SetRemoteCallData remoteCallData ->
             BackendExtra.asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
 
+        Call.Local_RequestRecording ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    case currentCall sessionId clientId model of
+                        Just callId ->
+                            let
+                                sharedCallId : Call.SharedCallId
+                                sharedCallId =
+                                    Call.toSharedCallId session.userId callId
+
+                                request : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+                                request =
+                                    Call.AskingToRecord
+                                        { requestedBy = session.userId, requestedAt = time, allowedBy = SeqSet.empty }
+                                        |> Just
+                                        |> setRecordingStatus time sharedCallId model
+                                        |> Tuple.mapSecond (addVoiceChatChangeResponse changeId clientId voiceMsg)
+                            in
+                            case SeqDict.get sharedCallId model.callRecordings of
+                                Just (Call.AskingToRecord _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (Call.RecordingSince _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (Call.RecordingDeclined _) ->
+                                    request
+
+                                Nothing ->
+                                    request
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
+        Call.Local_AnswerRecording allow ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    case currentCall sessionId clientId model of
+                        Just callId ->
+                            let
+                                sharedCallId : Call.SharedCallId
+                                sharedCallId =
+                                    Call.toSharedCallId session.userId callId
+                            in
+                            case SeqDict.get sharedCallId model.callRecordings of
+                                Just (Call.AskingToRecord asking) ->
+                                    (if allow then
+                                        Call.AskingToRecord { asking | allowedBy = SeqSet.insert session.userId asking.allowedBy }
+
+                                     else
+                                        Call.RecordingDeclined
+                                            { requestedBy = asking.requestedBy
+                                            , declinedBy = Just session.userId
+                                            , declinedAt = time
+                                            }
+                                    )
+                                        |> Just
+                                        |> setRecordingStatus time sharedCallId model
+                                        |> Tuple.mapSecond (addVoiceChatChangeResponse changeId clientId voiceMsg)
+
+                                Just (Call.RecordingSince _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (Call.RecordingDeclined _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
+        Call.Local_StopRecording ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    case currentCall sessionId clientId model of
+                        Just callId ->
+                            setRecordingStatus time (Call.toSharedCallId session.userId callId) model Nothing
+                                |> Tuple.mapSecond (addVoiceChatChangeResponse changeId clientId voiceMsg)
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
+
+addVoiceChatChangeResponse :
+    ChangeId
+    -> ClientId
+    -> Call.LocalChange
+    -> Command BackendOnly ToFrontend BackendMsg
+    -> Command BackendOnly ToFrontend BackendMsg
+addVoiceChatChangeResponse changeId clientId change cmd =
+    Command.batch
+        [ LocalChangeResponse changeId (Local_VoiceChatChange change) |> Lamdera.sendToFrontend clientId
+        , cmd
+        ]
+
+
+currentCall : SessionId -> ClientId -> BackendModel -> Maybe Call.CallId
+currentCall sessionId clientId model =
+    case SeqDict.get sessionId model.connections of
+        Just connections ->
+            case NonemptyDict.get clientId connections of
+                Just connection ->
+                    case connection.call of
+                        NotInCall ->
+                            Nothing
+
+                        ConnectedToCall callId ->
+                            Just callId
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+callMembers : Call.SharedCallId -> BackendModel -> SeqSet (Id UserId)
+callMembers sharedCallId model =
+    SeqDict.foldl
+        (\sessionId connections set ->
+            case SeqDict.get sessionId model.sessions of
+                Just session ->
+                    if
+                        NonemptyDict.any
+                            (\_ connection ->
+                                case connection.call of
+                                    ConnectedToCall callId ->
+                                        Call.toSharedCallId session.userId callId == sharedCallId
+
+                                    NotInCall ->
+                                        False
+                            )
+                            connections
+                    then
+                        SeqSet.insert session.userId set
+
+                    else
+                        set
+
+                Nothing ->
+                    set
+        )
+        SeqSet.empty
+        model.connections
+
+
+recordingRequestTimeout : Duration
+recordingRequestTimeout =
+    Duration.seconds 60
+
+
+{-| Re-check a call's recording now that someone has left it, which can be what lets it
+start or what ends it.
+-}
+settleCallRecording : Time.Posix -> Call.SharedCallId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
+settleCallRecording time sharedCallId model =
+    setRecordingStatus time sharedCallId model (SeqDict.get sharedCallId model.callRecordings)
+
+
+setRecordingStatus :
+    Time.Posix
+    -> Call.SharedCallId
+    -> BackendModel
+    -> Maybe Call.RecordingStatus
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+setRecordingStatus time sharedCallId model maybeStatus =
+    let
+        members : SeqSet (Id UserId)
+        members =
+            callMembers sharedCallId model
+
+        settled : Maybe Call.RecordingStatus
+        settled =
+            if SeqSet.isEmpty members then
+                Nothing
+
+            else
+                case maybeStatus of
+                    Just (Call.AskingToRecord asking) ->
+                        if not (SeqSet.member asking.requestedBy members) then
+                            Nothing
+
+                        else if SeqSet.isEmpty (SeqSet.diff members (SeqSet.insert asking.requestedBy asking.allowedBy)) then
+                            Just (Call.RecordingSince time)
+
+                        else
+                            maybeStatus
+
+                    Just (Call.RecordingDeclined _) ->
+                        maybeStatus
+
+                    Just (Call.RecordingSince _) ->
+                        maybeStatus
+
+                    Nothing ->
+                        Nothing
+    in
+    if settled == SeqDict.get sharedCallId model.callRecordings then
+        ( model, Command.none )
+
+    else
+        ( { model
+            | callRecordings =
+                case settled of
+                    Just status ->
+                        SeqDict.insert sharedCallId status model.callRecordings
+
+                    Nothing ->
+                        SeqDict.remove sharedCallId model.callRecordings
+          }
+        , case sharedCallId of
+            Call.SharedDmCall dmChannelId ->
+                let
+                    ( userId, otherUserId ) =
+                        DmChannelId.toUserIds dmChannelId
+                in
+                Broadcast.toDmChannel
+                    userId
+                    { otherUserId = otherUserId }
+                    (\id -> Call.Server_RecordingChanged (Call.DmRoomId id) settled |> Server_VoiceChatChange)
+                    model
+
+            Call.SharedGuildCall id ->
+                Broadcast.toGuild
+                    id.guildId
+                    (Call.Server_RecordingChanged (Call.GuildRoomId id) settled |> Server_VoiceChatChange |> ServerChange)
+                    model
+        )
+
 
 {-| Apply a "set audio/video input enabled" change: update the stored state for
 this connection, echo the change back to the requester, and broadcast the new
@@ -9645,44 +9938,51 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
                     )
                 )
                 model.connections
+
+        model2 : BackendModel
+        model2 =
+            case roomId of
+                Call.DmRoomId id ->
+                    let
+                        dmChannelId =
+                            DmChannelId.fromUserIds userId id.otherUserId
+                    in
+                    { model
+                        | connections = connections
+                        , dmChannels =
+                            if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                model.dmChannels
+
+                            else
+                                SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
+                    }
+
+                Call.GuildRoomId id ->
+                    { model
+                        | connections = connections
+                        , guilds =
+                            if guildVoiceChatRoomHasOtherMembers id clientId model then
+                                model.guilds
+
+                            else
+                                SeqDict.updateIfExists
+                                    id.guildId
+                                    (\guild ->
+                                        { guild
+                                            | channels =
+                                                SeqDict.updateIfExists
+                                                    id.channelId
+                                                    (LocalState.markCallMessageAsEndedBackend time)
+                                                    guild.channels
+                                        }
+                                    )
+                                    model.guilds
+                    }
+
+        ( model3, recordingCmd ) =
+            settleCallRecording time (Call.toSharedCallId userId roomId) model2
     in
-    ( case roomId of
-        Call.DmRoomId id ->
-            let
-                dmChannelId =
-                    DmChannelId.fromUserIds userId id.otherUserId
-            in
-            { model
-                | connections = connections
-                , dmChannels =
-                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
-                        model.dmChannels
-
-                    else
-                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
-            }
-
-        Call.GuildRoomId id ->
-            { model
-                | connections = connections
-                , guilds =
-                    if guildVoiceChatRoomHasOtherMembers id clientId model then
-                        model.guilds
-
-                    else
-                        SeqDict.updateIfExists
-                            id.guildId
-                            (\guild ->
-                                { guild
-                                    | channels =
-                                        SeqDict.updateIfExists
-                                            id.channelId
-                                            (LocalState.markCallMessageAsEndedBackend time)
-                                            guild.channels
-                                }
-                            )
-                            model.guilds
-            }
+    ( model3
     , Command.batch
         [ case maybeChangeId of
             Just changeId ->
@@ -9691,6 +9991,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
 
             Nothing ->
                 Command.none
+        , recordingCmd
         , case roomId of
             Call.DmRoomId id ->
                 Broadcast.toDmChannelExcludingOne
@@ -9705,7 +10006,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
                             }
                             |> Server_VoiceChatChange
                     )
-                    model
+                    model3
 
             Call.GuildRoomId id ->
                 Broadcast.toGuildExcludingOne
@@ -9719,7 +10020,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
                         |> Server_VoiceChatChange
                         |> ServerChange
                     )
-                    model
+                    model3
         ]
     )
 

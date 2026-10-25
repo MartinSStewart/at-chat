@@ -15,6 +15,7 @@ type BackendMsgLog
     | BackendMsgLog_UserConnected
     | BackendMsgLog_UserDisconnected
     | BackendMsgLog_UserDisconnectedWithTime
+    | BackendMsgLog_RecordingRequestTick
     | BackendMsgLog_BackendGotTime
     | BackendMsgLog_SentLogErrorEmail
     | BackendMsgLog_SentNotificationEmail
@@ -117,6 +118,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_UserDisconnectedWithTime ->
             "UserDisconnectedWithTime"
+
+        BackendMsgLog_RecordingRequestTick ->
+            "RecordingRequestTick"
 
         BackendMsgLog_BackendGotTime ->
             "BackendGotTime"

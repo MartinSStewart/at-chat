@@ -380,6 +380,18 @@ pendingChangesText localChange =
                 Call.Local_SetRemoteCallData _ ->
                     Just "Set audio/video input enabled"
 
+                Call.Local_RequestRecording ->
+                    Just "Asked to record call"
+
+                Call.Local_AnswerRecording True ->
+                    Just "Allowed call recording"
+
+                Call.Local_AnswerRecording False ->
+                    Just "Declined call recording"
+
+                Call.Local_StopRecording ->
+                    Just "Stopped call recording"
+
         Local_Game _ change ->
             case change of
                 Game.CreatePublicLink _ _ ->
@@ -5287,6 +5299,15 @@ changeUpdate localMsg local =
                         Call.Local_SetRemoteCallData _ ->
                             local
 
+                        Call.Local_RequestRecording ->
+                            local
+
+                        Call.Local_AnswerRecording _ ->
+                            local
+
+                        Call.Local_StopRecording ->
+                            local
+
                 Local_Game guildOrDmId gameChange ->
                     gameChangeUpdate
                         local.localUser.session.userId
@@ -7055,6 +7076,20 @@ changeUpdate localMsg local =
                                                 connectionId.roomId
                                                 (NonemptyDict.insert connectionId.otherClientId remoteCallData)
                                                 calls.voiceChats
+                                    }
+                            }
+
+                        Call.Server_RecordingChanged callId maybeStatus ->
+                            { local
+                                | calls =
+                                    { calls
+                                        | recordings =
+                                            case maybeStatus of
+                                                Just status ->
+                                                    SeqDict.insert callId status calls.recordings
+
+                                                Nothing ->
+                                                    SeqDict.remove callId calls.recordings
                                     }
                             }
 
@@ -10090,7 +10125,7 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , calls = Call.init loginData.voiceChatPeers
+    , calls = Call.init loginData.voiceChatPeers loginData.callRecordings
     }
 
 

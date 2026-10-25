@@ -145,6 +145,8 @@ voiceChatTest normalConfig =
         "Voice chat"
         [ dmCallTest False normalConfig
         , dmCallTest True normalConfig
+        , recordingNeedsEveryoneTest normalConfig
+        , recordingNotStartedTest normalConfig
         , E2EHelper.startTest
             "Hop between voice calls"
             E2EHelper.startTime
@@ -557,6 +559,134 @@ dmCallTest isMobile normalConfig =
                         )
                     , E2EHelper.tallSnapshot user 100 { name = "Call ended" }
                     ]
+                ]
+            )
+        ]
+
+
+recordingStatuses : T.Data FrontendModel E2EHelper.BackendModel2 -> List Call.RecordingStatus
+recordingStatuses data =
+    SeqDict.values (E2EHelper.unwrapBackend data.backend).callRecordings
+
+
+checkIsRecording : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkIsRecording data =
+    case recordingStatuses data of
+        [ Call.RecordingSince _ ] ->
+            Ok ()
+
+        _ ->
+            Err "Expected the call to be recording"
+
+
+checkIsAskingToRecord : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkIsAskingToRecord data =
+    case recordingStatuses data of
+        [ Call.AskingToRecord _ ] ->
+            Ok ()
+
+        _ ->
+            Err "Expected the call to still be asking whether it can be recorded"
+
+
+checkNoRecording : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNoRecording data =
+    case recordingStatuses data of
+        [] ->
+            Ok ()
+
+        _ ->
+            Err "Expected no call to have a recording status"
+
+
+recordingNeedsEveryoneTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+recordingNeedsEveryoneTest normalConfig =
+    E2EHelper.startTest
+        "A call is only recorded once everyone in it allows it"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectFourUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin stevie joe wanda ->
+                [ admin.click 100 (Dom.id "guild_voiceChat")
+                , startCall admin
+                , stevie.click 100 (Dom.id "guild_voiceChat")
+                , startCall stevie
+                , joe.click 100 (Dom.id "guild_voiceChat")
+                , startCall joe
+                , admin.click 100 (Dom.id "voiceChat_record")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Asking everyone if this call can be recorded" ])
+                , stevie.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
+                , joe.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
+                , E2EHelper.tallSnapshot stevie 0 { name = "Asked to allow a call recording" }
+
+                -- Wanda isn't in the call, so isn't asked
+                , wanda.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.text "wants to record this call" ])
+                , stevie.click 100 (Dom.id "voiceChat_allowRecording")
+                , stevie.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Waiting for everyone else to allow recording" ])
+                , T.checkState 0 checkIsAskingToRecord
+                , joe.click 100 (Dom.id "voiceChat_allowRecording")
+                , T.checkState 100 checkIsRecording
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "This call is now being recorded" ])
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_stopRecording" ])
+                , E2EHelper.tallSnapshot admin 0 { name = "Call recording started" }
+                , wanda.click 100 (Dom.id "guild_voiceChat")
+                , wanda.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Join\u{00A0}Recorded\u{00A0}Call" ])
+
+                -- Joining a call that's being recorded is agreeing to it
+                , startCall wanda
+                , T.checkState 100 checkIsRecording
+                , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                , T.checkState 100 checkIsRecording
+                , joe.click 100 (Dom.id "voiceChat_stopRecording")
+                , T.checkState 100 checkNoRecording
+                , wanda.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_record" ])
+                ]
+            )
+        ]
+
+
+recordingNotStartedTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+recordingNotStartedTest normalConfig =
+    E2EHelper.startTest
+        "A DM call recording that's declined or goes unanswered isn't started"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                , startCall admin
+                , user.click 100 (Dom.id "guild_voiceChat")
+                , startCall user
+                , admin.click 100 (Dom.id "voiceChat_record")
+                , user.click 100 (Dom.id "voiceChat_declineRecording")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Recording wasn't started because" ])
+                , user.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "Recording wasn't started because you declined" ])
+                , E2EHelper.tallSnapshot admin 0 { name = "Call recording declined" }
+                , admin.checkView 10000 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Recording wasn't started" ])
+
+                -- Asking again and getting no answer
+                , admin.click 100 (Dom.id "voiceChat_record")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
+                , T.checkState 30000 checkIsAskingToRecord
+                , user.checkView
+                    31000
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Recording wasn't started because not everyone answered in time" ])
+                , user.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.text "wants to record this call" ])
+
+                -- Somebody on their own has nobody else to ask
+                , user.click 100 (Dom.id "guild_leaveVoiceChat")
+                , admin.click 100 (Dom.id "voiceChat_record")
+                , T.checkState 100 checkIsRecording
+                , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                , T.checkState 100 checkNoRecording
                 ]
             )
         ]
