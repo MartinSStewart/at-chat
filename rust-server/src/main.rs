@@ -4,7 +4,7 @@ use axum::{Json, RequestExt};
 use axum::{
     Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Path, Request, State},
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
     http::{StatusCode, Uri},
     middleware::Next,
     routing::get,
@@ -84,6 +84,10 @@ async fn main() {
                 .route(
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/recording-upload",
+                    post(recording_upload_endpoint).options(options_endpoint),
                 )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
@@ -659,6 +663,220 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         StatusCode::OK,
         serde_json::to_string::<EmbedResponse>(&response).unwrap(),
     )
+}
+
+const RECORDINGS_PATH: &str = "./var/lib/atchat/recordings";
+
+/// Which file a piece of a call recording belongs to, and where in it the piece goes.
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RecordingFile {
+    recording_id: String,
+    name: String,
+    started_at: i64,
+    ended_at: i64,
+    size: u64,
+}
+
+// Not built on RecordingFile with serde(flatten), since flattened query parameters all come
+// through as strings and the numbers then fail to parse.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadQuery {
+    recording_id: String,
+    name: String,
+    started_at: i64,
+    ended_at: i64,
+    size: u64,
+    offset: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadRequest {
+    session_id: String,
+    file: RecordingFile,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadedRequest {
+    user_id: u64,
+    file: RecordingFile,
+    uploaded: u64,
+}
+
+// The recording id and file name end up in a path, so nothing that could step outside the
+// recordings directory gets through. The backend checks the file name the same way.
+fn is_valid_recording_id(recording_id: &str) -> bool {
+    !recording_id.is_empty()
+        && recording_id.len() <= 100
+        && recording_id
+            .chars()
+            .all(|x| x.is_ascii_lowercase() || x.is_ascii_digit() || x == '-')
+}
+
+fn is_valid_recording_file_name(name: &str) -> bool {
+    name.chars().count() <= 200
+        && ["VIDEO_", "SCREEN_", "AUDIO_"]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        && [".mp4", ".wav"].iter().any(|suffix| name.ends_with(suffix))
+        && !name
+            .chars()
+            .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32)
+}
+
+/// One piece of a call recording, uploaded by the person who recorded it once they've
+/// left the call. Files are gigabytes long, so they arrive a piece at a time, each saying
+/// where in the file it goes. A piece that doesn't start where the file on disk ends is
+/// turned away with how much is on disk, which is how an upload that was cut off finds
+/// out where to carry on from.
+async fn recording_upload_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Query(query): Query<RecordingUploadQuery>,
+    request: Request,
+) -> Response<String> {
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+    let recording_file = RecordingFile {
+        recording_id: query.recording_id,
+        name: query.name,
+        started_at: query.started_at,
+        ended_at: query.ended_at,
+        size: query.size,
+    };
+
+    if !is_valid_recording_id(&recording_file.recording_id)
+        || !is_valid_recording_file_name(&recording_file.name)
+    {
+        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid file");
+    }
+
+    let user_id: u64 = match session_id_from_cookie(request.headers()) {
+        Some(session_id) => {
+            match recording_uploader(&secret_key, &session_id, &recording_file).await {
+                Some(user_id) => user_id,
+                None => {
+                    return response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions");
+                }
+            }
+        }
+        None => {
+            return response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions");
+        }
+    };
+
+    let bytes: Bytes = match request.extract::<Bytes, _>().await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, "The upload didn't arrive");
+        }
+    };
+
+    let directory = format!(
+        "{RECORDINGS_PATH}/{}/{user_id}",
+        recording_file.recording_id
+    );
+    if tokio::fs::create_dir_all(&directory).await.is_err() {
+        return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+    }
+
+    let path = format!("{directory}/{}", recording_file.name);
+    let mut file = match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .await
+    {
+        Ok(file) => file,
+        Err(_) => {
+            return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+        }
+    };
+
+    let on_disk: u64 = match file.metadata().await {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+        }
+    };
+
+    if query.offset != on_disk {
+        return response_with_headers(StatusCode::CONFLICT, on_disk.to_string());
+    }
+
+    let uploaded: u64 = on_disk + bytes.len() as u64;
+
+    if uploaded > recording_file.size {
+        return response_with_headers(StatusCode::BAD_REQUEST, "More than the file's size");
+    }
+
+    if file.write_all(&bytes).await.is_err() || file.sync_data().await.is_err() {
+        // A piece that was only partly written leaves the file longer than any piece
+        // boundary, and the next attempt is told where it ends and carries on from there.
+        return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+    }
+
+    // The browser deletes its copy once it hears the whole file is here, so it mustn't hear
+    // that until the backend knows too. If telling the backend fails, the browser sends the
+    // piece again, is told it's already here, and then sends an empty piece at the end of the
+    // file, which gets the backend told again.
+    let told_backend: bool = http_client()
+        .post(rpc_url("recording-uploaded"))
+        .header("Content-Type", "text/plain")
+        .header(
+            "x-secret-key",
+            String::from_utf8_lossy(&secret_key).as_ref(),
+        )
+        .body(
+            serde_json::to_string(&RecordingUploadedRequest {
+                user_id,
+                file: recording_file,
+                uploaded,
+            })
+            .unwrap_or_default(),
+        )
+        .send()
+        .await
+        .and_then(|response| response.error_for_status())
+        .is_ok();
+
+    if told_backend {
+        response_with_headers(StatusCode::OK, uploaded.to_string())
+    } else {
+        response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    }
+}
+
+/// Asks Lamdera whether this person was in the recording, and who they are, since their
+/// files are kept under their user id.
+async fn recording_uploader(
+    secret_key: &[u8],
+    session_id: &str,
+    file: &RecordingFile,
+) -> Option<u64> {
+    let response = http_client()
+        .post(rpc_url("recording-upload"))
+        .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(
+            serde_json::to_string(&RecordingUploadRequest {
+                session_id: session_id.to_string(),
+                file: file.clone(),
+            })
+            .ok()?,
+        )
+        .send()
+        .await
+        .ok()?;
+
+    response
+        .text()
+        .await
+        .ok()?
+        .strip_prefix("valid,")?
+        .parse::<u64>()
+        .ok()
 }
 
 // Call recordings are made on each person's own device, and their files are lined up
@@ -2304,6 +2522,26 @@ pub struct UploadUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recording_paths_stay_inside_the_recordings_directory() {
+        assert!(is_valid_recording_id("guild-0-3-1792977120973"));
+        assert!(is_valid_recording_id("dm-1-2-1792977120973"));
+        assert!(!is_valid_recording_id("../secret"));
+        assert!(!is_valid_recording_id("guild/0"));
+        assert!(!is_valid_recording_id(""));
+
+        assert!(is_valid_recording_file_name(
+            "VIDEO_Martin_2026-10-25_20-31-07.250.mp4"
+        ));
+        assert!(is_valid_recording_file_name(
+            "AUDIO_Zoë_2026-10-25_20-31-07.250.wav"
+        ));
+        assert!(!is_valid_recording_file_name("VIDEO_../../secret.mp4"));
+        assert!(!is_valid_recording_file_name("VIDEO_a\\b.mp4"));
+        assert!(!is_valid_recording_file_name("secret.txt"));
+        assert!(!is_valid_recording_file_name("VIDEO_a.txt"));
+    }
 
     #[test]
     fn slack_credentials_follow_redirects_to_other_slack_hosts_only() {

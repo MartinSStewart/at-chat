@@ -100,6 +100,7 @@ type BackendMsgLog
     | BackendMsgLog_GotSwedishWordList
     | BackendMsgLog_Rpc_UserJoinedCall
     | BackendMsgLog_Rpc_NotifyAdmins
+    | BackendMsgLog_Rpc_RecordingUploadProgress
     | BackendMsgLog_GotTimeForBackendMsg
     | BackendMsgLog_BackendMsgCompleted
 
@@ -367,6 +368,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_Rpc_NotifyAdmins ->
             "Rpc_NotifyAdmins"
+
+        BackendMsgLog_Rpc_RecordingUploadProgress ->
+            "Rpc_RecordingUploadProgress"
 
         BackendMsgLog_GotTimeForBackendMsg ->
             "GotTimeForBackendMsg"

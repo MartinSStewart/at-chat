@@ -6002,6 +6002,29 @@ changeUpdate localMsg local =
                 Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
                     addReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 
+                Server_CallRecordingsChanged guildOrDmId messageId recordings ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.setCallRecordingsFrontend messageId recordings)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.setCallRecordingsFrontend messageId recordings)
+                                        local.dmChannels
+                            }
+
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 
@@ -7224,6 +7247,7 @@ callStartedMessage time startedBy =
         , reactions = SeqDict.empty
         , timestampDrawings = Drawing.emptyDrawing
         , cardDrawings = Drawing.emptyDrawing
+        , recordings = []
         }
 
 

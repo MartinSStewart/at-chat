@@ -59,6 +59,7 @@ module LocalState exposing
     , announcementChannel
     , banMember
     , callEndedText
+    , callRecordingBackend
     , callStartedText
     , canSendDiscordMessage
     , canViewDiscordChannel
@@ -163,6 +164,7 @@ module LocalState exposing
     , removeReactionEmojiHelper
     , routeToViewing
     , sentEnoughDiscordDmMessages
+    , setCallRecordingsFrontend
     , setDmE2ee
     , slackAnnouncementChannel
     , slackChannelMentions
@@ -171,6 +173,7 @@ module LocalState exposing
     , slackThreadMentionName
     , typingIn
     , updateAdminData
+    , updateCallRecordingsBackend
     , updateChannel
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
@@ -206,7 +209,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
+import Message exposing (CallRecording, CallStartedData, ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -4901,6 +4904,104 @@ markCallMessageAsEndedBackend time channel =
 
         Nothing ->
             channel
+
+
+{-| Change the recordings on the latest call message that `isCall` picks. Gives back
+the message's id and its recordings, unless nothing changed.
+-}
+updateCallRecordingsBackend :
+    (CallStartedData userId -> Bool)
+    -> (List (CallRecording userId) -> List (CallRecording userId))
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Id messageId, List (CallRecording userId), { a | messages : IdArray messageId (Message messageId userId channelId) } )
+updateCallRecordingsBackend isCall updateFunc channel =
+    let
+        callIndex : Maybe ( Int, Message messageId userId channelId )
+        callIndex =
+            arrayFindIndexRight
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            isCall callStarted
+
+                        _ ->
+                            False
+                )
+                channel.messages
+    in
+    case callIndex of
+        Just ( callIndex2, CallStarted callStarted ) ->
+            let
+                recordings : List (CallRecording userId)
+                recordings =
+                    updateFunc callStarted.recordings
+            in
+            if recordings == callStarted.recordings then
+                Nothing
+
+            else
+                Just
+                    ( Id.fromInt callIndex2
+                    , recordings
+                    , { channel
+                        | messages =
+                            IdArray.set
+                                (Id.fromInt callIndex2)
+                                (CallStarted { callStarted | recordings = recordings })
+                                channel.messages
+                      }
+                    )
+
+        _ ->
+            Nothing
+
+
+callRecordingBackend : Time.Posix -> { a | messages : IdArray messageId (Message messageId userId channelId) } -> Maybe (CallRecording userId)
+callRecordingBackend recordingStartedAt channel =
+    let
+        isRecording : CallRecording userId -> Bool
+        isRecording recording =
+            recording.startedAt == recordingStartedAt
+    in
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted callStarted ->
+                        List.any isRecording callStarted.recordings
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( _, CallStarted callStarted ) ->
+            List.Extra.find isRecording callStarted.recordings
+
+        _ ->
+            Nothing
+
+
+setCallRecordingsFrontend :
+    Id messageId
+    -> List (CallRecording userId)
+    -> { a | messages : MessageArray messageId userId channelId }
+    -> { a | messages : MessageArray messageId userId channelId }
+setCallRecordingsFrontend messageId recordings channel =
+    { channel
+        | messages =
+            MessageArray.updateIfExists
+                messageId
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            CallStarted { callStarted | recordings = recordings }
+
+                        _ ->
+                            message
+                )
+                channel.messages
+    }
 
 
 markCallMessageAsEndedFrontend : Time.Posix -> { a | messages : MessageArray messageId userId channelId } -> { a | messages : MessageArray messageId userId channelId }

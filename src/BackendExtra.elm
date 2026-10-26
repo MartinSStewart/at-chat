@@ -3406,6 +3406,9 @@ backendMsgLog msg =
         Rpc_NotifyAdmins _ _ _ ->
             BackendMsgLog_Rpc_NotifyAdmins
 
+        Rpc_RecordingUploadProgress _ _ _ ->
+            BackendMsgLog_Rpc_RecordingUploadProgress
+
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg
 

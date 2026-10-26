@@ -44,6 +44,8 @@ port module Call exposing
     , memberColumnOffset
     , recordingChangeCmd
     , recordingId
+    , recordingIdFromString
+    , recordingIdToString
     , recordingNoticeView
     , serverChangeCmd
     , startCallCmd
@@ -1867,13 +1869,11 @@ type ToJs
 
 
 {-| `recordingId` is the same for everyone in the recording, and files from one person
-are grouped under it on their device. `timeUrl` answers with the rust server's clock,
-which every file's start time is kept by.
+are grouped under it on their device.
 -}
 type alias StartRecordingData =
     { recordingId : String
     , userName : String
-    , timeUrl : String
     }
 
 
@@ -1882,7 +1882,6 @@ startRecordingDataCodec =
     Codec.object StartRecordingData
         |> Codec.field "recordingId" .recordingId Codec.string
         |> Codec.field "userName" .userName Codec.string
-        |> Codec.field "timeUrl" .timeUrl Codec.string
         |> Codec.buildObject
 
 
@@ -1895,16 +1894,7 @@ recordingId currentUserId local =
         Just callId ->
             case SeqDict.get callId local.recordings of
                 Just (RecordingSince since) ->
-                    (case toSharedCallId currentUserId callId of
-                        SharedDmCall dmChannelId ->
-                            "dm-" ++ DmChannelId.toString dmChannelId
-
-                        SharedGuildCall id ->
-                            "guild-" ++ Id.toString id.guildId ++ "-" ++ Id.toString id.channelId
-                    )
-                        ++ "-"
-                        ++ String.fromInt (Time.posixToMillis since)
-                        |> Just
+                    Just (recordingIdToString (toSharedCallId currentUserId callId) since)
 
                 Just (AskingToRecord _) ->
                     Nothing
@@ -1919,6 +1909,45 @@ recordingId currentUserId local =
             Nothing
 
 
+{-| The rust server keeps a recording's uploads in a folder with this name, so it has to
+stay something that's safe as a folder name.
+-}
+recordingIdToString : SharedCallId -> Time.Posix -> String
+recordingIdToString sharedCallId startedAt =
+    (case sharedCallId of
+        SharedDmCall dmChannelId ->
+            "dm-" ++ DmChannelId.toString dmChannelId
+
+        SharedGuildCall id ->
+            "guild-" ++ Id.toString id.guildId ++ "-" ++ Id.toString id.channelId
+    )
+        ++ "-"
+        ++ String.fromInt (Time.posixToMillis startedAt)
+
+
+recordingIdFromString : String -> Maybe ( SharedCallId, Time.Posix )
+recordingIdFromString text =
+    case String.split "-" text of
+        [ "dm", userIdA, userIdB, startedAt ] ->
+            case ( Id.fromString userIdA, Id.fromString userIdB, String.toInt startedAt ) of
+                ( Just userIdA2, Just userIdB2, Just startedAt2 ) ->
+                    Just ( SharedDmCall (DmChannelId.fromUserIds userIdA2 userIdB2), Time.millisToPosix startedAt2 )
+
+                _ ->
+                    Nothing
+
+        [ "guild", guildId, channelId, startedAt ] ->
+            case ( Id.fromString guildId, Id.fromString channelId, String.toInt startedAt ) of
+                ( Just guildId2, Just channelId2, Just startedAt2 ) ->
+                    Just ( SharedGuildCall { guildId = guildId2, channelId = channelId2 }, Time.millisToPosix startedAt2 )
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
 recordingChangeCmd : String -> Maybe String -> Maybe String -> Command FrontendOnly toMsg msg
 recordingChangeCmd userName recordingIdOld recordingIdNew =
     if recordingIdOld == recordingIdNew then
@@ -1927,12 +1956,7 @@ recordingChangeCmd userName recordingIdOld recordingIdNew =
     else
         case recordingIdNew of
             Just recordingId2 ->
-                ToJs_StartRecording
-                    { recordingId = recordingId2
-                    , userName = userName
-                    , timeUrl = FileStatus.domain ++ "/file/time"
-                    }
-                    |> toJs
+                toJs (ToJs_StartRecording { recordingId = recordingId2, userName = userName })
 
             Nothing ->
                 toJs ToJs_StopRecording

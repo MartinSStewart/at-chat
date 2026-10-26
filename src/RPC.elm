@@ -1,4 +1,4 @@
-module RPC exposing (checkFileUpload, lamdera_handleEndpoints, notifyAdmins, roomIdFromString)
+module RPC exposing (checkFileUpload, checkRecordingUpload, lamdera_handleEndpoints, notifyAdmins, recordingUploaded, roomIdFromString)
 
 import BackendExtra
 import Call
@@ -13,7 +13,10 @@ import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
+import LocalState
+import Message exposing (CallRecording, CallRecordingFile)
 import NonemptyDict
+import NonemptySet
 import RichText
 import SecretId
 import SeqDict
@@ -79,6 +82,205 @@ checkFileUpload _ model headers text =
 
         _ ->
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
+{-| What the Rust server is told about a file someone is uploading from a call recording.
+-}
+type alias RecordingFileRequest =
+    { recordingId : String
+    , name : String
+    , startedAt : Time.Posix
+    , endedAt : Time.Posix
+    , size : Int
+    }
+
+
+recordingFileRequestCodec : Codec RecordingFileRequest
+recordingFileRequestCodec =
+    Codec.object RecordingFileRequest
+        |> Codec.field "recordingId" .recordingId Codec.string
+        |> Codec.field "name" .name Codec.string
+        |> Codec.field "startedAt" .startedAt (Codec.map Time.millisToPosix Time.posixToMillis Codec.int)
+        |> Codec.field "endedAt" .endedAt (Codec.map Time.millisToPosix Time.posixToMillis Codec.int)
+        |> Codec.field "size" .size Codec.int
+        |> Codec.buildObject
+
+
+type alias RecordingUploadRequest =
+    { sessionId : Effect.Lamdera.SessionId
+    , file : RecordingFileRequest
+    }
+
+
+recordingUploadRequestCodec : Codec RecordingUploadRequest
+recordingUploadRequestCodec =
+    Codec.object RecordingUploadRequest
+        |> Codec.field "sessionId" .sessionId (Codec.map Effect.Lamdera.sessionIdFromString Effect.Lamdera.sessionIdToString Codec.string)
+        |> Codec.field "file" .file recordingFileRequestCodec
+        |> Codec.buildObject
+
+
+type alias RecordingUploadedRequest =
+    { userId : Id UserId
+    , file : RecordingFileRequest
+    , uploaded : Int
+    }
+
+
+recordingUploadedRequestCodec : Codec RecordingUploadedRequest
+recordingUploadedRequestCodec =
+    Codec.object RecordingUploadedRequest
+        |> Codec.field "userId" .userId (Codec.map Id.fromInt Id.toInt Codec.int)
+        |> Codec.field "file" .file recordingFileRequestCodec
+        |> Codec.field "uploaded" .uploaded Codec.int
+        |> Codec.buildObject
+
+
+maxRecordingFileSize : Int
+maxRecordingFileSize =
+    64 * 1024 * 1024 * 1024
+
+
+maxRecordingFilesPerPerson : Int
+maxRecordingFilesPerPerson =
+    1000
+
+
+{-| The Rust server checks this too, since the name ends up in a path on its disk.
+-}
+isValidRecordingFileName : String -> Bool
+isValidRecordingFileName name =
+    (String.length name <= 200)
+        && List.any (\prefix -> String.startsWith prefix name) [ "VIDEO_", "SCREEN_", "AUDIO_" ]
+        && List.any (\suffix -> String.endsWith suffix name) [ ".mp4", ".wav" ]
+        && not (String.any (\char -> String.contains (String.fromChar char) "/\\:*?\"<>|" || Char.toCode char < 32) name)
+
+
+{-| Asked by the Rust server before it stores each piece of someone's call recording.
+Gives back who is uploading, which it keeps their files under.
+-}
+checkRecordingUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+checkRecordingUpload _ model headers text =
+    case ( fromRustServer model headers, Codec.decodeString recordingUploadRequestCodec text ) of
+        ( True, Ok request ) ->
+            case SeqDict.get request.sessionId model.sessions of
+                Just session ->
+                    case recordingUpload session.userId request.file 0 model of
+                        Just _ ->
+                            ( Ok ("valid," ++ Id.toString session.userId), model, Cmd.none )
+
+                        Nothing ->
+                            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+                Nothing ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
+{-| Told by the Rust server after it has stored a piece of someone's call recording.
+-}
+recordingUploaded : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+recordingUploaded _ model headers text =
+    case ( fromRustServer model headers, Codec.decodeString recordingUploadedRequestCodec text ) of
+        ( True, Ok request ) ->
+            case recordingUpload request.userId request.file request.uploaded model of
+                Just ( sharedCallId, recordingStartedAt, file ) ->
+                    ( Ok "ok"
+                    , model
+                    , Task.perform
+                        (\() -> Rpc_RecordingUploadProgress sharedCallId recordingStartedAt file)
+                        (Task.succeed ())
+                    )
+
+                Nothing ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
+recordingUpload :
+    Id UserId
+    -> RecordingFileRequest
+    -> Int
+    -> BackendModel
+    -> Maybe ( Call.SharedCallId, Time.Posix, CallRecordingFile (Id UserId) )
+recordingUpload userId request uploaded model =
+    case Call.recordingIdFromString request.recordingId of
+        Just ( sharedCallId, recordingStartedAt ) ->
+            let
+                file : CallRecordingFile (Id UserId)
+                file =
+                    { recordedBy = userId
+                    , name = request.name
+                    , startedAt = request.startedAt
+                    , endedAt = request.endedAt
+                    , size = request.size
+                    , uploaded = uploaded
+                    }
+            in
+            case findCallRecording sharedCallId recordingStartedAt model of
+                Just recording ->
+                    if isRecordingUploadAllowed file recording then
+                        Just ( sharedCallId, recordingStartedAt, file )
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+isRecordingUploadAllowed : CallRecordingFile (Id UserId) -> CallRecording (Id UserId) -> Bool
+isRecordingUploadAllowed file recording =
+    let
+        ownFiles : List (CallRecordingFile (Id UserId))
+        ownFiles =
+            List.filter (\otherFile -> otherFile.recordedBy == file.recordedBy) recording.files
+    in
+    NonemptySet.member file.recordedBy recording.participants
+        && isValidRecordingFileName file.name
+        && (file.size > 0)
+        && (file.size <= maxRecordingFileSize)
+        && (file.uploaded >= 0)
+        && (file.uploaded <= file.size)
+        && (case List.filter (\otherFile -> otherFile.name == file.name) ownFiles of
+                [] ->
+                    List.length ownFiles < maxRecordingFilesPerPerson
+
+                existing :: _ ->
+                    existing.size == file.size
+           )
+
+
+findCallRecording : Call.SharedCallId -> Time.Posix -> BackendModel -> Maybe (CallRecording (Id UserId))
+findCallRecording sharedCallId recordingStartedAt model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    LocalState.callRecordingBackend recordingStartedAt dmChannel
+
+                Nothing ->
+                    Nothing
+
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            LocalState.callRecordingBackend recordingStartedAt channel
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
 
 
 {-| The session is whoever the `sid` cookie on the WebSocket handshake says it
@@ -234,6 +436,12 @@ lamdera_handleEndpoints _ req model =
 
         "is-call-allowed" ->
             LamderaRPC.handleEndpointString checkCall req model
+
+        "recording-upload" ->
+            LamderaRPC.handleEndpointString checkRecordingUpload req model
+
+        "recording-uploaded" ->
+            LamderaRPC.handleEndpointString recordingUploaded req model
 
         "notify-admins" ->
             LamderaRPC.handleEndpointString notifyAdmins req model

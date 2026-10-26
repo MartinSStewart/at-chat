@@ -8,8 +8,10 @@ endpoint.json
 rust-server/target/
 tests/var/lib/atchat/storage/
 tests/var/lib/atchat/backups/
+tests/var/lib/atchat/recordings/
 rust-server/var/lib/atchat/storage/
 rust-server/var/lib/atchat/backups/
+rust-server/var/lib/atchat/recordings/
 index.html
 at-chat-backups/
 benchmarks/benchmarks.js

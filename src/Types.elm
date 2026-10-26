@@ -120,7 +120,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (Message, MessageContent)
+import Message exposing (CallRecording, CallRecordingFile, Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -987,6 +987,7 @@ type BackendMsg
     | GotSwedishWordList (Result Http.Error String)
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
     | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
+    | Rpc_RecordingUploadProgress Call.SharedCallId Time.Posix (CallRecordingFile (Id UserId))
 
 
 type MessageFromGuildOrDm
@@ -1297,6 +1298,7 @@ type ServerChange
     | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_CallRecordingsChanged GuildOrDmId (Id ChannelMessageId) (List (CallRecording (Id UserId)))
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji

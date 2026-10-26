@@ -3,23 +3,30 @@ module E2EVoiceChat exposing (startCall, voiceChatTest)
 import Audio
 import Call
 import Codec
+import Dict
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
 import Effect.Test as T exposing (PortToJs)
 import Expect
 import FileStatus
+import Id exposing (Id, UserId)
+import IdArray
 import Json.Encode
 import List.Extra
 import Local
 import LocalState exposing (CallStatus(..))
+import Message exposing (CallRecording, CallRecordingFile, Message(..))
 import MyUi
 import NonemptyDict
+import NonemptySet
 import Pages.Guild
 import RPC
+import SecretId
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
+import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import Url
 
@@ -599,6 +606,166 @@ checkNoRecording data =
             Err "Expected no call to have a recording status"
 
 
+callRecordings : T.Data FrontendModel E2EHelper.BackendModel2 -> List ( Call.SharedCallId, CallRecording (Id UserId) )
+callRecordings data =
+    let
+        backend : Types.BackendModel
+        backend =
+            E2EHelper.unwrapBackend data.backend
+
+        fromMessages : Call.SharedCallId -> List (Message messageId (Id UserId) channelId) -> List ( Call.SharedCallId, CallRecording (Id UserId) )
+        fromMessages sharedCallId messages =
+            List.concatMap
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            List.map (Tuple.pair sharedCallId) callStarted.recordings
+
+                        _ ->
+                            []
+                )
+                messages
+    in
+    List.concatMap
+        (\( guildId, guild ) ->
+            List.concatMap
+                (\( channelId, channel ) ->
+                    fromMessages (Call.SharedGuildCall { guildId = guildId, channelId = channelId }) (IdArray.toList channel.messages)
+                )
+                (SeqDict.toList guild.channels)
+        )
+        (SeqDict.toList backend.guilds)
+        ++ List.concatMap
+            (\( dmChannelId, dmChannel ) -> fromMessages (Call.SharedDmCall dmChannelId) (IdArray.toList dmChannel.messages))
+            (SeqDict.toList backend.dmChannels)
+
+
+checkCallRecording :
+    { ended : Bool, participants : List Int, files : List ( String, Int ) }
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkCallRecording expected data =
+    case callRecordings data of
+        [ ( _, recording ) ] ->
+            let
+                actual : { ended : Bool, participants : List Int, files : List ( String, Int ) }
+                actual =
+                    { ended = recording.endedAt /= Nothing
+                    , participants = NonemptySet.toList recording.participants |> List.map Id.toInt |> List.sort
+                    , files = List.map (\file -> ( file.name, file.uploaded )) recording.files
+                    }
+            in
+            if actual == expected then
+                Ok ()
+
+            else
+                Err ("Expected the call's message to have the recording " ++ callRecordingToString expected ++ " but it had " ++ callRecordingToString actual)
+
+        recordings ->
+            Err ("Expected one recording on a call message but there were " ++ String.fromInt (List.length recordings))
+
+
+callRecordingToString : { ended : Bool, participants : List Int, files : List ( String, Int ) } -> String
+callRecordingToString recording =
+    (if recording.ended then
+        "ended"
+
+     else
+        "not ended"
+    )
+        ++ ", participants "
+        ++ String.join " " (List.map String.fromInt recording.participants)
+        ++ ", files "
+        ++ String.join " " (List.map (\( name, uploaded ) -> name ++ " (" ++ String.fromInt uploaded ++ ")") recording.files)
+
+
+{-| What the backend tells the Rust server when it asks whether someone can upload a piece
+of the call's recording.
+-}
+checkRecordingUpload : Lamdera.SessionId -> String -> Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String String
+checkRecordingUpload sessionId fileName size data =
+    case callRecordings data of
+        [ ( sharedCallId, recording ) ] ->
+            let
+                backend : Types.BackendModel
+                backend =
+                    E2EHelper.unwrapBackend data.backend
+
+                ( result, _, _ ) =
+                    RPC.checkRecordingUpload
+                        ""
+                        backend
+                        (Dict.singleton "x-secret-key" (SecretId.toString backend.serverSecret))
+                        (Json.Encode.object
+                            [ ( "sessionId", Json.Encode.string (Lamdera.sessionIdToString sessionId) )
+                            , ( "file"
+                              , Json.Encode.object
+                                    [ ( "recordingId", Json.Encode.string (Call.recordingIdToString sharedCallId recording.startedAt) )
+                                    , ( "name", Json.Encode.string fileName )
+                                    , ( "startedAt", Json.Encode.int (Time.posixToMillis recording.startedAt) )
+                                    , ( "endedAt", Json.Encode.int (Time.posixToMillis recording.startedAt + 1000) )
+                                    , ( "size", Json.Encode.int size )
+                                    ]
+                              )
+                            ]
+                            |> Json.Encode.encode 0
+                        )
+            in
+            Result.mapError (\_ -> "Upload refused") result
+
+        _ ->
+            Err "Expected one recording"
+
+
+expectRecordingUpload : Result String String -> Lamdera.SessionId -> String -> Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+expectRecordingUpload expected sessionId fileName size data =
+    let
+        actual : Result String String
+        actual =
+            checkRecordingUpload sessionId fileName size data
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err ("Expected the upload check to give " ++ uploadCheckToString expected ++ " but it gave " ++ uploadCheckToString actual)
+
+
+uploadCheckToString : Result String String -> String
+uploadCheckToString result =
+    case result of
+        Ok ok ->
+            "Ok " ++ ok
+
+        Err error ->
+            "Err " ++ error
+
+
+recordingUploadProgress : Id UserId -> String -> Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+recordingUploadProgress userId fileName size uploaded =
+    T.andThen
+        100
+        (\data ->
+            case callRecordings data of
+                [ ( sharedCallId, recording ) ] ->
+                    let
+                        file : CallRecordingFile (Id UserId)
+                        file =
+                            { recordedBy = userId
+                            , name = fileName
+                            , startedAt = recording.startedAt
+                            , endedAt = Time.millisToPosix (Time.posixToMillis recording.startedAt + 1000)
+                            , size = size
+                            , uploaded = uploaded
+                            }
+                    in
+                    [ T.backendUpdate 0 (Types.Rpc_RecordingUploadProgress sharedCallId recording.startedAt file) ]
+
+                _ ->
+                    [ T.checkBackend 0 (\_ -> Err "Expected one recording") ]
+        )
+
+
 recordingNeedsEveryoneTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -629,6 +796,11 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 0 checkIsAskingToRecord
                 , joe.click 100 (Dom.id "voiceChat_allowRecording")
                 , T.checkState 100 checkIsRecording
+                , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3 ], files = [] })
+                , T.checkState 0 (expectRecordingUpload (Ok "valid,2") E2EHelper.sessionId1 "VIDEO_Stevie_2026-10-25_20-31-07.250.mp4" 1000)
+
+                -- Wanda isn't in the recording yet, so can't upload to it
+                , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000)
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "This call is now being recorded" ])
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_stopRecording" ])
                 , E2EHelper.tallSnapshot admin 0 { name = "Call recording started" }
@@ -638,11 +810,23 @@ recordingNeedsEveryoneTest normalConfig =
                 -- Joining a call that's being recorded is agreeing to it
                 , startCall wanda
                 , T.checkState 100 checkIsRecording
+                , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3, 4 ], files = [] })
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkIsRecording
                 , joe.click 100 (Dom.id "voiceChat_stopRecording")
                 , T.checkState 100 checkNoRecording
                 , wanda.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_record" ])
+                , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
+
+                -- Files go up after the recording has ended
+                , T.checkState 0 (expectRecordingUpload (Ok "valid,4") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000)
+                , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "../secret.txt" 1000)
+                , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 0
+                , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 600
+                , T.checkState 100 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [ ( "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4", 600 ) ] })
+
+                -- A file can't change size partway through
+                , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 2000)
                 ]
             )
         ]

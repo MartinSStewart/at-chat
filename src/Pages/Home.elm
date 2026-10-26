@@ -765,6 +765,7 @@ previewPetPicsChannel time =
                     , reactions = SeqDict.empty
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
+                    , recordings = []
                     }
                 , previewMessage (previewMinutesAgo time 2) (Tuple.first previewCallMutedPeer) (NonemptyString 'C' "an anyone hear me?")
                 , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")

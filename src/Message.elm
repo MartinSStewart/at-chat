@@ -1,5 +1,7 @@
 module Message exposing
-    ( CallStartedData
+    ( CallRecording
+    , CallRecordingFile
+    , CallStartedData
     , ChangeAttachments(..)
     , EncryptedUserTextMessageData
     , EncryptedUserTextMessageDataNoReply
@@ -85,6 +87,31 @@ type alias CallStartedData userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
+    , recordings : List (CallRecording userId)
+    }
+
+
+{-| Kept on the call's message so there's a record of who agreed to be recorded after the
+call is over. Everyone who joined while it was recording agreed by joining.
+-}
+type alias CallRecording userId =
+    { startedAt : Time.Posix
+    , endedAt : Maybe Time.Posix
+    , participants : NonemptySet userId
+    , files : List (CallRecordingFile userId)
+    }
+
+
+{-| A file someone recorded on their own device. `uploaded` reaches `size` once all of it
+is on the server.
+-}
+type alias CallRecordingFile userId =
+    { recordedBy : userId
+    , name : String
+    , startedAt : Time.Posix
+    , endedAt : Time.Posix
+    , size : Int
+    , uploaded : Int
     }
 
 
