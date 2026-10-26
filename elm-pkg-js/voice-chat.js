@@ -330,16 +330,14 @@ function pcm16(samples) {
 // released when the tab closes for any reason, so another tab never repairs a
 // file that is still being recorded. Uploading has a lock of its own, so two
 // tabs don't upload the same file.
+//
+// Production minifies this file, which renames functions, so functions from it
+// can't be pasted in here with toString(). The WAV header is passed as bytes.
 const recordingFileWorker = `
-${concatBytes.toString()}
-${ascii.toString()}
-${littleEndian.toString()}
-${wavHeader.toString()}
-
+const EMPTY_WAV_HEADER = Uint8Array.of(${wavHeader(AUDIO_SAMPLE_RATE, 0).join(",")});
 const WAV_HEADER_BYTES = 44;
 const AUDIO_BYTES_PER_SECOND = ${AUDIO_SAMPLE_RATE * 2};
 const TIMESCALE = ${RECORDING_TIMESCALE};
-const SAMPLE_RATE = ${AUDIO_SAMPLE_RATE};
 
 const UPLOAD_PIECE_BYTES = 16 * 1024 * 1024;
 
@@ -664,16 +662,21 @@ async function repair(directory, entry) {
 
 function repairWav(access) {
     const size = access.getSize();
-    if (size < WAV_HEADER_BYTES) {
-        access.truncate(0);
-        access.write(wavHeader(SAMPLE_RATE, 0), { at: 0 });
-        return 0;
-    }
     // Samples are two bytes, so half of one is a write that was cut off.
-    const dataBytes = (size - WAV_HEADER_BYTES) - ((size - WAV_HEADER_BYTES) % 2);
+    const dataBytes = Math.max(0, (size - WAV_HEADER_BYTES) - ((size - WAV_HEADER_BYTES) % 2));
     access.truncate(WAV_HEADER_BYTES + dataBytes);
-    access.write(wavHeader(SAMPLE_RATE, dataBytes), { at: 0 });
+    access.write(wavHeaderWithSize(dataBytes), { at: 0 });
     return dataBytes / AUDIO_BYTES_PER_SECOND;
+}
+
+// The RIFF chunk's size and the data chunk's size are the only parts of the
+// header that change.
+function wavHeaderWithSize(dataBytes) {
+    const header = EMPTY_WAV_HEADER.slice();
+    const view = new DataView(header.buffer);
+    view.setUint32(4, 36 + dataBytes, true);
+    view.setUint32(40, dataBytes, true);
+    return header;
 }
 
 function readBytes(access, at, length) {
