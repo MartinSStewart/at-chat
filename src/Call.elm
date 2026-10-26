@@ -1660,7 +1660,7 @@ recordingUploadView localUser model =
                 , MyUi.htmlStyle "box-shadow" "0 4px 16px rgba(0,0,0,0.4)"
                 ]
                 [ Ui.text
-                    ("Uploading your part of the call recording ("
+                    ("Uploading recording ("
                         ++ megabytes progress.uploaded
                         ++ " of "
                         ++ megabytes progress.total
@@ -1669,7 +1669,7 @@ recordingUploadView localUser model =
                     |> Ui.el [ Ui.Font.bold ]
                 , Ui.Prose.paragraph
                     [ Ui.Font.size 14 ]
-                    [ Ui.text "Please don't leave or close this page until it's finished." ]
+                    [ Ui.text "Please leave this page open until it's finished (if closed, uploading will be paused until reopened)." ]
                 , Ui.row
                     [ Ui.height (Ui.px 6), Ui.rounded 3, Ui.clip, Ui.background MyUi.background3 ]
                     [ Ui.el [ Ui.width (Ui.portion filled), Ui.height Ui.fill, Ui.background MyUi.buttonBackground ] Ui.none
