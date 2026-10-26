@@ -3229,7 +3229,7 @@ left on the server with nothing pointing at them.
 -}
 canDeleteCallMessage : userId -> CallStartedData userId -> Bool
 canDeleteCallMessage userId callStarted =
-    callStarted.endedAt /= Nothing && NonemptySet.member userId callStarted.joinedBy
+    callStarted.endedAt /= Nothing && (callStarted.startedBy == userId || SeqSet.member userId callStarted.joinedBy)
 
 
 deleteMessageFrontend :
@@ -5386,7 +5386,7 @@ joinedCallMessageBackend userId channel =
                                 (Id.fromInt lastCallIndex)
                                 (CallStarted
                                     { callStarted
-                                        | joinedBy = NonemptySet.insert userId callStarted.joinedBy
+                                        | joinedBy = joinedCallBy userId callStarted
                                         , recordings = joinedCallRecording userId callStarted.recordings
                                     }
                                 )
@@ -5398,6 +5398,15 @@ joinedCallMessageBackend userId channel =
 
         _ ->
             channel
+
+
+joinedCallBy : userId -> CallStartedData userId -> SeqSet userId
+joinedCallBy userId callStarted =
+    if callStarted.startedBy == userId then
+        callStarted.joinedBy
+
+    else
+        SeqSet.insert userId callStarted.joinedBy
 
 
 joinedCallMessageFrontend : userId -> { a | messages : MessageArray messageId userId channelId } -> { a | messages : MessageArray messageId userId channelId }
@@ -5423,7 +5432,7 @@ joinedCallMessageFrontend userId channel =
                                 lastCallIndex
                                 (CallStarted
                                     { callStarted
-                                        | joinedBy = NonemptySet.insert userId callStarted.joinedBy
+                                        | joinedBy = joinedCallBy userId callStarted
                                         , recordings = joinedCallRecording userId callStarted.recordings
                                     }
                                 )

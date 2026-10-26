@@ -85,7 +85,7 @@ type alias CallStartedData userId =
     { startedAt : Time.Posix
     , endedAt : Maybe Time.Posix
     , startedBy : userId
-    , joinedBy : NonemptySet userId
+    , joinedBy : SeqSet userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
