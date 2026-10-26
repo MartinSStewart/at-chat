@@ -4,7 +4,6 @@ module Backend exposing
     , app
     , app_
     , handleExportBackendStep
-    , isCallWithRecording
     , startExport
     )
 
@@ -2812,15 +2811,14 @@ updateHelper msg model =
         Rpc_RecordingUploadProgress sharedCallId recordingStartedAt file ->
             updateCallRecordings
                 sharedCallId
-                (isCallWithRecording recordingStartedAt)
-                (List.map
-                    (\recording ->
-                        if recording.startedAt == recordingStartedAt then
-                            { recording | files = addRecordingFileProgress file recording.files }
+                (LocalState.isCallWithRecording recordingStartedAt)
+                (\maybeRecording ->
+                    case maybeRecording of
+                        Just recording ->
+                            Just { recording | files = addRecordingFileProgress file recording.files }
 
-                        else
-                            recording
-                    )
+                        Nothing ->
+                            Nothing
                 )
                 model
 
@@ -9809,35 +9807,18 @@ setRecordingStatus time sharedCallId model maybeStatus =
                     ( Just (Call.RecordingSince _), Just (Call.RecordingSince _) ) ->
                         ( model, Command.none )
 
-                    ( Just (Call.RecordingSince startedAt), _ ) ->
-                        updateCallRecordings
-                            sharedCallId
-                            (LocalState.isCallWithRecording startedAt)
-                            (List.map
-                                (\recording ->
-                                    if recording.startedAt == startedAt then
-                                        { recording | endedAt = Just time }
-
-                                    else
-                                        recording
-                                )
-                            )
-                            model
-
                     ( _, Just (Call.RecordingSince startedAt) ) ->
                         case NonemptySet.fromSeqSet members of
                             Just participants ->
                                 updateCallRecordings
                                     sharedCallId
                                     (\_ -> True)
-                                    (\recordings ->
-                                        recordings
-                                            ++ [ { startedAt = startedAt
-                                                 , endedAt = Nothing
-                                                 , participants = participants
-                                                 , files = []
-                                                 }
-                                               ]
+                                    (\_ ->
+                                        Just
+                                            { startedAt = startedAt
+                                            , participants = participants
+                                            , files = []
+                                            }
                                     )
                                     model
 
@@ -9898,7 +9879,7 @@ updateCallRecordings sharedCallId isCall updateFunc model =
             case SeqDict.get dmChannelId model.dmChannels of
                 Just dmChannel ->
                     case LocalState.updateCallRecordingsBackend isCall updateFunc dmChannel of
-                        Just ( messageId, recordings, dmChannel2 ) ->
+                        Just ( messageId, Just recording, dmChannel2 ) ->
                             let
                                 model2 : BackendModel
                                 model2 =
@@ -9911,9 +9892,12 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                             , Broadcast.toDmChannel
                                 userId
                                 { otherUserId = otherUserId }
-                                (\id -> Server_CallRecordingsChanged (GuildOrDmId_Dm id) messageId recordings)
+                                (\id -> Server_CallRecordingsChanged (GuildOrDmId_Dm id) messageId recording)
                                 model2
                             )
+
+                        Just ( _, Nothing, _ ) ->
+                            ( model, Command.none )
 
                         Nothing ->
                             ( model, Command.none )
@@ -9927,7 +9911,7 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                     case SeqDict.get id.channelId guild.channels of
                         Just channel ->
                             case LocalState.updateCallRecordingsBackend isCall updateFunc channel of
-                                Just ( messageId, recordings, channel2 ) ->
+                                Just ( messageId, Just recording, channel2 ) ->
                                     let
                                         model2 : BackendModel
                                         model2 =
@@ -9942,9 +9926,12 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                                     ( model2
                                     , Broadcast.toGuild
                                         id.guildId
-                                        (Server_CallRecordingsChanged (GuildOrDmId_Guild id) messageId recordings |> ServerChange)
+                                        (Server_CallRecordingsChanged (GuildOrDmId_Guild id) messageId recording |> ServerChange)
                                         model2
                                     )
+
+                                Just ( _, Nothing, _ ) ->
+                                    ( model, Command.none )
 
                                 Nothing ->
                                     ( model, Command.none )
@@ -9964,15 +9951,14 @@ joinedCallRecording sharedCallId userId model =
         Just (Call.RecordingSince startedAt) ->
             updateCallRecordings
                 sharedCallId
-                (isCallWithRecording startedAt)
-                (List.map
-                    (\recording ->
-                        if recording.startedAt == startedAt then
-                            { recording | participants = NonemptySet.insert userId recording.participants }
+                (LocalState.isCallWithRecording startedAt)
+                (\maybeRecording ->
+                    case maybeRecording of
+                        Just recording ->
+                            Just { recording | participants = NonemptySet.insert userId recording.participants }
 
-                        else
-                            recording
-                    )
+                        Nothing ->
+                            Nothing
                 )
                 model
 
@@ -10280,7 +10266,7 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                     , reactions = SeqDict.empty
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , recordings = []
+                                    , recordings = Nothing
                                     }
                                 )
                                 dmChannel
@@ -10396,7 +10382,7 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                     , reactions = SeqDict.empty
                                     , timestampDrawings = Drawing.emptyDrawing
                                     , cardDrawings = Drawing.emptyDrawing
-                                    , recordings = []
+                                    , recordings = Nothing
                                     }
                                 )
                                 channel

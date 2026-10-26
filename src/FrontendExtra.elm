@@ -7248,7 +7248,7 @@ callStartedMessage time startedBy =
         , reactions = SeqDict.empty
         , timestampDrawings = Drawing.emptyDrawing
         , cardDrawings = Drawing.emptyDrawing
-        , recordings = []
+        , recordings = Nothing
         }
 
 

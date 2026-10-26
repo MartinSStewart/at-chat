@@ -3165,7 +3165,7 @@ updateLoaded msg model =
                     case ( guildOrDmId, threadRoute ) of
                         ( GuildOrDmId guildOrDmId2, NoThreadWithMessage messageId ) ->
                             FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( loggedIn, downloadCallRecordings guildOrDmId2 messageId (Local.model loggedIn.localState) ))
+                                (\loggedIn -> ( loggedIn, downloadCallRecording guildOrDmId2 messageId (Local.model loggedIn.localState) ))
                                 model
 
                         ( GuildOrDmId _, ViewThreadWithMessage _ _ ) ->
@@ -6393,7 +6393,7 @@ updateLoaded msg model =
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
                             FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( loggedIn, downloadCallRecordings guildOrDmId2 messageId (Local.model loggedIn.localState) ))
+                                (\loggedIn -> ( loggedIn, downloadCallRecording guildOrDmId2 messageId (Local.model loggedIn.localState) ))
                                 model
 
                         DiscordGuildOrDmId _ ->
@@ -9917,10 +9917,8 @@ updateLoadedFromBackend msg model =
                 model
 
 
-{-| Normally there's only one, since a recording lasts until the call ends.
--}
-downloadCallRecordings : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Command FrontendOnly ToBackend FrontendMsg_
-downloadCallRecordings guildOrDmId messageId local =
+downloadCallRecording : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Command FrontendOnly ToBackend FrontendMsg_
+downloadCallRecording guildOrDmId messageId local =
     let
         currentUserId : Id UserId
         currentUserId =
@@ -9930,16 +9928,20 @@ downloadCallRecordings guildOrDmId messageId local =
         download maybeMessage =
             case maybeMessage of
                 Just (CallStarted callStarted) ->
-                    List.filter (CallRecording.isReady currentUserId) callStarted.recordings
-                        |> List.map
-                            (\recording ->
+                    case callStarted.recordings of
+                        Just recording ->
+                            if CallRecording.isReady currentUserId recording then
                                 CallRecording.zipUrl
                                     local.localUser.timezone
                                     (CallRecording.sharedCallId currentUserId guildOrDmId)
                                     recording
                                     |> Effect.File.Download.url
-                            )
-                        |> Command.batch
+
+                            else
+                                Command.none
+
+                        Nothing ->
+                            Command.none
 
                 _ ->
                     Command.none

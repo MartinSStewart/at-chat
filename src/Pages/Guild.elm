@@ -9893,7 +9893,7 @@ callStartedCard :
     -> Maybe (CallRecording userId)
     -> SeqDict userId { a | name : PersonName }
     -> Element MessageViewMsg
-callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt recordings allUsers =
+callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt recording allUsers =
     Ui.el
         []
         (Ui.el
@@ -9931,16 +9931,23 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
                         (Ui.text (User.toString userId allUsers))
                     , Ui.el [ Ui.Font.size 13 ] (Ui.text (startedACallText ++ eventDurationText startedAt endedAt))
                     ]
-                , if endedAt == Nothing && List.any (\recording -> recording.endedAt == Nothing) recordings then
-                    Ui.el
-                        [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
-                        , Ui.width Ui.shrink
-                        , MyUi.hoverText "This call is being recorded"
-                        ]
-                        (Ui.html (Icons.recording 22))
+                , case ( endedAt, recording ) of
+                    ( Nothing, Just _ ) ->
+                        Ui.el
+                            [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
+                            , Ui.width Ui.shrink
+                            , MyUi.hoverText "This call is being recorded"
+                            ]
+                            (Ui.html (Icons.recording 22))
 
-                  else
-                    Ui.none
+                    ( Nothing, Nothing ) ->
+                        Ui.none
+
+                    ( Just _, Just _ ) ->
+                        Ui.none
+
+                    ( Just _, Nothing ) ->
+                        Ui.none
                 ]
             )
         )
@@ -9949,30 +9956,35 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
 {-| Shows up for people in the recording once some of it has finished uploading, and
 downloads it as a zip.
 -}
-callRecordingsButton : userId -> Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
-callRecordingsButton currentUserId messageId recordings =
-    if List.any (CallRecording.isReady currentUserId) recordings then
-        MyUi.rowButton
-            (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
-            MessageViewMsg_PressedDownloadCallRecording
-            [ Ui.spacing 8
-            , Ui.paddingXY 14 0
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.background MyUi.background2
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.rounded 6
-            , Ui.width Ui.shrink
-            , Ui.Font.color MyUi.font3
-            , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
-            ]
-            [ Ui.html Icons.download
-            , Ui.text "Download\u{00A0}recording"
-            ]
+callRecordingsButton : userId -> Id messageId -> Maybe (CallRecording userId) -> Element MessageViewMsg
+callRecordingsButton currentUserId messageId maybeRecording =
+    case maybeRecording of
+        Just recording ->
+            if CallRecording.isReady currentUserId recording then
+                MyUi.rowButton
+                    (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
+                    MessageViewMsg_PressedDownloadCallRecording
+                    [ Ui.spacing 8
+                    , Ui.paddingXY 14 0
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    , Ui.background MyUi.background2
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.border1
+                    , Ui.rounded 6
+                    , Ui.width Ui.shrink
+                    , Ui.Font.color MyUi.font3
+                    , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                    ]
+                    [ Ui.html Icons.download
+                    , Ui.text "Download\u{00A0}recording"
+                    ]
 
-    else
-        Ui.none
+            else
+                Ui.none
+
+        Nothing ->
+            Ui.none
 
 
 goMatchStartedCard :

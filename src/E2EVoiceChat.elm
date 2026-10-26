@@ -619,7 +619,12 @@ callRecordings data =
                 (\message ->
                     case message of
                         CallStarted callStarted ->
-                            List.map (Tuple.pair sharedCallId) callStarted.recordings
+                            case callStarted.recordings of
+                                Just recording ->
+                                    [ ( sharedCallId, recording ) ]
+
+                                Nothing ->
+                                    []
 
                         _ ->
                             []
@@ -641,17 +646,16 @@ callRecordings data =
 
 
 checkCallRecording :
-    { ended : Bool, participants : List Int, files : List ( String, Int ) }
+    { participants : List Int, files : List ( String, Int ) }
     -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Result String ()
 checkCallRecording expected data =
     case callRecordings data of
         [ ( _, recording ) ] ->
             let
-                actual : { ended : Bool, participants : List Int, files : List ( String, Int ) }
+                actual : { participants : List Int, files : List ( String, Int ) }
                 actual =
-                    { ended = recording.endedAt /= Nothing
-                    , participants = NonemptySet.toList recording.participants |> List.map Id.toInt |> List.sort
+                    { participants = NonemptySet.toList recording.participants |> List.map Id.toInt |> List.sort
                     , files = List.map (\file -> ( file.name, file.uploaded )) recording.files
                     }
             in
@@ -665,15 +669,9 @@ checkCallRecording expected data =
             Err ("Expected one recording on a call message but there were " ++ String.fromInt (List.length recordings))
 
 
-callRecordingToString : { ended : Bool, participants : List Int, files : List ( String, Int ) } -> String
+callRecordingToString : { participants : List Int, files : List ( String, Int ) } -> String
 callRecordingToString recording =
-    (if recording.ended then
-        "ended"
-
-     else
-        "not ended"
-    )
-        ++ ", participants "
+    "participants "
         ++ String.join " " (List.map String.fromInt recording.participants)
         ++ ", files "
         ++ String.join " " (List.map (\( name, uploaded ) -> name ++ " (" ++ String.fromInt uploaded ++ ")") recording.files)
@@ -796,7 +794,7 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 0 checkIsAskingToRecord
                 , joe.click 100 (Dom.id "voiceChat_allowRecording")
                 , T.checkState 100 checkIsRecording
-                , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3 ], files = [] })
+                , T.checkState 0 (checkCallRecording { participants = [ 0, 2, 3 ], files = [] })
                 , T.checkState 0 (expectRecordingUpload (Ok "valid,2") E2EHelper.sessionId1 "VIDEO_Stevie_2026-10-25_20-31-07.250.mp4" 1000)
 
                 -- Wanda isn't in the recording yet, so can't upload to it
@@ -810,7 +808,7 @@ recordingNeedsEveryoneTest normalConfig =
                 -- Joining a call that's being recorded is agreeing to it
                 , startCall wanda
                 , T.checkState 100 checkIsRecording
-                , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3, 4 ], files = [] })
+                , T.checkState 0 (checkCallRecording { participants = [ 0, 2, 3, 4 ], files = [] })
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkIsRecording
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecorded_3" ])
@@ -824,14 +822,14 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 100 checkNoRecording
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecorded_3" ])
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
-                , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
+                , T.checkState 0 (checkCallRecording { participants = [ 0, 2, 3, 4 ], files = [] })
 
                 -- Files go up after the recording has ended
                 , T.checkState 0 (expectRecordingUpload (Ok "valid,4") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000)
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "../secret.txt" 1000)
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 0
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 600
-                , T.checkState 100 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [ ( "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4", 600 ) ] })
+                , T.checkState 100 (checkCallRecording { participants = [ 0, 2, 3, 4 ], files = [ ( "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4", 600 ) ] })
 
                 -- A file can't change size partway through
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 2000)
