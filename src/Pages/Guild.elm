@@ -9890,7 +9890,7 @@ callStartedCard :
     -> userId
     -> Time.Posix
     -> Maybe Time.Posix
-    -> List (CallRecording userId)
+    -> Maybe (CallRecording userId)
     -> SeqDict userId { a | name : PersonName }
     -> Element MessageViewMsg
 callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt recordings allUsers =

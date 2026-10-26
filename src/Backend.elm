@@ -4,6 +4,7 @@ module Backend exposing
     , app
     , app_
     , handleExportBackendStep
+    , isCallWithRecording
     , startExport
     )
 
@@ -9811,7 +9812,7 @@ setRecordingStatus time sharedCallId model maybeStatus =
                     ( Just (Call.RecordingSince startedAt), _ ) ->
                         updateCallRecordings
                             sharedCallId
-                            (isCallWithRecording startedAt)
+                            (LocalState.isCallWithRecording startedAt)
                             (List.map
                                 (\recording ->
                                     if recording.startedAt == startedAt then
@@ -9883,17 +9884,12 @@ setRecordingStatusBroadcast sharedCallId settled model =
                 model
 
 
-isCallWithRecording : Time.Posix -> CallStartedData (Id UserId) -> Bool
-isCallWithRecording recordingStartedAt callStarted =
-    List.any (\recording -> recording.startedAt == recordingStartedAt) callStarted.recordings
-
-
 {-| Change the recordings kept on a call's message, and tell everyone who can see it.
 -}
 updateCallRecordings :
     Call.SharedCallId
     -> (CallStartedData (Id UserId) -> Bool)
-    -> (List (CallRecording (Id UserId)) -> List (CallRecording (Id UserId)))
+    -> (Maybe (CallRecording (Id UserId)) -> Maybe (CallRecording (Id UserId)))
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
 updateCallRecordings sharedCallId isCall updateFunc model =

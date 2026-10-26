@@ -88,7 +88,7 @@ type alias CallStartedData userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
-    , recordings : List (CallRecording userId)
+    , recordings : Maybe (CallRecording userId)
     }
 
 
@@ -97,7 +97,6 @@ call is over. Everyone who joined while it was recording agreed by joining.
 -}
 type alias CallRecording userId =
     { startedAt : Time.Posix
-    , endedAt : Maybe Time.Posix
     , participants : NonemptySet userId
     , files : List (CallRecordingFile userId)
     }

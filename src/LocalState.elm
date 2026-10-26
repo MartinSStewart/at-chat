@@ -136,6 +136,7 @@ module LocalState exposing
     , guildToFrontendForUser
     , incrementLastViewedMessageBackend
     , incrementLastViewedMessageFrontend
+    , isCallWithRecording
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
     , joinedCallMessageBackend
@@ -4929,9 +4930,9 @@ the message's id and its recordings, unless nothing changed.
 -}
 updateCallRecordingsBackend :
     (CallStartedData userId -> Bool)
-    -> (List (CallRecording userId) -> List (CallRecording userId))
+    -> (Maybe (CallRecording userId) -> Maybe (CallRecording userId))
     -> { a | messages : IdArray messageId (Message messageId userId channelId) }
-    -> Maybe ( Id messageId, List (CallRecording userId), { a | messages : IdArray messageId (Message messageId userId channelId) } )
+    -> Maybe ( Id messageId, Maybe (CallRecording userId), { a | messages : IdArray messageId (Message messageId userId channelId) } )
 updateCallRecordingsBackend isCall updateFunc channel =
     let
         callIndex : Maybe ( Int, Message messageId userId channelId )
@@ -4950,7 +4951,7 @@ updateCallRecordingsBackend isCall updateFunc channel =
     case callIndex of
         Just ( callIndex2, CallStarted callStarted ) ->
             let
-                recordings : List (CallRecording userId)
+                recordings : Maybe (CallRecording userId)
                 recordings =
                     updateFunc callStarted.recordings
             in
@@ -4974,19 +4975,24 @@ updateCallRecordingsBackend isCall updateFunc channel =
             Nothing
 
 
+isCallWithRecording : Time.Posix -> CallStartedData userId -> Bool
+isCallWithRecording recordingStartedAt callStarted =
+    case callStarted.recordings of
+        Just recording ->
+            recording.startedAt == recordingStartedAt
+
+        Nothing ->
+            False
+
+
 callRecordingBackend : Time.Posix -> { a | messages : IdArray messageId (Message messageId userId channelId) } -> Maybe (CallRecording userId)
 callRecordingBackend recordingStartedAt channel =
-    let
-        isRecording : CallRecording userId -> Bool
-        isRecording recording =
-            recording.startedAt == recordingStartedAt
-    in
     case
         arrayFindIndexRight
             (\message ->
                 case message of
                     CallStarted callStarted ->
-                        List.any isRecording callStarted.recordings
+                        isCallWithRecording recordingStartedAt callStarted
 
                     _ ->
                         False
@@ -4994,7 +5000,7 @@ callRecordingBackend recordingStartedAt channel =
             channel.messages
     of
         Just ( _, CallStarted callStarted ) ->
-            List.Extra.find isRecording callStarted.recordings
+            callStarted.recordings
 
         _ ->
             Nothing
@@ -5002,7 +5008,7 @@ callRecordingBackend recordingStartedAt channel =
 
 setCallRecordingsFrontend :
     Id messageId
-    -> List (CallRecording userId)
+    -> CallRecording userId
     -> { a | messages : MessageArray messageId userId channelId }
     -> { a | messages : MessageArray messageId userId channelId }
 setCallRecordingsFrontend messageId recordings channel =
@@ -5013,7 +5019,7 @@ setCallRecordingsFrontend messageId recordings channel =
                 (\message ->
                     case message of
                         CallStarted callStarted ->
-                            CallStarted { callStarted | recordings = recordings }
+                            CallStarted { callStarted | recordings = Just recordings }
 
                         _ ->
                             message

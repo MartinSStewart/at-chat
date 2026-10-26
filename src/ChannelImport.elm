@@ -245,7 +245,7 @@ importMessage mapUserId mapChannelId messages =
                                 , reactions = mapReactions mapUserId data.reactions
                                 , timestampDrawings = mapDrawing mapUserId data.timestampDrawings
                                 , cardDrawings = mapDrawing mapUserId data.cardDrawings
-                                , recordings = []
+                                , recordings = Nothing
                                 }
                                 :: list
                             , encrypted

@@ -1298,7 +1298,7 @@ type ServerChange
     | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
-    | Server_CallRecordingsChanged GuildOrDmId (Id ChannelMessageId) (List (CallRecording (Id UserId)))
+    | Server_CallRecordingsChanged GuildOrDmId (Id ChannelMessageId) (CallRecording (Id UserId))
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji

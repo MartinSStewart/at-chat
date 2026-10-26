@@ -541,7 +541,7 @@ callStartedDataCodec userId =
             , reactions = reactions
             , timestampDrawings = timestampDrawings
             , cardDrawings = cardDrawings
-            , recordings = []
+            , recordings = Nothing
             }
         )
         |> Codec.field "startedAt" .startedAt CodecExtra.time
