@@ -1492,7 +1492,7 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
 
                           else
                             Ui.none
-                        , if hasJoined2 then
+                        , if hasJoined2 && not isMobile then
                             recordButton recordingStatus
 
                           else
@@ -1611,7 +1611,7 @@ recordButton recordingStatus =
             Ui.none
 
         Just (AskingToRecord _) ->
-            button (Dom.id "voiceChat_cancelRecording") PressedCancelRecording (Ui.rgb 42 50 78) "Cancel\u{00A0}Recording"
+            button (Dom.id "voiceChat_cancelRecording") PressedCancelRecording (Ui.rgb 42 50 78) "Cancel"
 
         Just (RecordingDeclined _) ->
             button (Dom.id "voiceChat_record") PressedRecord (Ui.rgb 42 50 78) "Record"
