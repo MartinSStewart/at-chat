@@ -120,7 +120,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (CallRecording, CallRecordingFile, Message, MessageContent)
+import Message exposing (CallRecordingFile, Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -1298,7 +1298,8 @@ type ServerChange
     | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
-    | Server_CallRecordingsChanged GuildOrDmId (Id ChannelMessageId) (CallRecording (Id UserId))
+    | Server_CallRecordingStarted GuildOrDmId (Id ChannelMessageId) Time.Posix (NonemptySet (Id UserId))
+    | Server_CallRecordingUploadProgress GuildOrDmId (Id ChannelMessageId) (CallRecordingFile (Id UserId))
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji

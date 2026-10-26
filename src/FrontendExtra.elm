@@ -6002,7 +6002,7 @@ changeUpdate localMsg local =
                 Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
                     addReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 
-                Server_CallRecordingsChanged guildOrDmId messageId recordings ->
+                Server_CallRecordingStarted guildOrDmId messageId startedAt participants ->
                     case guildOrDmId of
                         GuildOrDmId_Guild { guildId, channelId } ->
                             { local
@@ -6010,7 +6010,7 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (LocalState.setCallRecordingsFrontend messageId recordings)
+                                            (LocalState.startCallRecordingFrontend messageId startedAt participants)
                                             channelId
                                         )
                                         local.guilds
@@ -6021,7 +6021,30 @@ changeUpdate localMsg local =
                                 | dmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
-                                        (LocalState.setCallRecordingsFrontend messageId recordings)
+                                        (LocalState.startCallRecordingFrontend messageId startedAt participants)
+                                        local.dmChannels
+                            }
+
+                Server_CallRecordingUploadProgress guildOrDmId messageId file ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.callRecordingUploadProgressFrontend messageId file)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.callRecordingUploadProgressFrontend messageId file)
                                         local.dmChannels
                             }
 

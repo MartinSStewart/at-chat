@@ -3177,7 +3177,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_AddReactionEmoji _ _ _ _ ->
                             False
 
-                        Types.Server_CallRecordingsChanged _ _ _ ->
+                        Types.Server_CallRecordingStarted _ _ _ _ ->
+                            True
+
+                        Types.Server_CallRecordingUploadProgress _ _ _ ->
                             True
 
                         Types.Server_RemoveReactionEmoji _ _ _ _ ->

@@ -836,6 +836,9 @@ recordingNeedsEveryoneTest normalConfig =
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 1000
                 , E2EHelper.tallSnapshot admin 100 { name = "Call recording ready to download" }
+
+                -- Wanda's client added her to the recording when she joined, without being told separately
+                , wanda.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , admin.click 100 (Dom.id "guild_callRecordings_3")
 
                 -- Wanda joined after the call started, and can still delete its card

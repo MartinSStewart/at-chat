@@ -55,11 +55,11 @@ import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), Channe
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner
-import Message exposing (CallRecording, CallRecordingFile, CallStartedData, ChangeAttachments(..), GameType(..), Message(..))
+import Message exposing (CallRecordingFile, ChangeAttachments(..), GameType(..), Message(..))
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
@@ -2809,18 +2809,7 @@ updateHelper msg model =
             BackendExtra.notifyAdmins time botUserId text model
 
         Rpc_RecordingUploadProgress sharedCallId recordingStartedAt file ->
-            updateCallRecordings
-                sharedCallId
-                (LocalState.isCallWithRecording recordingStartedAt)
-                (\maybeRecording ->
-                    case maybeRecording of
-                        Just recording ->
-                            Just { recording | files = addRecordingFileProgress file recording.files }
-
-                        Nothing ->
-                            Nothing
-                )
-                model
+            callRecordingUploadProgress sharedCallId recordingStartedAt file model
 
 
 gotDiscordStickers :
@@ -9810,17 +9799,7 @@ setRecordingStatus time sharedCallId model maybeStatus =
                     ( _, Just (Call.RecordingSince startedAt) ) ->
                         case NonemptySet.fromSeqSet members of
                             Just participants ->
-                                updateCallRecordings
-                                    sharedCallId
-                                    (\_ -> True)
-                                    (\_ ->
-                                        Just
-                                            { startedAt = startedAt
-                                            , participants = participants
-                                            , files = []
-                                            }
-                                    )
-                                    model
+                                startCallRecording sharedCallId startedAt participants model
 
                             Nothing ->
                                 ( model, Command.none )
@@ -9865,21 +9844,19 @@ setRecordingStatusBroadcast sharedCallId settled model =
                 model
 
 
-{-| Change the recordings kept on a call's message, and tell everyone who can see it.
--}
-updateCallRecordings :
+startCallRecording :
     Call.SharedCallId
-    -> (CallStartedData (Id UserId) -> Bool)
-    -> (Maybe (CallRecording (Id UserId)) -> Maybe (CallRecording (Id UserId)))
+    -> Time.Posix
+    -> NonemptySet (Id UserId)
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
-updateCallRecordings sharedCallId isCall updateFunc model =
+startCallRecording sharedCallId startedAt participants model =
     case sharedCallId of
         Call.SharedDmCall dmChannelId ->
             case SeqDict.get dmChannelId model.dmChannels of
                 Just dmChannel ->
-                    case LocalState.updateCallRecordingsBackend isCall updateFunc dmChannel of
-                        Just ( messageId, Just recording, dmChannel2 ) ->
+                    case LocalState.startCallRecordingBackend startedAt participants dmChannel of
+                        Just ( messageId, dmChannel2 ) ->
                             let
                                 model2 : BackendModel
                                 model2 =
@@ -9892,12 +9869,9 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                             , Broadcast.toDmChannel
                                 userId
                                 { otherUserId = otherUserId }
-                                (\id -> Server_CallRecordingsChanged (GuildOrDmId_Dm id) messageId recording)
+                                (\id -> Server_CallRecordingStarted (GuildOrDmId_Dm id) messageId startedAt participants)
                                 model2
                             )
-
-                        Just ( _, Nothing, _ ) ->
-                            ( model, Command.none )
 
                         Nothing ->
                             ( model, Command.none )
@@ -9910,8 +9884,8 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                 Just guild ->
                     case SeqDict.get id.channelId guild.channels of
                         Just channel ->
-                            case LocalState.updateCallRecordingsBackend isCall updateFunc channel of
-                                Just ( messageId, Just recording, channel2 ) ->
+                            case LocalState.startCallRecordingBackend startedAt participants channel of
+                                Just ( messageId, channel2 ) ->
                                     let
                                         model2 : BackendModel
                                         model2 =
@@ -9926,12 +9900,9 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                                     ( model2
                                     , Broadcast.toGuild
                                         id.guildId
-                                        (Server_CallRecordingsChanged (GuildOrDmId_Guild id) messageId recording |> ServerChange)
+                                        (Server_CallRecordingStarted (GuildOrDmId_Guild id) messageId startedAt participants |> ServerChange)
                                         model2
                                     )
-
-                                Just ( _, Nothing, _ ) ->
-                                    ( model, Command.none )
 
                                 Nothing ->
                                     ( model, Command.none )
@@ -9943,50 +9914,74 @@ updateCallRecordings sharedCallId isCall updateFunc model =
                     ( model, Command.none )
 
 
-{-| Someone who joins a call while it's being recorded agrees to it by joining.
--}
-joinedCallRecording : Call.SharedCallId -> Id UserId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
-joinedCallRecording sharedCallId userId model =
-    case SeqDict.get sharedCallId model.callRecordings of
-        Just (Call.RecordingSince startedAt) ->
-            updateCallRecordings
-                sharedCallId
-                (LocalState.isCallWithRecording startedAt)
-                (\maybeRecording ->
-                    case maybeRecording of
-                        Just recording ->
-                            Just { recording | participants = NonemptySet.insert userId recording.participants }
+callRecordingUploadProgress :
+    Call.SharedCallId
+    -> Time.Posix
+    -> CallRecordingFile (Id UserId)
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+callRecordingUploadProgress sharedCallId recordingStartedAt file model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    case LocalState.callRecordingUploadProgressBackend recordingStartedAt file dmChannel of
+                        Just ( messageId, dmChannel2 ) ->
+                            let
+                                model2 : BackendModel
+                                model2 =
+                                    { model | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels }
+
+                                ( userId, otherUserId ) =
+                                    DmChannelId.toUserIds dmChannelId
+                            in
+                            ( model2
+                            , Broadcast.toDmChannel
+                                userId
+                                { otherUserId = otherUserId }
+                                (\id -> Server_CallRecordingUploadProgress (GuildOrDmId_Dm id) messageId file)
+                                model2
+                            )
 
                         Nothing ->
-                            Nothing
-                )
-                model
+                            ( model, Command.none )
 
-        Just (Call.AskingToRecord _) ->
-            ( model, Command.none )
+                Nothing ->
+                    ( model, Command.none )
 
-        Just (Call.RecordingDeclined _) ->
-            ( model, Command.none )
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            case LocalState.callRecordingUploadProgressBackend recordingStartedAt file channel of
+                                Just ( messageId, channel2 ) ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | guilds =
+                                                    SeqDict.insert
+                                                        id.guildId
+                                                        { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                                                        model.guilds
+                                            }
+                                    in
+                                    ( model2
+                                    , Broadcast.toGuild
+                                        id.guildId
+                                        (Server_CallRecordingUploadProgress (GuildOrDmId_Guild id) messageId file |> ServerChange)
+                                        model2
+                                    )
 
-        Nothing ->
-            ( model, Command.none )
+                                Nothing ->
+                                    ( model, Command.none )
 
+                        Nothing ->
+                            ( model, Command.none )
 
-addRecordingFileProgress : CallRecordingFile (Id UserId) -> List (CallRecordingFile (Id UserId)) -> List (CallRecordingFile (Id UserId))
-addRecordingFileProgress file files =
-    if List.any (\existing -> existing.recordedBy == file.recordedBy && existing.name == file.name) files then
-        List.map
-            (\existing ->
-                if existing.recordedBy == file.recordedBy && existing.name == file.name then
-                    { existing | uploaded = max file.uploaded existing.uploaded }
-
-                else
-                    existing
-            )
-            files
-
-    else
-        files ++ [ file ]
+                Nothing ->
+                    ( model, Command.none )
 
 
 {-| Apply a "set audio/video input enabled" change: update the stored state for
@@ -10304,11 +10299,8 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                     else
                                         model2.users
                             }
-
-                        ( model4, recordingCmd ) =
-                            joinedCallRecording (Call.SharedDmCall dmChannelId) userId model3
                     in
-                    ( model4
+                    ( model3
                     , Command.batch
                         [ Lamdera.sendToFrontend
                             clientId
@@ -10329,9 +10321,8 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                     }
                                     |> Server_VoiceChatChange
                             )
-                            model4
+                            model3
                         , leaveCmd
-                        , recordingCmd
                         ]
                     )
 
@@ -10423,11 +10414,8 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                     else
                                         model2.users
                             }
-
-                        ( model4, recordingCmd ) =
-                            joinedCallRecording (Call.SharedGuildCall id) userId model3
                     in
-                    ( model4
+                    ( model3
                     , Command.batch
                         [ Lamdera.sendToFrontend
                             clientId
@@ -10447,9 +10435,8 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                 |> Server_VoiceChatChange
                                 |> ServerChange
                             )
-                            model4
+                            model3
                         , leaveCmd
-                        , recordingCmd
                         ]
                     )
 
