@@ -532,7 +532,18 @@ repliedToGameCodec =
 
 callStartedDataCodec : Codec userId -> Codec (Message.CallStartedData userId)
 callStartedDataCodec userId =
-    Codec.object Message.CallStartedData
+    Codec.object
+        (\startedAt endedAt startedBy reactions timestampDrawings cardDrawings ->
+            { startedAt = startedAt
+            , endedAt = endedAt
+            , startedBy = startedBy
+            , joinedBy = SeqSet.empty
+            , reactions = reactions
+            , timestampDrawings = timestampDrawings
+            , cardDrawings = cardDrawings
+            , recordings = Nothing
+            }
+        )
         |> Codec.field "startedAt" .startedAt CodecExtra.time
         |> Codec.field "endedAt" .endedAt (Codec.nullable CodecExtra.time)
         |> Codec.field "startedBy" .startedBy userId

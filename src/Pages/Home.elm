@@ -762,9 +762,11 @@ previewPetPicsChannel time =
                     { startedAt = previewMinutesAgo time 4
                     , endedAt = Nothing
                     , startedBy = Id.fromInt 1
+                    , joinedBy = SeqSet.empty
                     , reactions = SeqDict.empty
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
+                    , recordings = Nothing
                     }
                 , previewMessage (previewMinutesAgo time 2) (Tuple.first previewCallMutedPeer) (NonemptyString 'C' "an anyone hear me?")
                 , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")
@@ -822,6 +824,7 @@ previewLoginData userAgent =
     , stickers = SeqDict.empty
     , customEmojis = SeqDict.empty
     , voiceChatPeers = SeqDict.empty
+    , callRecordings = SeqDict.empty
     }
 
 
@@ -1418,6 +1421,7 @@ view loaded =
                                             previewCallPeers
                                             |> NonemptyDict.fromNonemptyList
                                             |> SeqDict.singleton previewCallId
+                                    , recordings = SeqDict.empty
                                     }
                             }
                     in

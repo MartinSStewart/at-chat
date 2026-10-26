@@ -380,6 +380,18 @@ pendingChangesText localChange =
                 Call.Local_SetRemoteCallData _ ->
                     Just "Set audio/video input enabled"
 
+                Call.Local_RequestRecording ->
+                    Just "Asked to record call"
+
+                Call.Local_AnswerRecording True ->
+                    Just "Allowed call recording"
+
+                Call.Local_AnswerRecording False ->
+                    Just "Declined call recording"
+
+                Call.Local_CancelRecording ->
+                    Just "Cancelled asking to record call"
+
         Local_Game _ change ->
             case change of
                 Game.CreatePublicLink _ _ ->
@@ -5287,6 +5299,15 @@ changeUpdate localMsg local =
                         Call.Local_SetRemoteCallData _ ->
                             local
 
+                        Call.Local_RequestRecording ->
+                            local
+
+                        Call.Local_AnswerRecording _ ->
+                            local
+
+                        Call.Local_CancelRecording ->
+                            local
+
                 Local_Game guildOrDmId gameChange ->
                     gameChangeUpdate
                         local.localUser.session.userId
@@ -5980,6 +6001,98 @@ changeUpdate localMsg local =
 
                 Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
                     addReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
+
+                Server_CallRecordingStarted guildOrDmId messageId startedAt participants ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.startCallRecordingFrontend messageId startedAt participants)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.startCallRecordingFrontend messageId startedAt participants)
+                                        local.dmChannels
+                            }
+
+                Server_CallRecordingUploadProgress guildOrDmId messageId file ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.callRecordingUploadProgressFrontend messageId file)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.callRecordingUploadProgressFrontend messageId file)
+                                        local.dmChannels
+                            }
+
+                Server_CallRecordingUploadFinished guildOrDmId messageId userId ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.finishedUploadingCallRecordingFrontend messageId userId)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.finishedUploadingCallRecordingFrontend messageId userId)
+                                        local.dmChannels
+                            }
+
+                Server_CallRecordingZipBuilt guildOrDmId messageId zip ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.callRecordingZipBuiltFrontend messageId zip)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.callRecordingZipBuiltFrontend messageId zip)
+                                        local.dmChannels
+                            }
 
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
@@ -7058,6 +7171,20 @@ changeUpdate localMsg local =
                                     }
                             }
 
+                        Call.Server_RecordingChanged callId maybeStatus ->
+                            { local
+                                | calls =
+                                    { calls
+                                        | recordings =
+                                            case maybeStatus of
+                                                Just status ->
+                                                    SeqDict.insert callId status calls.recordings
+
+                                                Nothing ->
+                                                    SeqDict.remove callId calls.recordings
+                                    }
+                            }
+
                 Server_Game changeBy guildOrDmId gameChange ->
                     gameChangeUpdate changeBy guildOrDmId gameChange local
 
@@ -7186,9 +7313,11 @@ callStartedMessage time startedBy =
         { startedAt = time
         , endedAt = Nothing
         , startedBy = startedBy
+        , joinedBy = SeqSet.empty
         , reactions = SeqDict.empty
         , timestampDrawings = Drawing.emptyDrawing
         , cardDrawings = Drawing.emptyDrawing
+        , recordings = Nothing
         }
 
 
@@ -7198,7 +7327,26 @@ from. It is their own doing, so it doesn't leave them with something unread.
 joinCallHelper : Id UserId -> Time.Posix -> Bool -> CallId -> Call.Local -> LocalState -> LocalState
 joinCallHelper userId time alreadyInCall roomId calls2 local =
     if alreadyInCall then
-        { local | calls = calls2 }
+        case roomId of
+            DmRoomId { otherUserId } ->
+                { local
+                    | calls = calls2
+                    , dmChannels =
+                        SeqDict.updateIfExists
+                            otherUserId
+                            (LocalState.joinedCallMessageFrontend userId)
+                            local.dmChannels
+                }
+
+            GuildRoomId id ->
+                { local
+                    | calls = calls2
+                    , guilds =
+                        SeqDict.updateIfExists
+                            id.guildId
+                            (LocalState.updateChannel (LocalState.joinedCallMessageFrontend userId) id.channelId)
+                            local.guilds
+                }
 
     else
         case roomId of
@@ -10090,7 +10238,7 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , calls = Call.init loginData.voiceChatPeers
+    , calls = Call.init loginData.voiceChatPeers loginData.callRecordings
     }
 
 

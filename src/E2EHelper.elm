@@ -931,6 +931,13 @@ mockVoiceChatPorts request =
                 Call.ToJs_StopScreenShare ->
                     Nothing
 
+                Call.ToJs_StartRecording _ ->
+                    -- JS starts saving what it captures to the device. No response.
+                    Nothing
+
+                Call.ToJs_StopRecording ->
+                    Nothing
+
                 Call.ToJs_GetMediaDevices ->
                     fromJsEvent
                         (Call.FromJs_GotUserMediaDevices
@@ -3169,6 +3176,18 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                         Types.Server_AddReactionEmoji _ _ _ _ ->
                             False
+
+                        Types.Server_CallRecordingStarted _ _ _ _ ->
+                            True
+
+                        Types.Server_CallRecordingUploadProgress _ _ _ ->
+                            True
+
+                        Types.Server_CallRecordingUploadFinished _ _ _ ->
+                            True
+
+                        Types.Server_CallRecordingZipBuilt _ _ _ ->
+                            True
 
                         Types.Server_RemoveReactionEmoji _ _ _ _ ->
                             False

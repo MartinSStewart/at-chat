@@ -55,6 +55,7 @@ import Array
 import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
+import CallRecording
 import ChannelDescription
 import ChannelHeader
 import ChannelName exposing (ChannelName)
@@ -88,7 +89,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (GameType(..), Message(..), MessageContent, RepliedTo(..), UserTextMessageDrawings)
+import Message exposing (CallRecording, GameType(..), Message(..), MessageContent, RepliedTo(..), UserTextMessageDrawings)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
@@ -8346,15 +8347,23 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard
-                        (User.userColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.userColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                callStartedData.recordings
+                                allUsers
+                            )
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
+                        ]
                     , messageTimestamp
                         (User.userColor localUser)
                         callStartedData.timestampDrawings
@@ -8592,15 +8601,23 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard
-                        (User.discordUserColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.discordUserColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                callStartedData.recordings
+                                allUsers
+                            )
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
+                        ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
@@ -8825,15 +8842,23 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard
-                        (User.userColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.userColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                callStartedData.recordings
+                                allUsers
+                            )
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
+                        ]
                     , messageTimestamp
                         (User.userColor localUser)
                         callStartedData.timestampDrawings
@@ -9030,15 +9055,23 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard
-                        (User.discordUserColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.discordUserColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                callStartedData.recordings
+                                allUsers
+                            )
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
+                        ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
@@ -9810,6 +9843,9 @@ gameStartedContent userId game allUsers =
         ]
 
 
+{-| Written out rather than using eventCard, since a recorded call also shows that it was
+recorded.
+-}
 callStartedCard :
     (userId -> UserColor)
     -> Bool
@@ -9818,19 +9854,138 @@ callStartedCard :
     -> userId
     -> Time.Posix
     -> Maybe Time.Posix
+    -> Maybe (CallRecording userId)
     -> SeqDict userId { a | name : PersonName }
     -> Element MessageViewMsg
-callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt allUsers =
-    eventCard
-        userIdToColor
-        isSelectingAnchor
-        messageId
-        drawings
-        (Dom.id "guild_callStartedCard")
-        MessageViewMsg_PressedCallStartedCard
-        (Ui.html Icons.phone)
-        (User.toString userId allUsers)
-        (startedACallText ++ eventDurationText startedAt endedAt)
+callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt recording allUsers =
+    Ui.el
+        []
+        (Ui.el
+            (Ui.rounded 6
+                :: Drawing.anchorHighlight
+                    ("guild_eventCard_" ++ Id.toString messageId |> Dom.id)
+                    userIdToColor
+                    MessageView_PressedCardAnchor
+                    isSelectingAnchor
+                    drawings
+            )
+            (MyUi.rowButton
+                (Dom.id "guild_callStartedCard")
+                MessageViewMsg_PressedCallStartedCard
+                [ Ui.spacing 12
+                , Ui.paddingXY 16 6
+                , Ui.background MyUi.background2
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.rounded 6
+                , Ui.width Ui.shrink
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                , if isSelectingAnchor then
+                    MyUi.noPointerEvents
+
+                  else
+                    Ui.noAttr
+                ]
+                [ Ui.html Icons.phone
+                , Ui.column
+                    [ Ui.spacing 2, Ui.width Ui.shrink ]
+                    [ Ui.el
+                        [ Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.widthMax 200, Ui.clipWithEllipsis ]
+                        (Ui.text (User.toString userId allUsers))
+                    , Ui.el [ Ui.Font.size 13 ] (Ui.text (startedACallText ++ eventDurationText startedAt endedAt))
+                    ]
+                , case ( endedAt, recording ) of
+                    ( Nothing, Just _ ) ->
+                        Ui.el
+                            [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
+                            , Ui.width Ui.shrink
+                            , MyUi.hoverText "This call is being recorded"
+                            ]
+                            (Ui.html (Icons.recording 22))
+
+                    ( Nothing, Nothing ) ->
+                        Ui.none
+
+                    ( Just _, Just _ ) ->
+                        Ui.none
+
+                    ( Just _, Nothing ) ->
+                        Ui.none
+                ]
+            )
+        )
+
+
+{-| Shows up once the recording's zip has been made. It's made again as each person
+finishes uploading, so until everyone has, a warning says who it's still missing.
+-}
+callRecordingsButton :
+    Bool
+    -> Time.Zone
+    -> Id messageId
+    -> Maybe (CallRecording userId)
+    -> SeqDict userId { a | name : PersonName }
+    -> Element msg
+callRecordingsButton isMobile timezone messageId maybeRecording allUsers =
+    case maybeRecording of
+        Just recording ->
+            case recording.zip of
+                Just zip ->
+                    let
+                        notFinished : List userId
+                        notFinished =
+                            List.filter
+                                (\userId -> not (SeqSet.member userId recording.finishedUploading))
+                                (NonemptySet.toList recording.participants)
+                    in
+                    Ui.row
+                        [ Ui.id ("guild_callRecordings_" ++ Id.toString messageId)
+                        , Ui.downloadAs
+                            { url = FileStatus.fileUrl (FileStatus.contentType "application/zip") zip.fileHash
+                            , filename = CallRecording.zipName timezone recording.startedAt
+                            }
+                        , Ui.spacing 8
+                        , Ui.paddingXY 14 0
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        , Ui.background MyUi.background2
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.border1
+                        , Ui.rounded 6
+                        , Ui.width Ui.shrink
+                        , Ui.Font.color MyUi.font3
+                        , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                        ]
+                        [ Ui.html Icons.download
+                        , if isMobile then
+                            Ui.none
+
+                          else
+                            Ui.text "Download\u{00A0}recording"
+                        , case notFinished of
+                            [] ->
+                                Ui.none
+
+                            _ :: _ ->
+                                Ui.el
+                                    [ Ui.id ("guild_callRecordingsMissing_" ++ Id.toString messageId)
+                                    , Ui.width Ui.shrink
+                                    , Ui.Font.color MyUi.errorColor
+                                    , MyUi.hoverText
+                                        ("Not everyone's part is in it yet. Still waiting on "
+                                            ++ String.join ", " (List.map (\userId -> User.toString userId allUsers) notFinished)
+                                            ++ ". They need to open at-chat on the device they were in the call with for their part to finish uploading."
+                                        )
+                                    ]
+                                    (Ui.html (Icons.warning 20))
+                        ]
+
+                Nothing ->
+                    Ui.none
+
+        Nothing ->
+            Ui.none
 
 
 goMatchStartedCard :

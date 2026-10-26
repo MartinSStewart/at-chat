@@ -14,11 +14,13 @@ port module Call exposing
     , MediaDevicesStatus(..)
     , Model
     , Msg(..)
-    , Recording
+    , RecordingStatus(..)
     , RemoteCallData
     , ServerChange(..)
+    , SharedCallId(..)
     , StartCallData
     , StartLocalStreamData
+    , StartRecordingData
     , ToJs(..)
     , canShareScreen
     , connectionIdToString
@@ -30,6 +32,7 @@ port module Call exposing
     , dragThumbnail
     , encodeFromJs
     , fromJs
+    , fromSharedCallId
     , gotUserMediaDevices
     , init
     , initModel
@@ -39,23 +42,28 @@ port module Call exposing
     , leaveVoiceChatCmds
     , localVideoNodeId
     , memberColumnOffset
+    , recordingChangeCmd
+    , recordingId
+    , recordingIdFromString
+    , recordingIdToString
+    , recordingNoticeView
     , serverChangeCmd
     , startCallCmd
     , startLocalStream
     , toJs
+    , toSharedCallId
     , videoNodes
     , videoPosAndSize
     , view
     , voiceChatToJsCodec
     )
 
-import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannelId
+import DmChannelId exposing (DmChannelId)
 import Duration
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -71,16 +79,17 @@ import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
 import List.Extra
-import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
+import Quantity
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Prose
 import Url
 import User exposing (LocalUser)
 import UserAgent exposing (Device(..), UserAgent)
@@ -90,6 +99,9 @@ import UserSession exposing (ChannelHeaderTab(..))
 type LocalChange
     = Local_Leave Time.Posix
     | Local_SetRemoteCallData RemoteCallData
+    | Local_RequestRecording
+    | Local_AnswerRecording Bool
+    | Local_CancelRecording
 
 
 type ServerChange
@@ -97,6 +109,24 @@ type ServerChange
     | Server_OtherJoined Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
+    | Server_RecordingChanged CallId (Maybe RecordingStatus)
+
+
+{-| A call that isn't being recorded and hasn't just had a recording turned down has no
+status at all. The person who asked is taken to have allowed it.
+-}
+type RecordingStatus
+    = AskingToRecord { requestedBy : Id UserId, requestedAt : Time.Posix, allowedBy : SeqSet (Id UserId) }
+    | RecordingDeclined { requestedBy : Id UserId, declinedBy : Maybe (Id UserId), declinedAt : Time.Posix }
+    | RecordingSince Time.Posix
+
+
+{-| `CallId` is relative to whoever is looking at it, which makes a DM call look like two
+different calls to the backend. This is the same for both people in it.
+-}
+type SharedCallId
+    = SharedDmCall DmChannelId
+    | SharedGuildCall Viewing_ChannelId
 
 
 type Msg
@@ -107,7 +137,9 @@ type Msg
     | PressedToggleScreenShare
     | PressedJoinCall CallId
     | PressedLeaveCall
-    | PressedDownloadRecording CallId
+    | PressedRecord
+    | PressedCancelRecording
+    | PressedAnswerRecording Bool
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
@@ -120,6 +152,7 @@ type Msg
 type alias Local =
     { currentRoom : Maybe CallId
     , voiceChats : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+    , recordings : SeqDict CallId RecordingStatus
     }
 
 
@@ -138,7 +171,6 @@ type alias Model =
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
     , remoteCallData : RemoteCallData
     , isSpeaking : SeqSet ConnectionId
-    , recordings : SeqDict CallId (Nonempty Recording)
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
@@ -150,26 +182,46 @@ type alias Model =
     }
 
 
-type alias Recording =
-    { mimeType : String
-    , extraData : String
-    , startTime : Time.Posix
-    , endTime : Time.Posix
-    , data : Bytes
-    }
-
-
 type MediaDevicesStatus
     = MediaDevicesNotLoaded
     | HasMediaDevices (List MediaDevice)
     | FailedToGetMediaDevices String
 
 
-init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> Local
-init voiceChats =
+init :
+    SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+    -> SeqDict CallId RecordingStatus
+    -> Local
+init voiceChats recordings =
     { currentRoom = Nothing
     , voiceChats = voiceChats
+    , recordings = recordings
     }
+
+
+toSharedCallId : Id UserId -> CallId -> SharedCallId
+toSharedCallId currentUserId callId =
+    case callId of
+        DmRoomId id ->
+            SharedDmCall (DmChannelId.fromUserIds currentUserId id.otherUserId)
+
+        GuildRoomId id ->
+            SharedGuildCall id
+
+
+fromSharedCallId : Id UserId -> SharedCallId -> Maybe CallId
+fromSharedCallId currentUserId sharedCallId =
+    case sharedCallId of
+        SharedDmCall dmChannelId ->
+            case DmChannelId.otherUserId currentUserId dmChannelId of
+                Just otherUserId ->
+                    Just (DmRoomId { otherUserId = otherUserId })
+
+                Nothing ->
+                    Nothing
+
+        SharedGuildCall id ->
+            Just (GuildRoomId id)
 
 
 {-| Everyone in a call and how many of their devices have joined it. The current user
@@ -204,7 +256,6 @@ initModel =
     , selectedVideoInputDevice = Nothing
     , remoteCallData = defaultRemoteCallData
     , isSpeaking = SeqSet.empty
-    , recordings = SeqDict.empty
     , localIsSpeaking = False
     , startConnectionError = Nothing
     , volume = SeqDict.empty
@@ -307,7 +358,7 @@ type CallId
 
 type DisplayMode
     = NoVideo
-    | ShowLocalVideo
+    | ShowLocalVideo CallId
     | ShowLocalVideoAndCall CallId
     | ShowLocalVideoAndCallThumbnail CallId
 
@@ -340,7 +391,7 @@ showLocalVideo displayMode2 =
         NoVideo ->
             False
 
-        ShowLocalVideo ->
+        ShowLocalVideo _ ->
             True
 
         ShowLocalVideoAndCall _ ->
@@ -394,10 +445,10 @@ displayMode isMobile currentUserId route local =
                                         ShowLocalVideoAndCall roomId
 
                                     Nothing ->
-                                        ShowLocalVideo
+                                        ShowLocalVideo roomId
 
                             else if isTabExpanded then
-                                ShowLocalVideo
+                                ShowLocalVideo roomId
 
                             else
                                 thumbnailOrNoVideo
@@ -437,10 +488,10 @@ displayMode isMobile currentUserId route local =
                                         ShowLocalVideoAndCall roomId
 
                                     Nothing ->
-                                        ShowLocalVideo
+                                        ShowLocalVideo roomId
 
                             else if isTabExpanded then
-                                ShowLocalVideo
+                                ShowLocalVideo roomId
 
                             else
                                 thumbnailOrNoVideo
@@ -582,6 +633,21 @@ videoNodes localUser config loggedIn local =
         displayMode2 =
             displayMode isMobile localUser.session.userId config.route local
 
+        viewedCall : Maybe CallId
+        viewedCall =
+            case displayMode2 of
+                NoVideo ->
+                    Nothing
+
+                ShowLocalVideo callId ->
+                    Just callId
+
+                ShowLocalVideoAndCall callId ->
+                    Just callId
+
+                ShowLocalVideoAndCallThumbnail _ ->
+                    Nothing
+
         -- The button that turns polling on lives in the voice chat panel, so
         -- the panel being open is also the only place it can be turned off
         -- again.
@@ -592,7 +658,7 @@ videoNodes localUser config loggedIn local =
                         NoVideo ->
                             False
 
-                        ShowLocalVideo ->
+                        ShowLocalVideo _ ->
                             True
 
                         ShowLocalVideoAndCall _ ->
@@ -615,7 +681,7 @@ videoNodes localUser config loggedIn local =
                 model
             ]
 
-        ShowLocalVideo ->
+        ShowLocalVideo _ ->
             let
                 tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
                 tiles =
@@ -732,6 +798,30 @@ videoNodes localUser config loggedIn local =
                     )
                     sessions
     )
+        ++ (case viewedCall of
+                Just callId ->
+                    case SeqDict.get callId local.recordings of
+                        Just (RecordingSince _) ->
+                            [ ( "call_recordingIndicator"
+                              , recordingIndicator
+                                    { right = Coord.xRaw config.windowSize - voiceChatX - maxWidth + padding
+                                    , top = localUser.safeAreaInsetTop + voiceChatY + padding
+                                    }
+                              )
+                            ]
+
+                        Just (AskingToRecord _) ->
+                            []
+
+                        Just (RecordingDeclined _) ->
+                            []
+
+                        Nothing ->
+                            []
+
+                Nothing ->
+                    []
+           )
         ++ (if showDebugData then
                 [ ( "call_debugData"
                   , debugDataView
@@ -766,6 +856,22 @@ localTiles localUser model =
 
     else
         [ cameraTile ]
+
+
+{-| A recording only ends with the call, so this isn't a button.
+-}
+recordingIndicator : { right : Int, top : Int } -> Html msg
+recordingIndicator position =
+    Html.div
+        [ Html.Attributes.id "voiceChat_recordingIndicator"
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "right" (String.fromInt position.right ++ "px")
+        , Html.Attributes.style "top" (String.fromInt position.top ++ "px")
+        , Html.Attributes.style "z-index" "1000"
+        , Html.Attributes.style "line-height" "0"
+        , Html.Attributes.title "This call is being recorded"
+        ]
+        [ Icons.recording 24 ]
 
 
 {-| Drawn as part of the video layer rather than inside the voice chat panel,
@@ -1338,6 +1444,10 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
 
         isMobile =
             MyUi.isMobileAlt windowSize
+
+        recordingStatus : Maybe RecordingStatus
+        recordingStatus =
+            SeqDict.get roomId calls.recordings
     in
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
@@ -1368,7 +1478,7 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                         Ui.paddingXY 16 8
                     , Ui.spacing 8
                     ]
-                    [ mediaDeviceSelectors isMobile roomId model
+                    [ mediaDeviceSelectors isMobile model
                     , Ui.row
                         [ Ui.alignRight
                         , Ui.width Ui.shrink
@@ -1378,14 +1488,12 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                             MyUi.simpleButton
                                 (Dom.id "voiceChat_toggleDebugData")
                                 PressedToggleDebugData
-                                (Ui.text
-                                    (if model.pollDebugData then
-                                        "Stop\u{00A0}polling\u{00A0}JS"
+                                (Ui.text "Debug")
 
-                                     else
-                                        "Poll\u{00A0}JS\u{00A0}state"
-                                    )
-                                )
+                          else
+                            Ui.none
+                        , if hasJoined2 && not isMobile then
+                            recordButton recordingStatus
 
                           else
                             Ui.none
@@ -1426,7 +1534,18 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                                     "Start\u{00A0}Call"
 
                                 ( False, Just _ ) ->
-                                    "Join\u{00A0}Call"
+                                    case recordingStatus of
+                                        Just (RecordingSince _) ->
+                                            "Join\u{00A0}Recorded\u{00A0}Call"
+
+                                        Just (AskingToRecord _) ->
+                                            "Join\u{00A0}Call"
+
+                                        Just (RecordingDeclined _) ->
+                                            "Join\u{00A0}Call"
+
+                                        Nothing ->
+                                            "Join\u{00A0}Call"
                               )
                                 |> Ui.text
                                 |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
@@ -1464,6 +1583,147 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
             )
         ]
         Ui.none
+
+
+recordButton : Maybe RecordingStatus -> Element Msg
+recordButton recordingStatus =
+    let
+        button : HtmlId -> Msg -> Ui.Color -> String -> Element Msg
+        button htmlId onPress background label =
+            MyUi.rowButton
+                htmlId
+                onPress
+                [ Ui.spacing 8
+                , Ui.background background
+                , Ui.border 1
+                , Ui.borderColor MyUi.inputBorder
+                , Ui.rounded 99
+                , Ui.height Ui.fill
+                , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                , Ui.Font.color MyUi.white
+                ]
+                [ Ui.el [ Ui.width (Ui.px 12), Ui.height (Ui.px 12), Ui.rounded 6, Ui.background recordRed ] Ui.none
+                , Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ] (Ui.text label)
+                ]
+    in
+    case recordingStatus of
+        Just (RecordingSince _) ->
+            Ui.none
+
+        Just (AskingToRecord _) ->
+            button (Dom.id "voiceChat_cancelRecording") PressedCancelRecording (Ui.rgb 42 50 78) "Cancel"
+
+        Just (RecordingDeclined _) ->
+            button (Dom.id "voiceChat_record") PressedRecord (Ui.rgb 42 50 78) "Record"
+
+        Nothing ->
+            button (Dom.id "voiceChat_record") PressedRecord (Ui.rgb 42 50 78) "Record"
+
+
+recordRed : Ui.Color
+recordRed =
+    Ui.rgb 240 60 60
+
+
+{-| Shown over everything, so that someone who's in the call but looking at another
+channel still gets asked.
+-}
+recordingNoticeView : LocalUser -> Time.Posix -> Local -> Element Msg
+recordingNoticeView localUser time local =
+    let
+        currentUserId : Id UserId
+        currentUserId =
+            localUser.session.userId
+
+        notice : List (Element Msg) -> Element Msg
+        notice content =
+            Ui.column
+                [ Ui.width Ui.shrink
+                , Ui.widthMax 400
+                , Ui.centerX
+                , Ui.alignTop
+                , Ui.move { x = 0, y = localUser.safeAreaInsetTop + MyUi.channelHeaderHeight + 16, z = 0 }
+                , Ui.padding 12
+                , Ui.spacing 12
+                , Ui.rounded 8
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.background MyUi.background1
+                , Ui.Font.color MyUi.font1
+                , MyUi.htmlStyle "box-shadow" "0 4px 16px rgba(0,0,0,0.4)"
+                ]
+                content
+
+        isRecent : Time.Posix -> Bool
+        isRecent since =
+            Duration.from since time |> Quantity.lessThan (Duration.seconds 8)
+    in
+    case local.currentRoom of
+        Just callId ->
+            case SeqDict.get callId local.recordings of
+                Just (AskingToRecord asking) ->
+                    if asking.requestedBy == currentUserId then
+                        notice [ Ui.text "Asking everyone if this call can be recorded…" ]
+
+                    else if SeqSet.member currentUserId asking.allowedBy then
+                        notice [ Ui.text "Waiting for everyone else to allow recording…" ]
+
+                    else
+                        notice
+                            [ Ui.text (User.toStringAlt asking.requestedBy localUser ++ " wants to record this call")
+                                |> Ui.el [ Ui.Font.bold, MyUi.htmlStyle "word-break" "break-all" ]
+                            , Ui.Prose.paragraph
+                                [ Ui.Font.size 14 ]
+                                [ Ui.text "Cameras, microphones, and any screen sharing will be recorded." ]
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ MyUi.simpleButton
+                                    (Dom.id "voiceChat_allowRecording")
+                                    (PressedAnswerRecording True)
+                                    (Ui.text "Allow")
+                                , MyUi.secondaryButtonTall
+                                    (Dom.id "voiceChat_declineRecording")
+                                    (PressedAnswerRecording False)
+                                    "Decline"
+                                ]
+                            ]
+
+                Just (RecordingDeclined declined) ->
+                    if isRecent declined.declinedAt then
+                        notice
+                            [ Ui.el
+                                [ MyUi.htmlStyle "word-break" "break-all" ]
+                                (case declined.declinedBy of
+                                    Just declinedBy ->
+                                        if declinedBy == currentUserId then
+                                            Ui.text "Recording wasn't started because you declined"
+
+                                        else
+                                            "Recording wasn't started because "
+                                                ++ User.toStringAlt declinedBy localUser
+                                                ++ " declined"
+                                                |> Ui.text
+
+                                    Nothing ->
+                                        Ui.text "Recording wasn't started because not everyone answered in time"
+                                )
+                            ]
+
+                    else
+                        Ui.none
+
+                Just (RecordingSince since) ->
+                    if isRecent since then
+                        notice [ Ui.text "This call is now being recorded" ]
+
+                    else
+                        Ui.none
+
+                Nothing ->
+                    Ui.none
+
+        Nothing ->
+            Ui.none
 
 
 voiceChatControlButton : String -> String -> Element msg -> Bool -> msg -> Element msg
@@ -1628,6 +1888,9 @@ serverChangeCmd change _ local _ =
         Server_SetRemoteCallData connectionId remoteCallData ->
             toJs (ToJs_SetPeerVideoInputEnabled connectionId remoteCallData.videoInputEnabled)
 
+        Server_RecordingChanged _ _ ->
+            Command.none
+
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
 
@@ -1651,6 +1914,102 @@ type ToJs
     | ToJs_StopLocalStream
     | ToJs_SetVolume ConnectionId Float
     | ToJs_DebugDataRequest
+    | ToJs_StartRecording StartRecordingData
+    | ToJs_StopRecording
+
+
+{-| `recordingId` is the same for everyone in the recording, and files from one person
+are grouped under it on their device.
+-}
+type alias StartRecordingData =
+    { recordingId : String
+    , userName : String
+    }
+
+
+startRecordingDataCodec : Codec StartRecordingData
+startRecordingDataCodec =
+    Codec.object StartRecordingData
+        |> Codec.field "recordingId" .recordingId Codec.string
+        |> Codec.field "userName" .userName Codec.string
+        |> Codec.buildObject
+
+
+{-| The recording this device should be saving its camera, microphone and screen into,
+if any.
+-}
+recordingId : Id UserId -> Local -> Maybe String
+recordingId currentUserId local =
+    case local.currentRoom of
+        Just callId ->
+            case SeqDict.get callId local.recordings of
+                Just (RecordingSince since) ->
+                    Just (recordingIdToString (toSharedCallId currentUserId callId) since)
+
+                Just (AskingToRecord _) ->
+                    Nothing
+
+                Just (RecordingDeclined _) ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+{-| The rust server keeps a recording's uploads in a folder with this name, so it has to
+stay something that's safe as a folder name.
+-}
+recordingIdToString : SharedCallId -> Time.Posix -> String
+recordingIdToString sharedCallId startedAt =
+    (case sharedCallId of
+        SharedDmCall dmChannelId ->
+            "dm-" ++ DmChannelId.toString dmChannelId
+
+        SharedGuildCall id ->
+            "guild-" ++ Id.toString id.guildId ++ "-" ++ Id.toString id.channelId
+    )
+        ++ "-"
+        ++ String.fromInt (Time.posixToMillis startedAt)
+
+
+recordingIdFromString : String -> Maybe ( SharedCallId, Time.Posix )
+recordingIdFromString text =
+    case String.split "-" text of
+        [ "dm", userIdA, userIdB, startedAt ] ->
+            case ( Id.fromString userIdA, Id.fromString userIdB, String.toInt startedAt ) of
+                ( Just userIdA2, Just userIdB2, Just startedAt2 ) ->
+                    Just ( SharedDmCall (DmChannelId.fromUserIds userIdA2 userIdB2), Time.millisToPosix startedAt2 )
+
+                _ ->
+                    Nothing
+
+        [ "guild", guildId, channelId, startedAt ] ->
+            case ( Id.fromString guildId, Id.fromString channelId, String.toInt startedAt ) of
+                ( Just guildId2, Just channelId2, Just startedAt2 ) ->
+                    Just ( SharedGuildCall { guildId = guildId2, channelId = channelId2 }, Time.millisToPosix startedAt2 )
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+recordingChangeCmd : String -> Maybe String -> Maybe String -> Command FrontendOnly toMsg msg
+recordingChangeCmd userName recordingIdOld recordingIdNew =
+    if recordingIdOld == recordingIdNew then
+        Command.none
+
+    else
+        case recordingIdNew of
+            Just recordingId2 ->
+                toJs (ToJs_StartRecording { recordingId = recordingId2, userName = userName })
+
+            Nothing ->
+                toJs ToJs_StopRecording
 
 
 type alias StartLocalStreamData =
@@ -1729,7 +2088,7 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eA eB eC eD eF eG eH eI eO eP eJ eK eL eM eN value ->
+        (\eA eB eC eD eF eG eH eI eO eP eJ eK eL eM eN eQ eR value ->
             case value of
                 ToJs_StartCall a ->
                     eA a
@@ -1775,6 +2134,12 @@ voiceChatToJsCodec =
 
                 ToJs_DebugDataRequest ->
                     eN
+
+                ToJs_StartRecording a ->
+                    eQ a
+
+                ToJs_StopRecording ->
+                    eR
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
@@ -1791,6 +2156,8 @@ voiceChatToJsCodec =
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
         |> Codec.variant0 "debug-data-request" ToJs_DebugDataRequest
+        |> Codec.variant1 "start-recording" ToJs_StartRecording startRecordingDataCodec
+        |> Codec.variant0 "stop-recording" ToJs_StopRecording
         |> Codec.buildCustom
 
 
@@ -2099,8 +2466,8 @@ connectionIdCodec =
 --    Codec.string
 
 
-mediaDeviceSelectors : Bool -> CallId -> Model -> Element Msg
-mediaDeviceSelectors isMobile roomId model =
+mediaDeviceSelectors : Bool -> Model -> Element Msg
+mediaDeviceSelectors isMobile model =
     case model.userMediaDevices of
         MediaDevicesNotLoaded ->
             Ui.none
@@ -2128,16 +2495,7 @@ mediaDeviceSelectors isMobile roomId model =
                 , Ui.widthMax 400
                 , Ui.attrIf isMobile Ui.alignRight
                 ]
-                [ case SeqDict.get roomId model.recordings of
-                    Just _ ->
-                        MyUi.simpleButton
-                            (Dom.id "voiceChat_downloadRecording")
-                            (PressedDownloadRecording roomId)
-                            (Ui.text "Download recording")
-
-                    Nothing ->
-                        Ui.none
-                , deviceDropdown
+                [ deviceDropdown
                     isMobile
                     "Microphone"
                     Icons.microphone
@@ -2178,7 +2536,13 @@ isPressMsg msg =
         PressedLeaveCall ->
             True
 
-        PressedDownloadRecording _ ->
+        PressedRecord ->
+            True
+
+        PressedCancelRecording ->
+            True
+
+        PressedAnswerRecording _ ->
             True
 
         PressedCopyError _ ->

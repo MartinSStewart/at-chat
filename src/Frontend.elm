@@ -73,6 +73,7 @@ import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pages.Privacy
 import Pagination
+import PersonName
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
@@ -720,6 +721,7 @@ update _ msg model =
                         [ cmd
                         , checkCallDisplayModeChange loaded loadedNew
                         , checkCallPreviewShown loaded loadedNew
+                        , checkCallRecordingChange loaded loadedNew
                         ]
                     , Audio.cmdNone
                     )
@@ -734,6 +736,7 @@ update _ msg model =
                         [ cmd
                         , checkCallDisplayModeChange loaded loadedNew
                         , checkCallPreviewShown loaded loadedNew
+                        , checkCallRecordingChange loaded loadedNew
                         ]
                     , Audio.cmdNone
                     )
@@ -5582,36 +5585,36 @@ updateLoaded msg model =
                         )
                         model
 
-                Call.PressedDownloadRecording roomId ->
+                Call.PressedRecord ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                voiceChat : Call.Model
-                                voiceChat =
-                                    loggedIn.voiceChat
-                            in
-                            case SeqDict.get roomId loggedIn.voiceChat.recordings of
-                                Just (Nonempty recording rest) ->
-                                    ( { loggedIn
-                                        | voiceChat =
-                                            { voiceChat
-                                                | recordings =
-                                                    case List.Nonempty.fromList rest of
-                                                        Just nonempty ->
-                                                            SeqDict.insert roomId nonempty voiceChat.recordings
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_VoiceChatChange Call.Local_RequestRecording |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
-                                                        Nothing ->
-                                                            SeqDict.remove roomId voiceChat.recordings
-                                            }
-                                      }
-                                    , Effect.File.Download.bytes
-                                        ("recording " ++ UserAgent.browserToString model.startupData.userAgent.browser)
-                                        recording.mimeType
-                                        recording.data
-                                    )
+                Call.PressedCancelRecording ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_VoiceChatChange Call.Local_CancelRecording |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
-                                Nothing ->
-                                    ( loggedIn, Command.none )
+                Call.PressedAnswerRecording allow ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_VoiceChatChange (Call.Local_AnswerRecording allow) |> Just)
+                                loggedIn
+                                Command.none
                         )
                         model
 
@@ -5716,7 +5719,7 @@ updateLoaded msg model =
                                 Call.NoVideo ->
                                     ( model, Command.none )
 
-                                Call.ShowLocalVideo ->
+                                Call.ShowLocalVideo _ ->
                                     ( model, Command.none )
 
                                 Call.ShowLocalVideoAndCall _ ->
@@ -7066,6 +7069,46 @@ checkCallDisplayModeChange modelOld modelNew =
                 loggedInOld.voiceChat
 
         _ ->
+            Command.none
+
+
+checkCallRecordingChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallRecordingChange modelOld modelNew =
+    case ( modelOld.loginStatus, modelNew.loginStatus ) of
+        ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+
+                localNew =
+                    Local.model loggedInNew.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localNew.localUser.user.name)
+                (Call.recordingId localOld.localUser.session.userId localOld.calls)
+                (Call.recordingId localNew.localUser.session.userId localNew.calls)
+
+        ( NotLoggedIn _, LoggedIn loggedInNew ) ->
+            let
+                localNew =
+                    Local.model loggedInNew.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localNew.localUser.user.name)
+                Nothing
+                (Call.recordingId localNew.localUser.session.userId localNew.calls)
+
+        ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+            in
+            Call.recordingChangeCmd
+                (PersonName.toString localOld.localUser.user.name)
+                (Call.recordingId localOld.localUser.session.userId localOld.calls)
+                Nothing
+
+        ( NotLoggedIn _, NotLoggedIn _ ) ->
             Command.none
 
 
@@ -8758,7 +8801,7 @@ updateFromBackend _ msg model =
                         )
             in
             ( Loaded loadedNew
-            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew ]
+            , Command.batch [ cmds, checkCallPreviewShown loaded loadedNew, checkCallRecordingChange loaded loadedNew ]
             , Audio.cmdNone
             )
 
@@ -9055,6 +9098,15 @@ updateLoadedFromBackend msg model =
                                         Command.none
 
                                     Call.Local_SetRemoteCallData _ ->
+                                        Command.none
+
+                                    Call.Local_RequestRecording ->
+                                        Command.none
+
+                                    Call.Local_AnswerRecording _ ->
+                                        Command.none
+
+                                    Call.Local_CancelRecording ->
                                         Command.none
 
                             Local_TextEditor TextEditor.Local_Undo ->
@@ -9953,6 +10005,11 @@ view _ model =
 
                                       else
                                         Ui.noAttr
+                                    , -- elm-ui draws later inFront elements underneath earlier ones, and this
+                                      -- has to be above the video tiles
+                                      Call.recordingNoticeView local.localUser loaded.time local.calls
+                                        |> Ui.map VoiceChatMsg
+                                        |> Ui.inFront
                                     , Call.videoNodes
                                         local.localUser
                                         loaded

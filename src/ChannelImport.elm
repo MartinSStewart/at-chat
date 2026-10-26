@@ -30,6 +30,7 @@ import Message exposing (Message(..), MessageContent, UserTextMessageDrawings)
 import NonemptySet exposing (NonemptySet)
 import RichText
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Thread exposing (BackendThread)
 import Types exposing (BackendModel)
 
@@ -241,9 +242,11 @@ importMessage mapUserId mapChannelId messages =
                                 { startedAt = data.startedAt
                                 , endedAt = data.endedAt
                                 , startedBy = mapUserId data.startedBy
+                                , joinedBy = SeqSet.map mapUserId data.joinedBy
                                 , reactions = mapReactions mapUserId data.reactions
                                 , timestampDrawings = mapDrawing mapUserId data.timestampDrawings
                                 , cardDrawings = mapDrawing mapUserId data.cardDrawings
+                                , recordings = Nothing
                                 }
                                 :: list
                             , encrypted

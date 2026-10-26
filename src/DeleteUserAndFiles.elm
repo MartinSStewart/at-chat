@@ -480,8 +480,18 @@ messageFiles message =
         DeletedMessage _ ->
             []
 
-        CallStarted _ ->
-            []
+        CallStarted callStarted ->
+            case callStarted.recordings of
+                Just recording ->
+                    case recording.zip of
+                        Just zip ->
+                            [ zip.fileHash ]
+
+                        Nothing ->
+                            []
+
+                Nothing ->
+                    []
 
         GameStarted _ ->
             []

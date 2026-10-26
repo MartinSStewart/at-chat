@@ -28,6 +28,7 @@ module BackendExtra exposing
     , asSlackWorkspaceMember
     , asUser
     , backendMsgLog
+    , callRecording
     , channelDataToDecrypt
     , decryptOldMessages
     , discordDmChannelToFrontend
@@ -108,7 +109,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
+import Message exposing (CallRecording, Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
@@ -134,6 +135,31 @@ import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, SlackFrontendUser, UserSession)
 import VisibleMessages
 import WordSpellingGame exposing (WordList(..))
+
+
+callRecording : Call.SharedCallId -> Time.Posix -> BackendModel -> Maybe (CallRecording (Id UserId))
+callRecording sharedCallId recordingStartedAt model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    LocalState.callRecordingBackend recordingStartedAt dmChannel
+
+                Nothing ->
+                    Nothing
+
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            LocalState.callRecordingBackend recordingStartedAt channel
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
 
 
 addLogWithCmd :
@@ -1339,6 +1365,7 @@ getLoginData sessionId clientId currentlyViewing session email user requestMessa
     , stickers = model.stickers
     , customEmojis = model.customEmojis
     , voiceChatPeers = getVoiceChatData clientId session model
+    , callRecordings = getCallRecordings session.userId model
     }
 
 
@@ -1553,6 +1580,39 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
                             NonemptyDict.singleton ( otherSession.userId, otherClientId ) remoteCallData |> Just
                 )
                 dict2
+
+
+getCallRecordings : Id UserId -> BackendModel -> SeqDict CallId Call.RecordingStatus
+getCallRecordings userId model =
+    SeqDict.foldl
+        (\sharedCallId status dict ->
+            case sharedCallId of
+                Call.SharedDmCall _ ->
+                    case Call.fromSharedCallId userId sharedCallId of
+                        Just callId ->
+                            SeqDict.insert callId status dict
+
+                        Nothing ->
+                            dict
+
+                Call.SharedGuildCall id ->
+                    case SeqDict.get id.guildId model.guilds of
+                        Just guild ->
+                            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                                IsMember ->
+                                    SeqDict.insert (GuildRoomId id) status dict
+
+                                IsOwner ->
+                                    SeqDict.insert (GuildRoomId id) status dict
+
+                                IsNotMember ->
+                                    dict
+
+                        Nothing ->
+                            dict
+        )
+        SeqDict.empty
+        model.callRecordings
 
 
 getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
@@ -3144,6 +3204,9 @@ backendMsgLog msg =
         UserDisconnectedWithTime _ _ _ ->
             BackendMsgLog_UserDisconnectedWithTime
 
+        RecordingRequestTick _ ->
+            BackendMsgLog_RecordingRequestTick
+
         BackendGotTime _ _ _ _ ->
             BackendMsgLog_BackendGotTime
 
@@ -3368,6 +3431,15 @@ backendMsgLog msg =
 
         Rpc_NotifyAdmins _ _ _ ->
             BackendMsgLog_Rpc_NotifyAdmins
+
+        Rpc_RecordingUploadProgress _ _ _ ->
+            BackendMsgLog_Rpc_RecordingUploadProgress
+
+        Rpc_RecordingUploadFinished _ _ _ ->
+            BackendMsgLog_Rpc_RecordingUploadFinished
+
+        Rpc_RecordingZipBuilt _ _ _ ->
+            BackendMsgLog_Rpc_RecordingZipBuilt
 
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg

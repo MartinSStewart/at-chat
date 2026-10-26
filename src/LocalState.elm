@@ -59,7 +59,13 @@ module LocalState exposing
     , announcementChannel
     , banMember
     , callEndedText
+    , callRecordingBackend
+    , callRecordingUploadProgressBackend
+    , callRecordingUploadProgressFrontend
+    , callRecordingZipBuiltBackend
+    , callRecordingZipBuiltFrontend
     , callStartedText
+    , canDeleteCallMessage
     , canSendDiscordMessage
     , canViewDiscordChannel
     , canViewDiscordGuild
@@ -118,6 +124,8 @@ module LocalState exposing
     , editMessageFrontendHelperNoThread
     , editMessageHelper
     , editMessageHelperNoThread
+    , finishedUploadingCallRecordingBackend
+    , finishedUploadingCallRecordingFrontend
     , forgetEditTyping
     , gameStartedText
     , getAdminData
@@ -136,6 +144,8 @@ module LocalState exposing
     , incrementLastViewedMessageFrontend
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
+    , joinedCallMessageBackend
+    , joinedCallMessageFrontend
     , loadingDiscordChannelMap
     , markAllChannelsAndThreadsAsViewedBackend
     , markAllChannelsAndThreadsAsViewedFrontend
@@ -169,6 +179,8 @@ module LocalState exposing
     , slackGuildOrDmIdToLatestMessages
     , slackGuildOrDmIdToMessage
     , slackThreadMentionName
+    , startCallRecordingBackend
+    , startCallRecordingFrontend
     , typingIn
     , updateAdminData
     , updateChannel
@@ -206,7 +218,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
+import Message exposing (CallRecording, CallRecordingFile, CallRecordingZip, CallStartedData, ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -3197,14 +3209,27 @@ deleteMessageBackendHelperNoThread userId messageId channel =
                 DeletedMessage _ ->
                     Err ()
 
-                CallStarted _ ->
-                    Err ()
+                CallStarted callStarted ->
+                    if canDeleteCallMessage userId callStarted then
+                        { channel | messages = IdArray.set messageId (DeletedMessage callStarted.startedAt) channel.messages }
+                            |> Ok
+
+                    else
+                        Err ()
 
                 GameStarted _ ->
                     Err ()
 
         Nothing ->
             Err ()
+
+
+{-| Anyone who was in a call can delete its card once it's over. Its recording's files are
+left on the server with nothing pointing at them.
+-}
+canDeleteCallMessage : userId -> CallStartedData userId -> Bool
+canDeleteCallMessage userId callStarted =
+    callStarted.endedAt /= Nothing && (callStarted.startedBy == userId || SeqSet.member userId callStarted.joinedBy)
 
 
 deleteMessageFrontend :
@@ -3392,8 +3417,10 @@ deleteMessageFrontendNoThread messageId channel =
                 DeletedMessage _ ->
                     channel
 
-                CallStarted _ ->
-                    channel
+                CallStarted callStarted ->
+                    { channel
+                        | messages = MessageArray.set messageId (DeletedMessage callStarted.startedAt) channel.messages
+                    }
 
                 GameStarted _ ->
                     channel
@@ -4903,6 +4930,386 @@ markCallMessageAsEndedBackend time channel =
             channel
 
 
+{-| Puts a new recording on the call that's going on. Gives back the call message's id,
+unless there's no call going on or it already has a recording.
+-}
+startCallRecordingBackend :
+    Time.Posix
+    -> NonemptySet userId
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Id messageId, { a | messages : IdArray messageId (Message messageId userId channelId) } )
+startCallRecordingBackend startedAt participants channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( callIndex, CallStarted callStarted ) ->
+            case ( callStarted.endedAt, callStarted.recordings ) of
+                ( Nothing, Nothing ) ->
+                    Just
+                        ( Id.fromInt callIndex
+                        , { channel
+                            | messages =
+                                IdArray.set
+                                    (Id.fromInt callIndex)
+                                    (CallStarted
+                                        { callStarted
+                                            | recordings =
+                                                Just
+                                                    { startedAt = startedAt
+                                                    , participants = participants
+                                                    , files = []
+                                                    , finishedUploading = SeqSet.empty
+                                                    , zip = Nothing
+                                                    }
+                                        }
+                                    )
+                                    channel.messages
+                          }
+                        )
+
+                ( Nothing, Just _ ) ->
+                    Nothing
+
+                ( Just _, Nothing ) ->
+                    Nothing
+
+                ( Just _, Just _ ) ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+startCallRecordingFrontend :
+    Id messageId
+    -> Time.Posix
+    -> NonemptySet userId
+    -> { a | messages : MessageArray messageId userId channelId }
+    -> { a | messages : MessageArray messageId userId channelId }
+startCallRecordingFrontend messageId startedAt participants channel =
+    { channel
+        | messages =
+            MessageArray.updateIfExists
+                messageId
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            CallStarted
+                                { callStarted
+                                    | recordings =
+                                        Just
+                                            { startedAt = startedAt
+                                            , participants = participants
+                                            , files = []
+                                            , finishedUploading = SeqSet.empty
+                                            , zip = Nothing
+                                            }
+                                }
+
+                        _ ->
+                            message
+                )
+                channel.messages
+    }
+
+
+{-| Gives back the call message's id, unless there's no such recording or this doesn't
+change how much of the file has been uploaded.
+-}
+callRecordingUploadProgressBackend :
+    Time.Posix
+    -> CallRecordingFile userId
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Id messageId, { a | messages : IdArray messageId (Message messageId userId channelId) } )
+callRecordingUploadProgressBackend recordingStartedAt file channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted callStarted ->
+                        isCallWithRecording recordingStartedAt callStarted
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( callIndex, CallStarted callStarted ) ->
+            case callStarted.recordings of
+                Just recording ->
+                    let
+                        files : List (CallRecordingFile userId)
+                        files =
+                            addRecordingFileProgress file recording.files
+                    in
+                    if files == recording.files then
+                        Nothing
+
+                    else
+                        Just
+                            ( Id.fromInt callIndex
+                            , { channel
+                                | messages =
+                                    IdArray.set
+                                        (Id.fromInt callIndex)
+                                        (CallStarted { callStarted | recordings = Just { recording | files = files } })
+                                        channel.messages
+                              }
+                            )
+
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+callRecordingUploadProgressFrontend :
+    Id messageId
+    -> CallRecordingFile userId
+    -> { a | messages : MessageArray messageId userId channelId }
+    -> { a | messages : MessageArray messageId userId channelId }
+callRecordingUploadProgressFrontend messageId file channel =
+    { channel
+        | messages =
+            MessageArray.updateIfExists
+                messageId
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            case callStarted.recordings of
+                                Just recording ->
+                                    CallStarted
+                                        { callStarted
+                                            | recordings = Just { recording | files = addRecordingFileProgress file recording.files }
+                                        }
+
+                                Nothing ->
+                                    message
+
+                        _ ->
+                            message
+                )
+                channel.messages
+    }
+
+
+finishedUploadingCallRecordingBackend :
+    Time.Posix
+    -> userId
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Id messageId, { a | messages : IdArray messageId (Message messageId userId channelId) } )
+finishedUploadingCallRecordingBackend recordingStartedAt userId channel =
+    case callWithRecordingBackend recordingStartedAt channel of
+        Just ( callIndex, callStarted, recording ) ->
+            if SeqSet.member userId recording.finishedUploading then
+                Nothing
+
+            else
+                Just
+                    ( Id.fromInt callIndex
+                    , { channel
+                        | messages =
+                            IdArray.set
+                                (Id.fromInt callIndex)
+                                (CallStarted
+                                    { callStarted
+                                        | recordings =
+                                            Just { recording | finishedUploading = SeqSet.insert userId recording.finishedUploading }
+                                    }
+                                )
+                                channel.messages
+                      }
+                    )
+
+        Nothing ->
+            Nothing
+
+
+finishedUploadingCallRecordingFrontend :
+    Id messageId
+    -> userId
+    -> { a | messages : MessageArray messageId userId channelId }
+    -> { a | messages : MessageArray messageId userId channelId }
+finishedUploadingCallRecordingFrontend messageId userId channel =
+    { channel
+        | messages =
+            MessageArray.updateIfExists
+                messageId
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            case callStarted.recordings of
+                                Just recording ->
+                                    CallStarted
+                                        { callStarted
+                                            | recordings =
+                                                Just { recording | finishedUploading = SeqSet.insert userId recording.finishedUploading }
+                                        }
+
+                                Nothing ->
+                                    message
+
+                        _ ->
+                            message
+                )
+                channel.messages
+    }
+
+
+{-| A zip made from fewer files than the one already there was started before it and
+finished after, and is left out.
+-}
+callRecordingZipBuiltBackend :
+    Time.Posix
+    -> CallRecordingZip
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Id messageId, { a | messages : IdArray messageId (Message messageId userId channelId) } )
+callRecordingZipBuiltBackend recordingStartedAt zip channel =
+    case callWithRecordingBackend recordingStartedAt channel of
+        Just ( callIndex, callStarted, recording ) ->
+            let
+                isNewer : Bool
+                isNewer =
+                    case recording.zip of
+                        Just existing ->
+                            zip.fileCount > existing.fileCount
+
+                        Nothing ->
+                            True
+            in
+            if isNewer then
+                Just
+                    ( Id.fromInt callIndex
+                    , { channel
+                        | messages =
+                            IdArray.set
+                                (Id.fromInt callIndex)
+                                (CallStarted { callStarted | recordings = Just { recording | zip = Just zip } })
+                                channel.messages
+                      }
+                    )
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
+callRecordingZipBuiltFrontend :
+    Id messageId
+    -> CallRecordingZip
+    -> { a | messages : MessageArray messageId userId channelId }
+    -> { a | messages : MessageArray messageId userId channelId }
+callRecordingZipBuiltFrontend messageId zip channel =
+    { channel
+        | messages =
+            MessageArray.updateIfExists
+                messageId
+                (\message ->
+                    case message of
+                        CallStarted callStarted ->
+                            case callStarted.recordings of
+                                Just recording ->
+                                    CallStarted { callStarted | recordings = Just { recording | zip = Just zip } }
+
+                                Nothing ->
+                                    message
+
+                        _ ->
+                            message
+                )
+                channel.messages
+    }
+
+
+callWithRecordingBackend :
+    Time.Posix
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe ( Int, CallStartedData userId, CallRecording userId )
+callWithRecordingBackend recordingStartedAt channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted callStarted ->
+                        isCallWithRecording recordingStartedAt callStarted
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( callIndex, CallStarted callStarted ) ->
+            case callStarted.recordings of
+                Just recording ->
+                    Just ( callIndex, callStarted, recording )
+
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+addRecordingFileProgress : CallRecordingFile userId -> List (CallRecordingFile userId) -> List (CallRecordingFile userId)
+addRecordingFileProgress file files =
+    if List.any (\existing -> existing.recordedBy == file.recordedBy && existing.name == file.name) files then
+        List.map
+            (\existing ->
+                if existing.recordedBy == file.recordedBy && existing.name == file.name then
+                    { existing | uploaded = max file.uploaded existing.uploaded }
+
+                else
+                    existing
+            )
+            files
+
+    else
+        files ++ [ file ]
+
+
+isCallWithRecording : Time.Posix -> CallStartedData userId -> Bool
+isCallWithRecording recordingStartedAt callStarted =
+    case callStarted.recordings of
+        Just recording ->
+            recording.startedAt == recordingStartedAt
+
+        Nothing ->
+            False
+
+
+callRecordingBackend : Time.Posix -> { a | messages : IdArray messageId (Message messageId userId channelId) } -> Maybe (CallRecording userId)
+callRecordingBackend recordingStartedAt channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted callStarted ->
+                        isCallWithRecording recordingStartedAt callStarted
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( _, CallStarted callStarted ) ->
+            callStarted.recordings
+
+        _ ->
+            Nothing
+
+
 markCallMessageAsEndedFrontend : Time.Posix -> { a | messages : MessageArray messageId userId channelId } -> { a | messages : MessageArray messageId userId channelId }
 markCallMessageAsEndedFrontend time channel =
     let
@@ -4937,4 +5344,103 @@ markCallMessageAsEndedFrontend time channel =
                     channel
 
         Nothing ->
+            channel
+
+
+{-| A recording lasts until its call ends, so joining a call that has one is joining the
+recording, and agreeing to it.
+-}
+joinedCallRecording : userId -> Maybe (CallRecording userId) -> Maybe (CallRecording userId)
+joinedCallRecording userId maybeRecording =
+    case maybeRecording of
+        Just recording ->
+            Just { recording | participants = NonemptySet.insert userId recording.participants }
+
+        Nothing ->
+            Nothing
+
+
+joinedCallMessageBackend :
+    userId
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+joinedCallMessageBackend userId channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( lastCallIndex, CallStarted callStarted ) ->
+            case callStarted.endedAt of
+                Nothing ->
+                    { channel
+                        | messages =
+                            IdArray.set
+                                (Id.fromInt lastCallIndex)
+                                (CallStarted
+                                    { callStarted
+                                        | joinedBy = joinedCallBy userId callStarted
+                                        , recordings = joinedCallRecording userId callStarted.recordings
+                                    }
+                                )
+                                channel.messages
+                    }
+
+                Just _ ->
+                    channel
+
+        _ ->
+            channel
+
+
+joinedCallBy : userId -> CallStartedData userId -> SeqSet userId
+joinedCallBy userId callStarted =
+    if callStarted.startedBy == userId then
+        callStarted.joinedBy
+
+    else
+        SeqSet.insert userId callStarted.joinedBy
+
+
+joinedCallMessageFrontend : userId -> { a | messages : MessageArray messageId userId channelId } -> { a | messages : MessageArray messageId userId channelId }
+joinedCallMessageFrontend userId channel =
+    case
+        MessageArray.findRight
+            (\message ->
+                case message of
+                    CallStarted _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( lastCallIndex, CallStarted callStarted ) ->
+            case callStarted.endedAt of
+                Nothing ->
+                    { channel
+                        | messages =
+                            MessageArray.set
+                                lastCallIndex
+                                (CallStarted
+                                    { callStarted
+                                        | joinedBy = joinedCallBy userId callStarted
+                                        , recordings = joinedCallRecording userId callStarted.recordings
+                                    }
+                                )
+                                channel.messages
+                    }
+
+                Just _ ->
+                    channel
+
+        _ ->
             channel

@@ -120,7 +120,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (Message, MessageContent)
+import Message exposing (CallRecordingFile, CallRecordingZip, Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -539,6 +539,7 @@ type alias BackendModel =
     , pendingSlackUserLookups : SeqSet (Slack.Id Slack.UserId)
     , refreshingSlackConversations : SeqSet (Slack.Id Slack.UserId)
     , pendingSlackReconnects : SeqDict (Slack.Id Slack.UserId) Duration
+    , callRecordings : SeqDict Call.SharedCallId Call.RecordingStatus
     }
 
 
@@ -870,6 +871,7 @@ type BackendMsg
     | UserConnected SessionId ClientId
     | UserDisconnected SessionId ClientId
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
+    | RecordingRequestTick Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | SentNotificationEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
@@ -985,6 +987,9 @@ type BackendMsg
     | GotSwedishWordList (Result Http.Error String)
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
     | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
+    | Rpc_RecordingUploadProgress Call.SharedCallId Time.Posix (CallRecordingFile (Id UserId))
+    | Rpc_RecordingUploadFinished Call.SharedCallId Time.Posix (Id UserId)
+    | Rpc_RecordingZipBuilt Call.SharedCallId Time.Posix CallRecordingZip
 
 
 type MessageFromGuildOrDm
@@ -1215,6 +1220,7 @@ type alias LoginData =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , voiceChatPeers : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+    , callRecordings : SeqDict CallId Call.RecordingStatus
     }
 
 
@@ -1294,6 +1300,10 @@ type ServerChange
     | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_CallRecordingStarted GuildOrDmId (Id ChannelMessageId) Time.Posix (NonemptySet (Id UserId))
+    | Server_CallRecordingUploadProgress GuildOrDmId (Id ChannelMessageId) (CallRecordingFile (Id UserId))
+    | Server_CallRecordingUploadFinished GuildOrDmId (Id ChannelMessageId) (Id UserId)
+    | Server_CallRecordingZipBuilt GuildOrDmId (Id ChannelMessageId) CallRecordingZip
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji

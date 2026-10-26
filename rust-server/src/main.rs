@@ -4,7 +4,7 @@ use axum::{Json, RequestExt};
 use axum::{
     Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Path, Request, State},
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
     http::{StatusCode, Uri},
     middleware::Next,
     routing::get,
@@ -85,6 +85,15 @@ async fn main() {
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
+                .route(
+                    "/file/recording-upload",
+                    post(recording_upload_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/recording-upload-finished",
+                    post(recording_upload_finished_endpoint).options(options_endpoint),
+                )
+                .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
                     "/file/discord-sticker/{sticker_id}",
@@ -658,6 +667,666 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         StatusCode::OK,
         serde_json::to_string::<EmbedResponse>(&response).unwrap(),
     )
+}
+
+const RECORDINGS_PATH: &str = "./var/lib/atchat/recordings";
+
+/// Which file a piece of a call recording belongs to, and where in it the piece goes.
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RecordingFile {
+    recording_id: String,
+    name: String,
+    started_at: i64,
+    ended_at: i64,
+    size: u64,
+}
+
+// Not built on RecordingFile with serde(flatten), since flattened query parameters all come
+// through as strings and the numbers then fail to parse.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadQuery {
+    recording_id: String,
+    name: String,
+    started_at: i64,
+    ended_at: i64,
+    size: u64,
+    offset: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadRequest {
+    session_id: String,
+    file: RecordingFile,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadedRequest {
+    user_id: u64,
+    file: RecordingFile,
+    uploaded: u64,
+}
+
+// The recording id and file name end up in a path, so nothing that could step outside the
+// recordings directory gets through. The backend checks the file name the same way.
+fn is_valid_recording_id(recording_id: &str) -> bool {
+    !recording_id.is_empty()
+        && recording_id.len() <= 100
+        && recording_id
+            .chars()
+            .all(|x| x.is_ascii_lowercase() || x.is_ascii_digit() || x == '-')
+}
+
+fn is_valid_recording_file_name(name: &str) -> bool {
+    name.chars().count() <= 200
+        && ["VIDEO_", "SCREEN_", "AUDIO_"]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        && [".mp4", ".wav"].iter().any(|suffix| name.ends_with(suffix))
+        && !name
+            .chars()
+            .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32)
+}
+
+/// One piece of a call recording, uploaded by the person who recorded it once they've
+/// left the call. Files are gigabytes long, so they arrive a piece at a time, each saying
+/// where in the file it goes. A piece that doesn't start where the file on disk ends is
+/// turned away with how much is on disk, which is how an upload that was cut off finds
+/// out where to carry on from.
+async fn recording_upload_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Query(query): Query<RecordingUploadQuery>,
+    request: Request,
+) -> Response<String> {
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+    let recording_file = RecordingFile {
+        recording_id: query.recording_id,
+        name: query.name,
+        started_at: query.started_at,
+        ended_at: query.ended_at,
+        size: query.size,
+    };
+
+    if !is_valid_recording_id(&recording_file.recording_id)
+        || !is_valid_recording_file_name(&recording_file.name)
+    {
+        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid file");
+    }
+
+    let user_id: u64 = match session_id_from_cookie(request.headers()) {
+        Some(session_id) => {
+            match recording_uploader(&secret_key, &session_id, &recording_file).await {
+                Some(user_id) => user_id,
+                None => {
+                    return response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions");
+                }
+            }
+        }
+        None => {
+            return response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions");
+        }
+    };
+
+    let bytes: Bytes = match request.extract::<Bytes, _>().await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, "The upload didn't arrive");
+        }
+    };
+
+    let directory = format!(
+        "{RECORDINGS_PATH}/{}/{user_id}",
+        recording_file.recording_id
+    );
+    if tokio::fs::create_dir_all(&directory).await.is_err() {
+        return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+    }
+
+    let path = format!("{directory}/{}", recording_file.name);
+    let mut file = match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .await
+    {
+        Ok(file) => file,
+        Err(_) => {
+            return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+        }
+    };
+
+    let on_disk: u64 = match file.metadata().await {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+        }
+    };
+
+    if query.offset != on_disk {
+        return response_with_headers(StatusCode::CONFLICT, on_disk.to_string());
+    }
+
+    let uploaded: u64 = on_disk + bytes.len() as u64;
+
+    if uploaded > recording_file.size {
+        return response_with_headers(StatusCode::BAD_REQUEST, "More than the file's size");
+    }
+
+    if file.write_all(&bytes).await.is_err() || file.sync_data().await.is_err() {
+        // A piece that was only partly written leaves the file longer than any piece
+        // boundary, and the next attempt is told where it ends and carries on from there.
+        return response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+    }
+
+    // The browser deletes its copy once it hears the whole file is here, so it mustn't hear
+    // that until the backend knows too. If telling the backend fails, the browser sends the
+    // piece again, is told it's already here, and then sends an empty piece at the end of the
+    // file, which gets the backend told again.
+    let told_backend: bool = http_client()
+        .post(rpc_url("recording-uploaded"))
+        .header("Content-Type", "text/plain")
+        .header(
+            "x-secret-key",
+            String::from_utf8_lossy(&secret_key).as_ref(),
+        )
+        .body(
+            serde_json::to_string(&RecordingUploadedRequest {
+                user_id,
+                file: recording_file,
+                uploaded,
+            })
+            .unwrap_or_default(),
+        )
+        .send()
+        .await
+        .and_then(|response| response.error_for_status())
+        .is_ok();
+
+    if told_backend {
+        response_with_headers(StatusCode::OK, uploaded.to_string())
+    } else {
+        response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadFinishedRequest {
+    session_id: String,
+    recording_id: String,
+}
+
+/// What the backend says to do once someone has finished uploading their part of a
+/// recording.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadFinishedResponse {
+    has_new_files: bool,
+    is_everyone_finished: bool,
+    file_count: u64,
+    files: Vec<ZipFile>,
+}
+
+/// A file that's all here, and what it's called in the zip.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ZipFile {
+    user_id: u64,
+    name: String,
+    download_name: String,
+    size: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingZipBuiltRequest {
+    recording_id: String,
+    zip: RecordingZip,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingZip {
+    file_hash: String,
+    size: u64,
+    file_count: u64,
+}
+
+// Zips are gigabytes long, so only one is made at a time. It also means a zip that's
+// made after another one always has at least as many files in it.
+static RECORDING_ZIP_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Told by someone's device once it has uploaded everything it recorded. The recording's
+/// zip is made again with their files in it, and stored with the other uploaded files so
+/// it's downloaded like any of them. Once everyone in the recording has finished, the files
+/// it was made from aren't needed any more.
+async fn recording_upload_finished_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Query(query): Query<RecordingUploadFinishedQuery>,
+    headers: HeaderMap,
+) -> Response<String> {
+    if !is_valid_recording_id(&query.recording_id) {
+        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid recording");
+    }
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+    let finished = match session_id_from_cookie(&headers) {
+        Some(session_id) => {
+            recording_upload_finished(&secret_key, session_id, &query.recording_id).await
+        }
+        None => None,
+    };
+    match finished {
+        Some(finished2) => {
+            tokio::spawn(async move {
+                let _lock = RECORDING_ZIP_LOCK.lock().await;
+                if finished2.has_new_files {
+                    match build_recording_zip(&query.recording_id, finished2.files).await {
+                        Ok((file_hash, size)) => {
+                            let _ = tell_recording_zip_built(
+                                &secret_key,
+                                RecordingZipBuiltRequest {
+                                    recording_id: query.recording_id.clone(),
+                                    zip: RecordingZip {
+                                        file_hash,
+                                        size,
+                                        file_count: finished2.file_count,
+                                    },
+                                },
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            println!(
+                                "Making the zip for recording {} failed: {error}",
+                                query.recording_id
+                            );
+                            return;
+                        }
+                    }
+                }
+                if finished2.is_everyone_finished {
+                    let _ = tokio::fs::remove_dir_all(format!(
+                        "{RECORDINGS_PATH}/{}",
+                        query.recording_id
+                    ))
+                    .await;
+                }
+            });
+            response_with_headers(StatusCode::OK, "OK")
+        }
+        None => response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions"),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadFinishedQuery {
+    recording_id: String,
+}
+
+async fn recording_upload_finished(
+    secret_key: &[u8],
+    session_id: String,
+    recording_id: &str,
+) -> Option<RecordingUploadFinishedResponse> {
+    let response = http_client()
+        .post(rpc_url("recording-upload-finished"))
+        .header("Content-Type", "application/json")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(
+            serde_json::to_string(&RecordingUploadFinishedRequest {
+                session_id,
+                recording_id: recording_id.to_owned(),
+            })
+            .ok()?,
+        )
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?;
+
+    let mut finished: RecordingUploadFinishedResponse =
+        serde_json::from_str(&response.text().await.ok()?).ok()?;
+    finished.files.retain(|file| {
+        is_valid_recording_file_name(&file.name)
+            && is_valid_recording_file_name(&file.download_name)
+    });
+    Some(finished)
+}
+
+async fn tell_recording_zip_built(
+    secret_key: &[u8],
+    request: RecordingZipBuiltRequest,
+) -> Option<()> {
+    http_client()
+        .post(rpc_url("recording-zip-built"))
+        .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(serde_json::to_string(&request).ok()?)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?;
+    Some(())
+}
+
+/// Writes the zip next to the files it's made from, since storage might be somewhere
+/// that's slow to write a piece at a time, and then moves it to storage under its hash.
+/// Gives back its hash and size.
+async fn build_recording_zip(
+    recording_id: &str,
+    files: Vec<ZipFile>,
+) -> std::io::Result<(String, u64)> {
+    let mut entries: Vec<(ZipFile, tokio::fs::File)> = Vec::new();
+    for file in files {
+        let path = format!(
+            "{RECORDINGS_PATH}/{recording_id}/{}/{}",
+            file.user_id, file.name
+        );
+        if let Ok(opened) = tokio::fs::File::open(path).await {
+            entries.push((file, opened));
+        }
+    }
+
+    let temporary_path = format!("{RECORDINGS_PATH}/{recording_id}/recording.zip");
+    let mut writer = HashingWriter {
+        inner: tokio::fs::File::create(&temporary_path).await?,
+        hasher: Sha224::new(),
+        written: 0,
+    };
+    write_zip(&mut writer, entries).await?;
+    let hash = base64_encode(&writer.hasher.finalize());
+    let size = writer.written;
+
+    let path = filepath(&hash);
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false)
+        && tokio::fs::rename(&temporary_path, &path).await.is_err()
+    {
+        // Storage can be on another file system, which a file can't be renamed onto.
+        tokio::fs::copy(&temporary_path, &path).await?;
+    }
+    let _ = tokio::fs::remove_file(&temporary_path).await;
+    Ok((hash, size))
+}
+
+/// Passes everything written on to `inner`, and keeps a hash of it as it goes.
+struct HashingWriter<W> {
+    inner: W,
+    hasher: Sha224,
+    written: u64,
+}
+
+impl<W: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for HashingWriter<W> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let result = std::pin::Pin::new(&mut self.inner).poll_write(context, buffer);
+        if let std::task::Poll::Ready(Ok(written)) = result {
+            self.hasher.update(&buffer[..written]);
+            self.written += written as u64;
+        }
+        result
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+}
+
+// Streams something written elsewhere, a piece at a time, so a file gigabytes long never
+// has to be in memory all at once.
+fn reader_body(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static) -> Body {
+    Body::from_stream(futures_util::stream::unfold(
+        reader,
+        |mut reader| async move {
+            let mut buffer = vec![0u8; 256 * 1024];
+            match tokio::io::AsyncReadExt::read(&mut reader, &mut buffer).await {
+                Ok(0) => None,
+                Ok(read) => {
+                    buffer.truncate(read);
+                    Some((Ok::<Bytes, std::io::Error>(Bytes::from(buffer)), reader))
+                }
+                Err(error) => Some((Err(error), reader)),
+            }
+        },
+    ))
+}
+
+const ZIP_U32_MAX: u64 = 0xFFFF_FFFF;
+// Dates before 1980 can't be written, and the time each file was recorded is in its name
+// anyway.
+const ZIP_DOS_DATE: u16 = (1 << 5) | 1;
+// The size and checksum come after the file, and the name is UTF-8.
+const ZIP_FLAGS: u16 = 0x0008 | 0x0800;
+
+struct ZipEntry {
+    name: Vec<u8>,
+    crc: u32,
+    size: u64,
+    offset: u64,
+}
+
+impl ZipEntry {
+    fn is_zip64(&self) -> bool {
+        self.size >= ZIP_U32_MAX || self.offset >= ZIP_U32_MAX
+    }
+}
+
+// Laid out the way Go's archive/zip writes a zip it streams: each file's size and checksum
+// come after it in a data descriptor, and zip64 records are only used for a file or an
+// offset too big for the 32 bit ones.
+async fn write_zip(
+    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+    files: Vec<(ZipFile, tokio::fs::File)>,
+) -> std::io::Result<()> {
+    let mut written: u64 = 0;
+    let mut entries: Vec<ZipEntry> = Vec::new();
+
+    for (file, mut opened) in files {
+        let name: Vec<u8> = file.download_name.clone().into_bytes();
+        let offset = written;
+
+        let mut header: Vec<u8> = Vec::new();
+        header.extend_from_slice(&0x04034b50u32.to_le_bytes());
+        header.extend_from_slice(
+            &(if file.size >= ZIP_U32_MAX {
+                45u16
+            } else {
+                20u16
+            })
+            .to_le_bytes(),
+        );
+        header.extend_from_slice(&ZIP_FLAGS.to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&ZIP_DOS_DATE.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&name);
+        writer.write_all(&header).await?;
+        written += header.len() as u64;
+
+        let mut hasher = crc32fast::Hasher::new();
+        let mut size: u64 = 0;
+        let mut buffer = vec![0u8; 256 * 1024];
+        loop {
+            let read = tokio::io::AsyncReadExt::read(&mut opened, &mut buffer).await?;
+            if read == 0 || size >= file.size {
+                break;
+            }
+            let read2 = read.min((file.size - size) as usize);
+            hasher.update(&buffer[..read2]);
+            writer.write_all(&buffer[..read2]).await?;
+            size += read2 as u64;
+        }
+        written += size;
+
+        let entry = ZipEntry {
+            name,
+            crc: hasher.finalize(),
+            size,
+            offset,
+        };
+
+        let mut descriptor: Vec<u8> = Vec::new();
+        descriptor.extend_from_slice(&0x08074b50u32.to_le_bytes());
+        descriptor.extend_from_slice(&entry.crc.to_le_bytes());
+        if entry.size >= ZIP_U32_MAX {
+            descriptor.extend_from_slice(&entry.size.to_le_bytes());
+            descriptor.extend_from_slice(&entry.size.to_le_bytes());
+        } else {
+            descriptor.extend_from_slice(&(entry.size as u32).to_le_bytes());
+            descriptor.extend_from_slice(&(entry.size as u32).to_le_bytes());
+        }
+        writer.write_all(&descriptor).await?;
+        written += descriptor.len() as u64;
+
+        entries.push(entry);
+    }
+
+    let directory_start = written;
+    let directory: Vec<u8> = zip_central_directory(&entries);
+    let end: Vec<u8> = zip_end(
+        entries.len() as u64,
+        directory.len() as u64,
+        directory_start,
+    );
+    writer.write_all(&directory).await?;
+    writer.write_all(&end).await?;
+    writer.shutdown().await
+}
+
+fn zip_central_directory(entries: &[ZipEntry]) -> Vec<u8> {
+    let mut directory: Vec<u8> = Vec::new();
+    for entry in entries {
+        let version: u16 = if entry.is_zip64() { 45 } else { 20 };
+        directory.extend_from_slice(&0x02014b50u32.to_le_bytes());
+        directory.extend_from_slice(&version.to_le_bytes());
+        directory.extend_from_slice(&version.to_le_bytes());
+        directory.extend_from_slice(&ZIP_FLAGS.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&ZIP_DOS_DATE.to_le_bytes());
+        directory.extend_from_slice(&entry.crc.to_le_bytes());
+        let mut extra: Vec<u8> = Vec::new();
+        if entry.is_zip64() {
+            directory.extend_from_slice(&(ZIP_U32_MAX as u32).to_le_bytes());
+            directory.extend_from_slice(&(ZIP_U32_MAX as u32).to_le_bytes());
+            extra.extend_from_slice(&0x0001u16.to_le_bytes());
+            extra.extend_from_slice(&24u16.to_le_bytes());
+            extra.extend_from_slice(&entry.size.to_le_bytes());
+            extra.extend_from_slice(&entry.size.to_le_bytes());
+            extra.extend_from_slice(&entry.offset.to_le_bytes());
+        } else {
+            directory.extend_from_slice(&(entry.size as u32).to_le_bytes());
+            directory.extend_from_slice(&(entry.size as u32).to_le_bytes());
+        }
+        directory.extend_from_slice(&(entry.name.len() as u16).to_le_bytes());
+        directory.extend_from_slice(&(extra.len() as u16).to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u32.to_le_bytes());
+        directory.extend_from_slice(&(entry.offset.min(ZIP_U32_MAX) as u32).to_le_bytes());
+        directory.extend_from_slice(&entry.name);
+        directory.extend_from_slice(&extra);
+    }
+    directory
+}
+
+fn zip_end(records: u64, directory_size: u64, directory_start: u64) -> Vec<u8> {
+    let mut end: Vec<u8> = Vec::new();
+    let needs_zip64_end =
+        records >= 0xFFFF || directory_size >= ZIP_U32_MAX || directory_start >= ZIP_U32_MAX;
+    if needs_zip64_end {
+        let zip64_end_offset = directory_start + directory_size;
+        end.extend_from_slice(&0x06064b50u32.to_le_bytes());
+        end.extend_from_slice(&44u64.to_le_bytes());
+        end.extend_from_slice(&45u16.to_le_bytes());
+        end.extend_from_slice(&45u16.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&records.to_le_bytes());
+        end.extend_from_slice(&records.to_le_bytes());
+        end.extend_from_slice(&directory_size.to_le_bytes());
+        end.extend_from_slice(&directory_start.to_le_bytes());
+        end.extend_from_slice(&0x07064b50u32.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&zip64_end_offset.to_le_bytes());
+        end.extend_from_slice(&1u32.to_le_bytes());
+    }
+    end.extend_from_slice(&0x06054b50u32.to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+    end.extend_from_slice(&(records.min(0xFFFF) as u16).to_le_bytes());
+    end.extend_from_slice(&(records.min(0xFFFF) as u16).to_le_bytes());
+    end.extend_from_slice(&(directory_size.min(ZIP_U32_MAX) as u32).to_le_bytes());
+    end.extend_from_slice(&(directory_start.min(ZIP_U32_MAX) as u32).to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+
+    end
+}
+
+/// Asks Lamdera whether this person was in the recording, and who they are, since their
+/// files are kept under their user id.
+async fn recording_uploader(
+    secret_key: &[u8],
+    session_id: &str,
+    file: &RecordingFile,
+) -> Option<u64> {
+    let response = http_client()
+        .post(rpc_url("recording-upload"))
+        .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(
+            serde_json::to_string(&RecordingUploadRequest {
+                session_id: session_id.to_owned(),
+                file: file.clone(),
+            })
+            .ok()?,
+        )
+        .send()
+        .await
+        .ok()?;
+
+    response
+        .text()
+        .await
+        .ok()?
+        .strip_prefix("valid,")?
+        .parse::<u64>()
+        .ok()
+}
+
+// Call recordings are made on each person's own device, and their files are lined up
+// afterwards by start time. Every device asks this for the time rather than trusting its
+// own clock, which can be off by seconds.
+async fn time_endpoint() -> Response<String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    response_with_headers(StatusCode::OK, now.to_string())
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {
@@ -2010,43 +2679,48 @@ fn sandbox_csp(content_type: &str) -> &'static str {
 /// choice was made for.
 const NOSNIFF: &str = "nosniff";
 
+/// Read from disk as it's sent, since a call recording's zip can be gigabytes long.
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
     if is_valid_hash(&hash) {
-        match tokio::fs::read(filepath(&hash)).await {
-            Result::Ok(data) => {
-                let content_type = match content_type_index.parse::<usize>() {
-                    Ok(index) => content_types::CONTENT_TYPES.get(index),
-                    Err(_) => None,
-                };
-
-                match content_type {
-                    Some(content_type2) => Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", *content_type2)
-                        .header("Content-Disposition", "inline")
-                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                        .header("Content-Security-Policy", sandbox_csp(content_type2))
-                        .header("X-Content-Type-Options", NOSNIFF)
-                        .body(Body::from(data))
-                        .unwrap(),
-                    // No content type to send, so the browser would otherwise
-                    // sniff one out of the bytes and could land on html. This
-                    // branch is only reached by a url with an index the app never
-                    // generates, so refusing to guess costs nothing.
-                    None => Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                        .header("Content-Security-Policy", SANDBOX_CSP)
-                        .header("X-Content-Type-Options", NOSNIFF)
-                        .body(Body::from(data))
-                        .unwrap(),
-                }
+        let opened = match tokio::fs::File::open(filepath(&hash)).await {
+            Ok(opened) => opened,
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("File not found"))
+                    .unwrap();
             }
-            Result::Err(_) => Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("File not found"))
+        };
+        let size: Option<u64> = opened.metadata().await.ok().map(|metadata| metadata.len());
+        let content_type = match content_type_index.parse::<usize>() {
+            Ok(index) => content_types::CONTENT_TYPES.get(index),
+            Err(_) => None,
+        };
+
+        let mut builder = Response::builder().status(StatusCode::OK);
+        if let Some(size2) = size {
+            builder = builder.header("Content-Length", size2.to_string());
+        }
+        match content_type {
+            Some(content_type2) => builder
+                .header("Content-Type", *content_type2)
+                .header("Content-Disposition", "inline")
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                .header("Content-Security-Policy", sandbox_csp(content_type2))
+                .header("X-Content-Type-Options", NOSNIFF)
+                .body(reader_body(opened))
+                .unwrap(),
+            // No content type to send, so the browser would otherwise
+            // sniff one out of the bytes and could land on html. This
+            // branch is only reached by a url with an index the app never
+            // generates, so refusing to guess costs nothing.
+            None => builder
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                .header("Content-Security-Policy", SANDBOX_CSP)
+                .header("X-Content-Type-Options", NOSNIFF)
+                .body(reader_body(opened))
                 .unwrap(),
         }
     } else {
@@ -2292,6 +2966,26 @@ pub struct UploadUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recording_paths_stay_inside_the_recordings_directory() {
+        assert!(is_valid_recording_id("guild-0-3-1792977120973"));
+        assert!(is_valid_recording_id("dm-1-2-1792977120973"));
+        assert!(!is_valid_recording_id("../secret"));
+        assert!(!is_valid_recording_id("guild/0"));
+        assert!(!is_valid_recording_id(""));
+
+        assert!(is_valid_recording_file_name(
+            "VIDEO_Martin_2026-10-25_20-31-07.250.mp4"
+        ));
+        assert!(is_valid_recording_file_name(
+            "AUDIO_Zoë_2026-10-25_20-31-07.250.wav"
+        ));
+        assert!(!is_valid_recording_file_name("VIDEO_../../secret.mp4"));
+        assert!(!is_valid_recording_file_name("VIDEO_a\\b.mp4"));
+        assert!(!is_valid_recording_file_name("secret.txt"));
+        assert!(!is_valid_recording_file_name("VIDEO_a.txt"));
+    }
 
     #[test]
     fn slack_credentials_follow_redirects_to_other_slack_hosts_only() {
@@ -3124,6 +3818,50 @@ mod tests {
             Some("sandbox"),
             "a file served as html should be sandboxed out of the app's origin"
         );
+    }
+
+    #[tokio::test]
+    async fn a_stored_file_is_streamed_with_its_length() {
+        create_storage_dir();
+        fs::write(filepath("streamedFile"), b"zip bytes")
+            .expect("failed to write the file to serve");
+
+        let response = get_file_endpoint(Path((
+            index_of_content_type("application/zip").to_string(),
+            String::from("streamedFile"),
+        )))
+        .await;
+        let headers = response.headers().clone();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("the body should be readable");
+        let _ = fs::remove_file(filepath("streamedFile"));
+
+        assert_eq!(
+            headers
+                .get("Content-Length")
+                .and_then(|value| value.to_str().ok()),
+            Some("9")
+        );
+        assert_eq!(&body[..], b"zip bytes");
+    }
+
+    #[tokio::test]
+    async fn hashing_writer_hashes_what_it_writes() {
+        let mut writer = HashingWriter {
+            inner: Vec::new(),
+            hasher: Sha224::new(),
+            written: 0,
+        };
+        writer.write_all(b"some ").await.unwrap();
+        writer.write_all(b"bytes").await.unwrap();
+
+        assert_eq!(writer.written, 10);
+        assert_eq!(
+            base64_encode(&writer.hasher.finalize()),
+            hash_bytes(&Bytes::from_static(b"some bytes"))
+        );
+        assert_eq!(writer.inner, b"some bytes");
     }
 
     // --- encrypted uploads ---

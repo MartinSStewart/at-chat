@@ -255,8 +255,11 @@ sizeToString int =
     else if int < 1024 * 1024 then
         StringExtra.removeTrailing0s 1 (toFloat int / 1024) ++ "kb"
 
-    else
+    else if int < 1024 * 1024 * 1024 then
         StringExtra.removeTrailing0s 1 (toFloat int / (1024 * 1024)) ++ "mb"
+
+    else
+        StringExtra.removeTrailing0s 1 (toFloat int / (1024 * 1024 * 1024)) ++ "gb"
 
 
 progressToString : { sent : Int, size : Int } -> String

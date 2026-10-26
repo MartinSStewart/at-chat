@@ -1,5 +1,8 @@
 module Message exposing
-    ( CallStartedData
+    ( CallRecording
+    , CallRecordingFile
+    , CallRecordingZip
+    , CallStartedData
     , ChangeAttachments(..)
     , EncryptedUserTextMessageData
     , EncryptedUserTextMessageDataNoReply
@@ -82,9 +85,46 @@ type alias CallStartedData userId =
     { startedAt : Time.Posix
     , endedAt : Maybe Time.Posix
     , startedBy : userId
+    , joinedBy : SeqSet userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , timestampDrawings : Drawing userId
     , cardDrawings : Drawing userId
+    , recordings : Maybe (CallRecording userId)
+    }
+
+
+{-| Kept on the call's message so there's a record of who agreed to be recorded after the
+call is over. Everyone who joined while it was recording agreed by joining.
+-}
+type alias CallRecording userId =
+    { startedAt : Time.Posix
+    , participants : NonemptySet userId
+    , files : List (CallRecordingFile userId)
+    , finishedUploading : SeqSet userId
+    , zip : Maybe CallRecordingZip
+    }
+
+
+{-| Every file that had finished uploading when it was made, stored with the other uploaded
+files. It's made again each time someone finishes uploading their part of the recording.
+-}
+type alias CallRecordingZip =
+    { fileHash : FileHash
+    , size : Int
+    , fileCount : Int
+    }
+
+
+{-| A file someone recorded on their own device. `uploaded` reaches `size` once all of it
+is on the server.
+-}
+type alias CallRecordingFile userId =
+    { recordedBy : userId
+    , name : String
+    , startedAt : Time.Posix
+    , endedAt : Time.Posix
+    , size : Int
+    , uploaded : Int
     }
 
 
