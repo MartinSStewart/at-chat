@@ -47,6 +47,7 @@ port module Call exposing
     , recordingIdFromString
     , recordingIdToString
     , recordingNoticeView
+    , recordingUploadView
     , serverChangeCmd
     , startCallCmd
     , startLocalStream
@@ -179,6 +180,7 @@ type alias Model =
       thumbnailPosition : ( Float, Float )
     , pollDebugData : Bool
     , debugData : List DebugSection
+    , recordingUpload : Maybe { uploaded : Int, total : Int }
     }
 
 
@@ -263,6 +265,7 @@ initModel =
     , thumbnailPosition = ( 1, 0.1 )
     , pollDebugData = False
     , debugData = []
+    , recordingUpload = Nothing
     }
 
 
@@ -1625,6 +1628,64 @@ recordRed =
     Ui.rgb 240 60 60
 
 
+{-| This device's part of a call recording only goes up while at-chat is open on it.
+-}
+recordingUploadView : LocalUser -> Model -> Element msg
+recordingUploadView localUser model =
+    case model.recordingUpload of
+        Just progress ->
+            let
+                filled : Int
+                filled =
+                    if progress.total > 0 then
+                        clamp 0 1000 (progress.uploaded * 1000 // progress.total)
+
+                    else
+                        0
+            in
+            Ui.column
+                [ Ui.id "voiceChat_recordingUpload"
+                , Ui.width Ui.shrink
+                , Ui.widthMax 400
+                , Ui.centerX
+                , Ui.alignTop
+                , Ui.move { x = 0, y = localUser.safeAreaInsetTop + 8, z = 0 }
+                , Ui.padding 12
+                , Ui.spacing 8
+                , Ui.rounded 8
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.background MyUi.background1
+                , Ui.Font.color MyUi.font1
+                , MyUi.htmlStyle "box-shadow" "0 4px 16px rgba(0,0,0,0.4)"
+                ]
+                [ Ui.text
+                    ("Uploading your part of the call recording ("
+                        ++ megabytes progress.uploaded
+                        ++ " of "
+                        ++ megabytes progress.total
+                        ++ " MB)"
+                    )
+                    |> Ui.el [ Ui.Font.bold ]
+                , Ui.Prose.paragraph
+                    [ Ui.Font.size 14 ]
+                    [ Ui.text "Please don't leave or close this page until it's finished." ]
+                , Ui.row
+                    [ Ui.height (Ui.px 6), Ui.rounded 3, Ui.clip, Ui.background MyUi.background3 ]
+                    [ Ui.el [ Ui.width (Ui.portion filled), Ui.height Ui.fill, Ui.background MyUi.buttonBackground ] Ui.none
+                    , Ui.el [ Ui.width (Ui.portion (1000 - filled)) ] Ui.none
+                    ]
+                ]
+
+        Nothing ->
+            Ui.none
+
+
+megabytes : Int -> String
+megabytes bytes =
+    String.fromFloat (toFloat (round (toFloat bytes / (1024 * 1024) * 10)) / 10)
+
+
 {-| Shown over everything, so that someone who's in the call but looking at another
 channel still gets asked.
 -}
@@ -2212,6 +2273,8 @@ type FromJs
     | FromJs_DebugData (List DebugSection)
     | FromJs_ScreenShareStarted
     | FromJs_ScreenShareStopped
+    | FromJs_RecordingUploadProgress Int Int
+    | FromJs_RecordingUploadsStopped
 
 
 type LocalOrConnection
@@ -2238,7 +2301,7 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder iEncoder value ->
+        (\cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder iEncoder jEncoder kEncoder value ->
             case value of
                 FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
@@ -2260,6 +2323,12 @@ voiceChatFromJsCodec =
 
                 FromJs_ScreenShareStopped ->
                     iEncoder
+
+                FromJs_RecordingUploadProgress uploaded total ->
+                    jEncoder uploaded total
+
+                FromJs_RecordingUploadsStopped ->
+                    kEncoder
         )
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
@@ -2268,6 +2337,8 @@ voiceChatFromJsCodec =
         |> Codec.variant1 "debug-data" FromJs_DebugData (Codec.list debugSectionCodec)
         |> Codec.variant0 "screen-share-started" FromJs_ScreenShareStarted
         |> Codec.variant0 "screen-share-stopped" FromJs_ScreenShareStopped
+        |> Codec.variant2 "recording-upload-progress" FromJs_RecordingUploadProgress Codec.int Codec.int
+        |> Codec.variant0 "recording-uploads-stopped" FromJs_RecordingUploadsStopped
         |> Codec.buildCustom
 
 

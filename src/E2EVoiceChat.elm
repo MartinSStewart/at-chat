@@ -926,6 +926,27 @@ recordingNeedsEveryoneTest normalConfig =
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , T.checkState 0 (checkCallRecording { participants = [ 0, 2, 3, 4 ], files = [] })
 
+                -- Wanda is told not to leave while her part goes up
+                , wanda.portEvent
+                    10
+                    "voice_chat_from_js"
+                    (Json.Encode.object
+                        [ ( "tag", Json.Encode.string "recording-upload-progress" )
+                        , ( "args", Json.Encode.list Json.Encode.int [ 600000, 1000000 ] )
+                        ]
+                    )
+                , wanda.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_recordingUpload" ])
+                , E2EHelper.tallSnapshot wanda 0 { name = "Uploading a call recording" }
+                , wanda.portEvent
+                    10
+                    "voice_chat_from_js"
+                    (Json.Encode.object
+                        [ ( "tag", Json.Encode.string "recording-uploads-stopped" )
+                        , ( "args", Json.Encode.list Json.Encode.int [] )
+                        ]
+                    )
+                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "voiceChat_recordingUpload" ])
+
                 -- Files go up after the recording has ended
                 , T.checkState 0 (expectRecordingUpload (Ok "valid,4") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000)
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "../secret.txt" 1000)

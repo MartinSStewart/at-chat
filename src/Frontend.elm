@@ -5320,6 +5320,26 @@ updateLoaded msg model =
                                 Call.FromJs_ScreenShareStopped ->
                                     setScreenShareEnabled model.time False loggedIn
 
+                                Call.FromJs_RecordingUploadProgress uploaded total ->
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | recordingUpload = Just { uploaded = uploaded, total = total } } }
+                                    , Command.none
+                                    )
+
+                                Call.FromJs_RecordingUploadsStopped ->
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | recordingUpload = Nothing } }
+                                    , Command.none
+                                    )
+
                                 Call.FromJs_DebugData sections ->
                                     let
                                         voiceChat : Call.Model
@@ -10010,6 +10030,7 @@ view _ model =
                                       Call.recordingNoticeView local.localUser loaded.time local.calls
                                         |> Ui.map VoiceChatMsg
                                         |> Ui.inFront
+                                    , Call.recordingUploadView local.localUser loggedIn.voiceChat |> Ui.inFront
                                     , Call.videoNodes
                                         local.localUser
                                         loaded

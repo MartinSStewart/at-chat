@@ -470,28 +470,38 @@ async function recoverAll() {
     const recovered = [];
     for await (const [name, directory] of recordings.entries()) {
         if (directory.kind !== "directory") continue;
-        await navigator.locks.request("at-chat-recording " + name, { ifAvailable: true }, async function (lock) {
-            // Held by a tab that is still recording into it.
-            if (!lock) return;
-            const index = await readIndex(directory);
-            const endedAt = new Map();
-            for (const entry of index.files) {
-                if (entry.endedAt !== null) continue;
-                const duration = await repair(directory, entry);
-                if (duration === null) continue;
-                endedAt.set(entry.name, entry.startedAt + Math.round(duration * 1000));
-                recovered.push(entry.name);
-            }
-            if (endedAt.size > 0) {
-                await changeIndex(directory, function (index2) {
-                    index2.files.forEach(function (entry) {
-                        if (endedAt.has(entry.name)) entry.endedAt = endedAt.get(entry.name);
-                    });
-                });
-            }
-        });
+        recovered.push(...(await recoverRecording(name, directory)));
     }
     postMessage({ type: "recovered", files: recovered });
+}
+
+// Returns the names of the files it repaired. A page that was refreshed can
+// still be holding the lock when the new one loads, and the new one can be
+// recording into the same directory by the time it's let go of, so this is
+// tried again before each upload too.
+async function recoverRecording(name, directory) {
+    const recovered = [];
+    await navigator.locks.request("at-chat-recording " + name, { ifAvailable: true }, async function (lock) {
+        // Held by a tab that is still recording into it.
+        if (!lock) return;
+        const index = await readIndex(directory);
+        const endedAt = new Map();
+        for (const entry of index.files) {
+            if (entry.endedAt !== null) continue;
+            const duration = await repair(directory, entry);
+            if (duration === null) continue;
+            endedAt.set(entry.name, entry.startedAt + Math.round(duration * 1000));
+            recovered.push(entry.name);
+        }
+        if (endedAt.size > 0) {
+            await changeIndex(directory, function (index2) {
+                index2.files.forEach(function (entry) {
+                    if (endedAt.has(entry.name)) entry.endedAt = endedAt.get(entry.name);
+                });
+            });
+        }
+    });
+    return recovered;
 }
 
 // Goes through every recording until each finished file is on the server, or
@@ -510,7 +520,9 @@ async function uploadAll() {
             for await (const [name, directory] of recordings.entries()) {
                 if (directory.kind !== "directory" || uploadUrl === null) continue;
                 await navigator.locks.request("at-chat-recording-upload " + name, { ifAvailable: true }, async function (lock) {
-                    if (lock) await uploadRecording(recordings, name, directory);
+                    if (!lock) return;
+                    await recoverRecording(name, directory);
+                    await uploadRecording(recordings, name, directory);
                 });
             }
         } while (uploadAgain && uploadUrl !== null);
@@ -518,11 +530,23 @@ async function uploadAll() {
         postMessage({ type: "error", name: e.name, message: String(e) });
     } finally {
         uploading = false;
+        postMessage({ type: "uploads-stopped" });
     }
 }
 
 async function uploadRecording(recordings, recordingId, directory) {
     const index = await readIndex(directory);
+    const queued = [];
+    for (const entry of index.files) {
+        if (entry.endedAt === null || entry.uploaded === true) continue;
+        try {
+            const file = await (await directory.getFileHandle(entry.name)).getFile();
+            queued.push({ key: recordingId + "/" + entry.name, size: file.size });
+        } catch (e) {
+            // Gone, so there's nothing of it to upload.
+        }
+    }
+    postMessage({ type: "upload-queued", files: queued });
     for (const entry of index.files) {
         if (uploadUrl === null) return;
         if (entry.endedAt === null || entry.uploaded === true) continue;
@@ -604,6 +628,7 @@ async function uploadFile(recordingId, directory, entry) {
         if (response && (response.ok || response.status === 409)) {
             const serverHas = Number(await response.text());
             if (!Number.isFinite(serverHas) || serverHas > file.size) return false;
+            postMessage({ type: "upload-progress", key: recordingId + "/" + entry.name, uploaded: serverHas });
             if (response.ok && serverHas === file.size) return true;
             offset = serverHas;
             failures = 0;
@@ -1937,6 +1962,21 @@ exports.init = async function init(app) {
         });
     }
 
+    // Every file the worker has said it's uploading since uploads last stopped,
+    // by recording id and name, so the progress shown covers all of them.
+    const recordingUploads = new Map();
+
+    function sendRecordingUploadProgress() {
+        let uploaded = 0;
+        let total = 0;
+        for (const file of recordingUploads.values()) {
+            uploaded += file.uploaded;
+            total += file.size;
+        }
+        if (total === 0) return;
+        app.ports.voice_chat_from_js.send({ tag: "recording-upload-progress", args: [uploaded, total] });
+    }
+
     function postToRecordingWorker(message, transfer) {
         if (!recordingWorker) {
             const url = URL.createObjectURL(new Blob([recordingFileWorker], { type: "application/javascript" }));
@@ -1955,6 +1995,19 @@ exports.init = async function init(app) {
                     const release = recordingLockReleases.get(data.directory);
                     recordingLockReleases.delete(data.directory);
                     if (release) release();
+                } else if (data.type === "upload-queued") {
+                    for (const file of data.files) {
+                        const existing = recordingUploads.get(file.key);
+                        recordingUploads.set(file.key, { size: file.size, uploaded: existing ? existing.uploaded : 0 });
+                    }
+                    sendRecordingUploadProgress();
+                } else if (data.type === "upload-progress") {
+                    const existing = recordingUploads.get(data.key);
+                    if (existing) existing.uploaded = data.uploaded;
+                    sendRecordingUploadProgress();
+                } else if (data.type === "uploads-stopped") {
+                    recordingUploads.clear();
+                    app.ports.voice_chat_from_js.send({ tag: "recording-uploads-stopped", args: [] });
                 } else if (data.type === "recovered") {
                     if (data.files.length > 0) console.log("Repaired recording files left unfinished last time:", data.files);
                     startRecordingUploads();
