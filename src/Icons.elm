@@ -1174,16 +1174,14 @@ recording height =
             , Svg.Attributes.width "50"
             , Svg.Attributes.height "22"
             , Svg.Attributes.rx "5"
-            , Svg.Attributes.fill "none"
-            , Svg.Attributes.stroke "currentColor"
-            , Svg.Attributes.strokeWidth "2"
+            , Svg.Attributes.fill "red"
             ]
             []
         , Svg.circle
             [ Svg.Attributes.cx "12"
             , Svg.Attributes.cy "12"
             , Svg.Attributes.r "5"
-            , Svg.Attributes.fill "currentColor"
+            , Svg.Attributes.fill "white"
             ]
             []
         , Svg.text_
@@ -1192,7 +1190,7 @@ recording height =
             , Svg.Attributes.fontSize "12.5"
             , Svg.Attributes.fontWeight "bold"
             , Svg.Attributes.fontFamily "sans-serif"
-            , Svg.Attributes.fill "currentColor"
+            , Svg.Attributes.fill "white"
             ]
             [ Svg.text "REC" ]
         ]

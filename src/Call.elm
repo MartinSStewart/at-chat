@@ -1434,14 +1434,7 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                             MyUi.simpleButton
                                 (Dom.id "voiceChat_toggleDebugData")
                                 PressedToggleDebugData
-                                (Ui.text
-                                    (if model.pollDebugData then
-                                        "Stop\u{00A0}polling\u{00A0}JS"
-
-                                     else
-                                        "Poll\u{00A0}JS\u{00A0}state"
-                                    )
-                                )
+                                (Ui.text "Debug")
 
                           else
                             Ui.none
