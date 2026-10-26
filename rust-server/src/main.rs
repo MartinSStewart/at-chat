@@ -85,6 +85,7 @@ async fn main() {
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
+                .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
                     "/file/discord-sticker/{sticker_id}",
@@ -658,6 +659,17 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         StatusCode::OK,
         serde_json::to_string::<EmbedResponse>(&response).unwrap(),
     )
+}
+
+// Call recordings are made on each person's own device, and their files are lined up
+// afterwards by start time. Every device asks this for the time rather than trusting its
+// own clock, which can be off by seconds.
+async fn time_endpoint() -> Response<String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    response_with_headers(StatusCode::OK, now.to_string())
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {

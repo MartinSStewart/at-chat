@@ -1867,11 +1867,13 @@ type ToJs
 
 
 {-| `recordingId` is the same for everyone in the recording, and files from one person
-are grouped under it on their device.
+are grouped under it on their device. `timeUrl` answers with the rust server's clock,
+which every file's start time is kept by.
 -}
 type alias StartRecordingData =
     { recordingId : String
     , userName : String
+    , timeUrl : String
     }
 
 
@@ -1880,6 +1882,7 @@ startRecordingDataCodec =
     Codec.object StartRecordingData
         |> Codec.field "recordingId" .recordingId Codec.string
         |> Codec.field "userName" .userName Codec.string
+        |> Codec.field "timeUrl" .timeUrl Codec.string
         |> Codec.buildObject
 
 
@@ -1924,7 +1927,12 @@ recordingChangeCmd userName recordingIdOld recordingIdNew =
     else
         case recordingIdNew of
             Just recordingId2 ->
-                toJs (ToJs_StartRecording { recordingId = recordingId2, userName = userName })
+                ToJs_StartRecording
+                    { recordingId = recordingId2
+                    , userName = userName
+                    , timeUrl = FileStatus.domain ++ "/file/time"
+                    }
+                    |> toJs
 
             Nothing ->
                 toJs ToJs_StopRecording

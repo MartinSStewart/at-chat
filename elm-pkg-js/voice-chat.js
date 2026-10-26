@@ -317,7 +317,28 @@ function pcm16(samples) {
 // workers, and it is the only way of writing to the origin private file system
 // that lands on disk as it goes. createWritable() keeps everything in a swap
 // file until close(), which a crash or a closed tab never gets to.
+//
+// Each recording is a directory under "recordings", named by the recording's
+// id, holding its files and an index.json listing them:
+//   { files: [{ name, kind, startedAt, endedAt }] }
+// with times in milliseconds by the server's clock. A file whose endedAt is
+// null was still being written when the page went away, and is repaired the
+// next time at-chat opens.
+//
+// The tab writing a recording holds a Web Lock named after it, which is
+// released when the tab closes for any reason, so another tab never repairs a
+// file that is still being recorded.
 const recordingFileWorker = `
+${concatBytes.toString()}
+${ascii.toString()}
+${littleEndian.toString()}
+${wavHeader.toString()}
+
+const WAV_HEADER_BYTES = 44;
+const AUDIO_BYTES_PER_SECOND = ${AUDIO_SAMPLE_RATE * 2};
+const TIMESCALE = ${RECORDING_TIMESCALE};
+const SAMPLE_RATE = ${AUDIO_SAMPLE_RATE};
+
 let root = null;
 const files = new Map();
 const queue = [];
@@ -336,20 +357,63 @@ async function pump() {
         try {
             await handle(message);
         } catch (e) {
-            postMessage({ type: "error", file: message.file, message: String(e) });
+            postMessage({ type: "error", name: e.name, message: String(e) });
         }
     }
     busy = false;
 }
 
+async function recordingsDirectory() {
+    if (!root) root = await navigator.storage.getDirectory();
+    return root.getDirectoryHandle("recordings", { create: true });
+}
+
+async function readIndex(directory) {
+    try {
+        const file = await (await directory.getFileHandle("index.json")).getFile();
+        const index = JSON.parse(await file.text());
+        if (index && Array.isArray(index.files)) return index;
+    } catch (e) {
+        // Missing or cut off partway through being written.
+    }
+    return { files: [] };
+}
+
+async function writeIndex(directory, index) {
+    const access = await (await directory.getFileHandle("index.json", { create: true })).createSyncAccessHandle();
+    const bytes = new TextEncoder().encode(JSON.stringify(index));
+    access.truncate(0);
+    access.write(bytes, { at: 0 });
+    access.flush();
+    access.close();
+}
+
 async function handle(message) {
     if (message.type === "open") {
-        if (!root) root = await navigator.storage.getDirectory();
-        const recordings = await root.getDirectoryHandle("recordings", { create: true });
-        const directory = await recordings.getDirectoryHandle(message.directory, { create: true });
-        const fileHandle = await directory.getFileHandle(message.name, { create: true });
-        const access = await fileHandle.createSyncAccessHandle();
+        const directory = await (await recordingsDirectory()).getDirectoryHandle(message.directory, { create: true });
+        const access = await (await directory.getFileHandle(message.entry.name, { create: true })).createSyncAccessHandle();
         files.set(message.file, { access, size: access.getSize() });
+        const index = await readIndex(directory);
+        index.files = index.files.filter(function (entry) { return entry.name !== message.entry.name; });
+        index.files.push(message.entry);
+        await writeIndex(directory, index);
+        return;
+    }
+    if (message.type === "ended") {
+        const directory = await (await recordingsDirectory()).getDirectoryHandle(message.directory, { create: true });
+        const index = await readIndex(directory);
+        index.files.forEach(function (entry) {
+            if (entry.name === message.name) entry.endedAt = message.endedAt;
+        });
+        await writeIndex(directory, index);
+        return;
+    }
+    if (message.type === "release") {
+        postMessage({ type: "released", directory: message.directory });
+        return;
+    }
+    if (message.type === "recover") {
+        await recoverAll();
         return;
     }
     const file = files.get(message.file);
@@ -365,8 +429,136 @@ async function handle(message) {
         file.access.flush();
         file.access.close();
         files.delete(message.file);
-        postMessage({ type: "closed", file: message.file, size: file.size });
     }
+}
+
+async function recoverAll() {
+    const recordings = await recordingsDirectory();
+    const recovered = [];
+    for await (const [name, directory] of recordings.entries()) {
+        if (directory.kind !== "directory") continue;
+        await navigator.locks.request("at-chat-recording " + name, { ifAvailable: true }, async function (lock) {
+            // Held by a tab that is still recording into it.
+            if (!lock) return;
+            const index = await readIndex(directory);
+            let changed = false;
+            for (const entry of index.files) {
+                if (entry.endedAt !== null) continue;
+                const duration = await repair(directory, entry);
+                if (duration === null) continue;
+                entry.endedAt = entry.startedAt + Math.round(duration * 1000);
+                changed = true;
+                recovered.push(entry.name);
+            }
+            if (changed) await writeIndex(directory, index);
+        });
+    }
+    postMessage({ type: "recovered", files: recovered });
+}
+
+// Cuts a file back to what was completely written, and returns how many
+// seconds long it is, or null when it can't be opened.
+async function repair(directory, entry) {
+    let access;
+    try {
+        access = await (await directory.getFileHandle(entry.name)).createSyncAccessHandle();
+    } catch (e) {
+        return null;
+    }
+    try {
+        return entry.name.endsWith(".wav") ? repairWav(access) : repairMp4(access);
+    } finally {
+        access.flush();
+        access.close();
+    }
+}
+
+function repairWav(access) {
+    const size = access.getSize();
+    if (size < WAV_HEADER_BYTES) {
+        access.truncate(0);
+        access.write(wavHeader(SAMPLE_RATE, 0), { at: 0 });
+        return 0;
+    }
+    // Samples are two bytes, so half of one is a write that was cut off.
+    const dataBytes = (size - WAV_HEADER_BYTES) - ((size - WAV_HEADER_BYTES) % 2);
+    access.truncate(WAV_HEADER_BYTES + dataBytes);
+    access.write(wavHeader(SAMPLE_RATE, dataBytes), { at: 0 });
+    return dataBytes / AUDIO_BYTES_PER_SECOND;
+}
+
+function readBytes(access, at, length) {
+    const bytes = new Uint8Array(length);
+    const read = access.read(bytes, { at });
+    return read === length ? bytes : null;
+}
+
+// Walks the top level boxes and keeps everything up to the last fragment that
+// was written in full, a moof followed by its whole mdat. The duration comes
+// from the last fragment's start time plus the length of its samples.
+function repairMp4(access) {
+    const size = access.getSize();
+    let offset = 0;
+    let keep = 0;
+    let lastMoof = null;
+    let duration = 0;
+    while (offset + 8 <= size) {
+        const header = readBytes(access, offset, 8);
+        if (!header) break;
+        const view = new DataView(header.buffer);
+        const boxSize = view.getUint32(0);
+        const type = String.fromCharCode(header[4], header[5], header[6], header[7]);
+        if (boxSize < 8 || offset + boxSize > size) break;
+        if (type === "moof") {
+            lastMoof = readBytes(access, offset, boxSize);
+        } else if (type === "mdat") {
+            if (lastMoof) {
+                const fragmentEnd = moofEndTime(lastMoof);
+                if (fragmentEnd !== null) duration = fragmentEnd / TIMESCALE;
+            }
+            lastMoof = null;
+            keep = offset + boxSize;
+        } else if (type === "ftyp" || type === "moov") {
+            keep = offset + boxSize;
+        }
+        offset += boxSize;
+    }
+    access.truncate(keep);
+    return duration;
+}
+
+// tfdt's start time plus every sample duration in trun, for the boxes this
+// recorder writes.
+function moofEndTime(moof) {
+    const view = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
+    let start = null;
+    let total = 0;
+    function walk(from, to) {
+        let at = from;
+        while (at + 8 <= to) {
+            const boxSize = view.getUint32(at);
+            const type = String.fromCharCode(moof[at + 4], moof[at + 5], moof[at + 6], moof[at + 7]);
+            if (boxSize < 8 || at + boxSize > to) return;
+            if (type === "traf") {
+                walk(at + 8, at + boxSize);
+            } else if (type === "tfdt") {
+                start = moof[at + 8] === 1 ? Number(view.getBigUint64(at + 12)) : view.getUint32(at + 12);
+            } else if (type === "trun") {
+                const flags = view.getUint32(at + 8) & 0xffffff;
+                const count = view.getUint32(at + 12);
+                let entry = at + 16;
+                if (flags & 0x1) entry += 4;
+                if (flags & 0x4) entry += 4;
+                const entrySize = ((flags & 0x100) ? 4 : 0) + ((flags & 0x200) ? 4 : 0) + ((flags & 0x400) ? 4 : 0) + ((flags & 0x800) ? 4 : 0);
+                if (flags & 0x100) {
+                    for (let i = 0; i < count; i++) total += view.getUint32(entry + i * entrySize);
+                }
+            }
+            at += boxSize;
+        }
+    }
+    walk(8, moof.byteLength);
+    return start === null ? null : start + total;
 }
 `;
 
@@ -780,7 +972,13 @@ exports.init = async function init(app) {
 
         capture.port.onmessage = function (event) {
             const samples = event.data;
-            if (!state.stopped) recordAudio(samples);
+            if (!state.stopped) {
+                const micOn = state.stream.getAudioTracks().some(function (track) {
+                    return track.enabled && track.readyState === "live";
+                });
+                if (micOn) recordAudio(samples);
+                else recordAudioOff();
+            }
             if (!readyToSend(state)) return;
             const audioData = new AudioData({
                 format: "f32-planar",
@@ -1417,20 +1615,26 @@ exports.init = async function init(app) {
     // goes out over the call. Each person keeps their own camera, mic and screen,
     // and they're lined up afterwards by the times in their file names.
     //
-    // A camera file ends when the camera is turned off or changes size, and a
-    // screen file when the share stops or the shared window is resized, since
-    // one MP4 track can't change size partway. The next frame starts a new file.
+    // A camera file ends when the camera is turned off or changes size, a screen
+    // file when the share stops or the shared window is resized, since one MP4
+    // track can't change size partway, and a mic file when the mic is muted. The
+    // next frame starts a new file.
     //
     // Shape of `recorder`:
-    //   id          the recording's id, the directory its files go in
-    //   userName    for the file names
-    //   camera      the camera's open file, see recordingVideoFile
-    //   screen      likewise for a shared screen
-    //   audio       the mic's open file, see recordingAudioFile
-    //   files       every file started, for the debug panel
+    //   id           the recording's id, the directory its files go in
+    //   userName     for the file names
+    //   clockOffset  milliseconds to add to this device's clock to get the
+    //                server's, or null until it has been measured
+    //   camera       the camera's open file, see recordingVideoFile
+    //   screen       likewise for a shared screen
+    //   audio        the mic's open file, see recordAudio
+    //   files        every file started, for the debug panel
+    //   storageTimer checks there's still room, see checkRecordingStorage
     let recorder = null;
     let recordingWorker = null;
     let nextRecordingFile = 1;
+    // Resolving one of these lets go of that recording's Web Lock.
+    const recordingLockReleases = new Map();
     // Codecs an encoder has failed with on this device. Linux in particular can
     // report H.264 as supported and then fail on the first frame.
     const failedRecordingCodecs = new Set();
@@ -1439,22 +1643,108 @@ exports.init = async function init(app) {
     // VP9 for browsers without an H.264 encoder.
     const RECORDING_CODECS = ["avc1.640033", "avc1.4d0033", "avc1.420033", "vp09.00.51.08"];
 
+    // Below this much free space a warning is shown, and below the second the
+    // recording on this device stops rather than failing partway through a write.
+    const RECORDING_STORAGE_WARNING_BYTES = 2_000_000_000;
+    const RECORDING_STORAGE_STOP_BYTES = 200_000_000;
+    const RECORDING_STORAGE_CHECK_MS = 60_000;
+
     function startRecording(args) {
         if (recorder && recorder.id === args.recordingId) return;
         stopRecording();
-        recorder = { id: args.recordingId, userName: args.userName, camera: null, screen: null, audio: null, files: [] };
+        const starting = {
+            id: args.recordingId,
+            userName: args.userName,
+            clockOffset: null,
+            camera: null,
+            screen: null,
+            audio: null,
+            files: [],
+            storageWarningShown: false,
+            storageTimer: null,
+        };
+        recorder = starting;
+
+        if (navigator.locks) {
+            navigator.locks.request("at-chat-recording " + starting.id, function () {
+                return new Promise(function (resolve) {
+                    recordingLockReleases.set(starting.id, resolve);
+                });
+            });
+        }
         // Without this the browser may clear the origin's storage to make room
         // for something else, recording included.
         if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+
+        measureClockOffset(args.timeUrl).then(function (offset) {
+            starting.clockOffset = offset;
+        });
+        checkRecordingStorage(starting);
+        starting.storageTimer = setInterval(function () {
+            checkRecordingStorage(starting);
+        }, RECORDING_STORAGE_CHECK_MS);
     }
 
-    function stopRecording() {
+    async function stopRecording() {
         const stopping = recorder;
         recorder = null;
         if (!stopping) return;
-        if (stopping.camera) closeRecordingVideoFile(stopping.camera);
-        if (stopping.screen) closeRecordingVideoFile(stopping.screen);
-        if (stopping.audio) closeRecordingAudioFile(stopping.audio);
+        clearInterval(stopping.storageTimer);
+        await Promise.all([
+            stopping.camera ? closeRecordingVideoFile(stopping.camera) : null,
+            stopping.screen ? closeRecordingVideoFile(stopping.screen) : null,
+            stopping.audio ? closeRecordingAudioFile(stopping.audio) : null,
+        ]);
+        // Queued behind the closes, so the lock is only let go of once the
+        // files are finished.
+        postToRecordingWorker({ type: "release", directory: stopping.id });
+    }
+
+    // The files from everyone in a call are lined up by their start times, and
+    // each device's clock can be off by seconds, so times are kept by the rust
+    // server's clock. Of a few round trips, the quickest says the most about
+    // when the server read its clock.
+    async function measureClockOffset(timeUrl) {
+        let best = null;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const sent = Date.now();
+                const response = await fetch(timeUrl, { cache: "no-store" });
+                const serverTime = Number(await response.text());
+                const received = Date.now();
+                if (!Number.isFinite(serverTime)) continue;
+                const roundTrip = received - sent;
+                if (best === null || roundTrip < best.roundTrip) {
+                    best = { roundTrip, offset: serverTime - (sent + roundTrip / 2) };
+                }
+            } catch (e) {
+                // Recorded by this device's clock instead, which is still close.
+            }
+        }
+        return best === null ? 0 : Math.round(best.offset);
+    }
+
+    async function checkRecordingStorage(owner) {
+        if (!navigator.storage || !navigator.storage.estimate) return;
+        let estimate;
+        try {
+            estimate = await navigator.storage.estimate();
+        } catch (e) {
+            return;
+        }
+        if (recorder !== owner) return;
+        const free = estimate.quota - estimate.usage;
+        if (free < RECORDING_STORAGE_STOP_BYTES) {
+            fail("Recording stopped on this device because it's out of storage space.");
+            stopRecording();
+        } else if (free < RECORDING_STORAGE_WARNING_BYTES && !owner.storageWarningShown) {
+            owner.storageWarningShown = true;
+            fail(
+                "This device is running low on storage space for the recording (" +
+                    (free / 1e9).toFixed(1) +
+                    " GB left). It will stop recording when it runs out."
+            );
+        }
     }
 
     function postToRecordingWorker(message, transfer) {
@@ -1463,7 +1753,21 @@ exports.init = async function init(app) {
             recordingWorker = new Worker(url);
             URL.revokeObjectURL(url);
             recordingWorker.onmessage = function (event) {
-                if (event.data.type === "error") fail("recording: " + event.data.message);
+                const data = event.data;
+                if (data.type === "error") {
+                    if (data.name === "QuotaExceededError") {
+                        fail("Recording stopped on this device because it's out of storage space.");
+                        stopRecording();
+                    } else {
+                        fail("recording: " + data.message);
+                    }
+                } else if (data.type === "released") {
+                    const release = recordingLockReleases.get(data.directory);
+                    recordingLockReleases.delete(data.directory);
+                    if (release) release();
+                } else if (data.type === "recovered" && data.files.length > 0) {
+                    console.log("Repaired recording files left unfinished last time:", data.files);
+                }
             };
         }
         recordingWorker.postMessage(message, transfer || []);
@@ -1480,22 +1784,27 @@ exports.init = async function init(app) {
 
     // VIDEO_Martin_2026-10-25_20-31-07.250.mp4, in local time, since that's
     // what the person editing it will think of the call as having started at.
-    function recordingFileName(kind, userName, extension) {
-        const now = new Date();
+    function recordingFileName(kind, userName, time, extension) {
+        const date = new Date(time);
         const safeName = userName.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "unknown";
         return (
             kind + "_" + safeName + "_" +
-            now.getFullYear() + "-" + twoDigits(now.getMonth() + 1) + "-" + twoDigits(now.getDate()) + "_" +
-            twoDigits(now.getHours()) + "-" + twoDigits(now.getMinutes()) + "-" + twoDigits(now.getSeconds()) +
-            "." + String(now.getMilliseconds()).padStart(3, "0") + "." + extension
+            date.getFullYear() + "-" + twoDigits(date.getMonth() + 1) + "-" + twoDigits(date.getDate()) + "_" +
+            twoDigits(date.getHours()) + "-" + twoDigits(date.getMinutes()) + "-" + twoDigits(date.getSeconds()) +
+            "." + String(date.getMilliseconds()).padStart(3, "0") + "." + extension
         );
     }
 
+    // The file isn't created until its first frame is ready to be written, so
+    // its name and start time are the time of that frame.
     function openRecordingFile(owner, kind, extension) {
         const file = {
+            owner,
             handle: nextRecordingFile,
-            name: recordingFileName(kind, owner.userName, extension),
-            opened: false,
+            kind,
+            extension,
+            name: null,
+            startedAt: null,
             bytes: 0,
         };
         nextRecordingFile += 1;
@@ -1503,10 +1812,28 @@ exports.init = async function init(app) {
         return file;
     }
 
-    function ensureRecordingFileOpen(owner, file) {
-        if (file.opened) return;
-        file.opened = true;
-        postToRecordingWorker({ type: "open", file: file.handle, directory: owner.id, name: file.name });
+    // `localTime` is when the first frame was captured, by this device's clock.
+    function ensureRecordingFileOpen(file, localTime) {
+        if (file.name !== null) return;
+        file.startedAt = Math.round(localTime + (file.owner.clockOffset || 0));
+        file.name = recordingFileName(file.kind, file.owner.userName, file.startedAt, file.extension);
+        postToRecordingWorker({
+            type: "open",
+            file: file.handle,
+            directory: file.owner.id,
+            entry: { name: file.name, kind: file.kind, startedAt: file.startedAt, endedAt: null },
+        });
+    }
+
+    function finishRecordingFile(file, localEndTime) {
+        if (file.name === null) return;
+        postToRecordingWorker({ type: "close", file: file.handle });
+        postToRecordingWorker({
+            type: "ended",
+            directory: file.owner.id,
+            name: file.name,
+            endedAt: Math.round(localEndTime + (file.owner.clockOffset || 0)),
+        });
     }
 
     async function pickRecordingCodec(width, height, framerate, bitrate) {
@@ -1547,6 +1874,7 @@ exports.init = async function init(app) {
             wroteInit: false,
             pending: [],
             sequenceNumber: 1,
+            endTime: 0,
             frames: 0,
         };
         pickRecordingCodec(width, height, framerate, bitrate).then(function (config) {
@@ -1573,6 +1901,7 @@ exports.init = async function init(app) {
     }
 
     function recordingVideoFrame(video, frame, now) {
+        if (video.owner.clockOffset === null) return;
         if (!video.encoder || video.failed || video.closed || video.encoder.state !== "configured") return;
         // Recording is meant to be the best copy, but a software encoder that
         // can't keep up only builds a backlog, so frames are dropped instead.
@@ -1609,7 +1938,7 @@ exports.init = async function init(app) {
                 video.description = avcDecoderConfigFromKeyFrame(data) || video.description;
                 if (!video.description) return;
             }
-            ensureRecordingFileOpen(video.owner, video.file);
+            ensureRecordingFileOpen(video.file, performance.timeOrigin + video.startNow);
             appendToRecordingFile(video.file, mp4InitSegment(video.codec, video.width, video.height, video.description));
             video.wroteInit = true;
         }
@@ -1626,6 +1955,7 @@ exports.init = async function init(app) {
             sample.duration = Math.max(1, next - sample.time);
         });
         appendToRecordingFile(video.file, mp4Fragment(video.sequenceNumber, samples));
+        video.endTime = endTime;
         video.sequenceNumber += 1;
         postToRecordingWorker({ type: "flush", file: video.file.handle });
     }
@@ -1645,7 +1975,12 @@ exports.init = async function init(app) {
             const last = video.pending[video.pending.length - 1];
             writeRecordingFragment(video, last.time + Math.round(RECORDING_TIMESCALE / video.framerate));
         }
-        if (video.file.opened) postToRecordingWorker({ type: "close", file: video.file.handle });
+        if (video.startNow !== null) {
+            finishRecordingFile(
+                video.file,
+                performance.timeOrigin + video.startNow + (video.endTime * 1000) / RECORDING_TIMESCALE
+            );
+        }
     }
 
     function recordingBitrate(width, height, framerate, bitsPerPixel) {
@@ -1708,11 +2043,13 @@ exports.init = async function init(app) {
     const WAV_HEADER_INTERVAL_MS = 5000;
 
     function recordAudio(samples) {
-        if (!recorder) return;
+        if (!recorder || recorder.clockOffset === null) return;
         let audio = recorder.audio;
         if (!audio) {
-            audio = { file: openRecordingFile(recorder, "AUDIO", "wav"), dataBytes: 0, lastHeaderTime: performance.now() };
-            ensureRecordingFileOpen(recorder, audio.file);
+            // The block arriving now is the last 20ms of sound.
+            const startLocal = Date.now() - (samples.length / AUDIO_SAMPLE_RATE) * 1000;
+            audio = { file: openRecordingFile(recorder, "AUDIO", "wav"), startLocal, dataBytes: 0, lastHeaderTime: performance.now() };
+            ensureRecordingFileOpen(audio.file, startLocal);
             appendToRecordingFile(audio.file, wavHeader(AUDIO_SAMPLE_RATE, 0));
             recorder.audio = audio;
         }
@@ -1731,9 +2068,15 @@ exports.init = async function init(app) {
         postToRecordingWorker({ type: "write-at", file: audio.file.handle, at: 0, bytes: wavHeader(AUDIO_SAMPLE_RATE, audio.dataBytes) });
     }
 
+    function recordAudioOff() {
+        if (!recorder || !recorder.audio) return;
+        closeRecordingAudioFile(recorder.audio);
+        recorder.audio = null;
+    }
+
     function closeRecordingAudioFile(audio) {
         writeWavHeader(audio);
-        postToRecordingWorker({ type: "close", file: audio.file.handle });
+        finishRecordingFile(audio.file, audio.startLocal + (audio.dataBytes / (AUDIO_SAMPLE_RATE * 2)) * 1000);
     }
 
     // --- debug data ---
@@ -1927,7 +2270,7 @@ exports.init = async function init(app) {
                       row("screen codec", recorder.screen ? recorder.screen.codec + " " + recorder.screen.frames + " frames" : "none"),
                   ].concat(
                       recorder.files.map(function (file) {
-                          return row(file.name, (file.bytes / 1e6).toFixed(1) + " MB");
+                          return row(file.name || file.kind + " (not started)", (file.bytes / 1e6).toFixed(1) + " MB");
                       })
                   )
                 : [row("recording", false)],
@@ -1944,6 +2287,22 @@ exports.init = async function init(app) {
         });
 
         return sections;
+    }
+
+    // Files a recording was still writing when the page last closed are cut
+    // back to what was completely written and marked as finished.
+    if (navigator.storage && navigator.storage.getDirectory && navigator.locks) {
+        navigator.storage
+            .getDirectory()
+            .then(function (root) {
+                return root.getDirectoryHandle("recordings");
+            })
+            .then(function () {
+                postToRecordingWorker({ type: "recover" });
+            })
+            .catch(function () {
+                // Nothing has been recorded on this device.
+            });
     }
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
