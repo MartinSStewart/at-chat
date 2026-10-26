@@ -55,6 +55,7 @@ import Array
 import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
+import CallRecording
 import ChannelDescription
 import ChannelHeader
 import ChannelName exposing (ChannelName)
@@ -8423,7 +8424,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton messageId callStartedData.recordings
+                        , callRecordingsButton currentUserId messageId callStartedData.recordings
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -8675,7 +8676,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton messageId callStartedData.recordings
+                        , callRecordingsButton currentUserId messageId callStartedData.recordings
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -8903,7 +8904,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton messageId callStartedData.recordings
+                        , callRecordingsButton currentUserId messageId callStartedData.recordings
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -9108,7 +9109,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton messageId callStartedData.recordings
+                        , callRecordingsButton currentUserId messageId callStartedData.recordings
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -9930,38 +9931,30 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
                         (Ui.text (User.toString userId allUsers))
                     , Ui.el [ Ui.Font.size 13 ] (Ui.text (startedACallText ++ eventDurationText startedAt endedAt))
                     ]
-                , case recordings of
-                    [] ->
-                        Ui.none
+                , if endedAt == Nothing && List.any (\recording -> recording.endedAt == Nothing) recordings then
+                    Ui.el
+                        [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
+                        , Ui.width Ui.shrink
+                        , MyUi.hoverText "This call is being recorded"
+                        ]
+                        (Ui.html (Icons.recording 22))
 
-                    _ :: _ ->
-                        Ui.el
-                            [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
-                            , Ui.width Ui.shrink
-                            , MyUi.hoverText "This call was recorded"
-                            ]
-                            (Ui.html (Icons.recording 22))
+                  else
+                    Ui.none
                 ]
             )
         )
 
 
-{-| Shows up once some of a recording has finished uploading, and opens the list of its
-files.
+{-| Shows up for people in the recording once some of it has finished uploading, and
+downloads it as a zip.
 -}
-callRecordingsButton : Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
-callRecordingsButton messageId recordings =
-    if
-        List.any
-            (\recording ->
-                (recording.deletedBy == Nothing)
-                    && List.any (\file -> file.uploaded >= file.size) recording.files
-            )
-            recordings
-    then
+callRecordingsButton : userId -> Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
+callRecordingsButton currentUserId messageId recordings =
+    if List.any (CallRecording.isReady currentUserId) recordings then
         MyUi.rowButton
             (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
-            MessageViewMsg_PressedCallRecordings
+            MessageViewMsg_PressedDownloadCallRecording
             [ Ui.spacing 8
             , Ui.paddingXY 14 0
             , Ui.height Ui.fill

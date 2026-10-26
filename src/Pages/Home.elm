@@ -762,6 +762,7 @@ previewPetPicsChannel time =
                     { startedAt = previewMinutesAgo time 4
                     , endedAt = Nothing
                     , startedBy = Id.fromInt 1
+                    , joinedBy = NonemptySet.singleton (Id.fromInt 1)
                     , reactions = SeqDict.empty
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing

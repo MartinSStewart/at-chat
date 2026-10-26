@@ -3435,9 +3435,6 @@ backendMsgLog msg =
         Rpc_RecordingUploadProgress _ _ _ ->
             BackendMsgLog_Rpc_RecordingUploadProgress
 
-        DeletedCallRecordingFiles _ _ _ ->
-            BackendMsgLog_DeletedCallRecordingFiles
-
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg
 

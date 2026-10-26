@@ -241,6 +241,7 @@ importMessage mapUserId mapChannelId messages =
                                 { startedAt = data.startedAt
                                 , endedAt = data.endedAt
                                 , startedBy = mapUserId data.startedBy
+                                , joinedBy = NonemptySet.map mapUserId data.joinedBy
                                 , reactions = mapReactions mapUserId data.reactions
                                 , timestampDrawings = mapDrawing mapUserId data.timestampDrawings
                                 , cardDrawings = mapDrawing mapUserId data.cardDrawings

@@ -813,6 +813,7 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3, 4 ], files = [] })
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkIsRecording
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecorded_3" ])
 
                 -- A recording only ends with the call
                 , joe.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "voiceChat_cancelRecording" ])
@@ -821,7 +822,7 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 100 checkIsRecording
                 , wanda.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkNoRecording
-                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecorded_3" ])
+                , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecorded_3" ])
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
 
@@ -838,16 +839,29 @@ recordingNeedsEveryoneTest normalConfig =
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 1000
                 , E2EHelper.tallSnapshot admin 100 { name = "Call recording ready to download" }
                 , admin.click 100 (Dom.id "guild_callRecordings_3")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" ])
-                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "Nothing from Joe yet. It uploads once they've left the call." ])
-                , E2EHelper.tallSnapshot admin 0 { name = "Call recording file list" }
-                , admin.click 100 (Dom.id "callRecording_delete")
-                , admin.click 100 (Dom.id "callRecording_confirmDelete")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Deleted by" ])
-                , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
 
-                -- Nothing more can be uploaded to a deleted recording
-                , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId1 "VIDEO_Stevie_2026-10-25_20-31-07.250.mp4" 1000)
+                -- Wanda joined after the call started, and can still delete its card
+                , wanda.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []
+                , wanda.custom
+                    100
+                    (Dom.id "miniView_showFullMenu")
+                    "click"
+                    (Json.Encode.object [ ( "clientX", Json.Encode.int 500 ), ( "clientY", Json.Encode.int 300 ) ])
+                , wanda.click 100 (Dom.id "messageMenu_deleteMessage")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
+                , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callStartedCard" ])
+
+                -- With the card gone there's no recording left to upload to or download from
+                , T.checkState
+                    0
+                    (\data ->
+                        case callRecordings data of
+                            [] ->
+                                Ok ()
+
+                            _ :: _ ->
+                                Err "Expected the recording to be gone with its card"
+                    )
                 ]
             )
         ]

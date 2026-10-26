@@ -59,7 +59,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (CallRecording, Message(..), MessageContent)
+import Message exposing (Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
@@ -3161,11 +3161,11 @@ updateLoaded msg model =
                         SlackDmRoute _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedCallRecordings ->
+                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
                     case ( guildOrDmId, threadRoute ) of
                         ( GuildOrDmId guildOrDmId2, NoThreadWithMessage messageId ) ->
                             FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( { loggedIn | callRecordingList = Just (CallRecording.init guildOrDmId2 messageId) }, Command.none ))
+                                (\loggedIn -> ( loggedIn, downloadCallRecordings guildOrDmId2 messageId (Local.model loggedIn.localState) ))
                                 model
 
                         ( GuildOrDmId _, ViewThreadWithMessage _ _ ) ->
@@ -4181,33 +4181,6 @@ updateLoaded msg model =
         PressedCloseExternalLinkWarning ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn -> ( { loggedIn | externalLinkWarning = Nothing }, Command.none ))
-                model
-
-        CallRecordingMsg callRecordingMsg ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.callRecordingList of
-                        Just list ->
-                            case callRecordingMsg of
-                                CallRecording.PressedClose ->
-                                    ( { loggedIn | callRecordingList = Nothing }, Command.none )
-
-                                CallRecording.PressedDelete startedAt ->
-                                    ( { loggedIn | callRecordingList = Just { list | confirmDelete = Just startedAt } }, Command.none )
-
-                                CallRecording.PressedCancelDelete ->
-                                    ( { loggedIn | callRecordingList = Just { list | confirmDelete = Nothing } }, Command.none )
-
-                                CallRecording.PressedConfirmDelete startedAt ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Local_VoiceChatChange (Call.Local_DeleteRecording (CallRecording.callId list) startedAt) |> Just)
-                                        { loggedIn | callRecordingList = Just { list | confirmDelete = Nothing } }
-                                        Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
                 model
 
         PressedAddDomainToWhitelist isChecked ->
@@ -5763,7 +5736,7 @@ updateLoaded msg model =
                                 Call.NoVideo ->
                                     ( model, Command.none )
 
-                                Call.ShowLocalVideo ->
+                                Call.ShowLocalVideo _ ->
                                     ( model, Command.none )
 
                                 Call.ShowLocalVideoAndCall _ ->
@@ -6416,11 +6389,11 @@ updateLoaded msg model =
                         SlackGuildOrDmId _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedCallRecordings ->
+                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
                             FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( { loggedIn | callRecordingList = Just (CallRecording.init guildOrDmId2 messageId) }, Command.none ))
+                                (\loggedIn -> ( loggedIn, downloadCallRecordings guildOrDmId2 messageId (Local.model loggedIn.localState) ))
                                 model
 
                         DiscordGuildOrDmId _ ->
@@ -6569,7 +6542,7 @@ updateLoaded msg model =
                     -- Calls are not supported inside threads
                     ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedCallRecordings ->
+                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -9169,9 +9142,6 @@ updateLoadedFromBackend msg model =
                                     Call.Local_CancelRecording ->
                                         Command.none
 
-                                    Call.Local_DeleteRecording _ _ ->
-                                        Command.none
-
                             Local_TextEditor TextEditor.Local_Undo ->
                                 case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
                                     Just range ->
@@ -9947,34 +9917,49 @@ updateLoadedFromBackend msg model =
                 model
 
 
-callRecordings : CallRecording.Model -> LocalState -> Maybe (List (CallRecording (Id UserId)))
-callRecordings callRecordingList local =
+{-| Normally there's only one, since a recording lasts until the call ends.
+-}
+downloadCallRecordings : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Command FrontendOnly ToBackend FrontendMsg_
+downloadCallRecordings guildOrDmId messageId local =
     let
-        fromMessage : Maybe (Message ChannelMessageId (Id UserId) (Id ChannelId)) -> Maybe (List (CallRecording (Id UserId)))
-        fromMessage maybeMessage =
+        currentUserId : Id UserId
+        currentUserId =
+            local.localUser.session.userId
+
+        download : Maybe (Message ChannelMessageId (Id UserId) (Id ChannelId)) -> Command FrontendOnly ToBackend FrontendMsg_
+        download maybeMessage =
             case maybeMessage of
                 Just (CallStarted callStarted) ->
-                    Just callStarted.recordings
+                    List.filter (CallRecording.isReady currentUserId) callStarted.recordings
+                        |> List.map
+                            (\recording ->
+                                CallRecording.zipUrl
+                                    local.localUser.timezone
+                                    (CallRecording.sharedCallId currentUserId guildOrDmId)
+                                    recording
+                                    |> Effect.File.Download.url
+                            )
+                        |> Command.batch
 
                 _ ->
-                    Nothing
+                    Command.none
     in
-    case callRecordingList.guildOrDmId of
+    case guildOrDmId of
         GuildOrDmId_Guild id ->
             case LocalState.getGuildAndChannel id local of
                 Just ( _, channel ) ->
-                    fromMessage (MessageArray.get callRecordingList.messageId channel.messages)
+                    download (MessageArray.get messageId channel.messages)
 
                 Nothing ->
-                    Nothing
+                    Command.none
 
         GuildOrDmId_Dm { otherUserId } ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
-                    fromMessage (MessageArray.get callRecordingList.messageId dmChannel.messages)
+                    download (MessageArray.get messageId dmChannel.messages)
 
                 Nothing ->
-                    Nothing
+                    Command.none
 
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
@@ -10069,25 +10054,6 @@ view _ model =
                                                 isMobile
                                                 url
                                                 |> Ui.inFront
-
-                                        Nothing ->
-                                            Ui.noAttr
-                                    , case loggedIn.callRecordingList of
-                                        Just callRecordingList ->
-                                            case callRecordings callRecordingList local of
-                                                Just recordings ->
-                                                    CallRecording.view
-                                                        isMobile
-                                                        local.localUser.timezone
-                                                        local.localUser.session.userId
-                                                        (User.allUsers local.localUser)
-                                                        callRecordingList
-                                                        recordings
-                                                        |> Ui.map CallRecordingMsg
-                                                        |> Ui.inFront
-
-                                                Nothing ->
-                                                    Ui.noAttr
 
                                         Nothing ->
                                             Ui.noAttr

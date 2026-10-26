@@ -97,10 +97,6 @@ async fn main() {
                     "/file/recording-zip/{recording_id}",
                     get(recording_zip_endpoint),
                 )
-                .route(
-                    "/file/internal/delete-recording/{recording_id}",
-                    post(delete_recording_endpoint).options(options_endpoint),
-                )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
@@ -1254,19 +1250,6 @@ fn zip_end(records: u64, directory_size: u64, directory_start: u64) -> Vec<u8> {
     end.extend_from_slice(&0u16.to_le_bytes());
 
     end
-}
-
-async fn delete_recording_endpoint(Path(recording_id): Path<String>) -> Response<String> {
-    if !is_valid_recording_id(&recording_id) {
-        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid recording");
-    }
-    match tokio::fs::remove_dir_all(format!("{RECORDINGS_PATH}/{recording_id}")).await {
-        Ok(()) => response_with_headers(StatusCode::OK, "OK"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            response_with_headers(StatusCode::OK, "OK")
-        }
-        Err(error) => response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
-    }
 }
 
 /// Asks Lamdera whether this person was in the recording, and who they are, since their

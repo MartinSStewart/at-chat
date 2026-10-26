@@ -61,6 +61,7 @@ module LocalState exposing
     , callEndedText
     , callRecordingBackend
     , callStartedText
+    , canDeleteCallMessage
     , canSendDiscordMessage
     , canViewDiscordChannel
     , canViewDiscordGuild
@@ -137,6 +138,8 @@ module LocalState exposing
     , incrementLastViewedMessageFrontend
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
+    , joinedCallMessageBackend
+    , joinedCallMessageFrontend
     , loadingDiscordChannelMap
     , markAllChannelsAndThreadsAsViewedBackend
     , markAllChannelsAndThreadsAsViewedFrontend
@@ -3200,14 +3203,27 @@ deleteMessageBackendHelperNoThread userId messageId channel =
                 DeletedMessage _ ->
                     Err ()
 
-                CallStarted _ ->
-                    Err ()
+                CallStarted callStarted ->
+                    if canDeleteCallMessage userId callStarted then
+                        { channel | messages = IdArray.set messageId (DeletedMessage callStarted.startedAt) channel.messages }
+                            |> Ok
+
+                    else
+                        Err ()
 
                 GameStarted _ ->
                     Err ()
 
         Nothing ->
             Err ()
+
+
+{-| Anyone who was in a call can delete its card once it's over. Its recording's files are
+left on the server with nothing pointing at them.
+-}
+canDeleteCallMessage : userId -> CallStartedData userId -> Bool
+canDeleteCallMessage userId callStarted =
+    callStarted.endedAt /= Nothing && NonemptySet.member userId callStarted.joinedBy
 
 
 deleteMessageFrontend :
@@ -3395,8 +3411,10 @@ deleteMessageFrontendNoThread messageId channel =
                 DeletedMessage _ ->
                     channel
 
-                CallStarted _ ->
-                    channel
+                CallStarted callStarted ->
+                    { channel
+                        | messages = MessageArray.set messageId (DeletedMessage callStarted.startedAt) channel.messages
+                    }
 
                 GameStarted _ ->
                     channel
@@ -5038,4 +5056,71 @@ markCallMessageAsEndedFrontend time channel =
                     channel
 
         Nothing ->
+            channel
+
+
+joinedCallMessageBackend :
+    userId
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+joinedCallMessageBackend userId channel =
+    case
+        arrayFindIndexRight
+            (\message ->
+                case message of
+                    CallStarted _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( lastCallIndex, CallStarted callStarted ) ->
+            case callStarted.endedAt of
+                Nothing ->
+                    { channel
+                        | messages =
+                            IdArray.set
+                                (Id.fromInt lastCallIndex)
+                                (CallStarted { callStarted | joinedBy = NonemptySet.insert userId callStarted.joinedBy })
+                                channel.messages
+                    }
+
+                Just _ ->
+                    channel
+
+        _ ->
+            channel
+
+
+joinedCallMessageFrontend : userId -> { a | messages : MessageArray messageId userId channelId } -> { a | messages : MessageArray messageId userId channelId }
+joinedCallMessageFrontend userId channel =
+    case
+        MessageArray.findRight
+            (\message ->
+                case message of
+                    CallStarted _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            channel.messages
+    of
+        Just ( lastCallIndex, CallStarted callStarted ) ->
+            case callStarted.endedAt of
+                Nothing ->
+                    { channel
+                        | messages =
+                            MessageArray.set
+                                lastCallIndex
+                                (CallStarted { callStarted | joinedBy = NonemptySet.insert userId callStarted.joinedBy })
+                                channel.messages
+                    }
+
+                Just _ ->
+                    channel
+
+        _ ->
             channel

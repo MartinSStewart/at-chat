@@ -392,9 +392,6 @@ pendingChangesText localChange =
                 Call.Local_CancelRecording ->
                     Just "Cancelled asking to record call"
 
-                Call.Local_DeleteRecording _ _ ->
-                    Just "Deleted call recording"
-
         Local_Game _ change ->
             case change of
                 Game.CreatePublicLink _ _ ->
@@ -3287,9 +3284,6 @@ isPressMsg msg =
         PressedCloseExternalLinkWarning ->
             True
 
-        CallRecordingMsg _ ->
-            True
-
         PressedAddDomainToWhitelist _ ->
             True
 
@@ -5314,9 +5308,6 @@ changeUpdate localMsg local =
                         Call.Local_CancelRecording ->
                             local
 
-                        Call.Local_DeleteRecording _ _ ->
-                            local
-
                 Local_Game guildOrDmId gameChange ->
                     gameChangeUpdate
                         local.localUser.session.userId
@@ -7253,6 +7244,7 @@ callStartedMessage time startedBy =
         { startedAt = time
         , endedAt = Nothing
         , startedBy = startedBy
+        , joinedBy = NonemptySet.singleton startedBy
         , reactions = SeqDict.empty
         , timestampDrawings = Drawing.emptyDrawing
         , cardDrawings = Drawing.emptyDrawing
@@ -7266,7 +7258,26 @@ from. It is their own doing, so it doesn't leave them with something unread.
 joinCallHelper : Id UserId -> Time.Posix -> Bool -> CallId -> Call.Local -> LocalState -> LocalState
 joinCallHelper userId time alreadyInCall roomId calls2 local =
     if alreadyInCall then
-        { local | calls = calls2 }
+        case roomId of
+            DmRoomId { otherUserId } ->
+                { local
+                    | calls = calls2
+                    , dmChannels =
+                        SeqDict.updateIfExists
+                            otherUserId
+                            (LocalState.joinedCallMessageFrontend userId)
+                            local.dmChannels
+                }
+
+            GuildRoomId id ->
+                { local
+                    | calls = calls2
+                    , guilds =
+                        SeqDict.updateIfExists
+                            id.guildId
+                            (LocalState.updateChannel (LocalState.joinedCallMessageFrontend userId) id.channelId)
+                            local.guilds
+                }
 
     else
         case roomId of
@@ -10011,7 +10022,6 @@ loadedInitHelper startupData emojiData loginData loading =
             , profilePictureEditor = ImageEditor.init
             , guildIconEditor = Nothing
             , externalLinkWarning = Nothing
-            , callRecordingList = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , games = SeqDict.empty

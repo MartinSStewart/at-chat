@@ -227,7 +227,7 @@ recordingDownload _ model headers json =
                 ( Just session, Just ( sharedCallId, recordingStartedAt ) ) ->
                     case BackendExtra.callRecording sharedCallId recordingStartedAt model of
                         Just recording ->
-                            if NonemptySet.member session.userId recording.participants && recording.deletedBy == Nothing then
+                            if NonemptySet.member session.userId recording.participants then
                                 ( CallRecording.fileNames
                                     (\userId ->
                                         case NonemptyDict.get userId model.users of
@@ -308,7 +308,6 @@ isRecordingUploadAllowed file recording =
             List.filter (\otherFile -> otherFile.recordedBy == file.recordedBy) recording.files
     in
     NonemptySet.member file.recordedBy recording.participants
-        && (recording.deletedBy == Nothing)
         && isValidRecordingFileName file.name
         && (file.size > 0)
         && (file.size <= maxRecordingFileSize)

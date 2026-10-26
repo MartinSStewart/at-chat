@@ -537,6 +537,7 @@ callStartedDataCodec userId =
             { startedAt = startedAt
             , endedAt = endedAt
             , startedBy = startedBy
+            , joinedBy = NonemptySet.singleton startedBy
             , reactions = reactions
             , timestampDrawings = timestampDrawings
             , cardDrawings = cardDrawings

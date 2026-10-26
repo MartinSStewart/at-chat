@@ -102,7 +102,6 @@ type LocalChange
     | Local_RequestRecording
     | Local_AnswerRecording Bool
     | Local_CancelRecording
-    | Local_DeleteRecording CallId Time.Posix
 
 
 type ServerChange
@@ -359,7 +358,7 @@ type CallId
 
 type DisplayMode
     = NoVideo
-    | ShowLocalVideo
+    | ShowLocalVideo CallId
     | ShowLocalVideoAndCall CallId
     | ShowLocalVideoAndCallThumbnail CallId
 
@@ -392,7 +391,7 @@ showLocalVideo displayMode2 =
         NoVideo ->
             False
 
-        ShowLocalVideo ->
+        ShowLocalVideo _ ->
             True
 
         ShowLocalVideoAndCall _ ->
@@ -446,10 +445,10 @@ displayMode isMobile currentUserId route local =
                                         ShowLocalVideoAndCall roomId
 
                                     Nothing ->
-                                        ShowLocalVideo
+                                        ShowLocalVideo roomId
 
                             else if isTabExpanded then
-                                ShowLocalVideo
+                                ShowLocalVideo roomId
 
                             else
                                 thumbnailOrNoVideo
@@ -489,10 +488,10 @@ displayMode isMobile currentUserId route local =
                                         ShowLocalVideoAndCall roomId
 
                                     Nothing ->
-                                        ShowLocalVideo
+                                        ShowLocalVideo roomId
 
                             else if isTabExpanded then
-                                ShowLocalVideo
+                                ShowLocalVideo roomId
 
                             else
                                 thumbnailOrNoVideo
@@ -634,6 +633,21 @@ videoNodes localUser config loggedIn local =
         displayMode2 =
             displayMode isMobile localUser.session.userId config.route local
 
+        viewedCall : Maybe CallId
+        viewedCall =
+            case displayMode2 of
+                NoVideo ->
+                    Nothing
+
+                ShowLocalVideo callId ->
+                    Just callId
+
+                ShowLocalVideoAndCall callId ->
+                    Just callId
+
+                ShowLocalVideoAndCallThumbnail _ ->
+                    Nothing
+
         -- The button that turns polling on lives in the voice chat panel, so
         -- the panel being open is also the only place it can be turned off
         -- again.
@@ -644,7 +658,7 @@ videoNodes localUser config loggedIn local =
                         NoVideo ->
                             False
 
-                        ShowLocalVideo ->
+                        ShowLocalVideo _ ->
                             True
 
                         ShowLocalVideoAndCall _ ->
@@ -667,7 +681,7 @@ videoNodes localUser config loggedIn local =
                 model
             ]
 
-        ShowLocalVideo ->
+        ShowLocalVideo _ ->
             let
                 tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
                 tiles =
@@ -784,6 +798,30 @@ videoNodes localUser config loggedIn local =
                     )
                     sessions
     )
+        ++ (case viewedCall of
+                Just callId ->
+                    case SeqDict.get callId local.recordings of
+                        Just (RecordingSince _) ->
+                            [ ( "call_recordingIndicator"
+                              , recordingIndicator
+                                    { right = Coord.xRaw config.windowSize - voiceChatX - maxWidth + padding
+                                    , top = localUser.safeAreaInsetTop + voiceChatY + padding
+                                    }
+                              )
+                            ]
+
+                        Just (AskingToRecord _) ->
+                            []
+
+                        Just (RecordingDeclined _) ->
+                            []
+
+                        Nothing ->
+                            []
+
+                Nothing ->
+                    []
+           )
         ++ (if showDebugData then
                 [ ( "call_debugData"
                   , debugDataView
@@ -818,6 +856,22 @@ localTiles localUser model =
 
     else
         [ cameraTile ]
+
+
+{-| A recording only ends with the call, so this isn't a button.
+-}
+recordingIndicator : { right : Int, top : Int } -> Html msg
+recordingIndicator position =
+    Html.div
+        [ Html.Attributes.id "voiceChat_recordingIndicator"
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "right" (String.fromInt position.right ++ "px")
+        , Html.Attributes.style "top" (String.fromInt position.top ++ "px")
+        , Html.Attributes.style "z-index" "1000"
+        , Html.Attributes.style "line-height" "0"
+        , Html.Attributes.title "This call is being recorded"
+        ]
+        [ Icons.recording 24 ]
 
 
 {-| Drawn as part of the video layer rather than inside the voice chat panel,
@@ -1554,17 +1608,7 @@ recordButton recordingStatus =
     in
     case recordingStatus of
         Just (RecordingSince _) ->
-            -- A recording only ends with the call, so there's nothing to press.
-            Ui.el
-                [ Ui.id "voiceChat_recordingIndicator"
-                , Ui.height Ui.fill
-                , Ui.contentCenterY
-                , Ui.width Ui.shrink
-                , Ui.paddingXY 4 0
-                , Ui.Font.color MyUi.white
-                , MyUi.hoverText "This call is being recorded"
-                ]
-                (Ui.html (Icons.recording 26))
+            Ui.none
 
         Just (AskingToRecord _) ->
             button (Dom.id "voiceChat_cancelRecording") PressedCancelRecording (Ui.rgb 42 50 78) "Cancel\u{00A0}Recording"

@@ -101,7 +101,6 @@ type BackendMsgLog
     | BackendMsgLog_Rpc_UserJoinedCall
     | BackendMsgLog_Rpc_NotifyAdmins
     | BackendMsgLog_Rpc_RecordingUploadProgress
-    | BackendMsgLog_DeletedCallRecordingFiles
     | BackendMsgLog_GotTimeForBackendMsg
     | BackendMsgLog_BackendMsgCompleted
 
@@ -372,9 +371,6 @@ backendMsgLogToString log =
 
         BackendMsgLog_Rpc_RecordingUploadProgress ->
             "Rpc_RecordingUploadProgress"
-
-        BackendMsgLog_DeletedCallRecordingFiles ->
-            "DeletedCallRecordingFiles"
 
         BackendMsgLog_GotTimeForBackendMsg ->
             "GotTimeForBackendMsg"
