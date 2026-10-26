@@ -455,6 +455,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.notificationClickOpensConversationTest normalConfig
+    , E2EMisc.notifyAdminsTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
@@ -3936,6 +3937,12 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
 
                                                                 else
                                                                     [ "OpenRouter key was modified by attacker" ]
+                                                               )
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).notifyAdminsToken == (E2EHelper.unwrapBackend after.backend).notifyAdminsToken then
+                                                                    []
+
+                                                                else
+                                                                    [ "Notify admins token was modified by attacker" ]
                                                                )
                                                             ++ (if (E2EHelper.unwrapBackend before.backend).emailNotificationsEnabled == (E2EHelper.unwrapBackend after.backend).emailNotificationsEnabled then
                                                                     []

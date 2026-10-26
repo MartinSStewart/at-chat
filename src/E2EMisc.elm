@@ -25,6 +25,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , notificationClickOpensConversationTest
+    , notifyAdminsTest
     , openLastViewedGuildOnStartupTest
     , orphanedFilesTest
     , profileImageOpensDm
@@ -45,6 +46,7 @@ import Audio
 import Broadcast
 import ChannelExport
 import Color
+import Dict
 import DiscordUserData
 import DmChannel
 import DmChannelId
@@ -79,6 +81,7 @@ import Pages.Admin
 import Pages.Guild
 import PersonName
 import Quantity
+import RPC
 import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
@@ -1518,6 +1521,74 @@ notificationClickOpensConversationTest config =
                 ]
             )
         ]
+
+
+{-| `_r/notify-admins` is how a Claude thread tells Martin it's waiting on him. The test can't make
+the HTTP request itself, so it calls the endpoint's handler and sends the message it turns into.
+-}
+notifyAdminsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+notifyAdminsTest config =
+    E2EHelper.startTest
+        "Notifying the admins DMs them from the bot account"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.enableNotifications False admin
+                , T.andThen
+                    100
+                    (\data ->
+                        [ T.backendUpdate
+                            100
+                            (Types.Rpc_NotifyAdmins data.time (Id.fromInt 2) (String.Nonempty.NonemptyString 'W' "aiting on you"))
+                        ]
+                    )
+                , E2EHelper.checkNotification E2EHelper.userName "Waiting on you"
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.hasText admin [ "Waiting on you" ]
+                , E2EHelper.openDm user 100 "0"
+                , E2EHelper.hasText user [ "Waiting on you" ]
+                , T.checkState 100 (checkNotifyAdminsRequest "test-token" "Hello" (Err "Expected a request to be refused before the token is set"))
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
+                , admin.input 100 (Dom.id "admin_notifyAdminsToken_label") "test-token"
+                , admin.click 100 (Dom.id "admin_notifyAdminsToken_acceptEdit")
+                , admin.input 100 (Dom.id "admin_notifyAdminsBotUserId_label") "2"
+                , admin.click 100 (Dom.id "admin_notifyAdminsBotUserId_acceptEdit")
+                , T.checkState 100 (checkNotifyAdminsRequest "wrong-token" "Hello" (Err "Expected a wrong token to be refused"))
+                , T.checkState 100 (checkNotifyAdminsRequest "test-token" "  " (Err "Expected an empty message to be refused"))
+                , T.checkState 100 (checkNotifyAdminsRequest "test-token" "Hello" (Ok ()))
+                ]
+            )
+        ]
+
+
+checkNotifyAdminsRequest : String -> String -> Result String () -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNotifyAdminsRequest token text expected data =
+    let
+        ( result, _, _ ) =
+            RPC.notifyAdmins
+                "sessionId"
+                (E2EHelper.unwrapBackend data.backend)
+                (Dict.fromList [ ( "x-notify-token", token ) ])
+                text
+    in
+    case ( result, expected ) of
+        ( Ok _, Ok () ) ->
+            Ok ()
+
+        ( Err _, Err _ ) ->
+            Ok ()
+
+        ( Ok _, Err error ) ->
+            Err error
+
+        ( Err _, Ok () ) ->
+            Err "Expected the request to be accepted"
 
 
 {-| DM threads carry their own route, are listed underneath the DM in the friends

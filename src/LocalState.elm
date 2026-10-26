@@ -1066,6 +1066,8 @@ type alias AdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , openRouterKey : Maybe String
+    , notifyAdminsToken : Maybe String
+    , notifyAdminsBotUserId : Maybe (Id UserId)
     , postmarkKey : Postmark.ApiKey
     , dmChannels : AdminDataStatus (SeqDict DmChannelId AdminData_DmChannel)
     , discordDmChannels :

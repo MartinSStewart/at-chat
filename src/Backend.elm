@@ -260,6 +260,8 @@ init =
             else
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , openRouterKey = Nothing
+      , notifyAdminsToken = Nothing
+      , notifyAdminsBotUserId = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -2757,6 +2759,9 @@ updateHelper msg model =
 
                 Call.GuildRoomId id ->
                     joinGuildVoiceChat sessionId clientId time id model userId
+
+        Rpc_NotifyAdmins time botUserId text ->
+            BackendExtra.notifyAdmins time botUserId text model
 
 
 gotDiscordStickers :
@@ -10663,6 +10668,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetOpenRouterKey openRouterKey ->
             ( { model | openRouterKey = openRouterKey }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetNotifyAdminsToken notifyAdminsToken ->
+            ( { model | notifyAdminsToken = notifyAdminsToken }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetNotifyAdminsBotUserId notifyAdminsBotUserId ->
+            ( { model | notifyAdminsBotUserId = notifyAdminsBotUserId }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

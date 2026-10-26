@@ -1,4 +1,4 @@
-module RPC exposing (checkFileUpload, lamdera_handleEndpoints, roomIdFromString)
+module RPC exposing (checkFileUpload, lamdera_handleEndpoints, notifyAdmins, roomIdFromString)
 
 import BackendExtra
 import Call
@@ -13,8 +13,11 @@ import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
+import NonemptyDict
+import RichText
 import SecretId
 import SeqDict
+import String.Nonempty
 import Task
 import Time
 import Toop exposing (T4(..))
@@ -193,6 +196,36 @@ checkCall _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+{-| Lets a Claude thread working on at-chat tell the admins that it's waiting on them. Those threads
+run somewhere that can't open the websocket the app needs, but can make plain HTTPS requests.
+-}
+notifyAdmins : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+notifyAdmins _ model headers text =
+    case
+        T4
+            (Dict.get "x-notify-token" headers)
+            (String.Nonempty.fromString (String.trim text))
+            model.notifyAdminsToken
+            model.notifyAdminsBotUserId
+    of
+        T4 (Just token) (Just text2) (Just notifyAdminsToken) (Just botUserId) ->
+            if
+                (token == notifyAdminsToken)
+                    && (String.Nonempty.length text2 <= RichText.maxLength)
+                    && NonemptyDict.member botUserId model.users
+            then
+                ( Ok "sent"
+                , model
+                , Task.perform (\time -> Rpc_NotifyAdmins time botUserId text2) Time.now
+                )
+
+            else
+                ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
 lamdera_handleEndpoints _ req model =
     case req.endpoint of
@@ -201,6 +234,9 @@ lamdera_handleEndpoints _ req model =
 
         "is-call-allowed" ->
             LamderaRPC.handleEndpointString checkCall req model
+
+        "notify-admins" ->
+            LamderaRPC.handleEndpointString notifyAdmins req model
 
         _ ->
             ( ResultString "Endpoint not found", model, Cmd.none )

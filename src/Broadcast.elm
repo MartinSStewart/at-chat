@@ -2,6 +2,7 @@ module Broadcast exposing
     ( PushNotification
     , PushNotificationBody(..)
     , adminUserId
+    , backendSentDm
     , broadcastDm
     , discordDmNotification
     , discordGuildMessageNotification
@@ -2096,6 +2097,91 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                     , attachedFiles = attachedFiles
                     , stickers = stickers
                     , repliedToData = repliedToData2
+                    }
+            )
+            model
+        , Command.batch cmds
+        ]
+    )
+
+
+{-| Like `broadcastDm`, but for a message the backend sends on a user's behalf. No client sent it,
+so there's no change to confirm and nobody to leave out of the broadcast.
+-}
+backendSentDm :
+    Time.Posix
+    -> Id UserId
+    -> BackendUser
+    -> Id UserId
+    -> NonemptyString
+    -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
+    -> SeqDict (Id StickerId) StickerData
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+backendSentDm time userId sender otherUserId text message stickers model =
+    let
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\connection ->
+                    case connection.currentlyViewing of
+                        UserSession.Viewing_Dm data ->
+                            data.id.otherUserId == userId
+
+                        _ ->
+                            False
+                )
+                (userGetAllConnections otherUserId model)
+
+        ( sessions, cmds ) =
+            if isViewing then
+                ( model.sessions, [] )
+
+            else
+                notification
+                    time
+                    otherUserId
+                    (PersonName.toString sender.name)
+                    sender.icon
+                    (\userId2 ->
+                        case NonemptyDict.get userId2 model.users of
+                            Just user ->
+                                PersonName.toString user.name
+
+                            Nothing ->
+                                User.missingName
+                    )
+                    SeqDict.empty
+                    (String.Nonempty.toString text)
+                    (UserTextMessage message)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds userId otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
+                        , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+    in
+    ( sessions
+    , Command.batch
+        [ toDmChannel
+            userId
+            { otherUserId = otherUserId }
+            (\otherUserId2 ->
+                Server_SendMessage
+                    { senderId = userId
+                    , sender = User.backendToFrontendForUser sender
+                    , sentAt = time
+                    , guildOrDmId = GuildOrDmId_Dm otherUserId2
+                    , content = message.content.content
+                    , threadRoute = NoThreadWithRepliedTo Message.NoReply
+                    , attachedFiles = SeqDict.empty
+                    , stickers = stickers
+                    , repliedToData = NoReplyData
                     }
             )
             model

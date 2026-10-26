@@ -47,6 +47,7 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
+    , notifyAdmins
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
     , sendAccountDeletionEmail
@@ -1889,6 +1890,8 @@ adminData model lastLogPageViewed =
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , openRouterKey = model.openRouterKey
+    , notifyAdminsToken = model.notifyAdminsToken
+    , notifyAdminsBotUserId = model.notifyAdminsBotUserId
     , postmarkApiKey = model.postmarkApiKey
     , loadingDiscordChannels =
         SeqDict.map
@@ -2822,6 +2825,96 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
             ( model, invalidChangeResponse changeId clientId )
 
 
+{-| DMs every admin from `botUserId`, for things like a Claude thread that is waiting on an answer.
+-}
+notifyAdmins : Time.Posix -> Id UserId -> NonemptyString -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+notifyAdmins time botUserId text model =
+    case RateLimit.checkAndUpdateRateLimit time botUserId model.sendMessageRateLimits of
+        Ok sendMessageRateLimits ->
+            List.foldl
+                (\( adminId, admin ) ( model2, cmds ) ->
+                    if admin.isAdmin && adminId /= botUserId then
+                        let
+                            ( model3, cmd ) =
+                                sendBackendDm time botUserId adminId text model2
+                        in
+                        ( model3, cmd :: cmds )
+
+                    else
+                        ( model2, cmds )
+                )
+                ( { model | sendMessageRateLimits = sendMessageRateLimits }, [] )
+                (NonemptyDict.toList model.users)
+                |> Tuple.mapSecond Command.batch
+
+        Err () ->
+            ( model, Command.none )
+
+
+sendBackendDm : Time.Posix -> Id UserId -> Id UserId -> NonemptyString -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendBackendDm time senderId otherUserId text model =
+    case ( NonemptyDict.get senderId model.users, NonemptyDict.get otherUserId model.users ) of
+        ( Just sender, Just otherUser ) ->
+            let
+                dmChannelId : DmChannelId
+                dmChannelId =
+                    DmChannelId.fromUserIds senderId otherUserId
+
+                dmChannel : BackendDmChannel
+                dmChannel =
+                    case SeqDict.get dmChannelId model.dmChannels of
+                        Just dmChannel2 ->
+                            dmChannel2
+
+                        Nothing ->
+                            DmChannel.backendInit
+
+                richText : Nonempty (RichText (Id UserId) (Id ChannelId))
+                richText =
+                    RichText.fromNonemptyString
+                        Time.utc
+                        (SeqDict.fromList [ ( senderId, sender ), ( otherUserId, otherUser ) ])
+                        SeqDict.empty
+                        text
+
+                ( message, embedCmds, stickers ) =
+                    Message.userTextMessageBackend
+                        model.serverSecret
+                        time
+                        senderId
+                        richText
+                        Message.NoReply
+                        SeqDict.empty
+                        model.stickers
+
+                ( messageId, dmChannel3 ) =
+                    LocalState.createChannelMessageBackend (Message.UserTextMessage message) dmChannel
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.backendSentDm time senderId sender otherUserId text message stickers model
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel3 model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        senderId
+                        { sender
+                            | lastViewedMessage =
+                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) messageId sender.lastViewedMessage
+                        }
+                        (readerIsViewingDm otherUserId senderId (NoThreadWithMessage messageId) model)
+                , sessions = sessions
+              }
+            , Command.batch
+                [ notificationCmds
+                , Command.map identity (GotDmMessageEmbed dmChannelId (NoThreadWithMessage messageId)) embedCmds
+                ]
+            )
+
+        _ ->
+            ( model, Command.none )
+
+
 handleDrawingChange :
     SessionId
     -> ClientId
@@ -3272,6 +3365,9 @@ backendMsgLog msg =
 
         Rpc_UserJoinedCall _ _ _ _ _ ->
             BackendMsgLog_Rpc_UserJoinedCall
+
+        Rpc_NotifyAdmins _ _ _ ->
+            BackendMsgLog_Rpc_NotifyAdmins
 
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg

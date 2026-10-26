@@ -228,6 +228,8 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | NotifyAdminsTokenEditableMsg (Editable.Msg (Maybe String))
+    | NotifyAdminsBotUserIdEditableMsg (Editable.Msg (Maybe (Id UserId)))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -303,6 +305,8 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , notifyAdminsToken : Editable.Model
+    , notifyAdminsBotUserId : Editable.Model
     , postmarkKey : Editable.Model
     , discordLinkLimit : Editable.Model
     , slackLinkLimit : Editable.Model
@@ -355,6 +359,8 @@ type alias InitAdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , openRouterKey : Maybe String
+    , notifyAdminsToken : Maybe String
+    , notifyAdminsBotUserId : Maybe (Id UserId)
     , postmarkApiKey : Postmark.ApiKey
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
@@ -415,6 +421,8 @@ type AdminChange
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetOpenRouterKey (Maybe String)
+    | SetNotifyAdminsToken (Maybe String)
+    | SetNotifyAdminsBotUserId (Maybe (Id UserId))
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -468,6 +476,8 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , notifyAdminsToken = Editable.init
+    , notifyAdminsBotUserId = Editable.init
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
     , slackLinkLimit = Editable.init
@@ -498,6 +508,8 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , notifyAdminsToken = Editable.init
+    , notifyAdminsBotUserId = Editable.init
     , postmarkKey = Editable.init
     , discordLinkLimit = Editable.init
     , slackLinkLimit = Editable.init
@@ -615,6 +627,12 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
+
+        SetNotifyAdminsToken notifyAdminsToken ->
+            { local | adminData = IsAdmin { adminData | notifyAdminsToken = notifyAdminsToken } }
+
+        SetNotifyAdminsBotUserId notifyAdminsBotUserId ->
+            { local | adminData = IsAdmin { adminData | notifyAdminsBotUserId = notifyAdminsBotUserId } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1321,6 +1339,22 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
+        NotifyAdminsTokenEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | notifyAdminsToken = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetNotifyAdminsToken value |> AdminChange )
+
+        NotifyAdminsBotUserIdEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | notifyAdminsBotUserId = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetNotifyAdminsBotUserId value |> AdminChange )
+
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1909,6 +1943,12 @@ pendingChangesText change =
 
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
+
+        SetNotifyAdminsToken _ ->
+            "Set notify admins token"
+
+        SetNotifyAdminsBotUserId _ ->
+            "Set notify admins bot user id"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -3725,6 +3765,59 @@ apiKeysSection isMobile local expandedSections adminData2 model =
                     ""
             )
             model.openRouterKey
+        , Editable.view
+            (Dom.id "admin_notifyAdminsToken")
+            True
+            "Notify admins token"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just text2 |> Ok
+            )
+            NotifyAdminsTokenEditableMsg
+            (case adminData2.notifyAdminsToken of
+                Just token ->
+                    token
+
+                Nothing ->
+                    ""
+            )
+            model.notifyAdminsToken
+        , Editable.view
+            (Dom.id "admin_notifyAdminsBotUserId")
+            False
+            "Notify admins bot user id"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    case String.toInt text2 of
+                        Just userId ->
+                            Id.fromInt userId |> Just |> Ok
+
+                        Nothing ->
+                            Err "Invalid user id"
+            )
+            NotifyAdminsBotUserIdEditableMsg
+            (case adminData2.notifyAdminsBotUserId of
+                Just userId ->
+                    Id.toString userId
+
+                Nothing ->
+                    ""
+            )
+            model.notifyAdminsBotUserId
         , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True

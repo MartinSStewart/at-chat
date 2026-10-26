@@ -501,6 +501,8 @@ type alias BackendModel =
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , openRouterKey : Maybe String
+    , notifyAdminsToken : Maybe String
+    , notifyAdminsBotUserId : Maybe (Id UserId)
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId, Time.Zone )
@@ -982,6 +984,7 @@ type BackendMsg
     | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
+    | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
 
 
 type MessageFromGuildOrDm
