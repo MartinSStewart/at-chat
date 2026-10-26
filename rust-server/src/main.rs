@@ -90,12 +90,8 @@ async fn main() {
                     post(recording_upload_endpoint).options(options_endpoint),
                 )
                 .route(
-                    "/file/recording/{recording_id}/{user_id}/{name}",
-                    get(recording_file_endpoint),
-                )
-                .route(
-                    "/file/recording-zip/{recording_id}",
-                    get(recording_zip_endpoint),
+                    "/file/recording-upload-finished",
+                    post(recording_upload_finished_endpoint).options(options_endpoint),
                 )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
@@ -858,51 +854,130 @@ async fn recording_upload_endpoint(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RecordingDownloadRequest {
+struct RecordingUploadFinishedRequest {
     session_id: String,
     recording_id: String,
 }
 
-/// A file the backend says is all here and can be handed to whoever asked.
+/// What the backend says to do once someone has finished uploading their part of a
+/// recording.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DownloadableRecordingFile {
+struct RecordingUploadFinishedResponse {
+    has_new_files: bool,
+    is_everyone_finished: bool,
+    file_count: u64,
+    files: Vec<ZipFile>,
+}
+
+/// A file that's all here, and what it's called in the zip.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ZipFile {
     user_id: u64,
     name: String,
     download_name: String,
     size: u64,
 }
 
-impl DownloadableRecordingFile {
-    fn path(&self, recording_id: &str) -> String {
-        format!(
-            "{RECORDINGS_PATH}/{recording_id}/{}/{}",
-            self.user_id, self.name
-        )
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingZipBuiltRequest {
+    recording_id: String,
+    zip: RecordingZip,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingZip {
+    file_hash: String,
+    size: u64,
+    file_count: u64,
+}
+
+// Zips are gigabytes long, so only one is made at a time. It also means a zip that's
+// made after another one always has at least as many files in it.
+static RECORDING_ZIP_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Told by someone's device once it has uploaded everything it recorded. The recording's
+/// zip is made again with their files in it, and stored with the other uploaded files so
+/// it's downloaded like any of them. Once everyone in the recording has finished, the files
+/// it was made from aren't needed any more.
+async fn recording_upload_finished_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Query(query): Query<RecordingUploadFinishedQuery>,
+    headers: HeaderMap,
+) -> Response<String> {
+    if !is_valid_recording_id(&query.recording_id) {
+        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid recording");
+    }
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+    let finished = match session_id_from_cookie(&headers) {
+        Some(session_id) => {
+            recording_upload_finished(&secret_key, session_id, &query.recording_id).await
+        }
+        None => None,
+    };
+    match finished {
+        Some(finished2) => {
+            tokio::spawn(async move {
+                let _lock = RECORDING_ZIP_LOCK.lock().await;
+                if finished2.has_new_files {
+                    match build_recording_zip(&query.recording_id, finished2.files).await {
+                        Ok((file_hash, size)) => {
+                            let _ = tell_recording_zip_built(
+                                &secret_key,
+                                RecordingZipBuiltRequest {
+                                    recording_id: query.recording_id.clone(),
+                                    zip: RecordingZip {
+                                        file_hash,
+                                        size,
+                                        file_count: finished2.file_count,
+                                    },
+                                },
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            println!(
+                                "Making the zip for recording {} failed: {error}",
+                                query.recording_id
+                            );
+                            return;
+                        }
+                    }
+                }
+                if finished2.is_everyone_finished {
+                    let _ = tokio::fs::remove_dir_all(format!(
+                        "{RECORDINGS_PATH}/{}",
+                        query.recording_id
+                    ))
+                    .await;
+                }
+            });
+            response_with_headers(StatusCode::OK, "OK")
+        }
+        None => response_with_headers(StatusCode::UNAUTHORIZED, "Invalid permissions"),
     }
 }
 
-/// Asks Lamdera which of a recording's files this person can download. Nobody who wasn't
-/// in the recording gets any.
-async fn downloadable_recording_files(
-    state: &Mutex<AppState>,
-    headers: &HeaderMap,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingUploadFinishedQuery {
+    recording_id: String,
+}
+
+async fn recording_upload_finished(
+    secret_key: &[u8],
+    session_id: String,
     recording_id: &str,
-) -> Option<Vec<DownloadableRecordingFile>> {
-    if !is_valid_recording_id(recording_id) {
-        return None;
-    }
-    let session_id: String = session_id_from_cookie(headers)?;
-    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+) -> Option<RecordingUploadFinishedResponse> {
     let response = http_client()
-        .post(rpc_url("recording-download"))
+        .post(rpc_url("recording-upload-finished"))
         .header("Content-Type", "application/json")
-        .header(
-            "x-secret-key",
-            String::from_utf8_lossy(&secret_key).as_ref(),
-        )
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
         .body(
-            serde_json::to_string(&RecordingDownloadRequest {
+            serde_json::to_string(&RecordingUploadFinishedRequest {
                 session_id,
                 recording_id: recording_id.to_owned(),
             })
@@ -914,18 +989,105 @@ async fn downloadable_recording_files(
         .error_for_status()
         .ok()?;
 
-    let files: Vec<DownloadableRecordingFile> =
+    let mut finished: RecordingUploadFinishedResponse =
         serde_json::from_str(&response.text().await.ok()?).ok()?;
+    finished.files.retain(|file| {
+        is_valid_recording_file_name(&file.name)
+            && is_valid_recording_file_name(&file.download_name)
+    });
+    Some(finished)
+}
 
-    Some(
-        files
-            .into_iter()
-            .filter(|file| {
-                is_valid_recording_file_name(&file.name)
-                    && is_valid_recording_file_name(&file.download_name)
-            })
-            .collect(),
-    )
+async fn tell_recording_zip_built(
+    secret_key: &[u8],
+    request: RecordingZipBuiltRequest,
+) -> Option<()> {
+    http_client()
+        .post(rpc_url("recording-zip-built"))
+        .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(serde_json::to_string(&request).ok()?)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?;
+    Some(())
+}
+
+/// Writes the zip next to the files it's made from, since storage might be somewhere
+/// that's slow to write a piece at a time, and then moves it to storage under its hash.
+/// Gives back its hash and size.
+async fn build_recording_zip(
+    recording_id: &str,
+    files: Vec<ZipFile>,
+) -> std::io::Result<(String, u64)> {
+    let mut entries: Vec<(ZipFile, tokio::fs::File)> = Vec::new();
+    for file in files {
+        let path = format!(
+            "{RECORDINGS_PATH}/{recording_id}/{}/{}",
+            file.user_id, file.name
+        );
+        if let Ok(opened) = tokio::fs::File::open(path).await {
+            entries.push((file, opened));
+        }
+    }
+
+    let temporary_path = format!("{RECORDINGS_PATH}/{recording_id}/recording.zip");
+    let mut writer = HashingWriter {
+        inner: tokio::fs::File::create(&temporary_path).await?,
+        hasher: Sha224::new(),
+        written: 0,
+    };
+    write_zip(&mut writer, entries).await?;
+    let hash = base64_encode(&writer.hasher.finalize());
+    let size = writer.written;
+
+    let path = filepath(&hash);
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false)
+        && tokio::fs::rename(&temporary_path, &path).await.is_err()
+    {
+        // Storage can be on another file system, which a file can't be renamed onto.
+        tokio::fs::copy(&temporary_path, &path).await?;
+    }
+    let _ = tokio::fs::remove_file(&temporary_path).await;
+    Ok((hash, size))
+}
+
+/// Passes everything written on to `inner`, and keeps a hash of it as it goes.
+struct HashingWriter<W> {
+    inner: W,
+    hasher: Sha224,
+    written: u64,
+}
+
+impl<W: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for HashingWriter<W> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let result = std::pin::Pin::new(&mut self.inner).poll_write(context, buffer);
+        if let std::task::Poll::Ready(Ok(written)) = result {
+            self.hasher.update(&buffer[..written]);
+            self.written += written as u64;
+        }
+        result
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_shutdown(context)
+    }
 }
 
 // Browsers only read filename* when it's there, and it can hold any name. The plain
@@ -973,107 +1135,6 @@ fn reader_body(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static) -> Bo
     ))
 }
 
-fn plain_response(status_code: StatusCode, body: &'static str) -> Response<Body> {
-    Response::builder()
-        .status(status_code)
-        .header("Content-Type", "text/plain")
-        .body(Body::from(body))
-        .unwrap()
-}
-
-async fn recording_file_endpoint(
-    State(state): State<Arc<Mutex<AppState>>>,
-    Path((recording_id, user_id, name)): Path<(String, u64, String)>,
-    headers: HeaderMap,
-) -> Response<Body> {
-    let files = match downloadable_recording_files(&state, &headers, &recording_id).await {
-        Some(files) => files,
-        None => return plain_response(StatusCode::UNAUTHORIZED, "Invalid permissions"),
-    };
-
-    let file = match files
-        .into_iter()
-        .find(|file| file.user_id == user_id && file.name == name)
-    {
-        Some(file) => file,
-        None => return plain_response(StatusCode::NOT_FOUND, "Not found"),
-    };
-
-    match tokio::fs::File::open(file.path(&recording_id)).await {
-        Ok(opened) => Response::builder()
-            .status(StatusCode::OK)
-            .header(
-                "Content-Type",
-                if file.name.ends_with(".wav") {
-                    "audio/wav"
-                } else {
-                    "video/mp4"
-                },
-            )
-            .header("Content-Length", file.size.to_string())
-            .header(
-                "Content-Disposition",
-                content_disposition(&file.download_name),
-            )
-            .body(reader_body(tokio::io::AsyncReadExt::take(
-                opened, file.size,
-            )))
-            .unwrap(),
-        Err(_) => plain_response(StatusCode::NOT_FOUND, "Not found"),
-    }
-}
-
-#[derive(Deserialize)]
-struct RecordingZipQuery {
-    name: Option<String>,
-}
-
-/// Every file of a recording that's all here, in one zip. Video doesn't get any smaller
-/// by compressing it, so files are stored as they are and the zip is written as it's sent.
-async fn recording_zip_endpoint(
-    State(state): State<Arc<Mutex<AppState>>>,
-    Path(recording_id): Path<String>,
-    Query(query): Query<RecordingZipQuery>,
-    headers: HeaderMap,
-) -> Response<Body> {
-    let files = match downloadable_recording_files(&state, &headers, &recording_id).await {
-        Some(files) => files,
-        None => return plain_response(StatusCode::UNAUTHORIZED, "Invalid permissions"),
-    };
-
-    let zip_name: String = match query.name {
-        Some(name)
-            if name.ends_with(".zip")
-                && name.chars().count() <= 200
-                && !name
-                    .chars()
-                    .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32) =>
-        {
-            name
-        }
-        _ => String::from("Call recording.zip"),
-    };
-
-    let mut entries: Vec<(DownloadableRecordingFile, tokio::fs::File)> = Vec::new();
-    for file in files {
-        if let Ok(opened) = tokio::fs::File::open(file.path(&recording_id)).await {
-            entries.push((file, opened));
-        }
-    }
-
-    let (reader, mut writer) = tokio::io::duplex(1024 * 1024);
-    tokio::spawn(async move {
-        let _ = write_zip(&mut writer, entries).await;
-    });
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/zip")
-        .header("Content-Disposition", content_disposition(&zip_name))
-        .body(reader_body(reader))
-        .unwrap()
-}
-
 const ZIP_U32_MAX: u64 = 0xFFFF_FFFF;
 // Dates before 1980 can't be written, and the time each file was recorded is in its name
 // anyway.
@@ -1099,7 +1160,7 @@ impl ZipEntry {
 // offset too big for the 32 bit ones.
 async fn write_zip(
     writer: &mut (impl tokio::io::AsyncWrite + Unpin),
-    files: Vec<(DownloadableRecordingFile, tokio::fs::File)>,
+    files: Vec<(ZipFile, tokio::fs::File)>,
 ) -> std::io::Result<()> {
     let mut written: u64 = 0;
     let mut entries: Vec<ZipEntry> = Vec::new();
@@ -2644,43 +2705,66 @@ fn sandbox_csp(content_type: &str) -> &'static str {
 /// choice was made for.
 const NOSNIFF: &str = "nosniff";
 
+#[derive(Deserialize)]
+struct GetFileQuery {
+    download: Option<String>,
+}
+
+/// Read from disk as it's sent, since a call recording's zip can be gigabytes long. With
+/// `download`, the browser saves it under that name instead of showing it.
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
+    Query(query): Query<GetFileQuery>,
 ) -> http::Response<Body> {
     if is_valid_hash(&hash) {
-        match tokio::fs::read(filepath(&hash)).await {
-            Result::Ok(data) => {
-                let content_type = match content_type_index.parse::<usize>() {
-                    Ok(index) => content_types::CONTENT_TYPES.get(index),
-                    Err(_) => None,
-                };
-
-                match content_type {
-                    Some(content_type2) => Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", *content_type2)
-                        .header("Content-Disposition", "inline")
-                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                        .header("Content-Security-Policy", sandbox_csp(content_type2))
-                        .header("X-Content-Type-Options", NOSNIFF)
-                        .body(Body::from(data))
-                        .unwrap(),
-                    // No content type to send, so the browser would otherwise
-                    // sniff one out of the bytes and could land on html. This
-                    // branch is only reached by a url with an index the app never
-                    // generates, so refusing to guess costs nothing.
-                    None => Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                        .header("Content-Security-Policy", SANDBOX_CSP)
-                        .header("X-Content-Type-Options", NOSNIFF)
-                        .body(Body::from(data))
-                        .unwrap(),
-                }
+        let opened = match tokio::fs::File::open(filepath(&hash)).await {
+            Ok(opened) => opened,
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("File not found"))
+                    .unwrap();
             }
-            Result::Err(_) => Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("File not found"))
+        };
+        let size: Option<u64> = opened.metadata().await.ok().map(|metadata| metadata.len());
+        let content_disposition: String = match query.download {
+            Some(name)
+                if name.chars().count() <= 200
+                    && !name
+                        .chars()
+                        .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32) =>
+            {
+                content_disposition(&name)
+            }
+            _ => String::from("inline"),
+        };
+        let content_type = match content_type_index.parse::<usize>() {
+            Ok(index) => content_types::CONTENT_TYPES.get(index),
+            Err(_) => None,
+        };
+
+        let mut builder = Response::builder().status(StatusCode::OK);
+        if let Some(size2) = size {
+            builder = builder.header("Content-Length", size2.to_string());
+        }
+        match content_type {
+            Some(content_type2) => builder
+                .header("Content-Type", *content_type2)
+                .header("Content-Disposition", content_disposition)
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                .header("Content-Security-Policy", sandbox_csp(content_type2))
+                .header("X-Content-Type-Options", NOSNIFF)
+                .body(reader_body(opened))
+                .unwrap(),
+            // No content type to send, so the browser would otherwise
+            // sniff one out of the bytes and could land on html. This
+            // branch is only reached by a url with an index the app never
+            // generates, so refusing to guess costs nothing.
+            None => builder
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                .header("Content-Security-Policy", SANDBOX_CSP)
+                .header("X-Content-Type-Options", NOSNIFF)
+                .body(reader_body(opened))
                 .unwrap(),
         }
     } else {
@@ -3735,7 +3819,11 @@ mod tests {
         create_storage_dir();
         fs::write(filepath(hash), bytes).expect("failed to write the file to serve");
 
-        let response = get_file_endpoint(Path((content_type_index, hash.to_string()))).await;
+        let response = get_file_endpoint(
+            Path((content_type_index, hash.to_string())),
+            Query(GetFileQuery { download: None }),
+        )
+        .await;
 
         let _ = fs::remove_file(filepath(hash));
 
@@ -3778,6 +3866,63 @@ mod tests {
             Some("sandbox"),
             "a file served as html should be sandboxed out of the app's origin"
         );
+    }
+
+    #[tokio::test]
+    async fn a_file_with_a_download_name_is_saved_under_it() {
+        create_storage_dir();
+        fs::write(filepath("downloadNameFile"), b"zip bytes")
+            .expect("failed to write the file to serve");
+
+        let response = get_file_endpoint(
+            Path((
+                index_of_content_type("application/zip").to_string(),
+                String::from("downloadNameFile"),
+            )),
+            Query(GetFileQuery {
+                download: Some(String::from("Call recording 2026-10-26 14-05.zip")),
+            }),
+        )
+        .await;
+        let headers = response.headers().clone();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("the body should be readable");
+        let _ = fs::remove_file(filepath("downloadNameFile"));
+
+        assert_eq!(
+            headers
+                .get("Content-Disposition")
+                .and_then(|value| value.to_str().ok()),
+            Some(
+                "attachment; filename=\"Call recording 2026-10-26 14-05.zip\"; filename*=UTF-8''Call%20recording%202026-10-26%2014-05.zip"
+            )
+        );
+        assert_eq!(
+            headers
+                .get("Content-Length")
+                .and_then(|value| value.to_str().ok()),
+            Some("9")
+        );
+        assert_eq!(&body[..], b"zip bytes");
+    }
+
+    #[tokio::test]
+    async fn hashing_writer_hashes_what_it_writes() {
+        let mut writer = HashingWriter {
+            inner: Vec::new(),
+            hasher: Sha224::new(),
+            written: 0,
+        };
+        writer.write_all(b"some ").await.unwrap();
+        writer.write_all(b"bytes").await.unwrap();
+
+        assert_eq!(writer.written, 10);
+        assert_eq!(
+            base64_encode(&writer.hasher.finalize()),
+            hash_bytes(&Bytes::from_static(b"some bytes"))
+        );
+        assert_eq!(writer.inner, b"some bytes");
     }
 
     // --- encrypted uploads ---

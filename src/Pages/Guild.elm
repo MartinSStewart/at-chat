@@ -8424,7 +8424,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton currentUserId messageId callStartedData.recordings
+                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -8676,7 +8676,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton currentUserId messageId callStartedData.recordings
+                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -8904,7 +8904,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton currentUserId messageId callStartedData.recordings
+                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -9109,7 +9109,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton currentUserId messageId callStartedData.recordings
+                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -9953,35 +9953,64 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
         )
 
 
-{-| Shows up for people in the recording once some of it has finished uploading, and
-downloads it as a zip.
+{-| Shows up once the recording's zip has been made. It's made again as each person
+finishes uploading, so until everyone has, a warning says who it's still missing.
 -}
-callRecordingsButton : userId -> Id messageId -> Maybe (CallRecording userId) -> Element MessageViewMsg
-callRecordingsButton currentUserId messageId maybeRecording =
+callRecordingsButton :
+    Time.Zone
+    -> Id messageId
+    -> Maybe (CallRecording userId)
+    -> SeqDict userId { a | name : PersonName }
+    -> Element msg
+callRecordingsButton timezone messageId maybeRecording allUsers =
     case maybeRecording of
         Just recording ->
-            if CallRecording.isReady currentUserId recording then
-                MyUi.rowButton
-                    (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
-                    MessageViewMsg_PressedDownloadCallRecording
-                    [ Ui.spacing 8
-                    , Ui.paddingXY 14 0
-                    , Ui.height Ui.fill
-                    , Ui.contentCenterY
-                    , Ui.background MyUi.background2
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.border1
-                    , Ui.rounded 6
-                    , Ui.width Ui.shrink
-                    , Ui.Font.color MyUi.font3
-                    , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
-                    ]
-                    [ Ui.html Icons.download
-                    , Ui.text "Download\u{00A0}recording"
-                    ]
+            case recording.zip of
+                Just zip ->
+                    let
+                        notFinished : List userId
+                        notFinished =
+                            List.filter
+                                (\userId -> not (SeqSet.member userId recording.finishedUploading))
+                                (NonemptySet.toList recording.participants)
+                    in
+                    Ui.row
+                        [ Ui.id ("guild_callRecordings_" ++ Id.toString messageId)
+                        , Ui.download (CallRecording.zipUrl timezone recording.startedAt zip)
+                        , Ui.spacing 8
+                        , Ui.paddingXY 14 0
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        , Ui.background MyUi.background2
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.border1
+                        , Ui.rounded 6
+                        , Ui.width Ui.shrink
+                        , Ui.Font.color MyUi.font3
+                        , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                        ]
+                        [ Ui.html Icons.download
+                        , Ui.text "Download\u{00A0}recording"
+                        , case notFinished of
+                            [] ->
+                                Ui.none
 
-            else
-                Ui.none
+                            _ :: _ ->
+                                Ui.el
+                                    [ Ui.id ("guild_callRecordingsMissing_" ++ Id.toString messageId)
+                                    , Ui.width Ui.shrink
+                                    , Ui.Font.color MyUi.errorColor
+                                    , MyUi.hoverText
+                                        ("Not everyone's part is in it yet. Still waiting on "
+                                            ++ String.join ", " (List.map (\userId -> User.toString userId allUsers) notFinished)
+                                            ++ ". They need to open at-chat on the device they were in the call with for their part to finish uploading."
+                                        )
+                                    ]
+                                    (Ui.html (Icons.warning 20))
+                        ]
+
+                Nothing ->
+                    Ui.none
 
         Nothing ->
             Ui.none

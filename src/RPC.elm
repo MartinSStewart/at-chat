@@ -1,4 +1,4 @@
-module RPC exposing (checkFileUpload, checkRecordingUpload, lamdera_handleEndpoints, notifyAdmins, recordingDownload, recordingUploaded, roomIdFromString)
+module RPC exposing (checkFileUpload, checkRecordingUpload, lamdera_handleEndpoints, notifyAdmins, recordingUploadFinished, recordingUploaded, roomIdFromString)
 
 import BackendExtra
 import Call
@@ -14,13 +14,14 @@ import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
-import Message exposing (CallRecording, CallRecordingFile)
+import Message exposing (CallRecording, CallRecordingFile, CallRecordingZip)
 import NonemptyDict
 import NonemptySet
 import PersonName
 import RichText
 import SecretId
 import SeqDict
+import SeqSet
 import String.Nonempty
 import Task
 import Time
@@ -202,54 +203,86 @@ recordingUploaded _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
-type alias RecordingDownloadRequest =
+type alias RecordingUploadFinishedRequest =
     { sessionId : Effect.Lamdera.SessionId
     , recordingId : String
     }
 
 
-recordingDownloadRequestCodec : Codec RecordingDownloadRequest
-recordingDownloadRequestCodec =
-    Codec.object RecordingDownloadRequest
+recordingUploadFinishedRequestCodec : Codec RecordingUploadFinishedRequest
+recordingUploadFinishedRequestCodec =
+    Codec.object RecordingUploadFinishedRequest
         |> Codec.field "sessionId" .sessionId (Codec.map Effect.Lamdera.sessionIdFromString Effect.Lamdera.sessionIdToString Codec.string)
         |> Codec.field "recordingId" .recordingId Codec.string
         |> Codec.buildObject
 
 
-{-| Asked by the Rust server before it hands out any of a recording's files. Only people
-who were in the recording get them, and only files that are all there.
+{-| Told by the Rust server once someone's device has uploaded everything it recorded.
+The reply says which files go in the recording's zip, and whether there's anything new to
+make one from. Once everyone has finished, the files the zip was made from aren't needed.
 -}
-recordingDownload : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
-recordingDownload _ model headers json =
-    case ( fromRustServer model headers, Codec.decodeValue recordingDownloadRequestCodec json ) of
+recordingUploadFinished : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
+recordingUploadFinished _ model headers json =
+    case ( fromRustServer model headers, Codec.decodeValue recordingUploadFinishedRequestCodec json ) of
         ( True, Ok request ) ->
             case ( SeqDict.get request.sessionId model.sessions, Call.recordingIdFromString request.recordingId ) of
                 ( Just session, Just ( sharedCallId, recordingStartedAt ) ) ->
                     case BackendExtra.callRecording sharedCallId recordingStartedAt model of
                         Just recording ->
                             if NonemptySet.member session.userId recording.participants then
-                                ( CallRecording.fileNames
-                                    (\userId ->
-                                        case NonemptyDict.get userId model.users of
-                                            Just user ->
-                                                PersonName.toString user.name
+                                let
+                                    uploaded : List (CallRecordingFile (Id UserId))
+                                    uploaded =
+                                        List.filter (\file -> file.uploaded >= file.size) recording.files
 
-                                            Nothing ->
-                                                ""
-                                    )
-                                    (List.filter (\file -> file.uploaded >= file.size) recording.files)
-                                    |> Json.list
-                                        (\( file, downloadName ) ->
-                                            Json.object
-                                                [ ( "userId", Json.int (Id.toInt file.recordedBy) )
-                                                , ( "name", Json.string file.name )
-                                                , ( "downloadName", Json.string downloadName )
-                                                , ( "size", Json.int file.size )
-                                                ]
-                                        )
+                                    fileCount : Int
+                                    fileCount =
+                                        List.length uploaded
+                                in
+                                ( Json.object
+                                    [ ( "hasNewFiles"
+                                      , Json.bool
+                                            (case recording.zip of
+                                                Just zip ->
+                                                    fileCount > zip.fileCount
+
+                                                Nothing ->
+                                                    fileCount > 0
+                                            )
+                                      )
+                                    , ( "isEveryoneFinished"
+                                      , NonemptySet.toList recording.participants
+                                            |> List.all (\userId -> userId == session.userId || SeqSet.member userId recording.finishedUploading)
+                                            |> Json.bool
+                                      )
+                                    , ( "fileCount", Json.int fileCount )
+                                    , ( "files"
+                                      , CallRecording.fileNames
+                                            (\userId ->
+                                                case NonemptyDict.get userId model.users of
+                                                    Just user ->
+                                                        PersonName.toString user.name
+
+                                                    Nothing ->
+                                                        ""
+                                            )
+                                            uploaded
+                                            |> Json.list
+                                                (\( file, downloadName ) ->
+                                                    Json.object
+                                                        [ ( "userId", Json.int (Id.toInt file.recordedBy) )
+                                                        , ( "name", Json.string file.name )
+                                                        , ( "downloadName", Json.string downloadName )
+                                                        , ( "size", Json.int file.size )
+                                                        ]
+                                                )
+                                      )
+                                    ]
                                     |> Ok
                                 , model
-                                , Cmd.none
+                                , Task.perform
+                                    (\() -> Rpc_RecordingUploadFinished sharedCallId recordingStartedAt session.userId)
+                                    (Task.succeed ())
                                 )
 
                             else
@@ -259,6 +292,51 @@ recordingDownload _ model headers json =
                             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
                 _ ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
+type alias RecordingZipBuiltRequest =
+    { recordingId : String
+    , zip : CallRecordingZip
+    }
+
+
+recordingZipBuiltRequestCodec : Codec RecordingZipBuiltRequest
+recordingZipBuiltRequestCodec =
+    Codec.object RecordingZipBuiltRequest
+        |> Codec.field "recordingId" .recordingId Codec.string
+        |> Codec.field
+            "zip"
+            .zip
+            (Codec.object CallRecordingZip
+                |> Codec.field "fileHash" .fileHash (Codec.map FileStatus.fileHash FileStatus.fileHashToString Codec.string)
+                |> Codec.field "size" .size Codec.int
+                |> Codec.field "fileCount" .fileCount Codec.int
+                |> Codec.buildObject
+            )
+        |> Codec.buildObject
+
+
+{-| Told by the Rust server once it has made a recording's zip and stored it with the
+other uploaded files.
+-}
+recordingZipBuilt : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+recordingZipBuilt _ model headers text =
+    case ( fromRustServer model headers, Codec.decodeString recordingZipBuiltRequestCodec text ) of
+        ( True, Ok request ) ->
+            case Call.recordingIdFromString request.recordingId of
+                Just ( sharedCallId, recordingStartedAt ) ->
+                    ( Ok "ok"
+                    , model
+                    , Task.perform
+                        (\() -> Rpc_RecordingZipBuilt sharedCallId recordingStartedAt request.zip)
+                        (Task.succeed ())
+                    )
+
+                Nothing ->
                     ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
         _ ->
@@ -482,8 +560,11 @@ lamdera_handleEndpoints _ req model =
         "recording-uploaded" ->
             LamderaRPC.handleEndpointString recordingUploaded req model
 
-        "recording-download" ->
-            LamderaRPC.handleEndpointJson recordingDownload req model
+        "recording-upload-finished" ->
+            LamderaRPC.handleEndpointJson recordingUploadFinished req model
+
+        "recording-zip-built" ->
+            LamderaRPC.handleEndpointString recordingZipBuilt req model
 
         "notify-admins" ->
             LamderaRPC.handleEndpointString notifyAdmins req model

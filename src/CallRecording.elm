@@ -1,42 +1,19 @@
 module CallRecording exposing
     ( fileNames
-    , isReady
-    , sharedCallId
     , zipUrl
     )
 
 {-| Names and links for a call's recorded files.
 -}
 
-import Call
 import Date
 import Effect.Time as Time
 import FileStatus
-import Id exposing (GuildOrDmId(..), Id, UserId)
-import Message exposing (CallRecording, CallRecordingFile)
-import NonemptySet
+import Id exposing (Id, UserId)
+import Message exposing (CallRecordingFile, CallRecordingZip)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Url
-
-
-sharedCallId : Id UserId -> GuildOrDmId -> Call.SharedCallId
-sharedCallId currentUserId guildOrDmId =
-    case guildOrDmId of
-        GuildOrDmId_Guild id ->
-            Call.toSharedCallId currentUserId (Call.GuildRoomId id)
-
-        GuildOrDmId_Dm id ->
-            Call.toSharedCallId currentUserId (Call.DmRoomId id)
-
-
-{-| Only people in the recording can download it, and there's nothing to download until
-someone's file has finished uploading.
--}
-isReady : userId -> CallRecording userId -> Bool
-isReady currentUserId recording =
-    NonemptySet.member currentUserId recording.participants
-        && List.any (\file -> file.uploaded >= file.size) recording.files
 
 
 {-| What each file is called when it's downloaded. The name in it is the person's name now,
@@ -122,13 +99,11 @@ safeName name =
             name2
 
 
-zipUrl : Time.Zone -> Call.SharedCallId -> CallRecording userId -> String
-zipUrl timezone sharedCallId2 recording =
-    FileStatus.domain
-        ++ "/file/recording-zip/"
-        ++ Call.recordingIdToString sharedCallId2 recording.startedAt
-        ++ "?name="
-        ++ Url.percentEncode (zipName timezone recording.startedAt)
+zipUrl : Time.Zone -> Time.Posix -> CallRecordingZip -> String
+zipUrl timezone recordingStartedAt zip =
+    FileStatus.fileUrl (FileStatus.contentType "application/zip") zip.fileHash
+        ++ "?download="
+        ++ Url.percentEncode (zipName timezone recordingStartedAt)
 
 
 zipName : Time.Zone -> Time.Posix -> String

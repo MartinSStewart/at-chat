@@ -12,6 +12,7 @@ import Expect
 import FileStatus
 import Id exposing (Id, UserId)
 import IdArray
+import Json.Decode
 import Json.Encode
 import List.Extra
 import Local
@@ -764,6 +765,107 @@ recordingUploadProgress userId fileName size uploaded =
         )
 
 
+{-| What the backend tells the Rust server once someone's device has uploaded everything it
+recorded.
+-}
+expectRecordingUploadFinished :
+    { hasNewFiles : Bool, isEveryoneFinished : Bool, fileCount : Int }
+    -> Lamdera.SessionId
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+expectRecordingUploadFinished expected sessionId data =
+    case callRecordings data of
+        [ ( sharedCallId, recording ) ] ->
+            let
+                backend : Types.BackendModel
+                backend =
+                    E2EHelper.unwrapBackend data.backend
+
+                ( result, _, _ ) =
+                    RPC.recordingUploadFinished
+                        ""
+                        backend
+                        (Dict.singleton "x-secret-key" (SecretId.toString backend.serverSecret))
+                        (Json.Encode.object
+                            [ ( "sessionId", Json.Encode.string (Lamdera.sessionIdToString sessionId) )
+                            , ( "recordingId", Json.Encode.string (Call.recordingIdToString sharedCallId recording.startedAt) )
+                            ]
+                        )
+
+                decoder : Json.Decode.Decoder { hasNewFiles : Bool, isEveryoneFinished : Bool, fileCount : Int }
+                decoder =
+                    Json.Decode.map3
+                        (\hasNewFiles isEveryoneFinished fileCount ->
+                            { hasNewFiles = hasNewFiles, isEveryoneFinished = isEveryoneFinished, fileCount = fileCount }
+                        )
+                        (Json.Decode.field "hasNewFiles" Json.Decode.bool)
+                        (Json.Decode.field "isEveryoneFinished" Json.Decode.bool)
+                        (Json.Decode.field "fileCount" Json.Decode.int)
+            in
+            case result of
+                Ok json ->
+                    case Json.Decode.decodeValue decoder json of
+                        Ok actual ->
+                            if actual == expected then
+                                Ok ()
+
+                            else
+                                Err ("The upload finished reply wasn't what was expected: " ++ Json.Encode.encode 0 json)
+
+                        Err error ->
+                            Err (Json.Decode.errorToString error)
+
+                Err _ ->
+                    Err "Upload finished was refused"
+
+        _ ->
+            Err "Expected one recording"
+
+
+recordingUploadFinished : Id UserId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+recordingUploadFinished userId =
+    T.andThen
+        100
+        (\data ->
+            case callRecordings data of
+                [ ( sharedCallId, recording ) ] ->
+                    [ T.backendUpdate 0 (Types.Rpc_RecordingUploadFinished sharedCallId recording.startedAt userId) ]
+
+                _ ->
+                    [ T.checkBackend 0 (\_ -> Err "Expected one recording") ]
+        )
+
+
+recordingZipBuilt : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+recordingZipBuilt fileHash fileCount =
+    T.andThen
+        100
+        (\data ->
+            case callRecordings data of
+                [ ( sharedCallId, recording ) ] ->
+                    [ T.backendUpdate
+                        0
+                        (Types.Rpc_RecordingZipBuilt
+                            sharedCallId
+                            recording.startedAt
+                            { fileHash = FileStatus.fileHash fileHash, size = 1000, fileCount = fileCount }
+                        )
+                    ]
+
+                _ ->
+                    [ T.checkBackend 0 (\_ -> Err "Expected one recording") ]
+        )
+
+
+isFileTracked : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+isFileTracked fileHash data =
+    if SeqDict.member (FileStatus.fileHash fileHash) (E2EHelper.unwrapBackend data.backend).files then
+        Ok ()
+
+    else
+        Err "Expected the recording's zip to be tracked like any other file"
+
+
 recordingNeedsEveryoneTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -835,11 +937,27 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 2000)
                 , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 1000
-                , E2EHelper.tallSnapshot admin 100 { name = "Call recording ready to download" }
+
+                -- Nothing to download until a zip has been made
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
+                , T.checkState 0 (expectRecordingUploadFinished { hasNewFiles = True, isEveryoneFinished = False, fileCount = 1 } E2EHelper.sessionId4)
+                , recordingUploadFinished (Id.fromInt 4)
+                , recordingZipBuilt "zipHash1" 1
+                , T.checkState 100 (isFileTracked "zipHash1")
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecordings_3" ])
+
+                -- The others haven't opened at-chat since, so their parts are missing
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecordingsMissing_3" ])
+                , E2EHelper.tallSnapshot admin 0 { name = "Call recording ready to download" }
 
                 -- Wanda's client added her to the recording when she joined, without being told separately
                 , wanda.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecordings_3" ])
-                , admin.click 100 (Dom.id "guild_callRecordings_3")
+                , recordingUploadFinished (Id.fromInt 0)
+                , recordingUploadFinished (Id.fromInt 2)
+                , T.checkState 100 (expectRecordingUploadFinished { hasNewFiles = False, isEveryoneFinished = True, fileCount = 1 } E2EHelper.sessionId2)
+                , recordingUploadFinished (Id.fromInt 3)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordingsMissing_3" ])
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecordings_3" ])
 
                 -- Wanda joined after the call started, and can still delete its card
                 , wanda.mouseEnter 100 (Dom.id "guild_message_3") ( 10, 10 ) []

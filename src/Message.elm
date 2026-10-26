@@ -1,6 +1,7 @@
 module Message exposing
     ( CallRecording
     , CallRecordingFile
+    , CallRecordingZip
     , CallStartedData
     , ChangeAttachments(..)
     , EncryptedUserTextMessageData
@@ -99,6 +100,18 @@ type alias CallRecording userId =
     { startedAt : Time.Posix
     , participants : NonemptySet userId
     , files : List (CallRecordingFile userId)
+    , finishedUploading : SeqSet userId
+    , zip : Maybe CallRecordingZip
+    }
+
+
+{-| Every file that had finished uploading when it was made, stored with the other uploaded
+files. It's made again each time someone finishes uploading their part of the recording.
+-}
+type alias CallRecordingZip =
+    { fileHash : FileHash
+    , size : Int
+    , fileCount : Int
     }
 
 

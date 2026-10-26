@@ -348,6 +348,7 @@ const files = new Map();
 const queue = [];
 let busy = false;
 let uploadUrl = null;
+let uploadFinishedUrl = null;
 let uploading = false;
 let uploadAgain = false;
 
@@ -444,6 +445,7 @@ async function handle(message) {
     // Queued like the rest, so files closed just before are seen as finished.
     if (message.type === "upload") {
         uploadUrl = message.url;
+        uploadFinishedUrl = message.finishedUrl;
         uploadAll();
         return;
     }
@@ -534,13 +536,31 @@ async function uploadRecording(recordings, recordingId, directory) {
         await directory.removeEntry(entry.name).catch(function () {});
         postMessage({ type: "uploaded", recordingId, name: entry.name });
     }
-    // Once everything is up, the recording's directory goes too, unless it's
-    // still being recorded into.
+    // Once everything is up, the server is told so it can add this device's part
+    // to the recording's zip, and then the recording's directory goes too, unless
+    // it's still being recorded into.
     const index2 = await readIndex(directory);
     if (index2.files.every(function (entry) { return entry.uploaded === true; })) {
         await navigator.locks.request("at-chat-recording " + recordingId, { ifAvailable: true }, async function (lock) {
-            if (lock) await recordings.removeEntry(recordingId, { recursive: true }).catch(function () {});
+            if (lock && await tellUploadFinished(recordingId)) {
+                await recordings.removeEntry(recordingId, { recursive: true }).catch(function () {});
+            }
         });
+    }
+}
+
+// Returns false when it's worth trying again the next time uploads start. A
+// recording the server won't take anything more for is as finished as it gets.
+async function tellUploadFinished(recordingId) {
+    if (uploadFinishedUrl === null) return false;
+    try {
+        const response = await fetch(uploadFinishedUrl + "?" + new URLSearchParams({ recordingId }).toString(), {
+            method: "POST",
+            credentials: "include",
+        });
+        return response.ok || (response.status >= 400 && response.status < 500);
+    } catch (e) {
+        return false;
     }
 }
 
@@ -1910,7 +1930,11 @@ exports.init = async function init(app) {
     // bandwidth the call needs.
     function startRecordingUploads() {
         if (inCall) return;
-        postToRecordingWorker({ type: "upload", url: fileServer() + "/file/recording-upload" });
+        postToRecordingWorker({
+            type: "upload",
+            url: fileServer() + "/file/recording-upload",
+            finishedUrl: fileServer() + "/file/recording-upload-finished",
+        });
     }
 
     function postToRecordingWorker(message, transfer) {

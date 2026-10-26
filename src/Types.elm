@@ -120,7 +120,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (CallRecordingFile, Message, MessageContent)
+import Message exposing (CallRecordingFile, CallRecordingZip, Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -988,6 +988,8 @@ type BackendMsg
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
     | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
     | Rpc_RecordingUploadProgress Call.SharedCallId Time.Posix (CallRecordingFile (Id UserId))
+    | Rpc_RecordingUploadFinished Call.SharedCallId Time.Posix (Id UserId)
+    | Rpc_RecordingZipBuilt Call.SharedCallId Time.Posix CallRecordingZip
 
 
 type MessageFromGuildOrDm
@@ -1300,6 +1302,8 @@ type ServerChange
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_CallRecordingStarted GuildOrDmId (Id ChannelMessageId) Time.Posix (NonemptySet (Id UserId))
     | Server_CallRecordingUploadProgress GuildOrDmId (Id ChannelMessageId) (CallRecordingFile (Id UserId))
+    | Server_CallRecordingUploadFinished GuildOrDmId (Id ChannelMessageId) (Id UserId)
+    | Server_CallRecordingZipBuilt GuildOrDmId (Id ChannelMessageId) CallRecordingZip
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji

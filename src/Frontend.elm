@@ -13,7 +13,6 @@ import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
-import CallRecording
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
@@ -3159,22 +3158,6 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         SlackDmRoute _ ->
-                            ( model, Command.none )
-
-                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
-                    case ( guildOrDmId, threadRoute ) of
-                        ( GuildOrDmId guildOrDmId2, NoThreadWithMessage messageId ) ->
-                            FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( loggedIn, downloadCallRecording guildOrDmId2 messageId (Local.model loggedIn.localState) ))
-                                model
-
-                        ( GuildOrDmId _, ViewThreadWithMessage _ _ ) ->
-                            ( model, Command.none )
-
-                        ( DiscordGuildOrDmId _, _ ) ->
-                            ( model, Command.none )
-
-                        ( SlackGuildOrDmId _, _ ) ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -6389,19 +6372,6 @@ updateLoaded msg model =
                         SlackGuildOrDmId _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
-                    case guildOrDmId of
-                        GuildOrDmId guildOrDmId2 ->
-                            FrontendExtra.updateLoggedIn
-                                (\loggedIn -> ( loggedIn, downloadCallRecording guildOrDmId2 messageId (Local.model loggedIn.localState) ))
-                                model
-
-                        DiscordGuildOrDmId _ ->
-                            ( model, Command.none )
-
-                        SlackGuildOrDmId _ ->
-                            ( model, Command.none )
-
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
@@ -6540,9 +6510,6 @@ updateLoaded msg model =
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     -- Calls are not supported inside threads
-                    ( model, Command.none )
-
-                MessageView.MessageViewMsg_PressedDownloadCallRecording ->
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -9915,53 +9882,6 @@ updateLoadedFromBackend msg model =
                     )
                 )
                 model
-
-
-downloadCallRecording : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Command FrontendOnly ToBackend FrontendMsg_
-downloadCallRecording guildOrDmId messageId local =
-    let
-        currentUserId : Id UserId
-        currentUserId =
-            local.localUser.session.userId
-
-        download : Maybe (Message ChannelMessageId (Id UserId) (Id ChannelId)) -> Command FrontendOnly ToBackend FrontendMsg_
-        download maybeMessage =
-            case maybeMessage of
-                Just (CallStarted callStarted) ->
-                    case callStarted.recordings of
-                        Just recording ->
-                            if CallRecording.isReady currentUserId recording then
-                                CallRecording.zipUrl
-                                    local.localUser.timezone
-                                    (CallRecording.sharedCallId currentUserId guildOrDmId)
-                                    recording
-                                    |> Effect.File.Download.url
-
-                            else
-                                Command.none
-
-                        Nothing ->
-                            Command.none
-
-                _ ->
-                    Command.none
-    in
-    case guildOrDmId of
-        GuildOrDmId_Guild id ->
-            case LocalState.getGuildAndChannel id local of
-                Just ( _, channel ) ->
-                    download (MessageArray.get messageId channel.messages)
-
-                Nothing ->
-                    Command.none
-
-        GuildOrDmId_Dm { otherUserId } ->
-            case SeqDict.get otherUserId local.dmChannels of
-                Just dmChannel ->
-                    download (MessageArray.get messageId dmChannel.messages)
-
-                Nothing ->
-                    Command.none
 
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_

@@ -101,6 +101,8 @@ type BackendMsgLog
     | BackendMsgLog_Rpc_UserJoinedCall
     | BackendMsgLog_Rpc_NotifyAdmins
     | BackendMsgLog_Rpc_RecordingUploadProgress
+    | BackendMsgLog_Rpc_RecordingUploadFinished
+    | BackendMsgLog_Rpc_RecordingZipBuilt
     | BackendMsgLog_GotTimeForBackendMsg
     | BackendMsgLog_BackendMsgCompleted
 
@@ -371,6 +373,12 @@ backendMsgLogToString log =
 
         BackendMsgLog_Rpc_RecordingUploadProgress ->
             "Rpc_RecordingUploadProgress"
+
+        BackendMsgLog_Rpc_RecordingUploadFinished ->
+            "Rpc_RecordingUploadFinished"
+
+        BackendMsgLog_Rpc_RecordingZipBuilt ->
+            "Rpc_RecordingZipBuilt"
 
         BackendMsgLog_GotTimeForBackendMsg ->
             "GotTimeForBackendMsg"

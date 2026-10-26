@@ -3435,6 +3435,12 @@ backendMsgLog msg =
         Rpc_RecordingUploadProgress _ _ _ ->
             BackendMsgLog_Rpc_RecordingUploadProgress
 
+        Rpc_RecordingUploadFinished _ _ _ ->
+            BackendMsgLog_Rpc_RecordingUploadFinished
+
+        Rpc_RecordingZipBuilt _ _ _ ->
+            BackendMsgLog_Rpc_RecordingZipBuilt
+
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg
 

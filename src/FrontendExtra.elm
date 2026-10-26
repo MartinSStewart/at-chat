@@ -6048,6 +6048,52 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
+                Server_CallRecordingUploadFinished guildOrDmId messageId userId ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.finishedUploadingCallRecordingFrontend messageId userId)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.finishedUploadingCallRecordingFrontend messageId userId)
+                                        local.dmChannels
+                            }
+
+                Server_CallRecordingZipBuilt guildOrDmId messageId zip ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild { guildId, channelId } ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.callRecordingZipBuiltFrontend messageId zip)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm { otherUserId } ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.callRecordingZipBuiltFrontend messageId zip)
+                                        local.dmChannels
+                            }
+
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 

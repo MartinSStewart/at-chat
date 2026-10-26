@@ -3183,6 +3183,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_CallRecordingUploadProgress _ _ _ ->
                             True
 
+                        Types.Server_CallRecordingUploadFinished _ _ _ ->
+                            True
+
+                        Types.Server_CallRecordingZipBuilt _ _ _ ->
+                            True
+
                         Types.Server_RemoveReactionEmoji _ _ _ _ ->
                             False
 

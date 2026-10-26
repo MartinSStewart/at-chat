@@ -55,7 +55,7 @@ import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), Channe
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner
-import Message exposing (CallRecordingFile, ChangeAttachments(..), GameType(..), Message(..))
+import Message exposing (CallRecordingFile, CallRecordingZip, ChangeAttachments(..), GameType(..), Message(..))
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -2810,6 +2810,17 @@ updateHelper msg model =
 
         Rpc_RecordingUploadProgress sharedCallId recordingStartedAt file ->
             callRecordingUploadProgress sharedCallId recordingStartedAt file model
+
+        Rpc_RecordingUploadFinished sharedCallId recordingStartedAt userId ->
+            finishedUploadingCallRecording sharedCallId recordingStartedAt userId model
+
+        Rpc_RecordingZipBuilt sharedCallId recordingStartedAt zip ->
+            -- Kept even when it's left off the call's message, so it gets deleted as an orphan.
+            callRecordingZipBuilt
+                sharedCallId
+                recordingStartedAt
+                zip
+                { model | files = SeqDict.insert zip.fileHash { fileSize = zip.size, imageSize = Nothing } model.files }
 
 
 gotDiscordStickers :
@@ -9971,6 +9982,146 @@ callRecordingUploadProgress sharedCallId recordingStartedAt file model =
                                     , Broadcast.toGuild
                                         id.guildId
                                         (Server_CallRecordingUploadProgress (GuildOrDmId_Guild id) messageId file |> ServerChange)
+                                        model2
+                                    )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+
+finishedUploadingCallRecording :
+    Call.SharedCallId
+    -> Time.Posix
+    -> Id UserId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+finishedUploadingCallRecording sharedCallId recordingStartedAt userId model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    case LocalState.finishedUploadingCallRecordingBackend recordingStartedAt userId dmChannel of
+                        Just ( messageId, dmChannel2 ) ->
+                            let
+                                model2 : BackendModel
+                                model2 =
+                                    { model | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels }
+
+                                ( dmUserId, otherUserId ) =
+                                    DmChannelId.toUserIds dmChannelId
+                            in
+                            ( model2
+                            , Broadcast.toDmChannel
+                                dmUserId
+                                { otherUserId = otherUserId }
+                                (\id -> Server_CallRecordingUploadFinished (GuildOrDmId_Dm id) messageId userId)
+                                model2
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            case LocalState.finishedUploadingCallRecordingBackend recordingStartedAt userId channel of
+                                Just ( messageId, channel2 ) ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | guilds =
+                                                    SeqDict.insert
+                                                        id.guildId
+                                                        { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                                                        model.guilds
+                                            }
+                                    in
+                                    ( model2
+                                    , Broadcast.toGuild
+                                        id.guildId
+                                        (Server_CallRecordingUploadFinished (GuildOrDmId_Guild id) messageId userId |> ServerChange)
+                                        model2
+                                    )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+
+callRecordingZipBuilt :
+    Call.SharedCallId
+    -> Time.Posix
+    -> CallRecordingZip
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+callRecordingZipBuilt sharedCallId recordingStartedAt zip model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    case LocalState.callRecordingZipBuiltBackend recordingStartedAt zip dmChannel of
+                        Just ( messageId, dmChannel2 ) ->
+                            let
+                                model2 : BackendModel
+                                model2 =
+                                    { model | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels }
+
+                                ( userId, otherUserId ) =
+                                    DmChannelId.toUserIds dmChannelId
+                            in
+                            ( model2
+                            , Broadcast.toDmChannel
+                                userId
+                                { otherUserId = otherUserId }
+                                (\id -> Server_CallRecordingZipBuilt (GuildOrDmId_Dm id) messageId zip)
+                                model2
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            case LocalState.callRecordingZipBuiltBackend recordingStartedAt zip channel of
+                                Just ( messageId, channel2 ) ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | guilds =
+                                                    SeqDict.insert
+                                                        id.guildId
+                                                        { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                                                        model.guilds
+                                            }
+                                    in
+                                    ( model2
+                                    , Broadcast.toGuild
+                                        id.guildId
+                                        (Server_CallRecordingZipBuilt (GuildOrDmId_Guild id) messageId zip |> ServerChange)
                                         model2
                                     )
 
