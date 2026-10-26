@@ -32,7 +32,6 @@ import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Types exposing (BackendModel, BackendMsg(..))
-import UInt64
 import User
 import UserAgent
 import UserSession
@@ -471,28 +470,25 @@ tests =
                     |> Pages.Guild.decodeMessageIndex
                     |> Expect.equal { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex }
         , Test.fuzz
-            (Fuzz.map4
-                (\input messageIndex replyMessageIndex discordUserId -> ( input, ( messageIndex, replyMessageIndex ), discordUserId ))
+            (Fuzz.map3
+                (\input messageIndex replyMessageIndex -> ( input, messageIndex, replyMessageIndex ))
                 messageViewFuzzer
                 (Fuzz.intRange 0 (2 ^ 26 - 1))
                 (Fuzz.intRange 0 (2 ^ 26 - 1))
-                (Fuzz.map2 UInt64.fromInt32s Fuzz.int Fuzz.int |> Fuzz.map Discord.idFromUInt64)
             )
-            "Round trip Discord message view encoding"
+            "Round trip Discord reply view encoding"
           <|
-            \( input, ( messageIndex, replyMessageIndex ), discordUserId ) ->
-                Pages.Guild.encodeDiscordMessageView
+            \( input, messageIndex, replyMessageIndex ) ->
+                Pages.Guild.encodeDiscordMessageViewWithReply
                     (Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time)
                     (Pages.Guild.encodeMessageIndex messageIndex (Id.fromInt replyMessageIndex))
-                    discordUserId
-                    |> Pages.Guild.decodeDiscordMessageView
+                    |> Pages.Guild.decodeDiscordMessageViewWithReply
                     |> (\decoded ->
                             ( Pages.Guild.decodeMessageView decoded.data
                             , Pages.Guild.decodeMessageIndex decoded.messageIndexAndReplyMessageIndex
-                            , decoded.currentDiscordUserId
                             )
                        )
-                    |> Expect.equal ( input, { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex }, discordUserId )
+                    |> Expect.equal ( input, { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex } )
         , Test.test "Discord thread name is left as is when it's short enough" <|
             \_ ->
                 DiscordSync.threadName "Hello world!"

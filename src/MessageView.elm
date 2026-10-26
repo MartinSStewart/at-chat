@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), discordReactionEmojiView, gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, slackMiniView, slackThreadMiniView)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, slackMiniView, slackThreadMiniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -537,222 +537,109 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
         Nothing
 
     else
+        let
+            entries : List ( EmojiOrCustomEmoji, NonemptySet userId )
+            entries =
+                SeqDict.toList reactions
+
+            widths : List Int
+            widths =
+                List.map (\( _, users ) -> reactionButtonWidth users) entries
+
+            rowWidth : Int
+            rowWidth =
+                reactionRowWidth containerWidth
+
+            placements : List ReactionPopupPlacement
+            placements =
+                List.map2
+                    (reactionPopupPlacement rowWidth)
+                    widths
+                    (reactionButtonOffsets rowWidth widths)
+        in
         Ui.row
             [ Ui.wrap
             , Ui.spacing reactionSpacing
             ]
-            (List.indexedMap
-                (\index ( ( emoji, users ), placement ) ->
-                    let
-                        hasReactedTo : Bool
-                        hasReactedTo =
-                            NonemptySet.member currentUserId users
+            (List.map2 Tuple.pair entries placements
+                |> List.indexedMap
+                    (\index ( ( emoji, users ), placement ) ->
+                        let
+                            hasReactedTo : Bool
+                            hasReactedTo =
+                                NonemptySet.member currentUserId users
+                        in
+                        (if hasReactedTo then
+                            MyUi.rowButton
+                                (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
+                                (MessageView_PressedReactionEmoji_Remove emoji)
 
-                        attributes : List (Ui.Attribute MessageViewMsg)
-                        attributes =
-                            reactionButtonAttributes emojiData isHovered customEmojis allUsers index placement hasReactedTo emoji users
-
-                        content : List (Element MessageViewMsg)
-                        content =
-                            reactionButtonContent emojiData customEmojis animationMode emoji users
-                    in
-                    if hasReactedTo then
-                        MyUi.rowButton
-                            (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
-                            (MessageView_PressedReactionEmoji_Remove emoji)
-                            attributes
-                            content
-
-                    else
-                        MyUi.rowButton
-                            (Dom.id "guild_addReactionEmoji")
-                            (MessageView_PressedReactionEmoji_Add emoji)
-                            attributes
-                            content
-                )
-                (reactionsWithPlacements containerWidth reactions)
-            )
-            |> Just
-
-
-{-| Discord turns down a reaction with a custom emoji from another server, so someone else's
-reaction with one of those can't be joined. It's shown without being a button. Your own
-reactions can always be taken back.
--}
-discordReactionEmojiView :
-    Maybe CachedEmojiData
-    -> ReactionsHover
-    -> userId
-    -> SeqSet (Id CustomEmojiId)
-    -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> SeqDict userId { a | name : PersonName }
-    -> AnimationMode
-    -> Int
-    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
-    -> Maybe (Element MessageViewMsg)
-discordReactionEmojiView emojiData isHovered currentUserId usableCustomEmojis customEmojis allUsers animationMode containerWidth reactions =
-    if SeqDict.isEmpty reactions then
-        Nothing
-
-    else
-        Ui.row
-            [ Ui.wrap
-            , Ui.spacing reactionSpacing
-            ]
-            (List.indexedMap
-                (\index ( ( emoji, users ), placement ) ->
-                    let
-                        hasReactedTo : Bool
-                        hasReactedTo =
-                            NonemptySet.member currentUserId users
-
-                        attributes : List (Ui.Attribute MessageViewMsg)
-                        attributes =
-                            reactionButtonAttributes emojiData isHovered customEmojis allUsers index placement hasReactedTo emoji users
-
-                        content : List (Element MessageViewMsg)
-                        content =
-                            reactionButtonContent emojiData customEmojis animationMode emoji users
-
-                        addButton : Element MessageViewMsg
-                        addButton =
+                         else
                             MyUi.rowButton
                                 (Dom.id "guild_addReactionEmoji")
                                 (MessageView_PressedReactionEmoji_Add emoji)
-                                attributes
-                                content
-                    in
-                    if hasReactedTo then
-                        MyUi.rowButton
-                            (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
-                            (MessageView_PressedReactionEmoji_Remove emoji)
-                            attributes
-                            content
+                        )
+                            ([ Ui.rounded 8
+                             , Ui.spacing 2
+                             , Ui.background MyUi.background1
+                             , Ui.paddingXY 4 0
+                             , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                             , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
+                             , Ui.borderColor
+                                (if hasReactedTo then
+                                    MyUi.highlightedBorder
 
-                    else
-                        case emoji of
-                            EmojiOrCustomEmoji_Emoji _ ->
-                                addButton
+                                 else
+                                    MyUi.border1
+                                )
+                             , Ui.Font.color
+                                (if hasReactedTo then
+                                    MyUi.highlightedBorder
 
-                            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                                if SeqSet.member customEmojiId usableCustomEmojis then
-                                    addButton
+                                 else
+                                    MyUi.font2
+                                )
+                             , Ui.border 1
+                             , Ui.width (Ui.px (reactionButtonWidth users))
+                             , Ui.contentCenterX
+                             , Ui.Font.weight 500
+                             ]
+                                ++ (case isHovered of
+                                        ReactionsHovered ->
+                                            [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above ]
 
-                                else
-                                    Ui.row attributes content
-                )
-                (reactionsWithPlacements containerWidth reactions)
+                                        ReactionsNotHovered ->
+                                            []
+
+                                        ReactionLongPressed longPressedIndex ->
+                                            if longPressedIndex == index then
+                                                [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
+                                                , Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
+                                                ]
+
+                                            else
+                                                []
+                                   )
+                            )
+                            [ case emoji of
+                                EmojiOrCustomEmoji_Emoji emoji2 ->
+                                    Emoji.view emojiData emoji2
+
+                                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                                    Ui.el
+                                        [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
+                                            |> Ui.html
+                                            |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
+                                            |> Ui.inFront
+                                        , Ui.Font.color (Ui.rgba 0 0 0 0)
+                                        , Ui.Font.size 20
+                                        ]
+                                        (Ui.text "❓")
+                            , reactionCountView users
+                            ]
+                    )
             )
             |> Just
-
-
-reactionsWithPlacements :
-    Int
-    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
-    -> List ( ( EmojiOrCustomEmoji, NonemptySet userId ), ReactionPopupPlacement )
-reactionsWithPlacements containerWidth reactions =
-    let
-        entries : List ( EmojiOrCustomEmoji, NonemptySet userId )
-        entries =
-            SeqDict.toList reactions
-
-        widths : List Int
-        widths =
-            List.map (\( _, users ) -> reactionButtonWidth users) entries
-
-        rowWidth : Int
-        rowWidth =
-            reactionRowWidth containerWidth
-    in
-    List.map2
-        Tuple.pair
-        entries
-        (List.map2
-            (reactionPopupPlacement rowWidth)
-            widths
-            (reactionButtonOffsets rowWidth widths)
-        )
-
-
-reactionButtonAttributes :
-    Maybe CachedEmojiData
-    -> ReactionsHover
-    -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> SeqDict userId { a | name : PersonName }
-    -> Int
-    -> ReactionPopupPlacement
-    -> Bool
-    -> EmojiOrCustomEmoji
-    -> NonemptySet userId
-    -> List (Ui.Attribute MessageViewMsg)
-reactionButtonAttributes emojiData isHovered customEmojis allUsers index placement hasReactedTo emoji users =
-    [ Ui.rounded 8
-    , Ui.spacing 2
-    , Ui.background MyUi.background1
-    , Ui.paddingXY 4 0
-    , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-    , Ui.htmlAttribute (Html.Attributes.attribute "data-reaction-index" (String.fromInt index))
-    , Ui.borderColor
-        (if hasReactedTo then
-            MyUi.highlightedBorder
-
-         else
-            MyUi.border1
-        )
-    , Ui.Font.color
-        (if hasReactedTo then
-            MyUi.highlightedBorder
-
-         else
-            MyUi.font2
-        )
-    , Ui.border 1
-    , Ui.width (Ui.px (reactionButtonWidth users))
-    , Ui.contentCenterX
-    , Ui.Font.weight 500
-    ]
-        ++ (case isHovered of
-                ReactionsHovered ->
-                    [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above ]
-
-                ReactionsNotHovered ->
-                    []
-
-                ReactionLongPressed longPressedIndex ->
-                    if longPressedIndex == index then
-                        [ reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
-                        , Ui.htmlAttribute (Html.Attributes.class "reaction-long-pressed")
-                        ]
-
-                    else
-                        []
-           )
-
-
-reactionButtonContent :
-    Maybe CachedEmojiData
-    -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> AnimationMode
-    -> EmojiOrCustomEmoji
-    -> NonemptySet userId
-    -> List (Element msg)
-reactionButtonContent emojiData customEmojis animationMode emoji users =
-    [ case emoji of
-        EmojiOrCustomEmoji_Emoji emoji2 ->
-            Emoji.view emojiData emoji2
-
-        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-            Ui.el
-                [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
-                    |> Ui.html
-                    |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
-                    |> Ui.inFront
-                , Ui.Font.color (Ui.rgba 0 0 0 0)
-                , Ui.Font.size 20
-                ]
-                (Ui.text "❓")
-    , reactionCountView users
-    ]
 
 
 {-| Past 99 there isn't room for the count in a reaction button, so it becomes an

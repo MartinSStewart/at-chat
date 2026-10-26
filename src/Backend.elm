@@ -4601,7 +4601,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 id
                                 (\session userData user guild channel ->
-                                    case discordGuildReactionEmoji guild.customEmojis model.discordCustomEmojis emoji of
+                                    case emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji of
                                         Ok discordEmoji ->
                                             ( { model
                                                 | discordGuilds =
@@ -4659,7 +4659,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session userData user channel ->
-                                    case ( threadRoute, discordDmReactionEmoji emoji ) of
+                                    case ( threadRoute, emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji ) of
                                         ( NoThreadWithMessage messageId, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordDmChannels =
@@ -4706,7 +4706,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                         _ ->
-                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                            ( model, Command.none )
                                 )
 
                         SlackGuildOrDmId slackGuildOrDmId ->
@@ -9495,46 +9495,6 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-{-| Discord only lets someone react with custom emojis from the server they're in. Nitro lifts
-that, but we don't know who has Nitro.
--}
-discordGuildReactionEmoji :
-    SeqSet (Id CustomEmojiId)
-    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
-    -> EmojiOrCustomEmoji
-    -> Result () Discord.Emoji
-discordGuildReactionEmoji guildCustomEmojis customEmojis emoji =
-    case emoji of
-        EmojiOrCustomEmoji_Emoji emoji2 ->
-            Emoji.toString emoji2 |> Discord.UnicodeEmoji |> Ok
-
-        EmojiOrCustomEmoji_CustomEmoji id ->
-            if SeqSet.member id guildCustomEmojis then
-                case OneToOne.first id customEmojis of
-                    Just discordEmoji ->
-                        Discord.CustomEmoji
-                            { id = discordEmoji.id, name = CustomEmoji.emojiNameToString discordEmoji.name }
-                            |> Ok
-
-                    Nothing ->
-                        Err ()
-
-            else
-                Err ()
-
-
-{-| A DM isn't part of any server, so without Nitro there are no custom emojis to react with.
--}
-discordDmReactionEmoji : EmojiOrCustomEmoji -> Result () Discord.Emoji
-discordDmReactionEmoji emoji =
-    case emoji of
-        EmojiOrCustomEmoji_Emoji emoji2 ->
-            Emoji.toString emoji2 |> Discord.UnicodeEmoji |> Ok
-
-        EmojiOrCustomEmoji_CustomEmoji _ ->
-            Err ()
 
 
 emojiOrCustomEmojiToDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Result () Discord.Emoji

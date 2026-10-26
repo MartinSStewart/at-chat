@@ -10,7 +10,7 @@ module Pages.Guild exposing
     , chatWithText
     , confirmLeaveGuildText
     , conversationContainerId
-    , decodeDiscordMessageView
+    , decodeDiscordMessageViewWithReply
     , decodeMessageIndex
     , decodeMessageView
     , deleteGuildText
@@ -18,7 +18,7 @@ module Pages.Guild exposing
     , dropdownButtonId
     , e2eeSectionIsExpanded
     , editingText
-    , encodeDiscordMessageView
+    , encodeDiscordMessageViewWithReply
     , encodeMessageIndex
     , encodeMessageView
     , friendLabel
@@ -117,7 +117,6 @@ import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendTh
 import Time
 import Touch
 import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelError(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
-import UInt64
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -792,16 +791,6 @@ unreadOverviewNotMobile local loggedIn model =
                                                         loggedIn
                                                     )
                                                     currentDiscordUserId
-                                                    (case unread.guildOrDmId of
-                                                        GuildOrDmId _ ->
-                                                            SeqSet.empty
-
-                                                        DiscordGuildOrDmId guildOrDmId ->
-                                                            discordUsableCustomEmojis guildOrDmId local
-
-                                                        SlackGuildOrDmId _ ->
-                                                            SeqSet.empty
-                                                    )
                                                     allDiscordUsers
                                                     (case unread.guildOrDmId of
                                                         GuildOrDmId _ ->
@@ -855,16 +844,6 @@ unreadOverviewNotMobile local loggedIn model =
                                                             SeqDict.empty
                                                     )
                                                     currentDiscordUserId
-                                                    (case unread.guildOrDmId of
-                                                        GuildOrDmId _ ->
-                                                            SeqSet.empty
-
-                                                        DiscordGuildOrDmId guildOrDmId ->
-                                                            discordUsableCustomEmojis guildOrDmId local
-
-                                                        SlackGuildOrDmId _ ->
-                                                            SeqSet.empty
-                                                    )
                                                     local.localUser
                                                     Nothing
                                                     messageId
@@ -4917,7 +4896,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         highlight
                                         messageHover2
                                         currentDiscordUserId
-                                        (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                         channels
                                         local.localUser
@@ -4966,29 +4944,25 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     Nothing ->
                                         case ( maybeRepliedTo2, Message.mentionsChannel message || repliedToMentionsChannel maybeRepliedTo2 ) of
                                             ( Nothing, False ) ->
-                                                Ui.Lazy.lazy5
+                                                Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarter
-                                                    (encodeDiscordMessageView
-                                                        (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
-                                                        (encodeMessageIndex index (Id.fromInt 0))
-                                                        currentDiscordUserId
-                                                    )
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
+                                                    currentDiscordUserId
                                                     local.localUser
+                                                    index
                                                     message
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             ( Nothing, True ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarterWithChannelMention
-                                                    (encodeDiscordMessageView
+                                                    (encodeDiscordMessageViewWithReply
                                                         (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                         (encodeMessageIndex index (Id.fromInt 0))
-                                                        currentDiscordUserId
                                                     )
                                                     revealedSpoilers
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
+                                                    currentDiscordUserId
                                                     local.localUser
                                                     message
                                                     (case guildOrDmIdNoThread of
@@ -5008,13 +4982,12 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                             ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarterWithReply
-                                                    (encodeDiscordMessageView
+                                                    (encodeDiscordMessageViewWithReply
                                                         (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                         (encodeMessageIndex index replyMessageIndex)
-                                                        currentDiscordUserId
                                                     )
                                                     revealedSpoilers
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
+                                                    currentDiscordUserId
                                                     local.localUser
                                                     message
                                                     repliedToMessage
@@ -5030,7 +5003,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                     (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
@@ -5047,7 +5019,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     currentDiscordUserId
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                                     local.localUser
                                                     index
                                                     thread
@@ -5064,7 +5035,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                                     (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                     (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
@@ -5558,7 +5528,6 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                         channels
                                         currentDiscordUserId
-                                        (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                         local.localUser
                                         maybeRepliedTo2
                                         messageId
@@ -5602,16 +5571,13 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             Nothing ->
                                 case ( maybeRepliedTo2, Message.mentionsChannel message ) of
                                     ( Nothing, False ) ->
-                                        Ui.Lazy.lazy5
+                                        Ui.Lazy.lazy6
                                             discordThreadMessageViewLazy
-                                            (encodeDiscordMessageView
-                                                (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
-                                                (encodeMessageIndex index (Id.fromInt 0))
-                                                currentDiscordUserId
-                                            )
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                             revealedSpoilers
-                                            (discordUsableCustomEmojis guildOrDmIdNoThread local)
+                                            currentDiscordUserId
                                             local.localUser
+                                            index
                                             message
                                             |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
@@ -5626,7 +5592,6 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             channels
                                             currentDiscordUserId
-                                            (discordUsableCustomEmojis guildOrDmIdNoThread local)
                                             local.localUser
                                             maybeRepliedTo2
                                             messageId
@@ -5884,38 +5849,25 @@ decodeMessageIndex packed =
     }
 
 
-{-| The lazy Discord message views need more than the six arguments `Ui.Lazy` goes up to, and
-the Int `encodeMessageView` packs has no bits left for the message indices or the current
-Discord user. `Ui.Lazy` compares strings by value just like Ints, so they travel as one string.
+{-| A Discord reply's lazy view also takes the current Discord user, one argument more than
+`Ui.Lazy` goes up to, and the Int `encodeMessageView` packs has no bits left for the message
+indices. `Ui.Lazy` compares strings by value just like Ints, so the two travel as one string.
 -}
-encodeDiscordMessageView : Int -> Int -> Discord.Id Discord.UserId -> String
-encodeDiscordMessageView data messageIndexAndReplyMessageIndex currentDiscordUserId =
-    String.fromInt data
-        ++ " "
-        ++ String.fromInt messageIndexAndReplyMessageIndex
-        ++ " "
-        ++ Discord.idToString currentDiscordUserId
+encodeDiscordMessageViewWithReply : Int -> Int -> String
+encodeDiscordMessageViewWithReply data messageIndexAndReplyMessageIndex =
+    String.fromInt data ++ " " ++ String.fromInt messageIndexAndReplyMessageIndex
 
 
-decodeDiscordMessageView :
-    String
-    -> { data : Int, messageIndexAndReplyMessageIndex : Int, currentDiscordUserId : Discord.Id Discord.UserId }
-decodeDiscordMessageView packed =
+decodeDiscordMessageViewWithReply : String -> { data : Int, messageIndexAndReplyMessageIndex : Int }
+decodeDiscordMessageViewWithReply packed =
     case String.split " " packed of
-        [ data, messageIndexAndReplyMessageIndex, currentDiscordUserId ] ->
+        [ data, messageIndexAndReplyMessageIndex ] ->
             { data = String.toInt data |> Maybe.withDefault 0
             , messageIndexAndReplyMessageIndex = String.toInt messageIndexAndReplyMessageIndex |> Maybe.withDefault 0
-            , currentDiscordUserId =
-                case Discord.idFromString currentDiscordUserId of
-                    Just id ->
-                        id
-
-                    Nothing ->
-                        Discord.idFromUInt64 UInt64.zero
             }
 
         _ ->
-            { data = 0, messageIndexAndReplyMessageIndex = 0, currentDiscordUserId = Discord.idFromUInt64 UInt64.zero }
+            { data = 0, messageIndexAndReplyMessageIndex = 0 }
 
 
 encodeFriendsColumn : Bool -> Int -> Int
@@ -7447,7 +7399,6 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             NoHighlight
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                             currentUserId
-                            (discordUsableCustomEmojis discordGuildOrDmId local)
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                             channels
                             local.localUser
@@ -7467,7 +7418,6 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                         NoHighlight
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                         currentUserId
-                        (discordUsableCustomEmojis discordGuildOrDmId local)
                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                         channels
                         local.localUser
@@ -7947,41 +7897,18 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
         message
 
 
-{-| Discord only takes reactions with custom emojis from the server the message is in. A DM
-isn't part of a server so there are none.
--}
-discordUsableCustomEmojis : DiscordGuildOrDmId -> LocalState -> SeqSet (Id CustomEmojiId)
-discordUsableCustomEmojis guildOrDmId local =
-    case guildOrDmId of
-        DiscordGuildOrDmId_Guild { guildId } ->
-            case SeqDict.get guildId local.discordGuilds of
-                Just guild ->
-                    guild.customEmojis
-
-                Nothing ->
-                    SeqSet.empty
-
-        DiscordGuildOrDmId_Dm _ ->
-            SeqSet.empty
-
-
 discordMessageViewNotThreadStarter :
-    String
+    Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> SeqSet (Id CustomEmojiId)
+    -> Discord.Id Discord.UserId
     -> LocalUser
+    -> Int
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarter packed revealedSpoilers usableCustomEmojis localUser message =
+discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
-            decodeDiscordMessageView packed
-
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
-
-        { messageIndex } =
-            decodeMessageIndex messageIndexAndReplyMessageIndex
     in
     --Ui.el
     --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
@@ -8000,7 +7927,6 @@ discordMessageViewNotThreadStarter packed revealedSpoilers usableCustomEmojis lo
         highlight
         isHovered
         currentDiscordUserId
-        usableCustomEmojis
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         SeqDict.empty
         localUser
@@ -8013,15 +7939,15 @@ discordMessageViewNotThreadStarter packed revealedSpoilers usableCustomEmojis lo
 discordMessageViewNotThreadStarterWithReply :
     String
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> SeqSet (Id CustomEmojiId)
+    -> Discord.Id Discord.UserId
     -> LocalUser
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarterWithReply packed revealedSpoilers usableCustomEmojis localUser message replyMessage =
+discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message replyMessage =
     let
-        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
-            decodeDiscordMessageView packed
+        { data, messageIndexAndReplyMessageIndex } =
+            decodeDiscordMessageViewWithReply dataAndMessageIndex
 
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8038,7 +7964,6 @@ discordMessageViewNotThreadStarterWithReply packed revealedSpoilers usableCustom
         highlight
         isHovered
         currentDiscordUserId
-        usableCustomEmojis
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         SeqDict.empty
         localUser
@@ -8051,15 +7976,15 @@ discordMessageViewNotThreadStarterWithReply packed revealedSpoilers usableCustom
 discordMessageViewNotThreadStarterWithChannelMention :
     String
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> SeqSet (Id CustomEmojiId)
+    -> Discord.Id Discord.UserId
     -> LocalUser
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarterWithChannelMention packed revealedSpoilers usableCustomEmojis localUser message guildChannels =
+discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message guildChannels =
     let
-        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
-            decodeDiscordMessageView packed
+        { data, messageIndexAndReplyMessageIndex } =
+            decodeDiscordMessageViewWithReply dataAndMessageIndex
 
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8076,7 +8001,6 @@ discordMessageViewNotThreadStarterWithChannelMention packed revealedSpoilers usa
         highlight
         isHovered
         currentDiscordUserId
-        usableCustomEmojis
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         (LocalState.discordGuildChannelMentions localUser guildChannels)
         localUser
@@ -8090,13 +8014,12 @@ discordMessageViewThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> Discord.Id Discord.UserId
-    -> SeqSet (Id CustomEmojiId)
     -> LocalUser
     -> Int
     -> DiscordFrontendThread
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId usableCustomEmojis localUser messageIndex thread message =
+discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8110,7 +8033,6 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId usabl
         highlight
         isHovered
         currentDiscordUserId
-        usableCustomEmojis
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         SeqDict.empty
         localUser
@@ -8150,22 +8072,17 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
 
 
 discordThreadMessageViewLazy :
-    String
+    Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
-    -> SeqSet (Id CustomEmojiId)
+    -> Discord.Id Discord.UserId
     -> LocalUser
+    -> Int
     -> Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordThreadMessageViewLazy packed revealedSpoilers usableCustomEmojis localUser message =
+discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
-            decodeDiscordMessageView packed
-
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
-
-        { messageIndex } =
-            decodeMessageIndex messageIndexAndReplyMessageIndex
     in
     discordThreadMessageView
         time
@@ -8177,7 +8094,6 @@ discordThreadMessageViewLazy packed revealedSpoilers usableCustomEmojis localUse
         (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         SeqDict.empty
         currentDiscordUserId
-        usableCustomEmojis
         localUser
         Nothing
         (Id.fromInt messageIndex)
@@ -8207,6 +8123,22 @@ type HighlightMessage
     | UrlHighlight
 
 
+{-| Which custom emojis the one-click reactions on a Discord message may offer.
+
+Discord only accepts a reaction with an emoji it knows about, so a custom emoji picked
+up from an at-chat guild is rejected when it's used on a Discord message. Narrowing the
+offer to the current Discord guild's own emojis would mean carrying that guild's emoji
+set into the message view, and the Discord message views have already spent every
+argument `Ui.Lazy` has room for. The reactions offered up front are therefore unicode
+emojis, which Discord always takes; the emoji selector still offers the guild's custom
+emojis.
+
+-}
+discordQuickReactionCustomEmojis : SeqSet (Id CustomEmojiId)
+discordQuickReactionCustomEmojis =
+    SeqSet.empty
+
+
 messageView :
     Time.Posix
     -> Bool
@@ -8234,14 +8166,11 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
         channelMentions : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channelMentions =
             LocalState.guildChannelMentions localUser channels
-
-        reactionsView : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
-        reactionsView reactions =
-            MessageView.reactionEmojiView localUser.emojiData (reactionsHover isHovered) currentUserId localUser.customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     case message of
         UserTextMessage data ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8263,8 +8192,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 )
                 messageId
                 (currentUserId == data.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView data.reactions)
+                data.reactions
                 maybeThreadStarter
                 decrypted
                 isHovered
@@ -8291,6 +8221,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
             case SeqDict.get (Encryption.hash data.content) decrypted of
                 Just result ->
                     messageContainer
+                        containerWidth
                         isThreadStarter
                         localUser.timezone
                         time
@@ -8302,8 +8233,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         highlight
                         messageId
                         (currentUserId == data.createdBy)
+                        currentUserId
                         localUser.user
-                        (reactionsView data.reactions)
+                        data.reactions
                         maybeThreadStarter
                         decrypted
                         isHovered
@@ -8334,6 +8266,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8345,8 +8278,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView reactions)
+                reactions
                 maybeThreadStarter
                 decrypted
                 isHovered
@@ -8366,6 +8300,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         DeletedMessage createdAt ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8377,8 +8312,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                Nothing
+                SeqDict.empty
                 maybeThreadStarter
                 decrypted
                 isHovered
@@ -8391,6 +8327,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         CallStarted callStartedData ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8402,8 +8339,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView callStartedData.reactions)
+                callStartedData.reactions
                 maybeThreadStarter
                 decrypted
                 isHovered
@@ -8439,6 +8377,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         GameStarted gameStarted ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -8450,8 +8389,9 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView gameStarted.reactions)
+                gameStarted.reactions
                 maybeThreadStarter
                 decrypted
                 isHovered
@@ -8486,7 +8426,6 @@ discordMessageView :
     -> HighlightMessage
     -> IsHovered
     -> Discord.Id Discord.UserId
-    -> SeqSet (Id CustomEmojiId)
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> LocalUser
@@ -8495,23 +8434,15 @@ discordMessageView :
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId usableCustomEmojis allUsers channels localUser maybeRepliedTo2 maybeThreadStarter messageId message =
-    let
-        reactionsView : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId)) -> Maybe (Element MessageViewMsg)
-        reactionsView reactions =
-            MessageView.discordReactionEmojiView localUser.emojiData (reactionsHover isHovered) currentUserId usableCustomEmojis localUser.customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
-
-        quickReactionCustomEmojis : SeqSet (Id CustomEmojiId)
-        quickReactionCustomEmojis =
-            SeqSet.intersect usableCustomEmojis localUser.user.availableCustomEmojis
-    in
+discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId allUsers channels localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
         UserTextMessage data ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8529,8 +8460,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 )
                 messageId
                 (currentUserId == data.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView data.reactions)
+                data.reactions
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8552,10 +8484,11 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         EncryptedUserTextMessage data ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8563,8 +8496,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 highlight
                 messageId
                 (currentUserId == data.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView data.reactions)
+                data.reactions
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8586,10 +8520,11 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8597,8 +8532,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView reactions)
+                reactions
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8618,10 +8554,11 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         DeletedMessage createdAt ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8629,8 +8566,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                Nothing
+                SeqDict.empty
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8643,10 +8581,11 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         CallStarted callStartedData ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8654,8 +8593,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView callStartedData.reactions)
+                callStartedData.reactions
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8691,10 +8631,11 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         GameStarted gameStarted ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
-                quickReactionCustomEmojis
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8702,8 +8643,9 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView gameStarted.reactions)
+                gameStarted.reactions
                 maybeThreadStarter
                 SeqDict.empty
                 isHovered
@@ -8750,14 +8692,11 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
         decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId) (Id ChannelId)))
         decrypted =
             localUser.decryptedMessages
-
-        reactionsView : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
-        reactionsView reactions =
-            MessageView.reactionEmojiView localUser.emojiData (reactionsHover isHovered) currentUserId localUser.customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
+                containerWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
@@ -8771,11 +8710,13 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 )
                 messageId
                 (currentUserId == message2.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView message2.reactions)
+                message2.reactions
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (userTextMessageContent
                     time
@@ -8800,14 +8741,17 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
             case SeqDict.get (Encryption.hash message2.content) decrypted of
                 Just result ->
                     threadMessageContainer
+                        containerWidth
                         highlight
                         messageId
                         (currentUserId == message2.createdBy)
+                        currentUserId
                         localUser.user
-                        (reactionsView message2.reactions)
+                        message2.reactions
                         localUser.user.availableCustomEmojis
                         localUser.customEmojis
                         localUser.emojiData
+                        allUsers
                         isHovered
                         (userTextMessageContent
                             time
@@ -8836,14 +8780,17 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView reactions)
+                reactions
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -8860,14 +8807,17 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         DeletedMessage createdAt ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                Nothing
+                SeqDict.empty
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (deletedMessageContent
                     messageId
@@ -8878,14 +8828,17 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         CallStarted callStartedData ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView callStartedData.reactions)
+                callStartedData.reactions
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -8918,14 +8871,17 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         GameStarted gameStarted ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView gameStarted.reactions)
+                gameStarted.reactions
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -8958,25 +8914,16 @@ discordThreadMessageView :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> Discord.Id Discord.UserId
-    -> SeqSet (Id CustomEmojiId)
     -> LocalUser
     -> Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) MessageViewMsg)
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered allUsers channels currentUserId usableCustomEmojis localUser maybeRepliedTo2 messageId message =
-    let
-        reactionsView : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId)) -> Maybe (Element MessageViewMsg)
-        reactionsView reactions =
-            MessageView.discordReactionEmojiView localUser.emojiData (reactionsHover isHovered) currentUserId usableCustomEmojis localUser.customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
-
-        quickReactionCustomEmojis : SeqSet (Id CustomEmojiId)
-        quickReactionCustomEmojis =
-            SeqSet.intersect usableCustomEmojis localUser.user.availableCustomEmojis
-    in
+discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered allUsers channels currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
+                containerWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
@@ -8990,11 +8937,13 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 )
                 messageId
                 (currentUserId == message2.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView message2.reactions)
-                quickReactionCustomEmojis
+                message2.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (discordUserTextMessageContent
                     time
@@ -9014,14 +8963,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         EncryptedUserTextMessage message2 ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 (currentUserId == message2.createdBy)
+                currentUserId
                 localUser.user
-                (reactionsView message2.reactions)
-                quickReactionCustomEmojis
+                message2.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (discordUserTextMessageContent
                     time
@@ -9041,14 +8993,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView reactions)
-                quickReactionCustomEmojis
+                reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -9065,14 +9020,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         DeletedMessage createdAt ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                Nothing
-                quickReactionCustomEmojis
+                SeqDict.empty
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (deletedMessageContent
                     messageId
@@ -9083,14 +9041,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         CallStarted callStartedData ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView callStartedData.reactions)
-                quickReactionCustomEmojis
+                callStartedData.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -9123,14 +9084,17 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         GameStarted gameStarted ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
+                currentUserId
                 localUser.user
-                (reactionsView gameStarted.reactions)
-                quickReactionCustomEmojis
+                gameStarted.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
+                allUsers
                 isHovered
                 (Ui.row
                     []
@@ -10201,7 +10165,8 @@ orElseMaybe first second =
 
 
 messageContainer :
-    Bool
+    Int
+    -> Bool
     -> Time.Zone
     -> Time.Posix
     -> SeqSet (Id CustomEmojiId)
@@ -10212,14 +10177,20 @@ messageContainer :
     -> HighlightMessage
     -> Id ChannelMessageId
     -> Bool
+    -> userId
     -> FrontendCurrentUser
-    -> Maybe (Element MessageViewMsg)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId channelId)
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers channels highlight messageIndex canEdit currentUser maybeReactions maybeThread decrypted isHovered messageContent =
+messageContainer containerWidth isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers channels highlight messageIndex canEdit currentUserId currentUser reactions maybeThread decrypted isHovered messageContent =
+    let
+        maybeReactions : Maybe (Element MessageViewMsg)
+        maybeReactions =
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+    in
     Ui.column
         ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter MessageView_MouseEnteredMessage
@@ -10289,18 +10260,26 @@ messageContainer isThreadStarter timezone currentTime availableCustomEmojis cust
 
 
 threadMessageContainer :
-    HighlightMessage
+    Int
+    -> HighlightMessage
     -> Id ThreadMessageId
     -> Bool
+    -> userId
     -> FrontendCurrentUser
-    -> Maybe (Element MessageViewMsg)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> SeqSet (Id CustomEmojiId)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Maybe CachedEmojiData
+    -> SeqDict userId { a | name : PersonName }
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUser maybeReactions availableCustomEmojis customEmojis emojiData isHovered messageContent =
+threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions availableCustomEmojis customEmojis emojiData allUsers isHovered messageContent =
+    let
+        maybeReactions : Maybe (Element MessageViewMsg)
+        maybeReactions =
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+    in
     Ui.column
         ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter MessageView_MouseEnteredMessage
