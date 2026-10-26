@@ -1671,17 +1671,17 @@ recordingNoticeView localUser time local =
                     else
                         notice
                             [ Ui.text (User.toStringAlt asking.requestedBy localUser ++ " wants to record this call")
-                                |> Ui.el [ Ui.Font.bold ]
+                                |> Ui.el [ Ui.Font.bold, MyUi.htmlStyle "word-break" "break-all" ]
                             , Ui.Prose.paragraph
                                 [ Ui.Font.size 14 ]
-                                [ Ui.text "Your camera, microphone and screen share get saved on this device and uploaded once you leave the call." ]
+                                [ Ui.text "Cameras, microphones, and any screen sharing will be recorded." ]
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ MyUi.simpleButton
                                     (Dom.id "voiceChat_allowRecording")
                                     (PressedAnswerRecording True)
                                     (Ui.text "Allow")
-                                , MyUi.secondaryButton
+                                , MyUi.secondaryButtonTall
                                     (Dom.id "voiceChat_declineRecording")
                                     (PressedAnswerRecording False)
                                     "Decline"
@@ -1690,22 +1690,24 @@ recordingNoticeView localUser time local =
 
                 Just (RecordingDeclined declined) ->
                     if isRecent declined.declinedAt then
-                        (case declined.declinedBy of
-                            Just declinedBy ->
-                                if declinedBy == currentUserId then
-                                    "Recording wasn't started because you declined"
+                        notice
+                            [ Ui.el
+                                [ MyUi.htmlStyle "word-break" "break-all" ]
+                                (case declined.declinedBy of
+                                    Just declinedBy ->
+                                        if declinedBy == currentUserId then
+                                            Ui.text "Recording wasn't started because you declined"
 
-                                else
-                                    "Recording wasn't started because "
-                                        ++ User.toStringAlt declinedBy localUser
-                                        ++ " declined"
+                                        else
+                                            "Recording wasn't started because "
+                                                ++ User.toStringAlt declinedBy localUser
+                                                ++ " declined"
+                                                |> Ui.text
 
-                            Nothing ->
-                                "Recording wasn't started because not everyone answered in time"
-                        )
-                            |> Ui.text
-                            |> List.singleton
-                            |> notice
+                                    Nothing ->
+                                        Ui.text "Recording wasn't started because not everyone answered in time"
+                                )
+                            ]
 
                     else
                         Ui.none

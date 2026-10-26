@@ -390,7 +390,7 @@ subscriptions model =
                 )
                 (SeqDict.values model.callRecordings)
           then
-            Time.every (Duration.seconds 1) RecordingRequestTick
+            Time.every (Duration.seconds 10) RecordingRequestTick
 
           else
             Subscription.none
