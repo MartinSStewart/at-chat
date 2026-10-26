@@ -802,7 +802,7 @@ recordingNeedsEveryoneTest normalConfig =
                 -- Wanda isn't in the recording yet, so can't upload to it
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000)
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "This call is now being recorded" ])
-                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_stopRecording" ])
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_recordingIndicator" ])
                 , E2EHelper.tallSnapshot admin 0 { name = "Call recording started" }
                 , wanda.click 100 (Dom.id "guild_voiceChat")
                 , wanda.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Join\u{00A0}Recorded\u{00A0}Call" ])
@@ -813,9 +813,16 @@ recordingNeedsEveryoneTest normalConfig =
                 , T.checkState 0 (checkCallRecording { ended = False, participants = [ 0, 2, 3, 4 ], files = [] })
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkIsRecording
-                , joe.click 100 (Dom.id "voiceChat_stopRecording")
+
+                -- A recording only ends with the call
+                , joe.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "voiceChat_cancelRecording" ])
+                , stevie.click 100 (Dom.id "guild_leaveVoiceChat")
+                , joe.click 100 (Dom.id "guild_leaveVoiceChat")
+                , T.checkState 100 checkIsRecording
+                , wanda.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkNoRecording
-                , wanda.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "voiceChat_record" ])
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecorded_3" ])
+                , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
 
                 -- Files go up after the recording has ended
@@ -827,7 +834,9 @@ recordingNeedsEveryoneTest normalConfig =
 
                 -- A file can't change size partway through
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 2000)
+                , admin.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_callRecordings_3" ])
                 , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 1000
+                , E2EHelper.tallSnapshot admin 100 { name = "Call recording ready to download" }
                 , admin.click 100 (Dom.id "guild_callRecordings_3")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" ])
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "Nothing from Joe yet. It uploads once they've left the call." ])

@@ -389,8 +389,8 @@ pendingChangesText localChange =
                 Call.Local_AnswerRecording False ->
                     Just "Declined call recording"
 
-                Call.Local_StopRecording ->
-                    Just "Stopped call recording"
+                Call.Local_CancelRecording ->
+                    Just "Cancelled asking to record call"
 
                 Call.Local_DeleteRecording _ _ ->
                     Just "Deleted call recording"
@@ -5311,7 +5311,7 @@ changeUpdate localMsg local =
                         Call.Local_AnswerRecording _ ->
                             local
 
-                        Call.Local_StopRecording ->
+                        Call.Local_CancelRecording ->
                             local
 
                         Call.Local_DeleteRecording _ _ ->

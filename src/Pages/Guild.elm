@@ -8420,6 +8420,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                                 callStartedData.startedBy
                                 callStartedData.startedAt
                                 callStartedData.endedAt
+                                callStartedData.recordings
                                 allUsers
                             )
                         , callRecordingsButton messageId callStartedData.recordings
@@ -8671,6 +8672,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                                 callStartedData.startedBy
                                 callStartedData.startedAt
                                 callStartedData.endedAt
+                                callStartedData.recordings
                                 allUsers
                             )
                         , callRecordingsButton messageId callStartedData.recordings
@@ -8898,6 +8900,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                                 callStartedData.startedBy
                                 callStartedData.startedAt
                                 callStartedData.endedAt
+                                callStartedData.recordings
                                 allUsers
                             )
                         , callRecordingsButton messageId callStartedData.recordings
@@ -9102,6 +9105,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                                 callStartedData.startedBy
                                 callStartedData.startedAt
                                 callStartedData.endedAt
+                                callStartedData.recordings
                                 allUsers
                             )
                         , callRecordingsButton messageId callStartedData.recordings
@@ -9874,6 +9878,9 @@ gameStartedContent userId game allUsers =
         ]
 
 
+{-| Written out rather than using eventCard, since a recorded call also shows that it was
+recorded.
+-}
 callStartedCard :
     (userId -> UserColor)
     -> Bool
@@ -9882,45 +9889,97 @@ callStartedCard :
     -> userId
     -> Time.Posix
     -> Maybe Time.Posix
+    -> List (CallRecording userId)
     -> SeqDict userId { a | name : PersonName }
     -> Element MessageViewMsg
-callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt allUsers =
-    eventCard
-        userIdToColor
-        isSelectingAnchor
-        messageId
-        drawings
-        (Dom.id "guild_callStartedCard")
-        MessageViewMsg_PressedCallStartedCard
-        (Ui.html Icons.phone)
-        (User.toString userId allUsers)
-        (startedACallText ++ eventDurationText startedAt endedAt)
-
-
-callRecordingsButton : Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
-callRecordingsButton messageId recordings =
-    case recordings of
-        [] ->
-            Ui.none
-
-        _ :: _ ->
-            MyUi.rowButton
-                (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
-                MessageViewMsg_PressedCallRecordings
-                [ Ui.spacing 8
-                , Ui.paddingXY 12 6
+callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt recordings allUsers =
+    Ui.el
+        []
+        (Ui.el
+            (Ui.rounded 6
+                :: Drawing.anchorHighlight
+                    ("guild_eventCard_" ++ Id.toString messageId |> Dom.id)
+                    userIdToColor
+                    MessageView_PressedCardAnchor
+                    isSelectingAnchor
+                    drawings
+            )
+            (MyUi.rowButton
+                (Dom.id "guild_callStartedCard")
+                MessageViewMsg_PressedCallStartedCard
+                [ Ui.spacing 12
+                , Ui.paddingXY 16 6
                 , Ui.background MyUi.background2
                 , Ui.border 1
                 , Ui.borderColor MyUi.border1
                 , Ui.rounded 6
                 , Ui.width Ui.shrink
                 , Ui.Font.color MyUi.font3
-                , Ui.Font.size 14
                 , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                , if isSelectingAnchor then
+                    MyUi.noPointerEvents
+
+                  else
+                    Ui.noAttr
                 ]
-                [ Ui.el [ Ui.width (Ui.px 10), Ui.height (Ui.px 10), Ui.rounded 5, Ui.background (Ui.rgb 240 60 60) ] Ui.none
-                , Ui.text "Recording"
+                [ Ui.html Icons.phone
+                , Ui.column
+                    [ Ui.spacing 2, Ui.width Ui.shrink ]
+                    [ Ui.el
+                        [ Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.widthMax 200, Ui.clipWithEllipsis ]
+                        (Ui.text (User.toString userId allUsers))
+                    , Ui.el [ Ui.Font.size 13 ] (Ui.text (startedACallText ++ eventDurationText startedAt endedAt))
+                    ]
+                , case recordings of
+                    [] ->
+                        Ui.none
+
+                    _ :: _ ->
+                        Ui.el
+                            [ Ui.id ("guild_callRecorded_" ++ Id.toString messageId)
+                            , Ui.width Ui.shrink
+                            , MyUi.hoverText "This call was recorded"
+                            ]
+                            (Ui.html (Icons.recording 22))
                 ]
+            )
+        )
+
+
+{-| Shows up once some of a recording has finished uploading, and opens the list of its
+files.
+-}
+callRecordingsButton : Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
+callRecordingsButton messageId recordings =
+    if
+        List.any
+            (\recording ->
+                (recording.deletedBy == Nothing)
+                    && List.any (\file -> file.uploaded >= file.size) recording.files
+            )
+            recordings
+    then
+        MyUi.rowButton
+            (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
+            MessageViewMsg_PressedCallRecordings
+            [ Ui.spacing 8
+            , Ui.paddingXY 14 0
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.background MyUi.background2
+            , Ui.border 1
+            , Ui.borderColor MyUi.border1
+            , Ui.rounded 6
+            , Ui.width Ui.shrink
+            , Ui.Font.color MyUi.font3
+            , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+            ]
+            [ Ui.html Icons.download
+            , Ui.text "Download\u{00A0}recording"
+            ]
+
+    else
+        Ui.none
 
 
 goMatchStartedCard :

@@ -43,6 +43,7 @@ module Icons exposing
     , person
     , phone
     , plusIcon
+    , recording
     , recycle
     , reply
     , reset
@@ -1154,6 +1155,46 @@ phone =
             , Svg.Attributes.d "M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"
             ]
             []
+        ]
+
+
+{-| A white dot and "REC" in a box, like on a video camera. A red dot alone looks too
+much like a notification.
+-}
+recording : Int -> Html msg
+recording height =
+    Svg.svg
+        [ Svg.Attributes.viewBox "0 0 52 24"
+        , Svg.Attributes.height (String.fromInt height)
+        , Svg.Attributes.width (String.fromInt (height * 52 // 24))
+        ]
+        [ Svg.rect
+            [ Svg.Attributes.x "1"
+            , Svg.Attributes.y "1"
+            , Svg.Attributes.width "50"
+            , Svg.Attributes.height "22"
+            , Svg.Attributes.rx "5"
+            , Svg.Attributes.fill "none"
+            , Svg.Attributes.stroke "currentColor"
+            , Svg.Attributes.strokeWidth "2"
+            ]
+            []
+        , Svg.circle
+            [ Svg.Attributes.cx "12"
+            , Svg.Attributes.cy "12"
+            , Svg.Attributes.r "5"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        , Svg.text_
+            [ Svg.Attributes.x "21"
+            , Svg.Attributes.y "16.5"
+            , Svg.Attributes.fontSize "12.5"
+            , Svg.Attributes.fontWeight "bold"
+            , Svg.Attributes.fontFamily "sans-serif"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            [ Svg.text "REC" ]
         ]
 
 

@@ -5640,12 +5640,12 @@ updateLoaded msg model =
                         )
                         model
 
-                Call.PressedStopRecording ->
+                Call.PressedCancelRecording ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_VoiceChatChange Call.Local_StopRecording |> Just)
+                                (Local_VoiceChatChange Call.Local_CancelRecording |> Just)
                                 loggedIn
                                 Command.none
                         )
@@ -9166,7 +9166,7 @@ updateLoadedFromBackend msg model =
                                     Call.Local_AnswerRecording _ ->
                                         Command.none
 
-                                    Call.Local_StopRecording ->
+                                    Call.Local_CancelRecording ->
                                         Command.none
 
                                     Call.Local_DeleteRecording _ _ ->

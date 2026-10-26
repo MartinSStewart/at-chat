@@ -101,7 +101,7 @@ type LocalChange
     | Local_SetRemoteCallData RemoteCallData
     | Local_RequestRecording
     | Local_AnswerRecording Bool
-    | Local_StopRecording
+    | Local_CancelRecording
     | Local_DeleteRecording CallId Time.Posix
 
 
@@ -139,7 +139,7 @@ type Msg
     | PressedJoinCall CallId
     | PressedLeaveCall
     | PressedRecord
-    | PressedStopRecording
+    | PressedCancelRecording
     | PressedAnswerRecording Bool
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
@@ -1561,10 +1561,20 @@ recordButton recordingStatus =
     in
     case recordingStatus of
         Just (RecordingSince _) ->
-            button (Dom.id "voiceChat_stopRecording") PressedStopRecording red "Stop\u{00A0}Recording"
+            -- A recording only ends with the call, so there's nothing to press.
+            Ui.el
+                [ Ui.id "voiceChat_recordingIndicator"
+                , Ui.height Ui.fill
+                , Ui.contentCenterY
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 4 0
+                , Ui.Font.color MyUi.white
+                , MyUi.hoverText "This call is being recorded"
+                ]
+                (Ui.html (Icons.recording 26))
 
         Just (AskingToRecord _) ->
-            button (Dom.id "voiceChat_stopRecording") PressedStopRecording (Ui.rgb 42 50 78) "Cancel\u{00A0}Recording"
+            button (Dom.id "voiceChat_cancelRecording") PressedCancelRecording (Ui.rgb 42 50 78) "Cancel\u{00A0}Recording"
 
         Just (RecordingDeclined _) ->
             button (Dom.id "voiceChat_record") PressedRecord (Ui.rgb 42 50 78) "Record"
@@ -2490,7 +2500,7 @@ isPressMsg msg =
         PressedRecord ->
             True
 
-        PressedStopRecording ->
+        PressedCancelRecording ->
             True
 
         PressedAnswerRecording _ ->

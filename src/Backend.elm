@@ -9708,15 +9708,32 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                 )
 
-        Call.Local_StopRecording ->
+        Call.Local_CancelRecording ->
             BackendExtra.asUser
                 model
                 sessionId
                 (\session _ ->
                     case currentCall sessionId clientId model of
                         Just callId ->
-                            setRecordingStatus time (Call.toSharedCallId session.userId callId) model Nothing
-                                |> Tuple.mapSecond (addVoiceChatChangeResponse changeId clientId voiceMsg)
+                            let
+                                sharedCallId : Call.SharedCallId
+                                sharedCallId =
+                                    Call.toSharedCallId session.userId callId
+                            in
+                            -- Once a recording has started it only ends with the call.
+                            case SeqDict.get sharedCallId model.callRecordings of
+                                Just (Call.AskingToRecord _) ->
+                                    setRecordingStatus time sharedCallId model Nothing
+                                        |> Tuple.mapSecond (addVoiceChatChangeResponse changeId clientId voiceMsg)
+
+                                Just (Call.RecordingSince _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Just (Call.RecordingDeclined _) ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                         Nothing ->
                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
