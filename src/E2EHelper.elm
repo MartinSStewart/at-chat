@@ -2619,6 +2619,15 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                     }
                     "OK"
 
+            [ "delete-recording", _ ] ->
+                StringHttpResponse
+                    { url = currentRequest.url
+                    , statusCode = 200
+                    , statusText = "OK"
+                    , headers = Dict.empty
+                    }
+                    "OK"
+
             [ "regenerate-server-secret" ] ->
                 StringHttpResponse
                     { url = currentRequest.url

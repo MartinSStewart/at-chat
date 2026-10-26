@@ -88,7 +88,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, SlackFrontendChannel, SlackFrontendDmChannel, SlackFrontendWorkspace)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (GameType(..), Message(..), MessageContent, RepliedTo(..), UserTextMessageDrawings)
+import Message exposing (CallRecording, GameType(..), Message(..), MessageContent, RepliedTo(..), UserTextMessageDrawings)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
@@ -8408,15 +8408,22 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard
-                        (User.userColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.userColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                allUsers
+                            )
+                        , callRecordingsButton messageId callStartedData.recordings
+                        ]
                     , messageTimestamp
                         (User.userColor localUser)
                         callStartedData.timestampDrawings
@@ -8652,15 +8659,22 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard
-                        (User.discordUserColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.discordUserColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                allUsers
+                            )
+                        , callRecordingsButton messageId callStartedData.recordings
+                        ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
@@ -8872,15 +8886,22 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard
-                        (User.userColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.userColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                allUsers
+                            )
+                        , callRecordingsButton messageId callStartedData.recordings
+                        ]
                     , messageTimestamp
                         (User.userColor localUser)
                         callStartedData.timestampDrawings
@@ -9069,15 +9090,22 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard
-                        (User.discordUserColor localUser)
-                        (isHovered == IsHoveredWhileSelectingAnchor)
-                        messageId
-                        callStartedData.cardDrawings
-                        callStartedData.startedBy
-                        callStartedData.startedAt
-                        callStartedData.endedAt
-                        allUsers
+                    [ Ui.row
+                        [ Ui.spacing 8, Ui.contentCenterY ]
+                        [ Ui.el
+                            [ Ui.width Ui.shrink ]
+                            (callStartedCard
+                                (User.discordUserColor localUser)
+                                (isHovered == IsHoveredWhileSelectingAnchor)
+                                messageId
+                                callStartedData.cardDrawings
+                                callStartedData.startedBy
+                                callStartedData.startedAt
+                                callStartedData.endedAt
+                                allUsers
+                            )
+                        , callRecordingsButton messageId callStartedData.recordings
+                        ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
@@ -9867,6 +9895,32 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
         (Ui.html Icons.phone)
         (User.toString userId allUsers)
         (startedACallText ++ eventDurationText startedAt endedAt)
+
+
+callRecordingsButton : Id messageId -> List (CallRecording userId) -> Element MessageViewMsg
+callRecordingsButton messageId recordings =
+    case recordings of
+        [] ->
+            Ui.none
+
+        _ :: _ ->
+            MyUi.rowButton
+                (Dom.id ("guild_callRecordings_" ++ Id.toString messageId))
+                MessageViewMsg_PressedCallRecordings
+                [ Ui.spacing 8
+                , Ui.paddingXY 12 6
+                , Ui.background MyUi.background2
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.rounded 6
+                , Ui.width Ui.shrink
+                , Ui.Font.color MyUi.font3
+                , Ui.Font.size 14
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                ]
+                [ Ui.el [ Ui.width (Ui.px 10), Ui.height (Ui.px 10), Ui.rounded 5, Ui.background (Ui.rgb 240 60 60) ] Ui.none
+                , Ui.text "Recording"
+                ]
 
 
 goMatchStartedCard :

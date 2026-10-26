@@ -392,6 +392,9 @@ pendingChangesText localChange =
                 Call.Local_StopRecording ->
                     Just "Stopped call recording"
 
+                Call.Local_DeleteRecording _ _ ->
+                    Just "Deleted call recording"
+
         Local_Game _ change ->
             case change of
                 Game.CreatePublicLink _ _ ->
@@ -3284,6 +3287,9 @@ isPressMsg msg =
         PressedCloseExternalLinkWarning ->
             True
 
+        CallRecordingMsg _ ->
+            True
+
         PressedAddDomainToWhitelist _ ->
             True
 
@@ -5306,6 +5312,9 @@ changeUpdate localMsg local =
                             local
 
                         Call.Local_StopRecording ->
+                            local
+
+                        Call.Local_DeleteRecording _ _ ->
                             local
 
                 Local_Game guildOrDmId gameChange ->
@@ -10002,6 +10011,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , profilePictureEditor = ImageEditor.init
             , guildIconEditor = Nothing
             , externalLinkWarning = Nothing
+            , callRecordingList = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , games = SeqDict.empty

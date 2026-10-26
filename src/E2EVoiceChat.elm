@@ -827,6 +827,18 @@ recordingNeedsEveryoneTest normalConfig =
 
                 -- A file can't change size partway through
                 , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId4 "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 2000)
+                , recordingUploadProgress (Id.fromInt 4) "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" 1000 1000
+                , admin.click 100 (Dom.id "guild_callRecordings_3")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "VIDEO_Wanda_2026-10-25_20-31-07.250.mp4" ])
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "Nothing from Joe yet. It uploads once they've left the call." ])
+                , E2EHelper.tallSnapshot admin 0 { name = "Call recording file list" }
+                , admin.click 100 (Dom.id "callRecording_delete")
+                , admin.click 100 (Dom.id "callRecording_confirmDelete")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Deleted by" ])
+                , T.checkState 0 (checkCallRecording { ended = True, participants = [ 0, 2, 3, 4 ], files = [] })
+
+                -- Nothing more can be uploaded to a deleted recording
+                , T.checkState 0 (expectRecordingUpload (Err "Upload refused") E2EHelper.sessionId1 "VIDEO_Stevie_2026-10-25_20-31-07.250.mp4" 1000)
                 ]
             )
         ]

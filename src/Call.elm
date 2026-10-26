@@ -102,6 +102,7 @@ type LocalChange
     | Local_RequestRecording
     | Local_AnswerRecording Bool
     | Local_StopRecording
+    | Local_DeleteRecording CallId Time.Posix
 
 
 type ServerChange

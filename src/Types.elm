@@ -80,6 +80,7 @@ import BackendMsgLog exposing (BackendMsgLog, BackendMsgLogData)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import Call exposing (CallId, FromJs)
+import CallRecording
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
@@ -278,6 +279,7 @@ type alias LoggedIn2 =
     , profilePictureEditor : ImageEditor.Model
     , guildIconEditor : Maybe ( Id GuildId, ImageEditor.Model )
     , externalLinkWarning : Maybe Url
+    , callRecordingList : Maybe CallRecording.Model
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
     , games : SeqDict GuildOrDmId Game.Model
@@ -729,6 +731,7 @@ type FrontendMsg_
     | TypedDiscordLinkBookmarklet
     | GotVersionNumber (Result () Int)
     | PressedCloseExternalLinkWarning
+    | CallRecordingMsg CallRecording.Msg
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
     | PressedSelectNewColor
@@ -988,6 +991,7 @@ type BackendMsg
     | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
     | Rpc_NotifyAdmins Time.Posix (Id UserId) NonemptyString
     | Rpc_RecordingUploadProgress Call.SharedCallId Time.Posix (CallRecordingFile (Id UserId))
+    | DeletedCallRecordingFiles Time.Posix String (Result Http.Error ())
 
 
 type MessageFromGuildOrDm

@@ -28,6 +28,7 @@ module BackendExtra exposing
     , asSlackWorkspaceMember
     , asUser
     , backendMsgLog
+    , callRecording
     , channelDataToDecrypt
     , decryptOldMessages
     , discordDmChannelToFrontend
@@ -108,7 +109,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
+import Message exposing (CallRecording, Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
@@ -134,6 +135,31 @@ import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, SlackFrontendUser, UserSession)
 import VisibleMessages
 import WordSpellingGame exposing (WordList(..))
+
+
+callRecording : Call.SharedCallId -> Time.Posix -> BackendModel -> Maybe (CallRecording (Id UserId))
+callRecording sharedCallId recordingStartedAt model =
+    case sharedCallId of
+        Call.SharedDmCall dmChannelId ->
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    LocalState.callRecordingBackend recordingStartedAt dmChannel
+
+                Nothing ->
+                    Nothing
+
+        Call.SharedGuildCall id ->
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get id.channelId guild.channels of
+                        Just channel ->
+                            LocalState.callRecordingBackend recordingStartedAt channel
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
 
 
 addLogWithCmd :
@@ -3408,6 +3434,9 @@ backendMsgLog msg =
 
         Rpc_RecordingUploadProgress _ _ _ ->
             BackendMsgLog_Rpc_RecordingUploadProgress
+
+        DeletedCallRecordingFiles _ _ _ ->
+            BackendMsgLog_DeletedCallRecordingFiles
 
         GotTimeForBackendMsg _ _ ->
             BackendMsgLog_GotTimeForBackendMsg

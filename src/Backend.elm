@@ -70,7 +70,7 @@ import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -2807,6 +2807,14 @@ updateHelper msg model =
 
         Rpc_NotifyAdmins time botUserId text ->
             BackendExtra.notifyAdmins time botUserId text model
+
+        DeletedCallRecordingFiles time recordingId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToDeleteCallRecording recordingId error) model
 
         Rpc_RecordingUploadProgress sharedCallId recordingStartedAt file ->
             updateCallRecordings
@@ -9652,6 +9660,54 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                 )
 
+        Call.Local_DeleteRecording callId recordingStartedAt ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    let
+                        sharedCallId : Call.SharedCallId
+                        sharedCallId =
+                            Call.toSharedCallId session.userId callId
+                    in
+                    case BackendExtra.callRecording sharedCallId recordingStartedAt model of
+                        Just recording ->
+                            if NonemptySet.member session.userId recording.participants && recording.deletedBy == Nothing then
+                                let
+                                    recordingId : String
+                                    recordingId =
+                                        Call.recordingIdToString sharedCallId recordingStartedAt
+
+                                    ( model2, cmd ) =
+                                        updateCallRecordings
+                                            sharedCallId
+                                            (isCallWithRecording recordingStartedAt)
+                                            (List.map
+                                                (\recording2 ->
+                                                    if recording2.startedAt == recordingStartedAt then
+                                                        { recording2 | files = [], deletedBy = Just session.userId }
+
+                                                    else
+                                                        recording2
+                                                )
+                                            )
+                                            model
+                                in
+                                ( model2
+                                , Command.batch
+                                    [ addVoiceChatChangeResponse changeId clientId voiceMsg cmd
+                                    , deleteCallRecordingFiles model2.serverSecret recordingId
+                                        |> Task.attempt (DeletedCallRecordingFiles time recordingId)
+                                    ]
+                                )
+
+                            else
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
         Call.Local_StopRecording ->
             BackendExtra.asUser
                 model
@@ -9818,6 +9874,7 @@ setRecordingStatus time sharedCallId model maybeStatus =
                                                  , endedAt = Nothing
                                                  , participants = participants
                                                  , files = []
+                                                 , deletedBy = Nothing
                                                  }
                                                ]
                                     )
@@ -9864,6 +9921,38 @@ setRecordingStatusBroadcast sharedCallId settled model =
                 id.guildId
                 (Call.Server_RecordingChanged (Call.GuildRoomId id) settled |> Server_VoiceChatChange |> ServerChange)
                 model
+
+
+deleteCallRecordingFiles : SecretId ServerSecret -> String -> Task BackendOnly Http.Error ()
+deleteCallRecordingFiles serverSecret recordingId =
+    Http.task
+        { method = "POST"
+        , url = FileStatus.domain ++ "/file/internal/delete-recording/" ++ recordingId
+        , body = Http.emptyBody
+        , headers = [ FileStatus.secretKeyHeader serverSecret ]
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        Http.BadStatus_ metadata body ->
+                            Http.BadBody
+                                ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                |> Err
+
+                        Http.GoodStatus_ _ _ ->
+                            Ok ()
+
+                        Http.BadUrl_ string ->
+                            Err (Http.BadUrl string)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+                )
+        , timeout = Just Duration.minute
+        }
 
 
 isCallWithRecording : Time.Posix -> CallStartedData (Id UserId) -> Bool

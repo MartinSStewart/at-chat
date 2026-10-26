@@ -92,13 +92,15 @@ type alias CallStartedData userId =
 
 
 {-| Kept on the call's message so there's a record of who agreed to be recorded after the
-call is over. Everyone who joined while it was recording agreed by joining.
+call is over. Everyone who joined while it was recording agreed by joining. A deleted
+recording has no files left, but the record of it stays.
 -}
 type alias CallRecording userId =
     { startedAt : Time.Posix
     , endedAt : Maybe Time.Posix
     , participants : NonemptySet userId
     , files : List (CallRecordingFile userId)
+    , deletedBy : Maybe userId
     }
 
 

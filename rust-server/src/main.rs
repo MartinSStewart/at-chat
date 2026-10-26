@@ -89,6 +89,18 @@ async fn main() {
                     "/file/recording-upload",
                     post(recording_upload_endpoint).options(options_endpoint),
                 )
+                .route(
+                    "/file/recording/{recording_id}/{user_id}/{name}",
+                    get(recording_file_endpoint),
+                )
+                .route(
+                    "/file/recording-zip/{recording_id}",
+                    get(recording_zip_endpoint),
+                )
+                .route(
+                    "/file/internal/delete-recording/{recording_id}",
+                    post(delete_recording_endpoint).options(options_endpoint),
+                )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
@@ -848,6 +860,415 @@ async fn recording_upload_endpoint(
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordingDownloadRequest {
+    session_id: String,
+    recording_id: String,
+}
+
+/// A file the backend says is all here and can be handed to whoever asked.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadableRecordingFile {
+    user_id: u64,
+    name: String,
+    download_name: String,
+    size: u64,
+}
+
+impl DownloadableRecordingFile {
+    fn path(&self, recording_id: &str) -> String {
+        format!(
+            "{RECORDINGS_PATH}/{recording_id}/{}/{}",
+            self.user_id, self.name
+        )
+    }
+}
+
+/// Asks Lamdera which of a recording's files this person can download. Nobody who wasn't
+/// in the recording gets any.
+async fn downloadable_recording_files(
+    state: &Mutex<AppState>,
+    headers: &HeaderMap,
+    recording_id: &str,
+) -> Option<Vec<DownloadableRecordingFile>> {
+    if !is_valid_recording_id(recording_id) {
+        return None;
+    }
+    let session_id: String = session_id_from_cookie(headers)?;
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+    let response = http_client()
+        .post(rpc_url("recording-download"))
+        .header("Content-Type", "application/json")
+        .header(
+            "x-secret-key",
+            String::from_utf8_lossy(&secret_key).as_ref(),
+        )
+        .body(
+            serde_json::to_string(&RecordingDownloadRequest {
+                session_id,
+                recording_id: recording_id.to_owned(),
+            })
+            .ok()?,
+        )
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?;
+
+    let files: Vec<DownloadableRecordingFile> =
+        serde_json::from_str(&response.text().await.ok()?).ok()?;
+
+    Some(
+        files
+            .into_iter()
+            .filter(|file| {
+                is_valid_recording_file_name(&file.name)
+                    && is_valid_recording_file_name(&file.download_name)
+            })
+            .collect(),
+    )
+}
+
+// Browsers only read filename* when it's there, and it can hold any name. The plain
+// filename is for anything older, and gets whatever of the name is plain ASCII.
+fn content_disposition(filename: &str) -> String {
+    let ascii: String = filename
+        .chars()
+        .map(|x| {
+            if x.is_ascii_graphic() && x != '"' && x != '\\' || x == ' ' {
+                x
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let encoded: String = filename
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+                (byte as char).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect();
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
+// Streams something written elsewhere, a piece at a time, so a file gigabytes long never
+// has to be in memory all at once.
+fn reader_body(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static) -> Body {
+    Body::from_stream(futures_util::stream::unfold(
+        reader,
+        |mut reader| async move {
+            let mut buffer = vec![0u8; 256 * 1024];
+            match tokio::io::AsyncReadExt::read(&mut reader, &mut buffer).await {
+                Ok(0) => None,
+                Ok(read) => {
+                    buffer.truncate(read);
+                    Some((Ok::<Bytes, std::io::Error>(Bytes::from(buffer)), reader))
+                }
+                Err(error) => Some((Err(error), reader)),
+            }
+        },
+    ))
+}
+
+fn plain_response(status_code: StatusCode, body: &'static str) -> Response<Body> {
+    Response::builder()
+        .status(status_code)
+        .header("Content-Type", "text/plain")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+async fn recording_file_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path((recording_id, user_id, name)): Path<(String, u64, String)>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    let files = match downloadable_recording_files(&state, &headers, &recording_id).await {
+        Some(files) => files,
+        None => return plain_response(StatusCode::UNAUTHORIZED, "Invalid permissions"),
+    };
+
+    let file = match files
+        .into_iter()
+        .find(|file| file.user_id == user_id && file.name == name)
+    {
+        Some(file) => file,
+        None => return plain_response(StatusCode::NOT_FOUND, "Not found"),
+    };
+
+    match tokio::fs::File::open(file.path(&recording_id)).await {
+        Ok(opened) => Response::builder()
+            .status(StatusCode::OK)
+            .header(
+                "Content-Type",
+                if file.name.ends_with(".wav") {
+                    "audio/wav"
+                } else {
+                    "video/mp4"
+                },
+            )
+            .header("Content-Length", file.size.to_string())
+            .header(
+                "Content-Disposition",
+                content_disposition(&file.download_name),
+            )
+            .body(reader_body(tokio::io::AsyncReadExt::take(
+                opened, file.size,
+            )))
+            .unwrap(),
+        Err(_) => plain_response(StatusCode::NOT_FOUND, "Not found"),
+    }
+}
+
+#[derive(Deserialize)]
+struct RecordingZipQuery {
+    name: Option<String>,
+}
+
+/// Every file of a recording that's all here, in one zip. Video doesn't get any smaller
+/// by compressing it, so files are stored as they are and the zip is written as it's sent.
+async fn recording_zip_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path(recording_id): Path<String>,
+    Query(query): Query<RecordingZipQuery>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    let files = match downloadable_recording_files(&state, &headers, &recording_id).await {
+        Some(files) => files,
+        None => return plain_response(StatusCode::UNAUTHORIZED, "Invalid permissions"),
+    };
+
+    let zip_name: String = match query.name {
+        Some(name)
+            if name.ends_with(".zip")
+                && name.chars().count() <= 200
+                && !name
+                    .chars()
+                    .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32) =>
+        {
+            name
+        }
+        _ => String::from("Call recording.zip"),
+    };
+
+    let mut entries: Vec<(DownloadableRecordingFile, tokio::fs::File)> = Vec::new();
+    for file in files {
+        if let Ok(opened) = tokio::fs::File::open(file.path(&recording_id)).await {
+            entries.push((file, opened));
+        }
+    }
+
+    let (reader, mut writer) = tokio::io::duplex(1024 * 1024);
+    tokio::spawn(async move {
+        let _ = write_zip(&mut writer, entries).await;
+    });
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/zip")
+        .header("Content-Disposition", content_disposition(&zip_name))
+        .body(reader_body(reader))
+        .unwrap()
+}
+
+const ZIP_U32_MAX: u64 = 0xFFFF_FFFF;
+// Dates before 1980 can't be written, and the time each file was recorded is in its name
+// anyway.
+const ZIP_DOS_DATE: u16 = (1 << 5) | 1;
+// The size and checksum come after the file, and the name is UTF-8.
+const ZIP_FLAGS: u16 = 0x0008 | 0x0800;
+
+struct ZipEntry {
+    name: Vec<u8>,
+    crc: u32,
+    size: u64,
+    offset: u64,
+}
+
+impl ZipEntry {
+    fn is_zip64(&self) -> bool {
+        self.size >= ZIP_U32_MAX || self.offset >= ZIP_U32_MAX
+    }
+}
+
+// Laid out the way Go's archive/zip writes a zip it streams: each file's size and checksum
+// come after it in a data descriptor, and zip64 records are only used for a file or an
+// offset too big for the 32 bit ones.
+async fn write_zip(
+    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+    files: Vec<(DownloadableRecordingFile, tokio::fs::File)>,
+) -> std::io::Result<()> {
+    let mut written: u64 = 0;
+    let mut entries: Vec<ZipEntry> = Vec::new();
+
+    for (file, mut opened) in files {
+        let name: Vec<u8> = file.download_name.clone().into_bytes();
+        let offset = written;
+
+        let mut header: Vec<u8> = Vec::new();
+        header.extend_from_slice(&0x04034b50u32.to_le_bytes());
+        header.extend_from_slice(
+            &(if file.size >= ZIP_U32_MAX {
+                45u16
+            } else {
+                20u16
+            })
+            .to_le_bytes(),
+        );
+        header.extend_from_slice(&ZIP_FLAGS.to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&ZIP_DOS_DATE.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        header.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&name);
+        writer.write_all(&header).await?;
+        written += header.len() as u64;
+
+        let mut hasher = crc32fast::Hasher::new();
+        let mut size: u64 = 0;
+        let mut buffer = vec![0u8; 256 * 1024];
+        loop {
+            let read = tokio::io::AsyncReadExt::read(&mut opened, &mut buffer).await?;
+            if read == 0 || size >= file.size {
+                break;
+            }
+            let read2 = read.min((file.size - size) as usize);
+            hasher.update(&buffer[..read2]);
+            writer.write_all(&buffer[..read2]).await?;
+            size += read2 as u64;
+        }
+        written += size;
+
+        let entry = ZipEntry {
+            name,
+            crc: hasher.finalize(),
+            size,
+            offset,
+        };
+
+        let mut descriptor: Vec<u8> = Vec::new();
+        descriptor.extend_from_slice(&0x08074b50u32.to_le_bytes());
+        descriptor.extend_from_slice(&entry.crc.to_le_bytes());
+        if entry.size >= ZIP_U32_MAX {
+            descriptor.extend_from_slice(&entry.size.to_le_bytes());
+            descriptor.extend_from_slice(&entry.size.to_le_bytes());
+        } else {
+            descriptor.extend_from_slice(&(entry.size as u32).to_le_bytes());
+            descriptor.extend_from_slice(&(entry.size as u32).to_le_bytes());
+        }
+        writer.write_all(&descriptor).await?;
+        written += descriptor.len() as u64;
+
+        entries.push(entry);
+    }
+
+    let directory_start = written;
+    let directory: Vec<u8> = zip_central_directory(&entries);
+    let end: Vec<u8> = zip_end(
+        entries.len() as u64,
+        directory.len() as u64,
+        directory_start,
+    );
+    writer.write_all(&directory).await?;
+    writer.write_all(&end).await?;
+    writer.shutdown().await
+}
+
+fn zip_central_directory(entries: &[ZipEntry]) -> Vec<u8> {
+    let mut directory: Vec<u8> = Vec::new();
+    for entry in entries {
+        let version: u16 = if entry.is_zip64() { 45 } else { 20 };
+        directory.extend_from_slice(&0x02014b50u32.to_le_bytes());
+        directory.extend_from_slice(&version.to_le_bytes());
+        directory.extend_from_slice(&version.to_le_bytes());
+        directory.extend_from_slice(&ZIP_FLAGS.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&ZIP_DOS_DATE.to_le_bytes());
+        directory.extend_from_slice(&entry.crc.to_le_bytes());
+        let mut extra: Vec<u8> = Vec::new();
+        if entry.is_zip64() {
+            directory.extend_from_slice(&(ZIP_U32_MAX as u32).to_le_bytes());
+            directory.extend_from_slice(&(ZIP_U32_MAX as u32).to_le_bytes());
+            extra.extend_from_slice(&0x0001u16.to_le_bytes());
+            extra.extend_from_slice(&24u16.to_le_bytes());
+            extra.extend_from_slice(&entry.size.to_le_bytes());
+            extra.extend_from_slice(&entry.size.to_le_bytes());
+            extra.extend_from_slice(&entry.offset.to_le_bytes());
+        } else {
+            directory.extend_from_slice(&(entry.size as u32).to_le_bytes());
+            directory.extend_from_slice(&(entry.size as u32).to_le_bytes());
+        }
+        directory.extend_from_slice(&(entry.name.len() as u16).to_le_bytes());
+        directory.extend_from_slice(&(extra.len() as u16).to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u16.to_le_bytes());
+        directory.extend_from_slice(&0u32.to_le_bytes());
+        directory.extend_from_slice(&(entry.offset.min(ZIP_U32_MAX) as u32).to_le_bytes());
+        directory.extend_from_slice(&entry.name);
+        directory.extend_from_slice(&extra);
+    }
+    directory
+}
+
+fn zip_end(records: u64, directory_size: u64, directory_start: u64) -> Vec<u8> {
+    let mut end: Vec<u8> = Vec::new();
+    let needs_zip64_end =
+        records >= 0xFFFF || directory_size >= ZIP_U32_MAX || directory_start >= ZIP_U32_MAX;
+    if needs_zip64_end {
+        let zip64_end_offset = directory_start + directory_size;
+        end.extend_from_slice(&0x06064b50u32.to_le_bytes());
+        end.extend_from_slice(&44u64.to_le_bytes());
+        end.extend_from_slice(&45u16.to_le_bytes());
+        end.extend_from_slice(&45u16.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&records.to_le_bytes());
+        end.extend_from_slice(&records.to_le_bytes());
+        end.extend_from_slice(&directory_size.to_le_bytes());
+        end.extend_from_slice(&directory_start.to_le_bytes());
+        end.extend_from_slice(&0x07064b50u32.to_le_bytes());
+        end.extend_from_slice(&0u32.to_le_bytes());
+        end.extend_from_slice(&zip64_end_offset.to_le_bytes());
+        end.extend_from_slice(&1u32.to_le_bytes());
+    }
+    end.extend_from_slice(&0x06054b50u32.to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+    end.extend_from_slice(&(records.min(0xFFFF) as u16).to_le_bytes());
+    end.extend_from_slice(&(records.min(0xFFFF) as u16).to_le_bytes());
+    end.extend_from_slice(&(directory_size.min(ZIP_U32_MAX) as u32).to_le_bytes());
+    end.extend_from_slice(&(directory_start.min(ZIP_U32_MAX) as u32).to_le_bytes());
+    end.extend_from_slice(&0u16.to_le_bytes());
+
+    end
+}
+
+async fn delete_recording_endpoint(Path(recording_id): Path<String>) -> Response<String> {
+    if !is_valid_recording_id(&recording_id) {
+        return response_with_headers(StatusCode::BAD_REQUEST, "Invalid recording");
+    }
+    match tokio::fs::remove_dir_all(format!("{RECORDINGS_PATH}/{recording_id}")).await {
+        Ok(()) => response_with_headers(StatusCode::OK, "OK"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            response_with_headers(StatusCode::OK, "OK")
+        }
+        Err(error) => response_with_headers(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+    }
+}
+
 /// Asks Lamdera whether this person was in the recording, and who they are, since their
 /// files are kept under their user id.
 async fn recording_uploader(
@@ -861,7 +1282,7 @@ async fn recording_uploader(
         .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
         .body(
             serde_json::to_string(&RecordingUploadRequest {
-                session_id: session_id.to_string(),
+                session_id: session_id.to_owned(),
                 file: file.clone(),
             })
             .ok()?,

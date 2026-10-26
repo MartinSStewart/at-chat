@@ -13,6 +13,7 @@ import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
+import CallRecording
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
@@ -58,7 +59,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (Message(..), MessageContent)
+import Message exposing (CallRecording, Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
@@ -3160,6 +3161,22 @@ updateLoaded msg model =
                         SlackDmRoute _ ->
                             ( model, Command.none )
 
+                MessageView.MessageViewMsg_PressedCallRecordings ->
+                    case ( guildOrDmId, threadRoute ) of
+                        ( GuildOrDmId guildOrDmId2, NoThreadWithMessage messageId ) ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn -> ( { loggedIn | callRecordingList = Just (CallRecording.init guildOrDmId2 messageId) }, Command.none ))
+                                model
+
+                        ( GuildOrDmId _, ViewThreadWithMessage _ _ ) ->
+                            ( model, Command.none )
+
+                        ( DiscordGuildOrDmId _, _ ) ->
+                            ( model, Command.none )
+
+                        ( SlackGuildOrDmId _, _ ) ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
@@ -4164,6 +4181,33 @@ updateLoaded msg model =
         PressedCloseExternalLinkWarning ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn -> ( { loggedIn | externalLinkWarning = Nothing }, Command.none ))
+                model
+
+        CallRecordingMsg callRecordingMsg ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.callRecordingList of
+                        Just list ->
+                            case callRecordingMsg of
+                                CallRecording.PressedClose ->
+                                    ( { loggedIn | callRecordingList = Nothing }, Command.none )
+
+                                CallRecording.PressedDelete startedAt ->
+                                    ( { loggedIn | callRecordingList = Just { list | confirmDelete = Just startedAt } }, Command.none )
+
+                                CallRecording.PressedCancelDelete ->
+                                    ( { loggedIn | callRecordingList = Just { list | confirmDelete = Nothing } }, Command.none )
+
+                                CallRecording.PressedConfirmDelete startedAt ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_VoiceChatChange (Call.Local_DeleteRecording (CallRecording.callId list) startedAt) |> Just)
+                                        { loggedIn | callRecordingList = Just { list | confirmDelete = Nothing } }
+                                        Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
                 model
 
         PressedAddDomainToWhitelist isChecked ->
@@ -6372,6 +6416,19 @@ updateLoaded msg model =
                         SlackGuildOrDmId _ ->
                             ( model, Command.none )
 
+                MessageView.MessageViewMsg_PressedCallRecordings ->
+                    case guildOrDmId of
+                        GuildOrDmId guildOrDmId2 ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn -> ( { loggedIn | callRecordingList = Just (CallRecording.init guildOrDmId2 messageId) }, Command.none ))
+                                model
+
+                        DiscordGuildOrDmId _ ->
+                            ( model, Command.none )
+
+                        SlackGuildOrDmId _ ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
@@ -6510,6 +6567,9 @@ updateLoaded msg model =
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     -- Calls are not supported inside threads
+                    ( model, Command.none )
+
+                MessageView.MessageViewMsg_PressedCallRecordings ->
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -9109,6 +9169,9 @@ updateLoadedFromBackend msg model =
                                     Call.Local_StopRecording ->
                                         Command.none
 
+                                    Call.Local_DeleteRecording _ _ ->
+                                        Command.none
+
                             Local_TextEditor TextEditor.Local_Undo ->
                                 case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
                                     Just range ->
@@ -9884,6 +9947,36 @@ updateLoadedFromBackend msg model =
                 model
 
 
+callRecordings : CallRecording.Model -> LocalState -> Maybe (List (CallRecording (Id UserId)))
+callRecordings callRecordingList local =
+    let
+        fromMessage : Maybe (Message ChannelMessageId (Id UserId) (Id ChannelId)) -> Maybe (List (CallRecording (Id UserId)))
+        fromMessage maybeMessage =
+            case maybeMessage of
+                Just (CallStarted callStarted) ->
+                    Just callStarted.recordings
+
+                _ ->
+                    Nothing
+    in
+    case callRecordingList.guildOrDmId of
+        GuildOrDmId_Guild id ->
+            case LocalState.getGuildAndChannel id local of
+                Just ( _, channel ) ->
+                    fromMessage (MessageArray.get callRecordingList.messageId channel.messages)
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    fromMessage (MessageArray.get callRecordingList.messageId dmChannel.messages)
+
+                Nothing ->
+                    Nothing
+
+
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
 view _ model =
     { title = "at-chat"
@@ -9976,6 +10069,25 @@ view _ model =
                                                 isMobile
                                                 url
                                                 |> Ui.inFront
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    , case loggedIn.callRecordingList of
+                                        Just callRecordingList ->
+                                            case callRecordings callRecordingList local of
+                                                Just recordings ->
+                                                    CallRecording.view
+                                                        isMobile
+                                                        local.localUser.timezone
+                                                        local.localUser.session.userId
+                                                        (User.allUsers local.localUser)
+                                                        callRecordingList
+                                                        recordings
+                                                        |> Ui.map CallRecordingMsg
+                                                        |> Ui.inFront
+
+                                                Nothing ->
+                                                    Ui.noAttr
 
                                         Nothing ->
                                             Ui.noAttr

@@ -53,6 +53,7 @@ type Log
     | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
     | FailedToDeleteOrphanedFiles Http.Error
+    | FailedToDeleteCallRecording String Http.Error
     | FailedToLoadSlackConversations (Slack.Id Slack.TeamId) Slack.HttpError
     | FailedToLoadSlackCustomEmojis (Slack.Id Slack.TeamId) (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToSendSlackMessage SlackGuildOrDmId Slack.HttpError
@@ -151,6 +152,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToDeleteOrphanedFiles _ ->
+            Nothing
+
+        FailedToDeleteCallRecording _ _ ->
             Nothing
 
         FailedToLoadSlackConversations _ _ ->
@@ -574,6 +578,14 @@ logContent onPressCopy emojiData customEmojis log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Deleting orphaned files failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedToDeleteCallRecording recordingId error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Deleting a call recording's files failed"
+                , fieldRow "Recording" (Ui.text recordingId)
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 

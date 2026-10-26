@@ -1,7 +1,8 @@
-module RPC exposing (checkFileUpload, checkRecordingUpload, lamdera_handleEndpoints, notifyAdmins, recordingUploaded, roomIdFromString)
+module RPC exposing (checkFileUpload, checkRecordingUpload, lamdera_handleEndpoints, notifyAdmins, recordingDownload, recordingUploaded, roomIdFromString)
 
 import BackendExtra
 import Call
+import CallRecording
 import Codec exposing (Codec)
 import Coord
 import Dict
@@ -13,10 +14,10 @@ import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
-import LocalState
 import Message exposing (CallRecording, CallRecordingFile)
 import NonemptyDict
 import NonemptySet
+import PersonName
 import RichText
 import SecretId
 import SeqDict
@@ -201,6 +202,69 @@ recordingUploaded _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+type alias RecordingDownloadRequest =
+    { sessionId : Effect.Lamdera.SessionId
+    , recordingId : String
+    }
+
+
+recordingDownloadRequestCodec : Codec RecordingDownloadRequest
+recordingDownloadRequestCodec =
+    Codec.object RecordingDownloadRequest
+        |> Codec.field "sessionId" .sessionId (Codec.map Effect.Lamdera.sessionIdFromString Effect.Lamdera.sessionIdToString Codec.string)
+        |> Codec.field "recordingId" .recordingId Codec.string
+        |> Codec.buildObject
+
+
+{-| Asked by the Rust server before it hands out any of a recording's files. Only people
+who were in the recording get them, and only files that are all there.
+-}
+recordingDownload : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
+recordingDownload _ model headers json =
+    case ( fromRustServer model headers, Codec.decodeValue recordingDownloadRequestCodec json ) of
+        ( True, Ok request ) ->
+            case ( SeqDict.get request.sessionId model.sessions, Call.recordingIdFromString request.recordingId ) of
+                ( Just session, Just ( sharedCallId, recordingStartedAt ) ) ->
+                    case BackendExtra.callRecording sharedCallId recordingStartedAt model of
+                        Just recording ->
+                            if NonemptySet.member session.userId recording.participants && recording.deletedBy == Nothing then
+                                ( CallRecording.fileNames
+                                    (\userId ->
+                                        case NonemptyDict.get userId model.users of
+                                            Just user ->
+                                                PersonName.toString user.name
+
+                                            Nothing ->
+                                                ""
+                                    )
+                                    (List.filter (\file -> file.uploaded >= file.size) recording.files)
+                                    |> Json.list
+                                        (\( file, downloadName ) ->
+                                            Json.object
+                                                [ ( "userId", Json.int (Id.toInt file.recordedBy) )
+                                                , ( "name", Json.string file.name )
+                                                , ( "downloadName", Json.string downloadName )
+                                                , ( "size", Json.int file.size )
+                                                ]
+                                        )
+                                    |> Ok
+                                , model
+                                , Cmd.none
+                                )
+
+                            else
+                                ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+                        Nothing ->
+                            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+                _ ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
 recordingUpload :
     Id UserId
     -> RecordingFileRequest
@@ -221,7 +285,7 @@ recordingUpload userId request uploaded model =
                     , uploaded = uploaded
                     }
             in
-            case findCallRecording sharedCallId recordingStartedAt model of
+            case BackendExtra.callRecording sharedCallId recordingStartedAt model of
                 Just recording ->
                     if isRecordingUploadAllowed file recording then
                         Just ( sharedCallId, recordingStartedAt, file )
@@ -244,6 +308,7 @@ isRecordingUploadAllowed file recording =
             List.filter (\otherFile -> otherFile.recordedBy == file.recordedBy) recording.files
     in
     NonemptySet.member file.recordedBy recording.participants
+        && (recording.deletedBy == Nothing)
         && isValidRecordingFileName file.name
         && (file.size > 0)
         && (file.size <= maxRecordingFileSize)
@@ -256,31 +321,6 @@ isRecordingUploadAllowed file recording =
                 existing :: _ ->
                     existing.size == file.size
            )
-
-
-findCallRecording : Call.SharedCallId -> Time.Posix -> BackendModel -> Maybe (CallRecording (Id UserId))
-findCallRecording sharedCallId recordingStartedAt model =
-    case sharedCallId of
-        Call.SharedDmCall dmChannelId ->
-            case SeqDict.get dmChannelId model.dmChannels of
-                Just dmChannel ->
-                    LocalState.callRecordingBackend recordingStartedAt dmChannel
-
-                Nothing ->
-                    Nothing
-
-        Call.SharedGuildCall id ->
-            case SeqDict.get id.guildId model.guilds of
-                Just guild ->
-                    case SeqDict.get id.channelId guild.channels of
-                        Just channel ->
-                            LocalState.callRecordingBackend recordingStartedAt channel
-
-                        Nothing ->
-                            Nothing
-
-                Nothing ->
-                    Nothing
 
 
 {-| The session is whoever the `sid` cookie on the WebSocket handshake says it
@@ -442,6 +482,9 @@ lamdera_handleEndpoints _ req model =
 
         "recording-uploaded" ->
             LamderaRPC.handleEndpointString recordingUploaded req model
+
+        "recording-download" ->
+            LamderaRPC.handleEndpointJson recordingDownload req model
 
         "notify-admins" ->
             LamderaRPC.handleEndpointString notifyAdmins req model
