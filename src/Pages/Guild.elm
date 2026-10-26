@@ -8424,7 +8424,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -8676,7 +8676,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -8904,7 +8904,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.userColor localUser)
@@ -9109,7 +9109,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                                 callStartedData.recordings
                                 allUsers
                             )
-                        , callRecordingsButton localUser.timezone messageId callStartedData.recordings allUsers
+                        , callRecordingsButton isMobile localUser.timezone messageId callStartedData.recordings allUsers
                         ]
                     , messageTimestamp
                         (User.discordUserColor localUser)
@@ -9957,12 +9957,13 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
 finishes uploading, so until everyone has, a warning says who it's still missing.
 -}
 callRecordingsButton :
-    Time.Zone
+    Bool
+    -> Time.Zone
     -> Id messageId
     -> Maybe (CallRecording userId)
     -> SeqDict userId { a | name : PersonName }
     -> Element msg
-callRecordingsButton timezone messageId maybeRecording allUsers =
+callRecordingsButton isMobile timezone messageId maybeRecording allUsers =
     case maybeRecording of
         Just recording ->
             case recording.zip of
@@ -9993,7 +9994,11 @@ callRecordingsButton timezone messageId maybeRecording allUsers =
                         , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
                         ]
                         [ Ui.html Icons.download
-                        , Ui.text "Download\u{00A0}recording"
+                        , if isMobile then
+                            Ui.none
+
+                          else
+                            Ui.text "Download\u{00A0}recording"
                         , case notFinished of
                             [] ->
                                 Ui.none
