@@ -1,19 +1,17 @@
 module CallRecording exposing
     ( fileNames
-    , zipUrl
+    , zipName
     )
 
-{-| Names and links for a call's recorded files.
+{-| Names for a call's recorded files.
 -}
 
 import Date
 import Effect.Time as Time
-import FileStatus
 import Id exposing (Id, UserId)
-import Message exposing (CallRecordingFile, CallRecordingZip)
+import Message exposing (CallRecordingFile)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Url
 
 
 {-| What each file is called when it's downloaded. The name in it is the person's name now,
@@ -97,13 +95,6 @@ safeName name =
 
         name2 ->
             name2
-
-
-zipUrl : Time.Zone -> Time.Posix -> CallRecordingZip -> String
-zipUrl timezone recordingStartedAt zip =
-    FileStatus.fileUrl (FileStatus.contentType "application/zip") zip.fileHash
-        ++ "?download="
-        ++ Url.percentEncode (zipName timezone recordingStartedAt)
 
 
 zipName : Time.Zone -> Time.Posix -> String

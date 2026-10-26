@@ -9976,7 +9976,10 @@ callRecordingsButton timezone messageId maybeRecording allUsers =
                     in
                     Ui.row
                         [ Ui.id ("guild_callRecordings_" ++ Id.toString messageId)
-                        , Ui.download (CallRecording.zipUrl timezone recording.startedAt zip)
+                        , Ui.downloadAs
+                            { url = FileStatus.fileUrl (FileStatus.contentType "application/zip") zip.fileHash
+                            , filename = CallRecording.zipName timezone recording.startedAt
+                            }
                         , Ui.spacing 8
                         , Ui.paddingXY 14 0
                         , Ui.height Ui.fill

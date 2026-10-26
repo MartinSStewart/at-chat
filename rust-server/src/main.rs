@@ -1090,32 +1090,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for HashingWriter<W
     }
 }
 
-// Browsers only read filename* when it's there, and it can hold any name. The plain
-// filename is for anything older, and gets whatever of the name is plain ASCII.
-fn content_disposition(filename: &str) -> String {
-    let ascii: String = filename
-        .chars()
-        .map(|x| {
-            if x.is_ascii_graphic() && x != '"' && x != '\\' || x == ' ' {
-                x
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let encoded: String = filename
-        .bytes()
-        .map(|byte| {
-            if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
-                (byte as char).to_string()
-            } else {
-                format!("%{byte:02X}")
-            }
-        })
-        .collect();
-    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
-}
-
 // Streams something written elsewhere, a piece at a time, so a file gigabytes long never
 // has to be in memory all at once.
 fn reader_body(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static) -> Body {
@@ -2705,16 +2679,9 @@ fn sandbox_csp(content_type: &str) -> &'static str {
 /// choice was made for.
 const NOSNIFF: &str = "nosniff";
 
-#[derive(Deserialize)]
-struct GetFileQuery {
-    download: Option<String>,
-}
-
-/// Read from disk as it's sent, since a call recording's zip can be gigabytes long. With
-/// `download`, the browser saves it under that name instead of showing it.
+/// Read from disk as it's sent, since a call recording's zip can be gigabytes long.
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
-    Query(query): Query<GetFileQuery>,
 ) -> http::Response<Body> {
     if is_valid_hash(&hash) {
         let opened = match tokio::fs::File::open(filepath(&hash)).await {
@@ -2727,17 +2694,6 @@ async fn get_file_endpoint(
             }
         };
         let size: Option<u64> = opened.metadata().await.ok().map(|metadata| metadata.len());
-        let content_disposition: String = match query.download {
-            Some(name)
-                if name.chars().count() <= 200
-                    && !name
-                        .chars()
-                        .any(|x| "/\\:*?\"<>|".contains(x) || (x as u32) < 32) =>
-            {
-                content_disposition(&name)
-            }
-            _ => String::from("inline"),
-        };
         let content_type = match content_type_index.parse::<usize>() {
             Ok(index) => content_types::CONTENT_TYPES.get(index),
             Err(_) => None,
@@ -2750,7 +2706,7 @@ async fn get_file_endpoint(
         match content_type {
             Some(content_type2) => builder
                 .header("Content-Type", *content_type2)
-                .header("Content-Disposition", content_disposition)
+                .header("Content-Disposition", "inline")
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .header("Content-Security-Policy", sandbox_csp(content_type2))
                 .header("X-Content-Type-Options", NOSNIFF)
@@ -3819,11 +3775,7 @@ mod tests {
         create_storage_dir();
         fs::write(filepath(hash), bytes).expect("failed to write the file to serve");
 
-        let response = get_file_endpoint(
-            Path((content_type_index, hash.to_string())),
-            Query(GetFileQuery { download: None }),
-        )
-        .await;
+        let response = get_file_endpoint(Path((content_type_index, hash.to_string()))).await;
 
         let _ = fs::remove_file(filepath(hash));
 
@@ -3869,35 +3821,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_file_with_a_download_name_is_saved_under_it() {
+    async fn a_stored_file_is_streamed_with_its_length() {
         create_storage_dir();
-        fs::write(filepath("downloadNameFile"), b"zip bytes")
+        fs::write(filepath("streamedFile"), b"zip bytes")
             .expect("failed to write the file to serve");
 
-        let response = get_file_endpoint(
-            Path((
-                index_of_content_type("application/zip").to_string(),
-                String::from("downloadNameFile"),
-            )),
-            Query(GetFileQuery {
-                download: Some(String::from("Call recording 2026-10-26 14-05.zip")),
-            }),
-        )
+        let response = get_file_endpoint(Path((
+            index_of_content_type("application/zip").to_string(),
+            String::from("streamedFile"),
+        )))
         .await;
         let headers = response.headers().clone();
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("the body should be readable");
-        let _ = fs::remove_file(filepath("downloadNameFile"));
+        let _ = fs::remove_file(filepath("streamedFile"));
 
-        assert_eq!(
-            headers
-                .get("Content-Disposition")
-                .and_then(|value| value.to_str().ok()),
-            Some(
-                "attachment; filename=\"Call recording 2026-10-26 14-05.zip\"; filename*=UTF-8''Call%20recording%202026-10-26%2014-05.zip"
-            )
-        );
         assert_eq!(
             headers
                 .get("Content-Length")
