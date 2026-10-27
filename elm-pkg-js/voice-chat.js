@@ -426,6 +426,12 @@ async function handle(message) {
         });
         return;
     }
+    // Made as soon as recording starts, so a device that never records anything
+    // still has a recording to tell the server it has finished uploading.
+    if (message.type === "start") {
+        await (await recordingsDirectory()).getDirectoryHandle(message.directory, { create: true });
+        return;
+    }
     if (message.type === "ended") {
         const directory = await (await recordingsDirectory()).getDirectoryHandle(message.directory, { create: true });
         await changeIndex(directory, function (index) {
@@ -1874,6 +1880,7 @@ exports.init = async function init(app) {
             storageTimer: null,
         };
         recorder = starting;
+        postToRecordingWorker({ type: "start", directory: starting.id });
 
         if (navigator.locks) {
             navigator.locks.request("at-chat-recording " + starting.id, function () {
