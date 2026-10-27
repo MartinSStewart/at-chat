@@ -25,6 +25,7 @@ import Pages.Guild
 import RPC
 import SecretId
 import SeqDict
+import SeqSet
 import Test.Html.Query
 import Test.Html.Selector
 import Time
@@ -670,6 +671,30 @@ checkCallRecording expected data =
             Err ("Expected one recording on a call message but there were " ++ String.fromInt (List.length recordings))
 
 
+checkFinishedUploading : List Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkFinishedUploading expected data =
+    case callRecordings data of
+        [ ( _, recording ) ] ->
+            let
+                actual : List Int
+                actual =
+                    SeqSet.toList recording.finishedUploading |> List.map Id.toInt |> List.sort
+            in
+            if actual == expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected "
+                        ++ String.join " " (List.map String.fromInt expected)
+                        ++ " to have finished uploading but it was "
+                        ++ String.join " " (List.map String.fromInt actual)
+                    )
+
+        recordings ->
+            Err ("Expected one recording on a call message but there were " ++ String.fromInt (List.length recordings))
+
+
 callRecordingToString : { participants : List Int, files : List ( String, Int ) } -> String
 callRecordingToString recording =
     "participants "
@@ -914,6 +939,13 @@ recordingNeedsEveryoneTest normalConfig =
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkIsRecording
                 , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "guild_callRecorded_3" ])
+
+                -- Someone who leaves and comes back has more to upload
+                , recordingUploadFinished (Id.fromInt 0)
+                , T.checkState 100 (checkFinishedUploading [ 0 ])
+                , startCall admin
+                , T.checkState 100 (checkFinishedUploading [])
+                , admin.click 100 (Dom.id "guild_leaveVoiceChat")
 
                 -- A recording only ends with the call
                 , joe.checkView 0 (Test.Html.Query.hasNot [ Test.Html.Selector.id "voiceChat_cancelRecording" ])

@@ -42,6 +42,7 @@ module BackendExtra exposing
     , getLoginData
     , handleDrawingChange
     , invalidChangeResponse
+    , isInCall
     , isSlackChannelVisible
     , isSlackDmChannelVisible
     , linkedSlackUsers
@@ -160,6 +161,30 @@ callRecording sharedCallId recordingStartedAt model =
 
                 Nothing ->
                     Nothing
+
+
+isInCall : Id UserId -> Call.SharedCallId -> BackendModel -> Bool
+isInCall userId sharedCallId model =
+    case Call.fromSharedCallId userId sharedCallId of
+        Just callId ->
+            SeqDict.foldl
+                (\sessionId connections isInCall2 ->
+                    case SeqDict.get sessionId model.sessions of
+                        Just session ->
+                            isInCall2
+                                || (session.userId
+                                        == userId
+                                        && NonemptyDict.any (\_ connection -> connection.call == ConnectedToCall callId) connections
+                                   )
+
+                        Nothing ->
+                            isInCall2
+                )
+                False
+                model.connections
+
+        Nothing ->
+            False
 
 
 addLogWithCmd :

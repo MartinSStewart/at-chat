@@ -5354,7 +5354,11 @@ joinedCallRecording : userId -> Maybe (CallRecording userId) -> Maybe (CallRecor
 joinedCallRecording userId maybeRecording =
     case maybeRecording of
         Just recording ->
-            Just { recording | participants = NonemptySet.insert userId recording.participants }
+            Just
+                { recording
+                    | participants = NonemptySet.insert userId recording.participants
+                    , finishedUploading = SeqSet.remove userId recording.finishedUploading
+                }
 
         Nothing ->
             Nothing
