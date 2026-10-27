@@ -108,7 +108,7 @@ type LocalChange
 
 type ServerChange
     = Server_YouJoined Time.Posix CallId
-    | Server_OtherJoined Time.Posix ConnectionId
+    | Server_OtherJoined Time.Posix ConnectionId RemoteCallData
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
     | Server_RecordingChanged CallId (Maybe RecordingStatus)
@@ -2218,7 +2218,7 @@ serverChangeCmd change _ local _ =
         Server_YouJoined _ _ ->
             Command.none
 
-        Server_OtherJoined _ connectionId ->
+        Server_OtherJoined _ connectionId _ ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
