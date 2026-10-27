@@ -52,6 +52,11 @@ const SCREEN_GONE_MS = 5000;
 // Must match Call.localScreenShareNodeId.
 const LOCAL_SCREEN_NODE_ID = "local-screen-share";
 
+// A stall ends with the audio it held up arriving all at once. Played in order
+// behind what's already queued, it would leave that peer this far behind for the
+// rest of the call, so once more than this is queued the backlog is skipped.
+const MAX_AUDIO_QUEUED_SECONDS = 0.3;
+
 // A peer that has sent nothing for this long is treated as silent. Without it a
 // peer that stops sending mid-word stays outlined as speaking forever.
 const SPEAKING_TIMEOUT_MS = 400;
@@ -1491,6 +1496,7 @@ exports.init = async function init(app) {
             screen: peerVideo(nodeId + " screen"),
             gain,
             playheadSeconds: 0,
+            skippingAudio: false,
             audioDecoder: null,
             // What updateSpeaking works on: who this loudness belongs to, and
             // whether Elm has been told they are speaking.
@@ -1604,6 +1610,16 @@ exports.init = async function init(app) {
             buffer.copyToChannel(samples, channel);
             loudest = Math.max(loudest, meanAmplitude(samples));
         }
+
+        // What's already queued is let play out, and everything arriving
+        // meanwhile is dropped, so playback picks up again from the present.
+        const queuedSeconds = peer.playheadSeconds - context.currentTime;
+        if (queuedSeconds > MAX_AUDIO_QUEUED_SECONDS) peer.skippingAudio = true;
+        if (peer.skippingAudio && queuedSeconds > 0) {
+            updateSpeaking(peer, loudest);
+            return;
+        }
+        peer.skippingAudio = false;
 
         const source = context.createBufferSource();
         source.buffer = buffer;
