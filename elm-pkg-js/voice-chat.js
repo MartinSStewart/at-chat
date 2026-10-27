@@ -27,10 +27,13 @@ const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
 const SPEAKING_THRESHOLD = 0.02;
 
 // A shared screen is mostly text, which needs more pixels than a face does and
-// rarely moves, so it trades frame rate for resolution.
+// rarely moves, so it trades frame rate for resolution. The recording isn't
+// limited by anyone's bandwidth, so it keeps every frame the screen is
+// captured at.
 const SCREEN_MAX_WIDTH = 1920;
 const SCREEN_MAX_HEIGHT = 1080;
 const SCREEN_FRAME_RATE = 15;
+const SCREEN_CAPTURE_FRAME_RATE = 30;
 const SCREEN_BITRATE = 2_500_000;
 
 // A screen that isn't changing produces few or no frames, so its key frames go
@@ -1219,7 +1222,7 @@ exports.init = async function init(app) {
                 video: {
                     width: { max: SCREEN_MAX_WIDTH },
                     height: { max: SCREEN_MAX_HEIGHT },
-                    frameRate: { max: SCREEN_FRAME_RATE },
+                    frameRate: { max: SCREEN_CAPTURE_FRAME_RATE },
                 },
                 audio: false,
             });
@@ -1264,6 +1267,7 @@ exports.init = async function init(app) {
             outgoing: outgoingVideo(SCREEN, picked),
             lastKeyFrameTime: null,
             lastFrameTime: null,
+            lastSentTime: null,
             // Frames the browser actually produced, as opposed to ones the
             // idle timer took by hand.
             browserFrames: 0,
@@ -1311,7 +1315,13 @@ exports.init = async function init(app) {
 
         function encodeFrame(now) {
             showScreenPreview(screen.stream);
-            if (state.stopped || (!readyToSend(state) && !recorder)) return;
+            if (state.stopped) return;
+            // Frames arrive at about 33ms apart, so a little slack keeps every
+            // other one rather than every third.
+            const send =
+                readyToSend(state) &&
+                (screen.lastSentTime === null || now - screen.lastSentTime >= 1000 / SCREEN_FRAME_RATE - 10);
+            if (!send && !recorder) return;
             if (outgoing.startTime === null) outgoing.startTime = now;
             screen.lastFrameTime = now;
 
@@ -1330,10 +1340,11 @@ exports.init = async function init(app) {
                 return;
             }
             recordScreenFrame(frame, now);
-            if (!readyToSend(state)) {
+            if (!send) {
                 frame.close();
                 return;
             }
+            screen.lastSentTime = now;
             const encoder = videoEncoderFor(state, outgoing, frame.displayWidth, frame.displayHeight);
             // Encoding a 1080p screen in software can fall behind, and frames
             // that queue up only add delay, so they are dropped instead.
@@ -2271,8 +2282,8 @@ exports.init = async function init(app) {
                 "SCREEN",
                 width,
                 height,
-                SCREEN_FRAME_RATE,
-                recordingBitrate(width, height, SCREEN_FRAME_RATE, 0.15)
+                SCREEN_CAPTURE_FRAME_RATE,
+                recordingBitrate(width, height, SCREEN_CAPTURE_FRAME_RATE, 0.15)
             );
             recorder.screen = video;
         }
