@@ -22,6 +22,7 @@ port module Call exposing
     , StartLocalStreamData
     , StartRecordingData
     , ToJs(..)
+    , VideoTile(..)
     , canShareScreen
     , connectionIdToString
     , conversationOffset
@@ -146,6 +147,7 @@ type Msg
     | MouseEnterVideoNode LocalOrConnection
     | MouseExitVideoNode LocalOrConnection
     | DoubleClickedVideoNode
+    | PressedVideoTile VideoTile
     | PressedToggleDebugData
     | PolledDebugData
 
@@ -176,12 +178,18 @@ type alias Model =
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
     , videoHover : Maybe LocalOrConnection
+    , focusedTile : Maybe VideoTile
     , -- Thumbnail coordinate ranges from 0 to 1. Actual pixel position is derived by multiplying this by the windowSize
       thumbnailPosition : ( Float, Float )
     , pollDebugData : Bool
     , debugData : List DebugSection
     , recordingUpload : Maybe { uploaded : Int, total : Int }
     }
+
+
+type VideoTile
+    = CameraTile LocalOrConnection
+    | ScreenShareTile LocalOrConnection
 
 
 type MediaDevicesStatus
@@ -262,6 +270,7 @@ initModel =
     , startConnectionError = Nothing
     , volume = SeqDict.empty
     , videoHover = Nothing
+    , focusedTile = Nothing
     , thumbnailPosition = ( 1, 0.1 )
     , pollDebugData = False
     , debugData = []
@@ -628,6 +637,67 @@ videoNodes localUser config loggedIn local =
         getPosAndSize index list =
             List.Extra.getAt index list |> Maybe.withDefault ( Coord.origin, 100 )
 
+        layoutTiles : List ( VideoTile, ( Coord CssPixels, Int ) -> ( String, Html Msg ) ) -> List ( String, Html Msg )
+        layoutTiles tiles =
+            case ( isMobile, List.partition (\( tile, _ ) -> Just tile == model.focusedTile) tiles ) of
+                ( False, ( [ ( _, focusedTile ) ], (_ :: _) as otherTiles ) ) ->
+                    focusedLayout focusedTile (List.map Tuple.second otherTiles)
+
+                _ ->
+                    let
+                        list : List ( Coord CssPixels, Int )
+                        list =
+                            posAndSizes (List.length tiles)
+                    in
+                    List.indexedMap (\index ( _, tile ) -> tile (getPosAndSize index list)) tiles
+
+        focusedLayout :
+            (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+            -> List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+            -> List ( String, Html Msg )
+        focusedLayout focusedTile otherTiles =
+            let
+                count : Int
+                count =
+                    List.length otherTiles
+
+                columnWidth : Int
+                columnWidth =
+                    min
+                        (min 280 (maxWidth // 4))
+                        (floor (toFloat (maxHeight - (count - 1) * spacing) / toFloat count * aspectRatio))
+
+                columnTileHeight : Float
+                columnTileHeight =
+                    toFloat columnWidth / aspectRatio
+
+                columnY : Float
+                columnY =
+                    (toFloat maxHeight - toFloat count * columnTileHeight - toFloat ((count - 1) * spacing)) / 2
+
+                focusedWidth : Int
+                focusedWidth =
+                    min (maxWidth - columnWidth - spacing) (floor (toFloat maxHeight * aspectRatio))
+
+                focusedX : Int
+                focusedX =
+                    voiceChatX + (maxWidth - focusedWidth - spacing - columnWidth) // 2
+            in
+            focusedTile
+                ( Coord.xy focusedX (voiceChatY + round ((toFloat maxHeight - toFloat focusedWidth / aspectRatio) / 2))
+                , focusedWidth
+                )
+                :: List.indexedMap
+                    (\index tile ->
+                        tile
+                            ( Coord.xy
+                                (focusedX + focusedWidth + spacing)
+                                (voiceChatY + round (columnY + toFloat index * (columnTileHeight + toFloat spacing)))
+                            , columnWidth
+                            )
+                    )
+                    otherTiles
+
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
@@ -685,16 +755,7 @@ videoNodes localUser config loggedIn local =
             ]
 
         ShowLocalVideo _ ->
-            let
-                tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
-                tiles =
-                    localTiles localUser model
-
-                list : List ( Coord CssPixels, Int )
-                list =
-                    posAndSizes (List.length tiles)
-            in
-            List.indexedMap (\index tile -> tile (getPosAndSize index list)) tiles
+            layoutTiles (localTiles localUser model)
 
         ShowLocalVideoAndCall callId ->
             let
@@ -707,7 +768,7 @@ videoNodes localUser config loggedIn local =
                         Nothing ->
                             []
 
-                tiles : List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+                tiles : List ( VideoTile, ( Coord CssPixels, Int ) -> ( String, Html Msg ) )
                 tiles =
                     localTiles localUser model
                         ++ List.concatMap
@@ -730,18 +791,18 @@ videoNodes localUser config loggedIn local =
                                             model
                                 in
                                 if data.screenShareEnabled then
-                                    [ cameraTile, screenShareNode localUser (IsConnection connectionId) ]
+                                    [ ( CameraTile (IsConnection connectionId), cameraTile )
+                                    , ( ScreenShareTile (IsConnection connectionId)
+                                      , screenShareNode localUser (IsConnection connectionId)
+                                      )
+                                    ]
 
                                 else
-                                    [ cameraTile ]
+                                    [ ( CameraTile (IsConnection connectionId), cameraTile ) ]
                             )
                             sessions
-
-                list : List ( Coord CssPixels, Int )
-                list =
-                    posAndSizes (List.length tiles)
             in
-            List.indexedMap (\index tile -> tile (getPosAndSize index list)) tiles
+            layoutTiles tiles
 
         ShowLocalVideoAndCallThumbnail callId ->
             let
@@ -839,7 +900,7 @@ videoNodes localUser config loggedIn local =
         |> Html.Keyed.node "div" []
 
 
-localTiles : LocalUser -> Model -> List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
+localTiles : LocalUser -> Model -> List ( VideoTile, ( Coord CssPixels, Int ) -> ( String, Html Msg ) )
 localTiles localUser model =
     let
         cameraTile : ( Coord CssPixels, Int ) -> ( String, Html Msg )
@@ -855,10 +916,10 @@ localTiles localUser model =
                 model
     in
     if model.remoteCallData.screenShareEnabled then
-        [ cameraTile, screenShareNode localUser IsLocal ]
+        [ ( CameraTile IsLocal, cameraTile ), ( ScreenShareTile IsLocal, screenShareNode localUser IsLocal ) ]
 
     else
-        [ cameraTile ]
+        [ ( CameraTile IsLocal, cameraTile ) ]
 
 
 {-| A recording only ends with the call, so this isn't a button.
@@ -1211,38 +1272,51 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
             , Html.Attributes.style "pointer-events" "none"
             ]
             [ User.profileImageHtml (User.getUser userId localUser) ]
-        , -- Our own camera is a live MediaStream, so it plays in a <video>. A peer
-          -- arrives as encoded frames over the room socket, and a decoded
-          -- VideoFrame can only be drawn, so peers get a <canvas> instead.
-          case id of
-            IsLocal ->
-                Html.video
-                    [ Html.Attributes.id idString
-                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
-                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
-                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
-                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
-                    , Html.Attributes.style "border-radius" "8px"
-                    , Html.Attributes.style "pointer-events" "none"
-                    , Html.Attributes.attribute "playsinline" ""
-                    , Html.Attributes.attribute "webkit-playsinline" ""
-                    ]
+        , -- Kept apart from the volume slider so that dragging it doesn't also count as a click on the tile
+          Html.div
+            (case videoNodeState of
+                VideoNodeFullSize ->
+                    [ Html.Events.onClick (PressedVideoTile (CameraTile id)) ]
+
+                VideoNodeThumbnail ->
                     []
 
-            IsConnection _ ->
-                Html.canvas
-                    [ Html.Attributes.id idString
-                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
-                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
-                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
-                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
-                    , Html.Attributes.style "border-radius" "8px"
-                    , Html.Attributes.style "pointer-events" "none"
-                    , Html.Attributes.style "object-fit" "cover"
-                    ]
+                VideoNodeHidden ->
                     []
+            )
+            [ -- Our own camera is a live MediaStream, so it plays in a <video>. A peer
+              -- arrives as encoded frames over the room socket, and a decoded
+              -- VideoFrame can only be drawn, so peers get a <canvas> instead.
+              case id of
+                IsLocal ->
+                    Html.video
+                        [ Html.Attributes.id idString
+                        , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                        , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                        , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                        , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                        , Html.Attributes.style "border-radius" "8px"
+                        , Html.Attributes.style "pointer-events" "none"
+                        , Html.Attributes.attribute "playsinline" ""
+                        , Html.Attributes.attribute "webkit-playsinline" ""
+                        ]
+                        []
+
+                IsConnection _ ->
+                    Html.canvas
+                        [ Html.Attributes.id idString
+                        , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                        , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                        , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                        , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                        , Html.Attributes.style "border-radius" "8px"
+                        , Html.Attributes.style "pointer-events" "none"
+                        , Html.Attributes.style "object-fit" "cover"
+                        ]
+                        []
+            ]
         , case ( id, videoNodeState ) of
             ( IsConnection connectionId, VideoNodeFullSize ) ->
                 let
@@ -1374,6 +1448,7 @@ screenShareNode localUser id ( position, width ) =
         , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
         , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position) ++ "px")
         , Html.Attributes.style "pointer-events" "auto"
+        , Html.Events.onClick (PressedVideoTile (ScreenShareTile id))
         ]
         [ case id of
             IsLocal ->
@@ -2630,6 +2705,9 @@ isPressMsg msg =
 
         DoubleClickedVideoNode ->
             False
+
+        PressedVideoTile _ ->
+            True
 
         PressedToggleDebugData ->
             True
