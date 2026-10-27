@@ -231,6 +231,10 @@ recordingUploadFinished _ model headers json =
                         Just recording ->
                             if NonemptySet.member session.userId recording.participants then
                                 let
+                                    isInCall : Bool
+                                    isInCall =
+                                        BackendExtra.isInCall session.userId sharedCallId model
+
                                     uploaded : List (CallRecordingFile (Id UserId))
                                     uploaded =
                                         List.filter (\file -> file.uploaded >= file.size) recording.files
@@ -251,8 +255,10 @@ recordingUploadFinished _ model headers json =
                                             )
                                       )
                                     , ( "isEveryoneFinished"
-                                      , NonemptySet.toList recording.participants
-                                            |> List.all (\userId -> userId == session.userId || SeqSet.member userId recording.finishedUploading)
+                                      , not isInCall
+                                            && List.all
+                                                (\userId -> userId == session.userId || SeqSet.member userId recording.finishedUploading)
+                                                (NonemptySet.toList recording.participants)
                                             |> Json.bool
                                       )
                                     , ( "fileCount", Json.int fileCount )
@@ -280,9 +286,13 @@ recordingUploadFinished _ model headers json =
                                     ]
                                     |> Ok
                                 , model
-                                , Task.perform
-                                    (\() -> Rpc_RecordingUploadFinished sharedCallId recordingStartedAt session.userId)
-                                    (Task.succeed ())
+                                , if isInCall then
+                                    Cmd.none
+
+                                  else
+                                    Task.perform
+                                        (\() -> Rpc_RecordingUploadFinished sharedCallId recordingStartedAt session.userId)
+                                        (Task.succeed ())
                                 )
 
                             else

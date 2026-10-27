@@ -1092,21 +1092,73 @@ impl<W: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for HashingWriter<W
 
 // Streams something written elsewhere, a piece at a time, so a file gigabytes long never
 // has to be in memory all at once.
-fn reader_body(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static) -> Body {
+fn reader_body(
+    reader: impl tokio::io::AsyncRead + Unpin + Send + 'static,
+    sending: Sending,
+) -> Body {
     Body::from_stream(futures_util::stream::unfold(
-        reader,
-        |mut reader| async move {
+        (reader, sending),
+        |(mut reader, mut sending)| async move {
             let mut buffer = vec![0u8; 256 * 1024];
             match tokio::io::AsyncReadExt::read(&mut reader, &mut buffer).await {
-                Ok(0) => None,
+                Ok(0) => {
+                    sending.finish();
+                    None
+                }
                 Ok(read) => {
                     buffer.truncate(read);
-                    Some((Ok::<Bytes, std::io::Error>(Bytes::from(buffer)), reader))
+                    sending.sent += read as u64;
+                    // The last piece is usually the last one asked for, since the length
+                    // was sent up front.
+                    sending.finished = sending.sent >= sending.end;
+                    Some((
+                        Ok::<Bytes, std::io::Error>(Bytes::from(buffer)),
+                        (reader, sending),
+                    ))
                 }
-                Err(error) => Some((Err(error), reader)),
+                Err(error) => {
+                    println!(
+                        "Sending {} failed after {} of {} bytes: {error}",
+                        sending.path, sending.sent, sending.size
+                    );
+                    sending.finished = true;
+                    Some((Err(error), (reader, sending)))
+                }
             }
         },
     ))
+}
+
+// A long download that stops partway is otherwise invisible, since the request was answered
+// long before. Dropped before the end means the other side hung up.
+struct Sending {
+    path: String,
+    size: u64,
+    // Where in the file this response stops, which is the size unless a range was asked for.
+    end: u64,
+    sent: u64,
+    started: Instant,
+    finished: bool,
+}
+
+impl Sending {
+    fn finish(mut self) {
+        self.finished = true;
+    }
+}
+
+impl Drop for Sending {
+    fn drop(&mut self) {
+        if !self.finished {
+            println!(
+                "Sending {} stopped after {} of {} bytes and {:?}, the connection closed",
+                self.path,
+                self.sent,
+                self.size,
+                self.started.elapsed()
+            );
+        }
+    }
 }
 
 const ZIP_U32_MAX: u64 = 0xFFFF_FFFF;
@@ -2682,9 +2734,10 @@ const NOSNIFF: &str = "nosniff";
 /// Read from disk as it's sent, since a call recording's zip can be gigabytes long.
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> http::Response<Body> {
     if is_valid_hash(&hash) {
-        let opened = match tokio::fs::File::open(filepath(&hash)).await {
+        let mut opened = match tokio::fs::File::open(filepath(&hash)).await {
             Ok(opened) => opened,
             Err(_) => {
                 return Response::builder()
@@ -2693,16 +2746,67 @@ async fn get_file_endpoint(
                     .unwrap();
             }
         };
-        let size: Option<u64> = opened.metadata().await.ok().map(|metadata| metadata.len());
+        let size: u64 = match opened.metadata().await {
+            Ok(metadata) => metadata.len(),
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("File not found"))
+                    .unwrap();
+            }
+        };
         let content_type = match content_type_index.parse::<usize>() {
             Ok(index) => content_types::CONTENT_TYPES.get(index),
             Err(_) => None,
         };
+        // A file's name is its hash, so the hash is all a browser needs to know that the
+        // part it already has is of the same file.
+        let etag: String = format!("\"{hash}\"");
 
-        let mut builder = Response::builder().status(StatusCode::OK);
-        if let Some(size2) = size {
-            builder = builder.header("Content-Length", size2.to_string());
+        let (status, start, length) = match requested_range(&headers, &etag, size) {
+            RequestedRange::Whole => (StatusCode::OK, 0, size),
+            RequestedRange::Part { start, end } => {
+                (StatusCode::PARTIAL_CONTENT, start, end - start + 1)
+            }
+            RequestedRange::Unsatisfiable => {
+                return Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header("Accept-Ranges", "bytes")
+                    .header("ETag", &etag)
+                    .header("Content-Range", format!("bytes */{size}"))
+                    .body(Body::empty())
+                    .unwrap();
+            }
+        };
+        if tokio::io::AsyncSeekExt::seek(&mut opened, std::io::SeekFrom::Start(start))
+            .await
+            .is_err()
+        {
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from("Couldn't read the file"))
+                .unwrap();
         }
+        let mut builder = Response::builder()
+            .status(status)
+            .header("Accept-Ranges", "bytes")
+            .header("ETag", &etag)
+            .header("Content-Length", length.to_string());
+        if status == StatusCode::PARTIAL_CONTENT {
+            builder = builder.header(
+                "Content-Range",
+                format!("bytes {start}-{}/{size}", start + length - 1),
+            );
+        }
+        let sending = Sending {
+            path: format!("/file/{content_type_index}/{hash}"),
+            size,
+            end: start + length,
+            sent: start,
+            started: Instant::now(),
+            finished: false,
+        };
+        let body = reader_body(tokio::io::AsyncReadExt::take(opened, length), sending);
         match content_type {
             Some(content_type2) => builder
                 .header("Content-Type", *content_type2)
@@ -2710,7 +2814,7 @@ async fn get_file_endpoint(
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .header("Content-Security-Policy", sandbox_csp(content_type2))
                 .header("X-Content-Type-Options", NOSNIFF)
-                .body(reader_body(opened))
+                .body(body)
                 .unwrap(),
             // No content type to send, so the browser would otherwise
             // sniff one out of the bytes and could land on html. This
@@ -2720,7 +2824,7 @@ async fn get_file_endpoint(
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .header("Content-Security-Policy", SANDBOX_CSP)
                 .header("X-Content-Type-Options", NOSNIFF)
-                .body(reader_body(opened))
+                .body(body)
                 .unwrap(),
         }
     } else {
@@ -2729,6 +2833,57 @@ async fn get_file_endpoint(
             .body(Body::from(format!("{hash} is an invalid filename")))
             .unwrap()
     }
+}
+
+enum RequestedRange {
+    Whole,
+    Part { start: u64, end: u64 },
+    Unsatisfiable,
+}
+
+// Only a single range is answered, which is what a browser resuming a download asks for.
+// Anything else gets the whole file, as does a resume of some other file (If-Range).
+fn requested_range(headers: &HeaderMap, etag: &str, size: u64) -> RequestedRange {
+    if let Some(if_range) = headers.get("If-Range")
+        && if_range.to_str().ok() != Some(etag)
+    {
+        return RequestedRange::Whole;
+    }
+    let Some(range) = headers.get("Range").and_then(|value| value.to_str().ok()) else {
+        return RequestedRange::Whole;
+    };
+    let Some((start_text, end_text)) = range
+        .strip_prefix("bytes=")
+        .and_then(|bytes| bytes.split_once('-'))
+    else {
+        return RequestedRange::Whole;
+    };
+    if start_text.is_empty() {
+        // The last n bytes.
+        return match end_text.trim().parse::<u64>() {
+            Ok(0) | Err(_) => RequestedRange::Whole,
+            Ok(_) if size == 0 => RequestedRange::Unsatisfiable,
+            Ok(suffix) => RequestedRange::Part {
+                start: size.saturating_sub(suffix),
+                end: size - 1,
+            },
+        };
+    }
+    let Ok(start) = start_text.trim().parse::<u64>() else {
+        return RequestedRange::Whole;
+    };
+    if start >= size {
+        return RequestedRange::Unsatisfiable;
+    }
+    let end: u64 = if end_text.trim().is_empty() {
+        size - 1
+    } else {
+        match end_text.trim().parse::<u64>() {
+            Ok(end) if end >= start => end.min(size - 1),
+            _ => return RequestedRange::Whole,
+        }
+    };
+    RequestedRange::Part { start, end }
 }
 
 async fn fallback(uri: Uri) -> (StatusCode, String) {
@@ -3775,7 +3930,11 @@ mod tests {
         create_storage_dir();
         fs::write(filepath(hash), bytes).expect("failed to write the file to serve");
 
-        let response = get_file_endpoint(Path((content_type_index, hash.to_string()))).await;
+        let response = get_file_endpoint(
+            Path((content_type_index, hash.to_string())),
+            HeaderMap::new(),
+        )
+        .await;
 
         let _ = fs::remove_file(filepath(hash));
 
@@ -3826,10 +3985,13 @@ mod tests {
         fs::write(filepath("streamedFile"), b"zip bytes")
             .expect("failed to write the file to serve");
 
-        let response = get_file_endpoint(Path((
-            index_of_content_type("application/zip").to_string(),
-            String::from("streamedFile"),
-        )))
+        let response = get_file_endpoint(
+            Path((
+                index_of_content_type("application/zip").to_string(),
+                String::from("streamedFile"),
+            )),
+            HeaderMap::new(),
+        )
         .await;
         let headers = response.headers().clone();
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -3844,6 +4006,89 @@ mod tests {
             Some("9")
         );
         assert_eq!(&body[..], b"zip bytes");
+    }
+
+    async fn get_range(hash: &str, headers: &[(&str, &str)]) -> (StatusCode, HeaderMap, Bytes) {
+        create_storage_dir();
+        fs::write(filepath(hash), b"0123456789").expect("failed to write the file to serve");
+        let mut header_map = HeaderMap::new();
+        for (name, value) in headers {
+            header_map.insert(
+                http::HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                value.parse().unwrap(),
+            );
+        }
+        let response = get_file_endpoint(
+            Path((
+                index_of_content_type("application/zip").to_string(),
+                hash.to_string(),
+            )),
+            header_map,
+        )
+        .await;
+        let status = response.status();
+        let response_headers = response.headers().clone();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("the body should be readable");
+        let _ = fs::remove_file(filepath(hash));
+        (status, response_headers, body)
+    }
+
+    fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+        headers.get(name).and_then(|value| value.to_str().ok())
+    }
+
+    // What a browser asks for when it resumes a download that stopped partway.
+    #[tokio::test]
+    async fn a_download_can_be_resumed_from_where_it_stopped() {
+        let (status, headers, body) = get_range(
+            "resumedFile",
+            &[("Range", "bytes=4-"), ("If-Range", "\"resumedFile\"")],
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+        assert_eq!(header(&headers, "Content-Range"), Some("bytes 4-9/10"));
+        assert_eq!(header(&headers, "Content-Length"), Some("6"));
+        assert_eq!(&body[..], b"456789");
+    }
+
+    #[tokio::test]
+    async fn a_range_with_an_end_is_served_up_to_it() {
+        let (status, headers, body) = get_range("rangeWithEnd", &[("Range", "bytes=2-4")]).await;
+
+        assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+        assert_eq!(header(&headers, "Content-Range"), Some("bytes 2-4/10"));
+        assert_eq!(&body[..], b"234");
+    }
+
+    #[tokio::test]
+    async fn a_resume_of_another_file_gets_the_whole_file() {
+        let (status, _, body) = get_range(
+            "notTheSameFile",
+            &[("Range", "bytes=4-"), ("If-Range", "\"someOtherFile\"")],
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(&body[..], b"0123456789");
+    }
+
+    #[tokio::test]
+    async fn a_range_past_the_end_is_refused() {
+        let (status, headers, _) = get_range("rangePastEnd", &[("Range", "bytes=10-")]).await;
+
+        assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(header(&headers, "Content-Range"), Some("bytes */10"));
+    }
+
+    #[tokio::test]
+    async fn the_last_bytes_of_a_file_can_be_asked_for() {
+        let (status, _, body) = get_range("suffixRange", &[("Range", "bytes=-3")]).await;
+
+        assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+        assert_eq!(&body[..], b"789");
     }
 
     #[tokio::test]
