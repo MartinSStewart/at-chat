@@ -70,7 +70,6 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import Env
 import FileStatus
 import Html exposing (Html)
 import Html.Attributes
@@ -576,7 +575,7 @@ type VideoNodeState
 
 videoNodes :
     LocalUser
-    -> { a | windowSize : Coord CssPixels, route : Route }
+    -> { a | windowSize : Coord CssPixels, route : Route, clientId : ClientId }
     -> { b | voiceChat : Model, sidebarMode : ChannelSidebarMode }
     -> Local
     -> Html Msg
@@ -667,28 +666,32 @@ videoNodes localUser config loggedIn local =
 
         layoutTiles : List ( VideoTile, ( Coord CssPixels, Int ) -> ( String, Html Msg ) ) -> List ( String, Html Msg )
         layoutTiles tiles =
-            case ( isMobile, List.partition (\( tile, _ ) -> Just tile == model.focusedTile) tiles ) of
-                ( False, ( [ ( _, focusedTile ) ], (_ :: _) as otherTiles ) ) ->
-                    focusedLayout focusedTile (List.map Tuple.second otherTiles)
-
-                _ ->
-                    let
-                        list : List ( Coord CssPixels, Int )
-                        list =
-                            posAndSizes (List.length tiles)
-                    in
-                    List.indexedMap (\index ( _, tile ) -> tile (getPosAndSize index list)) tiles
-
-        focusedLayout :
-            (( Coord CssPixels, Int ) -> ( String, Html Msg ))
-            -> List (( Coord CssPixels, Int ) -> ( String, Html Msg ))
-            -> List ( String, Html Msg )
-        focusedLayout focusedTile otherTiles =
             let
-                count : Int
-                count =
-                    List.length otherTiles
+                placed : List ( ( VideoTile, ( Coord CssPixels, Int ) -> ( String, Html Msg ) ), ( Coord CssPixels, Int ) )
+                placed =
+                    case ( isMobile, List.partition (\( tile, _ ) -> Just tile == model.focusedTile) tiles ) of
+                        ( False, ( [ focusedTile ], (_ :: _) as otherTiles ) ) ->
+                            List.map2 Tuple.pair (focusedTile :: otherTiles) (focusedLayout (List.length otherTiles))
 
+                        _ ->
+                            List.map2 Tuple.pair tiles (posAndSizes (List.length tiles))
+            in
+            List.map (\( ( _, tile ), posAndSize ) -> tile posAndSize) placed
+                ++ (if showDebugData then
+                        List.map
+                            (\( ( videoTile, _ ), ( position, _ ) ) ->
+                                debugTileLabel localUser config.clientId videoTile position
+                            )
+                            placed
+
+                    else
+                        []
+                   )
+
+        -- The focused tile's position followed by the column's
+        focusedLayout : Int -> List ( Coord CssPixels, Int )
+        focusedLayout count =
+            let
                 columnWidth : Int
                 columnWidth =
                     min
@@ -711,20 +714,18 @@ videoNodes localUser config loggedIn local =
                 focusedX =
                     voiceChatX + (maxWidth - focusedWidth - spacing - columnWidth) // 2
             in
-            focusedTile
-                ( Coord.xy focusedX (voiceChatY + round ((toFloat maxHeight - toFloat focusedWidth / aspectRatio) / 2))
-                , focusedWidth
-                )
-                :: List.indexedMap
-                    (\index tile ->
-                        tile
-                            ( Coord.xy
-                                (focusedX + focusedWidth + spacing)
-                                (voiceChatY + round (columnY + toFloat index * (columnTileHeight + toFloat spacing)))
-                            , columnWidth
-                            )
+            ( Coord.xy focusedX (voiceChatY + round ((toFloat maxHeight - toFloat focusedWidth / aspectRatio) / 2))
+            , focusedWidth
+            )
+                :: List.map
+                    (\index ->
+                        ( Coord.xy
+                            (focusedX + focusedWidth + spacing)
+                            (voiceChatY + round (columnY + toFloat index * (columnTileHeight + toFloat spacing)))
+                        , columnWidth
+                        )
                     )
-                    otherTiles
+                    (List.range 0 (count - 1))
 
         isMobile : Bool
         isMobile =
@@ -749,9 +750,9 @@ videoNodes localUser config loggedIn local =
                 ShowLocalVideoAndCallThumbnail _ ->
                     Nothing
 
-        -- The button that turns polling on lives in the voice chat panel, so
-        -- the panel being open is also the only place it can be turned off
-        -- again.
+        -- The button that turns polling on is only reachable while looking at a
+        -- call you've joined, so that's also the only place it's shown, as
+        -- otherwise it couldn't be turned off again.
         showDebugData : Bool
         showDebugData =
             model.pollDebugData
@@ -760,7 +761,7 @@ videoNodes localUser config loggedIn local =
                             False
 
                         ShowLocalVideo _ ->
-                            True
+                            False
 
                         ShowLocalVideoAndCall _ ->
                             True
@@ -1026,7 +1027,7 @@ deviceSettingsView position isMobile model =
         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font1)
         , Html.Attributes.style "pointer-events" "auto"
         ]
-        (case model.userMediaDevices of
+        ((case model.userMediaDevices of
             MediaDevicesNotLoaded ->
                 [ Html.text "Loading microphones and cameras..." ]
 
@@ -1053,7 +1054,71 @@ deviceSettingsView position isMobile model =
                         SelectedVideoInputDevice
                     )
                 ]
+         )
+            ++ [ Html.button
+                    [ Html.Attributes.id "voiceChat_toggleDebugData"
+                    , Html.Events.onClick PressedToggleDebugData
+                    , Html.Attributes.style "align-self" "flex-end"
+                    , Html.Attributes.style "padding" "4px 10px"
+                    , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+                    , Html.Attributes.style "border-radius" "4px"
+                    , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
+                    , Html.Attributes.style "font-size" "14px"
+                    , Html.Attributes.style "cursor" "pointer"
+                    ]
+                    [ Html.text
+                        (if model.pollDebugData then
+                            "Hide debug info"
+
+                         else
+                            "Show debug info"
+                        )
+                    ]
+               ]
         )
+
+
+debugTileLabel : LocalUser -> ClientId -> VideoTile -> Coord CssPixels -> ( String, Html msg )
+debugTileLabel localUser ownClientId videoTile position =
+    let
+        ( owner, kind ) =
+            case videoTile of
+                CameraTile owner2 ->
+                    ( owner2, "video" )
+
+                ScreenShareTile owner2 ->
+                    ( owner2, "screen" )
+
+        ( userId, clientId ) =
+            case owner of
+                IsLocal ->
+                    ( localUser.session.userId, ownClientId )
+
+                IsConnection connectionId ->
+                    connectionId.otherClientId
+    in
+    ( "call_debugLabel " ++ kind ++ " " ++ otherUserIdToString ( userId, clientId )
+    , Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position + 8) ++ "px")
+        , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position + 8) ++ "px")
+        , -- Above the debug data panel, which would otherwise hide the labels of the videos under it
+          Html.Attributes.style "z-index" "1001"
+        , Html.Attributes.style "padding" "2px 6px"
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "background-color" "rgba(0,0,0,0.75)"
+        , Html.Attributes.style "color" "white"
+        , Html.Attributes.style "font-family" "monospace"
+        , Html.Attributes.style "font-size" "11px"
+        , Html.Attributes.style "line-height" "1.4"
+        , Html.Attributes.style "pointer-events" "none"
+        ]
+        [ Html.div [] [ Html.text ("user " ++ Id.toString userId) ]
+        , Html.div [] [ Html.text ("client " ++ Lamdera.clientIdToString clientId) ]
+        , Html.div [] [ Html.text kind ]
+        ]
+    )
 
 
 deviceSettingsRow : Html msg -> Html msg -> Html msg
@@ -1639,8 +1704,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Bool -> Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
-view isAdmin canShareScreen2 windowSize roomId calls model =
+view : Bool -> Coord CssPixels -> CallId -> Local -> Model -> Element Msg
+view canShareScreen2 windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
         ongoingCall =
@@ -1696,15 +1761,7 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                         , Ui.width Ui.shrink
                         , Ui.spacing 8
                         ]
-                        [ if isAdmin && not Env.isProduction then
-                            MyUi.simpleButton
-                                (Dom.id "voiceChat_toggleDebugData")
-                                PressedToggleDebugData
-                                (Ui.text "Debug")
-
-                          else
-                            Ui.none
-                        , if hasJoined2 && not isMobile then
+                        [ if hasJoined2 && not isMobile then
                             recordButton recordingStatus
 
                           else
