@@ -10430,6 +10430,7 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( otherUserId2.otherUserId, clientId )
                                     }
+                                    connection.remoteCallData
                                     |> Server_VoiceChatChange
                             )
                             model3
@@ -10543,6 +10544,7 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                 { roomId = Call.GuildRoomId id
                                 , otherClientId = ( userId, clientId )
                                 }
+                                connection.remoteCallData
                                 |> Server_VoiceChatChange
                                 |> ServerChange
                             )

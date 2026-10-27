@@ -7140,7 +7140,7 @@ changeUpdate localMsg local =
                                 { calls | currentRoom = Just roomId }
                                 local
 
-                        Call.Server_OtherJoined time { roomId, otherClientId } ->
+                        Call.Server_OtherJoined time { roomId, otherClientId } remoteCallData ->
                             joinCallHelper
                                 (Tuple.first otherClientId)
                                 time
@@ -7151,7 +7151,7 @@ changeUpdate localMsg local =
                                         SeqDictHelper.addToDict
                                             roomId
                                             otherClientId
-                                            Call.defaultRemoteCallData
+                                            remoteCallData
                                             calls.voiceChats
                                 }
                                 local

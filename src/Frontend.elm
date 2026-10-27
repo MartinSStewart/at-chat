@@ -5266,9 +5266,32 @@ updateLoaded msg model =
                         Ok event ->
                             case event of
                                 Call.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
-                                    ( { loggedIn | voiceChat = Call.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
-                                    , Command.none
-                                    )
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            Call.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat
+
+                                        remoteCallData : Call.RemoteCallData
+                                        remoteCallData =
+                                            voiceChat.remoteCallData
+                                    in
+                                    case ( voiceChat.selectedVideoInputDevice, remoteCallData.videoInputEnabled ) of
+                                        ( Nothing, True ) ->
+                                            -- Otherwise everyone else sees a black video instead of a profile picture
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Call.Local_SetRemoteCallData { remoteCallData | videoInputEnabled = False }
+                                                    |> Local_VoiceChatChange
+                                                    |> Just
+                                                )
+                                                { loggedIn
+                                                    | voiceChat =
+                                                        { voiceChat | remoteCallData = { remoteCallData | videoInputEnabled = False } }
+                                                }
+                                                (Call.toJs (Call.ToJs_SetVideoInputEnabled False))
+
+                                        _ ->
+                                            ( { loggedIn | voiceChat = voiceChat }, Command.none )
 
                                 Call.FromJs_GotUserMediaDevicesError error ->
                                     let
