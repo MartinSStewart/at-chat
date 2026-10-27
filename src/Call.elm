@@ -70,6 +70,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import Env
 import FileStatus
 import Html exposing (Html)
 import Html.Attributes
@@ -1695,7 +1696,7 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                         , Ui.width Ui.shrink
                         , Ui.spacing 8
                         ]
-                        [ if isAdmin then
+                        [ if isAdmin && not Env.isProduction then
                             MyUi.simpleButton
                                 (Dom.id "voiceChat_toggleDebugData")
                                 PressedToggleDebugData
