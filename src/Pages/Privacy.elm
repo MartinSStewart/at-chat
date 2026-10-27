@@ -34,10 +34,13 @@ at-chat stores the following sensitive data:
 * Your name (should you choose to provide your real name)
 * Any messages you write that contain sensitive data
 * Any files you upload that contain sensitive data
-* Should you choose to use the Discord integration:
-      *-*  A session token with full access to your Discord account (the setup explains the risks in more detail)
-      *-*  Your Discord account's email address
-      *-*  Cached Discord messages and files
+* Should you choose to use the Discord/Slack integration:
+      *-*  A session token with full access to your account (the setup explains the risks in more detail)
+      *-*  Your account's email address
+      *-*  Cached messages and files
+* Recorded calls (calls are only recorded if all participants agree to enable it)
+
+_Custom emojis and stickers are assumed to not contain any sensitive information_
 
 ## What it is for
 
@@ -50,13 +53,13 @@ Sensitive data may be used by an administrator for the sole purpose of fixing so
 
 Sensitive data can be accessed by 3rd parties in the following ways:
 * [Hetzner](https://www.hetzner.com/) owns the hardware at-chat runs on. The server being rented is located in Finland.
-* If you use the Discord integration feature, then messages and files sent to a Discord guild or Discord user will of course be available to Discord.
+* If you use the Discord/Slack integration feature, then messages and files sent to a Discord guild, Discord user, or Slack workspace will of course be available to Discord or Slack respectively.
 * If someone you are writing to has enabled email notifications then your messages, profile image, and name will be sent to [Postmark](https://postmarkapp.com/) and that user's email provider.
 * If you have message embeds enabled then the site serving that embedded image or video can potentially store your IP address
 
 ## When is it deleted
 
-Your email address, name, messages, and Discord session tokens will all be deleted when you delete your account. Account deletion takes """
+Your email address, name, messages, and Discord/Slack session tokens will all be deleted when you delete your account. Account deletion takes """
             ++ String.fromInt User.accountDeletionDelayInWeeks
             ++ """ weeks in order to give other users a chance to export any conversations they want a personal copy of.
 
