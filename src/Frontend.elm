@@ -5727,6 +5727,22 @@ updateLoaded msg model =
                 Call.PolledDebugData ->
                     ( model, Call.toJs Call.ToJs_DebugDataRequest )
 
+                Call.PressedToggleDeviceSettings ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : Call.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat = { voiceChat | showDeviceSettings = not voiceChat.showDeviceSettings }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
                 Call.PressedVideoTile tile ->
                     if MyUi.isMobile model then
                         ( model, Command.none )

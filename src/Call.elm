@@ -148,6 +148,7 @@ type Msg
     | MouseExitVideoNode LocalOrConnection
     | DoubleClickedVideoNode
     | PressedVideoTile VideoTile
+    | PressedToggleDeviceSettings
     | PressedToggleDebugData
     | PolledDebugData
 
@@ -179,6 +180,7 @@ type alias Model =
     , volume : SeqDict ( Id UserId, ClientId ) Float
     , videoHover : Maybe LocalOrConnection
     , focusedTile : Maybe VideoTile
+    , showDeviceSettings : Bool
     , -- Thumbnail coordinate ranges from 0 to 1. Actual pixel position is derived by multiplying this by the windowSize
       thumbnailPosition : ( Float, Float )
     , pollDebugData : Bool
@@ -271,6 +273,7 @@ initModel =
     , volume = SeqDict.empty
     , videoHover = Nothing
     , focusedTile = Nothing
+    , showDeviceSettings = False
     , thumbnailPosition = ( 1, 0.1 )
     , pollDebugData = False
     , debugData = []
@@ -613,13 +616,37 @@ videoNodes localUser config loggedIn local =
             -- The panel starts below the channel header, so only the gap between them is lost
             viewHeight config.windowSize
                 - (voiceChatY - MyUi.channelHeaderHeight)
-                - (if isMobile then
-                    150
-
-                   else
-                    90
-                  )
+                - controlsHeight
                 - (padding * 2)
+
+        -- Room at the bottom of the panel for its buttons, and for the microphone and
+        -- camera pickers too until the call is joined
+        controlsHeight : Int
+        controlsHeight =
+            case displayMode2 of
+                ShowLocalVideoAndCall _ ->
+                    if isMobile then
+                        33
+
+                    else
+                        41
+
+                ShowLocalVideo _ ->
+                    controlsHeightBeforeJoining
+
+                ShowLocalVideoAndCallThumbnail _ ->
+                    controlsHeightBeforeJoining
+
+                NoVideo ->
+                    controlsHeightBeforeJoining
+
+        controlsHeightBeforeJoining : Int
+        controlsHeightBeforeJoining =
+            if isMobile then
+                150
+
+            else
+                90
 
         padding =
             8
@@ -886,6 +913,43 @@ videoNodes localUser config loggedIn local =
                 Nothing ->
                     []
            )
+        ++ (case displayMode2 of
+                ShowLocalVideoAndCall _ ->
+                    if model.showDeviceSettings then
+                        [ ( "call_deviceSettings"
+                          , deviceSettingsView
+                                { right =
+                                    Coord.xRaw config.windowSize
+                                        - voiceChatX
+                                        - maxWidth
+                                        - padding
+                                        + (if isMobile then
+                                            8
+
+                                           else
+                                            16
+                                          )
+                                , bottom =
+                                    Coord.yRaw config.windowSize
+                                        - (localUser.safeAreaInsetTop + voiceChatY + maxHeight)
+                                }
+                                isMobile
+                                model
+                          )
+                        ]
+
+                    else
+                        []
+
+                ShowLocalVideo _ ->
+                    []
+
+                ShowLocalVideoAndCallThumbnail _ ->
+                    []
+
+                NoVideo ->
+                    []
+           )
         ++ (if showDebugData then
                 [ ( "call_debugData"
                   , debugDataView
@@ -936,6 +1000,71 @@ recordingIndicator position =
         , Html.Attributes.title "This call is being recorded"
         ]
         [ Icons.recording 24 ]
+
+
+{-| Drawn as part of the video layer for the same reason as `debugDataView`.
+-}
+deviceSettingsView : { right : Int, bottom : Int } -> Bool -> Model -> Html Msg
+deviceSettingsView position isMobile model =
+    Html.div
+        [ Html.Attributes.id "voiceChat_deviceSettings"
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "right" (String.fromInt position.right ++ "px")
+        , Html.Attributes.style "bottom" (String.fromInt position.bottom ++ "px")
+        , Html.Attributes.style "width" "400px"
+        , Html.Attributes.style "max-width" "calc(100% - 16px)"
+        , Html.Attributes.style "box-sizing" "border-box"
+        , Html.Attributes.style "z-index" "1000"
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "flex-direction" "column"
+        , Html.Attributes.style "gap" "8px"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "border-radius" "8px"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.border1)
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font1)
+        , Html.Attributes.style "pointer-events" "auto"
+        ]
+        (case model.userMediaDevices of
+            MediaDevicesNotLoaded ->
+                [ Html.text "Loading microphones and cameras..." ]
+
+            FailedToGetMediaDevices error ->
+                [ Html.text ("Failed to get media devices: " ++ error) ]
+
+            HasMediaDevices devices ->
+                [ deviceSettingsRow
+                    Icons.microphone
+                    (deviceSelect
+                        isMobile
+                        "Microphone"
+                        (List.filter (\d -> d.kind == AudioInput) devices)
+                        model.selectedAudioInputDevice
+                        SelectedAudioInputDevice
+                    )
+                , deviceSettingsRow
+                    (Icons.camera 24)
+                    (deviceSelect
+                        isMobile
+                        "Camera"
+                        (List.filter (\d -> d.kind == VideoInput) devices)
+                        model.selectedVideoInputDevice
+                        SelectedVideoInputDevice
+                    )
+                ]
+        )
+
+
+deviceSettingsRow : Html msg -> Html msg -> Html msg
+deviceSettingsRow icon select =
+    Html.div
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "align-items" "center"
+        , Html.Attributes.style "gap" "8px"
+        ]
+        [ Html.div [ Html.Attributes.style "flex" "0 0 24px", Html.Attributes.style "line-height" "0" ] [ icon ]
+        , select
+        ]
 
 
 {-| Drawn as part of the video layer rather than inside the voice chat panel,
@@ -1556,7 +1685,11 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                         Ui.paddingXY 16 8
                     , Ui.spacing 8
                     ]
-                    [ mediaDeviceSelectors isMobile model
+                    [ if hasJoined2 then
+                        Ui.none
+
+                      else
+                        mediaDeviceSelectors isMobile model
                     , Ui.row
                         [ Ui.alignRight
                         , Ui.width Ui.shrink
@@ -1652,6 +1785,11 @@ view isAdmin canShareScreen2 windowSize roomId calls model =
                             PressedTogglePauseVideo
                         , if hasJoined2 && canShareScreen2 then
                             screenShareButton model.remoteCallData.screenShareEnabled
+
+                          else
+                            Ui.none
+                        , if hasJoined2 then
+                            deviceSettingsButton model.showDeviceSettings
 
                           else
                             Ui.none
@@ -1974,6 +2112,31 @@ screenShareButton isSharing =
         , Ui.Font.color MyUi.white
         ]
         (Ui.html Icons.screenShare)
+
+
+deviceSettingsButton : Bool -> Element Msg
+deviceSettingsButton isOpen =
+    MyUi.elButton
+        (Dom.id "guild_voiceChatDeviceSettings")
+        PressedToggleDeviceSettings
+        [ Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.rounded 20
+        , MyUi.hoverText "Microphone and camera"
+        , Ui.border 1
+        , Ui.borderColor MyUi.inputBorder
+        , Ui.background
+            (if isOpen then
+                Ui.rgb 70 82 122
+
+             else
+                Ui.rgb 42 50 78
+            )
+        , Ui.Font.color MyUi.white
+        ]
+        (Ui.html Icons.gear)
 
 
 hasJoined : CallId -> Local -> Bool
@@ -2709,6 +2872,9 @@ isPressMsg msg =
         PressedVideoTile _ ->
             True
 
+        PressedToggleDeviceSettings ->
+            True
+
         PressedToggleDebugData ->
             True
 
@@ -2728,58 +2894,67 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
     Ui.row
         [ Ui.spacing 8 ]
         [ Ui.html icon
-        , Ui.html
-            (Html.select
-                [ Html.Attributes.value
-                    (case selected of
-                        Just a ->
-                            IdString.toString a
-
-                        Nothing ->
-                            ""
-                    )
-                , Html.Events.onInput (\text -> IdString.fromString text |> onSelect)
-                , Html.Attributes.style "width" "100%"
-                , Html.Attributes.style "padding"
-                    (if isMobile then
-                        "4px"
-
-                     else
-                        "7px 8px"
-                    )
-                , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-                , Html.Attributes.style "border-radius" "4px"
-                , Html.Attributes.style "font-size"
-                    (if isMobile then
-                        "14px"
-
-                     else
-                        "16px"
-                    )
-                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
-                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
-                , Html.Attributes.style "cursor" "pointer"
-                , Html.Attributes.attribute "aria-label" labelText
-                ]
-                (List.map
-                    (\device ->
-                        Html.option
-                            [ Html.Attributes.value (IdString.toString device.deviceId)
-                            , Html.Attributes.selected (Just device.deviceId == selected)
-                            ]
-                            [ Html.text
-                                (if String.isEmpty device.label then
-                                    IdString.toString device.deviceId
-
-                                 else
-                                    device.label
-                                )
-                            ]
-                    )
-                    devices
-                )
-            )
+        , Ui.html (deviceSelect isMobile labelText devices selected onSelect)
         ]
+
+
+deviceSelect :
+    Bool
+    -> String
+    -> List MediaDevice
+    -> Maybe (IdString MediaDeviceId)
+    -> (IdString MediaDeviceId -> msg)
+    -> Html msg
+deviceSelect isMobile labelText devices selected onSelect =
+    Html.select
+        [ Html.Attributes.value
+            (case selected of
+                Just a ->
+                    IdString.toString a
+
+                Nothing ->
+                    ""
+            )
+        , Html.Events.onInput (\text -> IdString.fromString text |> onSelect)
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "padding"
+            (if isMobile then
+                "4px"
+
+             else
+                "7px 8px"
+            )
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "font-size"
+            (if isMobile then
+                "14px"
+
+             else
+                "16px"
+            )
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
+        , Html.Attributes.style "cursor" "pointer"
+        , Html.Attributes.attribute "aria-label" labelText
+        ]
+        (List.map
+            (\device ->
+                Html.option
+                    [ Html.Attributes.value (IdString.toString device.deviceId)
+                    , Html.Attributes.selected (Just device.deviceId == selected)
+                    ]
+                    [ Html.text
+                        (if String.isEmpty device.label then
+                            IdString.toString device.deviceId
+
+                         else
+                            device.label
+                        )
+                    ]
+            )
+            devices
+        )
 
 
 {-| The mobile layout is three screens laid out left to right that the offset slides
