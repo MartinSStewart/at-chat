@@ -923,10 +923,8 @@ videoNodes localUser config loggedIn local =
                     if model.showDeviceSettings then
                         [ ( "call_deviceSettings"
                           , deviceSettingsView
-                                { right =
-                                    Coord.xRaw config.windowSize
-                                        - voiceChatX
-                                        - maxWidth
+                                { left =
+                                    voiceChatX
                                         - padding
                                         + (if isMobile then
                                             8
@@ -1004,12 +1002,12 @@ recordingIndicator position =
 
 {-| Drawn as part of the video layer for the same reason as `debugDataView`.
 -}
-deviceSettingsView : { right : Int, bottom : Int } -> Bool -> Maybe RecordingStatus -> Model -> Html Msg
+deviceSettingsView : { left : Int, bottom : Int } -> Bool -> Maybe RecordingStatus -> Model -> Html Msg
 deviceSettingsView position isMobile recordingStatus model =
     Html.div
         [ Html.Attributes.id "voiceChat_deviceSettings"
         , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "right" (String.fromInt position.right ++ "px")
+        , Html.Attributes.style "left" (String.fromInt position.left ++ "px")
         , Html.Attributes.style "bottom" (String.fromInt position.bottom ++ "px")
         , Html.Attributes.style "width" "400px"
         , Html.Attributes.style "max-width" "calc(100% - 16px)"
@@ -1769,6 +1767,90 @@ view canShareScreen2 windowSize roomId calls model =
         recordingStatus : Maybe RecordingStatus
         recordingStatus =
             SeqDict.get roomId calls.recordings
+
+        callButton : Element Msg
+        callButton =
+            MyUi.rowButton
+                (if hasJoined2 then
+                    Dom.id "guild_leaveVoiceChat"
+
+                 else
+                    Dom.id "guild_startVoiceChat"
+                )
+                (if hasJoined2 then
+                    PressedLeaveCall
+
+                 else
+                    PressedJoinCall roomId
+                )
+                [ Ui.spacing 8
+                , Ui.background
+                    (if hasJoined2 then
+                        red
+
+                     else
+                        green
+                    )
+                , Ui.rounded 99
+                , Ui.height Ui.fill
+                , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                ]
+                [ Ui.html Icons.phone
+                , (case ( hasJoined2, ongoingCall ) of
+                    ( True, Nothing ) ->
+                        "End\u{00A0}Call"
+
+                    ( True, Just _ ) ->
+                        "Leave\u{00A0}Call"
+
+                    ( False, Nothing ) ->
+                        "Start\u{00A0}Call"
+
+                    ( False, Just _ ) ->
+                        case recordingStatus of
+                            Just (RecordingSince _) ->
+                                "Join\u{00A0}Recorded\u{00A0}Call"
+
+                            Just (AskingToRecord _) ->
+                                "Join\u{00A0}Call"
+
+                            Just (RecordingDeclined _) ->
+                                "Join\u{00A0}Call"
+
+                            Nothing ->
+                                "Join\u{00A0}Call"
+                  )
+                    |> Ui.text
+                    |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                ]
+
+        muteButton : Element Msg
+        muteButton =
+            voiceChatControlButton
+                "guild_voiceChatMute"
+                (if model.remoteCallData.audioInputEnabled then
+                    "Mute microphone"
+
+                 else
+                    "Unmute microphone"
+                )
+                (Ui.html Icons.microphone)
+                model.remoteCallData.audioInputEnabled
+                PressedToggleMute
+
+        cameraButton : Element Msg
+        cameraButton =
+            voiceChatControlButton
+                "guild_voiceChatPauseVideo"
+                (if model.remoteCallData.videoInputEnabled then
+                    "Turn off camera"
+
+                 else
+                    "Turn on camera"
+                )
+                (Ui.html (Icons.camera 24))
+                model.remoteCallData.videoInputEnabled
+                PressedTogglePauseVideo
     in
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
@@ -1785,117 +1867,49 @@ view canShareScreen2 windowSize roomId calls model =
 
                     Nothing ->
                         Ui.none
-                , (if isMobile then
-                    Ui.column
-
-                   else
+                , if hasJoined2 then
                     Ui.row
-                  )
-                    [ Ui.contentBottom
-                    , if isMobile then
-                        Ui.paddingXY 8 0
+                        [ Ui.spacing 8
+                        , if isMobile then
+                            Ui.paddingXY 8 0
 
-                      else
-                        Ui.paddingXY 16 8
-                    , Ui.spacing 8
-                    ]
-                    [ if hasJoined2 then
-                        Ui.none
-
-                      else
-                        mediaDeviceSelectors isMobile model
-                    , Ui.row
-                        [ Ui.alignRight
-                        , Ui.width Ui.shrink
-                        , Ui.spacing 8
+                          else
+                            Ui.paddingXY 16 8
                         ]
-                        [ MyUi.rowButton
-                            (if hasJoined2 then
-                                Dom.id "guild_leaveVoiceChat"
-
-                             else
-                                Dom.id "guild_startVoiceChat"
-                            )
-                            (if hasJoined2 then
-                                PressedLeaveCall
-
-                             else
-                                PressedJoinCall roomId
-                            )
-                            [ Ui.spacing 8
-                            , Ui.background
-                                (if hasJoined2 then
-                                    red
-
-                                 else
-                                    green
-                                )
-                            , Ui.rounded 99
-                            , Ui.height Ui.fill
-                            , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
-                            ]
-                            [ Ui.html Icons.phone
-                            , (case ( hasJoined2, ongoingCall ) of
-                                ( True, Nothing ) ->
-                                    "End\u{00A0}Call"
-
-                                ( True, Just _ ) ->
-                                    "Leave\u{00A0}Call"
-
-                                ( False, Nothing ) ->
-                                    "Start\u{00A0}Call"
-
-                                ( False, Just _ ) ->
-                                    case recordingStatus of
-                                        Just (RecordingSince _) ->
-                                            "Join\u{00A0}Recorded\u{00A0}Call"
-
-                                        Just (AskingToRecord _) ->
-                                            "Join\u{00A0}Call"
-
-                                        Just (RecordingDeclined _) ->
-                                            "Join\u{00A0}Call"
-
-                                        Nothing ->
-                                            "Join\u{00A0}Call"
-                              )
-                                |> Ui.text
-                                |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
-                            ]
-                        , voiceChatControlButton
-                            "guild_voiceChatMute"
-                            (if model.remoteCallData.audioInputEnabled then
-                                "Mute microphone"
-
-                             else
-                                "Unmute microphone"
-                            )
-                            (Ui.html Icons.microphone)
-                            model.remoteCallData.audioInputEnabled
-                            PressedToggleMute
-                        , voiceChatControlButton
-                            "guild_voiceChatPauseVideo"
-                            (if model.remoteCallData.videoInputEnabled then
-                                "Turn off camera"
-
-                             else
-                                "Turn on camera"
-                            )
-                            (Ui.html (Icons.camera 24))
-                            model.remoteCallData.videoInputEnabled
-                            PressedTogglePauseVideo
-                        , if hasJoined2 && canShareScreen2 then
+                        [ muteButton
+                        , cameraButton
+                        , if canShareScreen2 then
                             screenShareButton model.remoteCallData.screenShareEnabled
 
                           else
                             Ui.none
-                        , if hasJoined2 then
-                            deviceSettingsButton model.showDeviceSettings
+                        , deviceSettingsButton model.showDeviceSettings
+                        , Ui.el [ Ui.alignRight, Ui.width Ui.shrink, Ui.height Ui.fill ] callButton
+                        ]
+
+                  else
+                    (if isMobile then
+                        Ui.column
+
+                     else
+                        Ui.row
+                    )
+                        [ Ui.contentBottom
+                        , if isMobile then
+                            Ui.paddingXY 8 0
 
                           else
-                            Ui.none
+                            Ui.paddingXY 16 8
+                        , Ui.spacing 8
                         ]
-                    ]
+                        [ mediaDeviceSelectors isMobile model
+                        , Ui.row
+                            [ Ui.alignRight
+                            , Ui.width Ui.shrink
+                            , Ui.spacing 8
+                            ]
+                            [ callButton, muteButton, cameraButton ]
+                        ]
                 ]
             )
         ]
