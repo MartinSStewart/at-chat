@@ -1801,7 +1801,11 @@ view canShareScreen2 windowSize roomId calls model =
                         "End\u{00A0}Call"
 
                     ( True, Just _ ) ->
-                        "Leave\u{00A0}Call"
+                        if isMobile then
+                            "Leave"
+
+                        else
+                            "Leave\u{00A0}Call"
 
                     ( False, Nothing ) ->
                         "Start\u{00A0}Call"
