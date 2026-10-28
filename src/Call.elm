@@ -1768,8 +1768,8 @@ view canShareScreen2 windowSize roomId calls model =
         recordingStatus =
             SeqDict.get roomId calls.recordings
 
-        callButton : Element Msg
-        callButton =
+        callButton : String -> Element Msg
+        callButton text =
             MyUi.rowButton
                 (if hasJoined2 then
                     Dom.id "guild_leaveVoiceChat"
@@ -1796,36 +1796,7 @@ view canShareScreen2 windowSize roomId calls model =
                 , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
                 ]
                 [ Ui.html Icons.phone
-                , (case ( hasJoined2, ongoingCall ) of
-                    ( True, Nothing ) ->
-                        "End\u{00A0}Call"
-
-                    ( True, Just _ ) ->
-                        if isMobile then
-                            "Leave"
-
-                        else
-                            "Leave\u{00A0}Call"
-
-                    ( False, Nothing ) ->
-                        "Start\u{00A0}Call"
-
-                    ( False, Just _ ) ->
-                        case recordingStatus of
-                            Just (RecordingSince _) ->
-                                "Join\u{00A0}Recorded\u{00A0}Call"
-
-                            Just (AskingToRecord _) ->
-                                "Join\u{00A0}Call"
-
-                            Just (RecordingDeclined _) ->
-                                "Join\u{00A0}Call"
-
-                            Nothing ->
-                                "Join\u{00A0}Call"
-                  )
-                    |> Ui.text
-                    |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                , Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ] (Ui.text text)
                 ]
 
         muteButton : Element Msg
@@ -1879,6 +1850,7 @@ view canShareScreen2 windowSize roomId calls model =
 
                           else
                             Ui.paddingXY 16 8
+                        , Ui.widthMax 380
                         ]
                         [ muteButton
                         , cameraButton
@@ -1888,7 +1860,21 @@ view canShareScreen2 windowSize roomId calls model =
                           else
                             Ui.none
                         , deviceSettingsButton model.showDeviceSettings
-                        , Ui.el [ Ui.alignRight, Ui.width Ui.shrink, Ui.height Ui.fill ] callButton
+                        , Ui.el
+                            [ Ui.alignRight, Ui.width Ui.shrink, Ui.height Ui.fill ]
+                            (callButton
+                                (case ongoingCall of
+                                    Nothing ->
+                                        "End\u{00A0}Call"
+
+                                    Just _ ->
+                                        if isMobile then
+                                            "Leave"
+
+                                        else
+                                            "Leave\u{00A0}Call"
+                                )
+                            )
                         ]
 
                   else
@@ -1908,11 +1894,29 @@ view canShareScreen2 windowSize roomId calls model =
                         ]
                         [ mediaDeviceSelectors isMobile model
                         , Ui.row
-                            [ Ui.alignRight
-                            , Ui.width Ui.shrink
-                            , Ui.spacing 8
+                            [ Ui.spacing 8, Ui.width Ui.shrink ]
+                            [ muteButton
+                            , cameraButton
+                            , callButton
+                                (case ongoingCall of
+                                    Nothing ->
+                                        "Start\u{00A0}Call"
+
+                                    Just _ ->
+                                        case recordingStatus of
+                                            Just (RecordingSince _) ->
+                                                "Join\u{00A0}Recorded\u{00A0}Call"
+
+                                            Just (AskingToRecord _) ->
+                                                "Join\u{00A0}Call"
+
+                                            Just (RecordingDeclined _) ->
+                                                "Join\u{00A0}Call"
+
+                                            Nothing ->
+                                                "Join\u{00A0}Call"
+                                )
                             ]
-                            [ callButton, muteButton, cameraButton ]
                         ]
                 ]
             )

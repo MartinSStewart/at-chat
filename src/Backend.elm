@@ -10428,7 +10428,7 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                 Call.Server_OtherJoined
                                     time
                                     { roomId = Call.DmRoomId otherUserId2
-                                    , otherClientId = ( otherUserId2.otherUserId, clientId )
+                                    , otherClientId = ( userId, clientId )
                                     }
                                     connection.remoteCallData
                                     |> Server_VoiceChatChange

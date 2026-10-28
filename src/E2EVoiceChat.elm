@@ -4,6 +4,7 @@ import Audio
 import Call
 import Codec
 import Dict
+import DmChannelId
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
@@ -23,6 +24,7 @@ import NonemptyDict
 import NonemptySet
 import Pages.Guild
 import RPC
+import Route exposing (ChannelsVisibleOnMobile(..))
 import SecretId
 import SeqDict
 import SeqSet
@@ -31,6 +33,7 @@ import Test.Html.Selector
 import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import Url
+import UserSession exposing (ChannelHeaderTab(..))
 
 
 {-| The url `ToJs_StartCall` carries is the one the browser would have opened.
@@ -165,6 +168,7 @@ voiceChatTest normalConfig =
         "Voice chat"
         [ dmCallTest False normalConfig
         , dmCallTest True normalConfig
+        , dmCallFromTwoDevicesTest normalConfig
         , recordingNeedsEveryoneTest normalConfig
         , recordingNotStartedTest normalConfig
         , E2EHelper.startTest
@@ -251,6 +255,96 @@ displayModeOf clientId data =
 
         _ ->
             Err "Expected user frontend to be loaded"
+
+
+{-| Who the given client thinks is in its call, as user id and client id pairs.
+-}
+checkCallMembers : Lamdera.ClientId -> List ( Int, Lamdera.ClientId ) -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkCallMembers clientId expected data =
+    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        toString : ( Int, Lamdera.ClientId ) -> String
+                        toString ( userId, clientId2 ) =
+                            String.fromInt userId ++ " " ++ Lamdera.clientIdToString clientId2
+
+                        actual : List String
+                        actual =
+                            (Local.model loggedIn.localState).calls.voiceChats
+                                |> SeqDict.values
+                                |> List.concatMap (\voiceChat -> NonemptyDict.toList voiceChat |> List.map Tuple.first)
+                                |> List.map (\( userId, clientId2 ) -> toString ( Id.toInt userId, clientId2 ))
+                                |> List.sort
+
+                        expected2 : List String
+                        expected2 =
+                            List.map toString expected |> List.sort
+                    in
+                    if actual == expected2 then
+                        Ok ()
+
+                    else
+                        Err ("Expected the call to have " ++ String.join ", " expected2 ++ " but it had " ++ String.join ", " actual)
+
+                Types.NotLoggedIn _ ->
+                    Err "Expected user to be logged in"
+
+        _ ->
+            Err "Expected user frontend to be loaded"
+
+
+dmCallFromTwoDevicesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+dmCallFromTwoDevicesTest normalConfig =
+    E2EHelper.startTest
+        "Joining a DM call from a second device shows that device as yours"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                , startCall admin
+                , user.click 100 (Dom.id "guild_voiceChat")
+                , startCall user
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    (Route.encode
+                        (Route.DmRoute
+                            { channelId = DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)
+                            , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
+                            , tab = Just ChannelHeaderTab_VoiceChat
+                            , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
+                            }
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\adminOtherDevice ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminOtherDevice.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , startCall adminOtherDevice
+                        , T.checkState 100 (checkCallMembers admin.clientId [ ( 0, adminOtherDevice.clientId ), ( 2, user.clientId ) ])
+                        , T.checkState 0 (checkCallMembers adminOtherDevice.clientId [ ( 0, admin.clientId ), ( 2, user.clientId ) ])
+                        , T.checkState 0 (checkCallMembers user.clientId [ ( 0, admin.clientId ), ( 0, adminOtherDevice.clientId ) ])
+                        ]
+                    )
+                ]
+            )
+        ]
 
 
 dmCallTest :
