@@ -78,6 +78,17 @@ isWebsocketRequest request =
         Nothing
 
 
+{-| Record is in the gear menu, which is closed again afterwards so it doesn't cover snapshots.
+-}
+pressRecord : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+pressRecord user =
+    T.group
+        [ user.click 100 (Dom.id "guild_voiceChatDeviceSettings")
+        , user.click 100 (Dom.id "voiceChat_record")
+        , user.click 100 (Dom.id "guild_voiceChatDeviceSettings")
+        ]
+
+
 {-| Clicking join only gets as far as opening a websocket, which in a test goes
 nowhere. What the backend is actually waiting for is the rust server asking it
 whether the caller may join, so that request is made here on the rust server's
@@ -908,7 +919,7 @@ recordingNeedsEveryoneTest normalConfig =
                 , startCall stevie
                 , joe.click 100 (Dom.id "guild_voiceChat")
                 , startCall joe
-                , admin.click 100 (Dom.id "voiceChat_record")
+                , pressRecord admin
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Asking everyone if this call can be recorded" ])
                 , stevie.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
                 , joe.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
@@ -1056,7 +1067,7 @@ recordingNotStartedTest normalConfig =
                 , startCall admin
                 , user.click 100 (Dom.id "guild_voiceChat")
                 , startCall user
-                , admin.click 100 (Dom.id "voiceChat_record")
+                , pressRecord admin
                 , user.click 100 (Dom.id "voiceChat_declineRecording")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Recording wasn't started because" ])
                 , user.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "Recording wasn't started because you declined" ])
@@ -1064,7 +1075,7 @@ recordingNotStartedTest normalConfig =
                 , admin.checkView 10000 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Recording wasn't started" ])
 
                 -- Asking again and getting no answer
-                , admin.click 100 (Dom.id "voiceChat_record")
+                , pressRecord admin
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "wants to record this call" ])
                 , T.checkState 30000 checkIsAskingToRecord
                 , user.checkView
@@ -1074,7 +1085,7 @@ recordingNotStartedTest normalConfig =
 
                 -- Somebody on their own has nobody else to ask
                 , user.click 100 (Dom.id "guild_leaveVoiceChat")
-                , admin.click 100 (Dom.id "voiceChat_record")
+                , pressRecord admin
                 , T.checkState 100 checkIsRecording
                 , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 , T.checkState 100 checkNoRecording
