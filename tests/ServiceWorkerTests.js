@@ -579,6 +579,18 @@ async function run() {
         }
     });
 
+    await check("Downloading a file goes straight to the network", async () => {
+        let responded = false;
+        listeners.fetch({
+            request: { url: domain + "file/606/" + fileHash, mode: "navigate", headers: new Headers() },
+            respondWith: () => { responded = true; }
+        });
+
+        if (responded) {
+            throw new Error("The worker answered for a download, which Firefox cuts off when it stops the worker");
+        }
+    });
+
     // Running locally, lamdera live and the rust server are on different ports, so reading
     // the ciphertext is a cross origin fetch that the file endpoints send no cors header
     // for. The worker goes through the proxy on 8001 to get at it. Deployed there is no

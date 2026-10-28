@@ -455,6 +455,13 @@ self.addEventListener('fetch', (event) => {
         || isInCachable
         ) {
 
+        // A file opened as its own page or downloaded is never cached anyway. Firefox
+        // stops a service worker that's been idle for 30s even while a response it
+        // handed over is still streaming, which cut large downloads off partway.
+        if (event.request.mode === 'navigate' && !isInCachable) {
+            return;
+        }
+
         event.respondWith(caches.open(cacheName).then((cache) => {
             // Go to the cache first
             return cache.match(url).then((cachedResponse) => {
