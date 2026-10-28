@@ -12,7 +12,7 @@ A text chat app similar to Discord
    for "login" and you should see it). Type that in.
 6. You're logged in!
 
-## How do I run the rust server locally? (for file hosting and Discord integration)
+## How do I run the rust server locally? (for file hosting, calls, and Discord/Slack integration)
 
 Run `npm run rust-server` in the root folder. Make sure you
 have [Rust installed first](https://rust-lang.org/tools/install/)

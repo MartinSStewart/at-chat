@@ -17,11 +17,7 @@
 * lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
   another step with a blank blue background
 * Add mic sensitivity slider
-* User profile not appearing when camera not connected but video is enabled
-* Had 3 person call and one person joined with video and they had extremely bad RTT. Me and the other person had no
-  issues (but weren't using video)
 * Double tapping send message shouldn't send twice
-* Video attachments not decoding when message is encrypted
 * Swiping quickly should move image more quickly so it can leave the screen for certain
 * Trying to join a guild and failing should tell the user what the error was
 * Adding a reaction to a word spelling game causes the moves to scroll to the bottom even if the user wasn't scrolled to
