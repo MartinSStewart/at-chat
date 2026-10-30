@@ -148,6 +148,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
 import Encryption exposing (EncryptedData(..))
 import Env
 import Expect
+import FileName
 import FileStatus
 import Game
 import Go
@@ -3444,6 +3445,17 @@ attackerShouldNotGetThisToFrontend toFrontend =
         ImportChannelResponse _ _ ->
             True
 
+        PeerToPeerDownloadResponse _ _ maybeUrl ->
+            case maybeUrl of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+
+        PeerToPeerSendFileRequest _ _ ->
+            True
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -3491,6 +3503,20 @@ allAttackerToBackendChanges =
             (Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035"))
             (Discord.idFromUInt64 (Unsafe.uint64 "1215077285749858324"))
         )
+    , SharePeerToPeerFileRequest
+        (FileStatus.peerToPeerIdFromString "1")
+        { guildOrDmId = GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 }
+        , fileName = FileName.fromString "hacked.zip"
+        , fileSize = 1000
+        }
+    , PeerToPeerDownloadRequest
+        (GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 })
+        (Id.fromInt 0)
+        (FileStatus.peerToPeerIdFromString "1")
+    , PeerToPeerDownloadRequest
+        (GuildOrDmId_Dm { otherUserId = Id.fromInt 0 })
+        (Id.fromInt 1)
+        (FileStatus.peerToPeerIdFromString "1")
     , LogOutRequest sessionId0Hash
     , LogOutRequest sessionId1Hash
     , LogOutRequest sessionId2Hash

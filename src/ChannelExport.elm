@@ -41,11 +41,12 @@ import Embed exposing (Embed)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption
 import FileName exposing (FileName)
-import FileStatus exposing (FileData, FileHash, FileMetadata, IsEncrypted, Orientation)
+import FileStatus exposing (Attachment(..), FileData, FileHash, FileMetadata, IsEncrypted, Orientation, PeerToPeerFile)
 import Game
 import Go
 import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
+import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (BackendChannel, ChannelStatus, DiscordBackendChannel)
 import Message exposing (GameType, Message, UserTextMessageDrawings)
@@ -580,7 +581,7 @@ messageContentCodec userId channelId =
     Codec.object Message.MessageContent
         |> Codec.field "content" .content (nonemptyCodec (richTextCodec userId channelId))
         |> Codec.field "embeds" .embeds (Codec.array embedCodec)
-        |> Codec.field "attachedFiles" .attachedFiles (seqDictCodec idCodec fileDataCodec)
+        |> Codec.field "attachedFiles" .attachedFiles (seqDictCodec idCodec attachmentCodec)
         |> Codec.buildObject
 
 
@@ -743,6 +744,37 @@ bytesCodec =
 fileHashCodec : Codec FileHash
 fileHashCodec =
     Codec.map FileStatus.fileHash FileStatus.fileHashToString Codec.string
+
+
+{-| A stored file is written the same way it was before peer to peer files existed, so
+older exports still read.
+-}
+attachmentCodec : Codec Attachment
+attachmentCodec =
+    Codec.build
+        (\attachment ->
+            case attachment of
+                Stored fileData ->
+                    Codec.encoder fileDataCodec fileData
+
+                PeerToPeer peerToPeer ->
+                    Codec.encoder peerToPeerFileCodec peerToPeer
+        )
+        (Json.Decode.oneOf
+            [ Codec.decoder peerToPeerFileCodec |> Json.Decode.map PeerToPeer
+            , Codec.decoder fileDataCodec |> Json.Decode.map Stored
+            ]
+        )
+
+
+peerToPeerFileCodec : Codec PeerToPeerFile
+peerToPeerFileCodec =
+    Codec.object PeerToPeerFile
+        |> Codec.field "fileName" .fileName fileNameCodec
+        |> Codec.field "fileSize" .fileSize Codec.int
+        |> Codec.field "contentType" .contentType contentTypeCodec
+        |> Codec.field "peerToPeerId" .peerToPeerId (Codec.map FileStatus.peerToPeerIdFromString FileStatus.peerToPeerIdToString Codec.string)
+        |> Codec.buildObject
 
 
 fileDataCodec : Codec FileData

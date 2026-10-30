@@ -67,6 +67,7 @@ module BackendExtra exposing
     , toBackendLog
     , unreadOverviewData
     , validateAttachedFiles
+    , validateStoredFiles
     )
 
 {-| Backend.elm is getting to large and it's slowing down my IDE.
@@ -95,7 +96,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import Env
-import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
+import FileStatus exposing (Attachment(..), BackendFileData, FileData, FileHash, FileId)
 import Hex
 import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
@@ -1154,22 +1155,48 @@ invalidChangeResponse changeId clientId =
         |> Lamdera.sendToFrontend clientId
 
 
-validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
+{-| A peer to peer file can't be checked here, since the server never sees it. Whoever
+downloads it gets what the uploader's device sends and the size it says.
+-}
+validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) Attachment -> SeqDict (Id FileId) Attachment
 validateAttachedFiles uploadedFiles dict =
+    SeqDict.filterMap
+        (\id attachment ->
+            if Id.toInt id < 1 then
+                Nothing
+
+            else
+                case attachment of
+                    Stored fileData ->
+                        validateStoredFile uploadedFiles fileData |> Maybe.map Stored
+
+                    PeerToPeer _ ->
+                        Just attachment
+        )
+        dict
+
+
+validateStoredFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
+validateStoredFiles uploadedFiles dict =
     SeqDict.filterMap
         (\id fileData ->
             if Id.toInt id < 1 then
                 Nothing
 
             else
-                case SeqDict.get fileData.fileHash uploadedFiles of
-                    Just { fileSize } ->
-                        Just { fileData | fileSize = fileSize }
-
-                    Nothing ->
-                        Nothing
+                validateStoredFile uploadedFiles fileData
         )
         dict
+
+
+validateStoredFile : SeqDict FileHash BackendFileData -> FileData -> Maybe FileData
+validateStoredFile uploadedFiles fileData =
+    case SeqDict.get fileData.fileHash uploadedFiles of
+        Just { fileSize } ->
+            Just { fileData | fileSize = fileSize }
+
+        Nothing ->
+            Nothing
 
 
 {-| The Slack accounts an at-chat user has linked, and the workspace each one is in.
@@ -2267,7 +2294,7 @@ sendGuildMessage :
     -> Viewing_ChannelId
     -> ThreadRouteWithRepliedTo
     -> NonemptyString
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> List EmojiOrCustomEmoji
     -> UserSession
     -> BackendUser
@@ -2778,7 +2805,7 @@ sendDm :
     -> Id UserId
     -> ThreadRouteWithRepliedTo
     -> NonemptyString
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> List EmojiOrCustomEmoji
     -> UserSession
     -> BackendUser
@@ -3789,6 +3816,12 @@ toBackendLog toBackend =
 
         ImportChannelRequest _ _ ->
             ToBackendLog_ImportChannelRequest
+
+        SharePeerToPeerFileRequest _ _ ->
+            ToBackendLog_SharePeerToPeerFileRequest
+
+        PeerToPeerDownloadRequest _ _ _ ->
+            ToBackendLog_PeerToPeerDownloadRequest
 
 
 asGuildMember :

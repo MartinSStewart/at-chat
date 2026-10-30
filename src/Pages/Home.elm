@@ -543,28 +543,29 @@ previewChannel time =
                         , attachedFiles =
                             SeqDict.fromList
                                 [ ( Id.fromInt 1
-                                  , { fileName = FileName.fromString "birb.webp"
-                                    , fileSize = 71812
-                                    , metadata =
-                                        FileStatus.FileMetadata_Image
-                                            { imageSize = Coord.xy 949 538
-                                            , orientation = Nothing
-                                            , gpsLocation = Nothing
-                                            , cameraOwner = Nothing
-                                            , exposureTime = Nothing
-                                            , fNumber = Nothing
-                                            , focalLength = Nothing
-                                            , isoSpeedRating = Nothing
-                                            , make = Nothing
-                                            , model = Nothing
-                                            , software = Nothing
-                                            , userComment = Nothing
-                                            }
-                                            |> Just
-                                    , contentType = FileStatus.webpContent
-                                    , fileHash = FileStatus.fileHash "mnQelyTECkZW5RjIFCZjNirt8R_nuWGtV0WEzQ"
-                                    , isEncrypted = IsNotEncrypted
-                                    }
+                                  , FileStatus.Stored
+                                        { fileName = FileName.fromString "birb.webp"
+                                        , fileSize = 71812
+                                        , metadata =
+                                            FileStatus.FileMetadata_Image
+                                                { imageSize = Coord.xy 949 538
+                                                , orientation = Nothing
+                                                , gpsLocation = Nothing
+                                                , cameraOwner = Nothing
+                                                , exposureTime = Nothing
+                                                , fNumber = Nothing
+                                                , focalLength = Nothing
+                                                , isoSpeedRating = Nothing
+                                                , make = Nothing
+                                                , model = Nothing
+                                                , software = Nothing
+                                                , userComment = Nothing
+                                                }
+                                                |> Just
+                                        , contentType = FileStatus.webpContent
+                                        , fileHash = FileStatus.fileHash "mnQelyTECkZW5RjIFCZjNirt8R_nuWGtV0WEzQ"
+                                        , isEncrypted = IsNotEncrypted
+                                        }
                                   )
                                 ]
                         }

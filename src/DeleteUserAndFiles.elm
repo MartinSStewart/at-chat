@@ -469,7 +469,7 @@ messageFiles : Message messageId userId channelId -> List FileHash
 messageFiles message =
     case message of
         UserTextMessage data ->
-            SeqDict.values data.content.attachedFiles |> List.map .fileHash
+            FileStatus.storedFiles data.content.attachedFiles |> SeqDict.values |> List.map .fileHash
 
         EncryptedUserTextMessage data ->
             SeqSet.toList data.fileHashes

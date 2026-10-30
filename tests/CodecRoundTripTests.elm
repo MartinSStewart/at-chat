@@ -202,7 +202,8 @@ roundTripTests =
                 , fileHash = FileStatus.fileHash "abc123"
                 , isEncrypted = FileStatus.IsNotEncrypted
                 }
-                    |> roundTrip FileStatus.fileDataSerializeCodec
+                    |> FileStatus.Stored
+                    |> roundTrip FileStatus.attachmentSerializeCodec
         , test "An image with every piece of metadata filled in survives" <|
             \_ ->
                 { fileName = FileName.fromString "photo.jpg"
@@ -232,7 +233,8 @@ roundTripTests =
                 , fileHash = FileStatus.fileHash "0123456789abcdef"
                 , isEncrypted = FileStatus.IsNotEncrypted
                 }
-                    |> roundTrip FileStatus.fileDataSerializeCodec
+                    |> FileStatus.Stored
+                    |> roundTrip FileStatus.attachmentSerializeCodec
         , -- The key and whether a thumbnail was made travel inside the encrypted message,
           -- so they have to survive the codec that puts them there.
           test "An encrypted file with a thumbnail survives" <|
@@ -247,7 +249,8 @@ roundTripTests =
                         (byteList (List.range 0 31) |> FileStatus.aesPrivateKey)
                         FileStatus.HasEncryptedThumbnail
                 }
-                    |> roundTrip FileStatus.fileDataSerializeCodec
+                    |> FileStatus.Stored
+                    |> roundTrip FileStatus.attachmentSerializeCodec
         , test "An encrypted file the browser made no thumbnail of survives" <|
             \_ ->
                 { fileName = FileName.fromString "photo.png"
@@ -260,7 +263,8 @@ roundTripTests =
                         (byteList (List.range 0 31) |> FileStatus.aesPrivateKey)
                         FileStatus.NoEncryptedThumbnail
                 }
-                    |> roundTrip FileStatus.fileDataSerializeCodec
+                    |> FileStatus.Stored
+                    |> roundTrip FileStatus.attachmentSerializeCodec
         , test "A video with every piece of metadata filled in survives" <|
             \_ ->
                 { fileName = FileName.fromString "clip.mp4"
@@ -281,8 +285,119 @@ roundTripTests =
                 , fileHash = FileStatus.fileHash "fedcba9876543210"
                 , isEncrypted = FileStatus.IsNotEncrypted
                 }
-                    |> roundTrip FileStatus.fileDataSerializeCodec
+                    |> FileStatus.Stored
+                    |> roundTrip FileStatus.attachmentSerializeCodec
+        , test "A peer to peer file survives, even one too large to count in 32 bits" <|
+            \_ ->
+                FileStatus.PeerToPeer
+                    { fileName = FileName.fromString "backup.tar"
+                    , fileSize = 6 * 1024 * 1024 * 1024 + 7
+                    , contentType = FileStatus.contentType "application/x-tar"
+                    , peerToPeerId = FileStatus.peerToPeerIdFromString "1793000000000-0-1"
+                    }
+                    |> roundTrip FileStatus.attachmentSerializeCodec
+        , -- Encrypted messages sent before peer to peer files existed can't be re-encoded.
+          test "A file in the shape attachments were written in before peer to peer files still reads" <|
+            \_ ->
+                Serialize.encodeToBytes
+                    oldFileDataCodec
+                    { fileName = FileName.fromString "photo.png"
+                    , fileSize = 2048
+                    , metadata = Nothing
+                    , contentType = 5
+                    , fileHash = "abc123"
+                    , isEncrypted = OldIsEncrypted (byteList (List.range 0 31)) OldHasThumbnail
+                    }
+                    |> Serialize.decodeFromBytes FileStatus.attachmentSerializeCodec
+                    |> Expect.equal
+                        (FileStatus.Stored
+                            { fileName = FileName.fromString "photo.png"
+                            , fileSize = 2048
+                            , metadata = Nothing
+                            , contentType = FileStatus.contentTypeFromInt 5
+                            , fileHash = FileStatus.fileHash "abc123"
+                            , isEncrypted =
+                                FileStatus.IsEncrypted
+                                    (byteList (List.range 0 31) |> FileStatus.aesPrivateKey)
+                                    FileStatus.HasEncryptedThumbnail
+                            }
+                            |> Ok
+                        )
         ]
+
+
+{-| How a stored file was written before peer to peer files existed, as far as a file with
+no metadata goes.
+-}
+oldFileDataCodec :
+    Serialize.Codec
+        String
+        { fileName : FileName.FileName
+        , fileSize : Int
+        , metadata : Maybe ()
+        , contentType : Int
+        , fileHash : String
+        , isEncrypted : OldIsEncrypted
+        }
+oldFileDataCodec =
+    Serialize.record
+        (\fileName fileSize metadata contentType fileHash isEncrypted ->
+            { fileName = fileName
+            , fileSize = fileSize
+            , metadata = metadata
+            , contentType = contentType
+            , fileHash = fileHash
+            , isEncrypted = isEncrypted
+            }
+        )
+        |> Serialize.field .fileName FileName.codec
+        |> Serialize.field .fileSize Serialize.unsignedInt32
+        |> Serialize.field .metadata (Serialize.maybe Serialize.unit)
+        |> Serialize.field .contentType Serialize.unsignedInt16
+        |> Serialize.field .fileHash Serialize.string
+        |> Serialize.field .isEncrypted oldIsEncryptedCodec
+        |> Serialize.finishRecord
+
+
+type OldIsEncrypted
+    = OldIsNotEncrypted
+    | OldIsEncrypted Bytes.Bytes OldThumbnail
+
+
+type OldThumbnail
+    = OldNoThumbnail
+    | OldHasThumbnail
+
+
+oldIsEncryptedCodec : Serialize.Codec e OldIsEncrypted
+oldIsEncryptedCodec =
+    Serialize.customType
+        (\notEncryptedEncoder encryptedEncoder value ->
+            case value of
+                OldIsNotEncrypted ->
+                    notEncryptedEncoder
+
+                OldIsEncrypted argA argB ->
+                    encryptedEncoder argA argB
+        )
+        |> Serialize.variant0 OldIsNotEncrypted
+        |> Serialize.variant2
+            OldIsEncrypted
+            Serialize.bytes
+            (Serialize.customType
+                (\noThumbnailEncoder hasThumbnailEncoder value ->
+                    case value of
+                        OldNoThumbnail ->
+                            noThumbnailEncoder
+
+                        OldHasThumbnail ->
+                            hasThumbnailEncoder
+                )
+                |> Serialize.variant0 OldNoThumbnail
+                |> Serialize.variant0 OldHasThumbnail
+                |> Serialize.finishCustomType
+            )
+        |> Serialize.finishCustomType
 
 
 roundTrip : Serialize.Codec e a -> a -> Expect.Expectation

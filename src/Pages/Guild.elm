@@ -100,6 +100,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
+import PeerToPeer
 import PersonName exposing (PersonName)
 import QRCode
 import Quantity
@@ -9326,6 +9327,14 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedChannelMention
                         , onPressCopyCode = MessageView_PressedCopyCode
+                        , peerToPeerFileState =
+                            \peerToPeerId ->
+                                PeerToPeer.fileState
+                                    localUser.session.userId
+                                    message2.createdBy
+                                    peerToPeerId
+                                    localUser.peerToPeer
+                        , onPressPeerToPeerFile = MessageView_PressedPeerToPeerFile message2.createdBy
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -9506,6 +9515,8 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedDiscordChannelMention
                         , onPressCopyCode = MessageView_PressedCopyCode
+                        , peerToPeerFileState = \_ -> FileStatus.PeerToPeerUploaderOffline
+                        , onPressPeerToPeerFile = \_ -> MessageView_NoOp
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -14052,6 +14063,8 @@ slackUserTextMessageContent time containerWidth localUser revealedSpoilers chann
                     , noOp = MessageView_NoOp
                     , onPressChannelMention = \_ _ -> MessageView_NoOp
                     , onPressCopyCode = MessageView_PressedCopyCode
+                    , peerToPeerFileState = \_ -> FileStatus.PeerToPeerUploaderOffline
+                    , onPressPeerToPeerFile = \_ -> MessageView_NoOp
                     }
                     (case localUser.user.embedVisibility of
                         ShowEmbeds ->

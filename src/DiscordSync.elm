@@ -46,7 +46,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId, FileMetadata, IsEncrypted(..))
+import FileStatus exposing (Attachment(..), FileData, FileHash, FileId, FileMetadata, IsEncrypted(..))
 import GuildName
 import Id exposing (ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -829,7 +829,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis channels discordS
                     Discord.NoReference ->
                         NoReply
                 )
-                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                 |> UserTextMessage
         )
         linkable
@@ -1018,9 +1018,9 @@ handleCreateMessage websocketJson discordMessage attachments model =
                             replyTo =
                                 referencedMessageToMessageId discordMessage channel
 
-                            attachments2 : SeqDict (Id FileId) FileData
+                            attachments2 : SeqDict (Id FileId) Attachment
                             attachments2 =
-                                SeqDict.map (\_ attachment -> attachment.fileData) attachments
+                                SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments
 
                             ( message, embedCmds, stickersToFrontend ) =
                                 Message.userTextMessageBackend
@@ -1429,7 +1429,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.author.id
                                                             richText
                                                             (Message.maybeToReply maybeReplyTo)
-                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                            (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                                                             model.stickers
                                                 in
                                                 case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId (Message.UserTextMessage message2) channel of
@@ -1466,7 +1466,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.author.id
                                                             richText
                                                             (Message.maybeToReply maybeReplyTo)
-                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                            (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                                                             model.stickers
                                                 in
                                                 case LocalState.createDiscordChannelMessageBackend linkedMessageId (Message.UserTextMessage message) channel of
@@ -1610,7 +1610,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                     |> Maybe.withDefault (NonemptyString ' ' "")
                                                                 )
                                                                 threadRoute
-                                                                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                                (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                                                             )
                                                             |> Lamdera.sendToFrontend clientId
                                                         , Broadcast.toDiscordGuildChannelExcludingOne
@@ -1623,7 +1623,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 (messageSender discordMessage.author model2)
                                                                 richText
                                                                 threadRoute
-                                                                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                                (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                                                                 stickers
                                                                 |> ServerChange
                                                             )
@@ -1640,7 +1640,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (messageSender discordMessage.author model2)
                                                             richText
                                                             threadRoute
-                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                            (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                                                             stickers
                                                             |> ServerChange
                                                         )

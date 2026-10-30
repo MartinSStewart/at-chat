@@ -39,7 +39,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import Encryption exposing (BytesHash, EncryptManyRequestId)
-import FileStatus exposing (FileData, FileId, FileStatus(..))
+import FileStatus exposing (Attachment, FileId, FileStatus(..), PeerToPeerFile)
 import FrontendExtra
 import Game
 import Go
@@ -73,6 +73,7 @@ import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pages.Privacy
 import Pagination
+import PeerToPeer
 import PersonName
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
@@ -351,6 +352,9 @@ subscriptions _ model =
                                                             :: list2
 
                                                     FileUploaded _ ->
+                                                        list2
+
+                                                    FilePeerToPeer _ ->
                                                         list2
 
                                                     FileError _ _ _ _ _ ->
@@ -1015,6 +1019,21 @@ updateLoaded msg model =
 
         SelectedFilesToAttach ( guildOrDmId, threadRoute ) file files ->
             FrontendExtra.gotFiles guildOrDmId threadRoute (Nonempty file files) model
+
+        SelectedPeerToPeerFileToShareAgain guildOrDmId peerToPeerFile file ->
+            -- The name is left unchecked since it may well have been renamed since.
+            if File.size file == peerToPeerFile.fileSize then
+                FrontendExtra.updateLoggedIn
+                    (\loggedIn ->
+                        FrontendExtra.sharePeerToPeerFile guildOrDmId peerToPeerFile file loggedIn
+                    )
+                    model
+
+            else
+                ( model, Command.none )
+
+        SentPeerToPeerFile _ _ ->
+            ( model, Command.none )
 
         NewChannelFormChanged guildId newChannelForm ->
             FrontendExtra.updateLoggedIn
@@ -2484,6 +2503,9 @@ updateLoaded msg model =
                         Just (FileUploading _ _ _ _) ->
                             Command.none
 
+                        Just (FilePeerToPeer _) ->
+                            Command.none
+
                         Just (FileError _ _ _ _ _) ->
                             Command.none
 
@@ -2668,6 +2690,9 @@ updateLoaded msg model =
                                                     isEncrypted
 
                                             FileUploaded _ ->
+                                                fileStatus
+
+                                            FilePeerToPeer _ ->
                                                 fileStatus
 
                                             FileError _ _ _ _ _ ->
@@ -3250,6 +3275,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedCopyCode text ->
                     copyText text model
 
+                MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
+                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3733,7 +3761,8 @@ updateLoaded msg model =
                                             model.time
                                             pending.id
                                             pending.threadRoute
-                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                            (FileStatus.storedFiles pending.contentAndEmbeds.attachedFiles
+                                                |> SeqDict.values
                                                 |> List.map .fileHash
                                                 |> SeqSet.fromList
                                             )
@@ -3817,7 +3846,8 @@ updateLoaded msg model =
                                         (Local_SendEncryptedMessage
                                             model.time
                                             { otherUserId = pending.otherUserId }
-                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                            (FileStatus.storedFiles pending.contentAndEmbeds.attachedFiles
+                                                |> SeqDict.values
                                                 |> List.map .fileHash
                                                 |> SeqSet.fromList
                                             )
@@ -4521,7 +4551,7 @@ updateLoaded msg model =
                                                     )
                                                     { content = richText
                                                     , embeds = Array.empty
-                                                    , attachedFiles = FileStatus.onlyUploadedFiles edit.attachedFiles
+                                                    , attachedFiles = FileStatus.readyAttachments edit.attachedFiles
                                                     }
                                                     (editWasSent loggedIn)
                                                     |> Tuple.mapSecond
@@ -4576,7 +4606,7 @@ updateLoaded msg model =
                                                                                     NoThreadWithMessage edit.messageIndex
                                                                             )
                                                                             nonempty
-                                                                            (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                                            (FileStatus.readyAttachments edit.attachedFiles)
                                                                             |> Just
 
                                                                 _ ->
@@ -4994,7 +5024,7 @@ updateLoaded msg model =
                                                     , attachedFiles =
                                                         case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                             Just dict ->
-                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                                NonemptyDict.toSeqDict dict |> FileStatus.readyAttachments
 
                                                             Nothing ->
                                                                 SeqDict.empty
@@ -5014,7 +5044,7 @@ updateLoaded msg model =
                                                                 (sendMessageThreadRoute guildOrDmIdWithThread threadRoute loggedIn)
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
-                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.readyAttachments
 
                                                                     Nothing ->
                                                                         SeqDict.empty
@@ -5048,7 +5078,7 @@ updateLoaded msg model =
                                                                 )
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
-                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.readyAttachments
 
                                                                     Nothing ->
                                                                         SeqDict.empty
@@ -5063,7 +5093,7 @@ updateLoaded msg model =
                                                                 nonempty
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
-                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.readyAttachments
 
                                                                     Nothing ->
                                                                         SeqDict.empty
@@ -6524,6 +6554,9 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedCopyCode text ->
                     copyText text model
 
+                MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
+                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
+
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
                 MessageView.MessageView_PressedSpoiler spoilerIndex ->
@@ -6631,6 +6664,9 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedCopyCode text ->
                     copyText text model
+
+                MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
+                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
 
         ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn
@@ -7110,6 +7146,74 @@ setScreenShareEnabled time screenShareEnabled loggedIn =
                     { voiceChat | remoteCallData = { remoteCallData | screenShareEnabled = screenShareEnabled } }
             }
             Command.none
+
+
+handlePressedPeerToPeerFile :
+    AnyGuildOrDmId
+    -> Id UserId
+    -> PeerToPeerFile
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handlePressedPeerToPeerFile anyGuildOrDmId uploader peerToPeerFile model =
+    case anyGuildOrDmId of
+        GuildOrDmId guildOrDmId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        localUser : User.LocalUser
+                        localUser =
+                            (Local.model loggedIn.localState).localUser
+
+                        request : ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+                        request =
+                            ( FrontendExtra.mapPeerToPeer
+                                (\peerToPeer ->
+                                    { peerToPeer
+                                        | downloads =
+                                            SeqDict.insert
+                                                ( uploader, peerToPeerFile.peerToPeerId )
+                                                PeerToPeer.Requested
+                                                peerToPeer.downloads
+                                    }
+                                )
+                                loggedIn
+                            , PeerToPeerDownloadRequest guildOrDmId uploader peerToPeerFile.peerToPeerId
+                                |> Lamdera.sendToBackend
+                            )
+                    in
+                    case
+                        PeerToPeer.fileState
+                            localUser.session.userId
+                            uploader
+                            peerToPeerFile.peerToPeerId
+                            localUser.peerToPeer
+                    of
+                        FileStatus.PeerToPeerAvailable ->
+                            request
+
+                        FileStatus.PeerToPeerUploaderOffline ->
+                            request
+
+                        FileStatus.PeerToPeerRequested ->
+                            ( loggedIn, Command.none )
+
+                        FileStatus.PeerToPeerSharedFromHere ->
+                            ( loggedIn, Command.none )
+
+                        FileStatus.PeerToPeerNotSharedFromHere ->
+                            ( loggedIn
+                            , Effect.File.Select.file
+                                []
+                                (SelectedPeerToPeerFileToShareAgain guildOrDmId peerToPeerFile)
+                            )
+                )
+                model
+
+        DiscordGuildOrDmId _ ->
+            ( model, Command.none )
+
+        SlackGuildOrDmId _ ->
+            ( model, Command.none )
 
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
@@ -8147,7 +8251,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                 local =
                     Local.model loggedIn.localState
 
-                maybeContentAndFiles : Maybe ( String, SeqDict (Id FileId) FileData )
+                maybeContentAndFiles : Maybe ( String, SeqDict (Id FileId) Attachment )
                 maybeContentAndFiles =
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
@@ -8208,7 +8312,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
                                         { messageIndex = Id.threadRouteToMessageId threadRoute
                                         , text = content
-                                        , attachedFiles = SeqDict.map (\_ a -> FileUploaded a) attachedFiles
+                                        , attachedFiles = SeqDict.map (\_ a -> FileStatus.attachmentToFileStatus a) attachedFiles
                                         }
                                         loggedIn.editMessage
                             }
@@ -9850,6 +9954,50 @@ updateLoadedFromBackend msg model =
                 )
                 { model | clientId = clientId }
 
+        PeerToPeerDownloadResponse uploader peerToPeerId maybeUrl ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case maybeUrl of
+                        Just url ->
+                            ( FrontendExtra.mapPeerToPeer
+                                (\peerToPeer ->
+                                    { peerToPeer | downloads = SeqDict.remove ( uploader, peerToPeerId ) peerToPeer.downloads }
+                                )
+                                loggedIn
+                            , Effect.File.Download.url url
+                            )
+
+                        Nothing ->
+                            ( FrontendExtra.mapPeerToPeer
+                                (\peerToPeer ->
+                                    { peerToPeer
+                                        | downloads =
+                                            SeqDict.insert
+                                                ( uploader, peerToPeerId )
+                                                PeerToPeer.UploaderOffline
+                                                peerToPeer.downloads
+                                    }
+                                )
+                                loggedIn
+                            , Command.none
+                            )
+                )
+                model
+
+        PeerToPeerSendFileRequest peerToPeerId url ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( loggedIn
+                    , case SeqDict.get peerToPeerId (Local.model loggedIn.localState).localUser.peerToPeer.shared of
+                        Just shared ->
+                            PeerToPeer.sendFile (SentPeerToPeerFile peerToPeerId) url shared.file
+
+                        Nothing ->
+                            Command.none
+                    )
+                )
+                model
+
         ReloadDataResponse reloadData ->
             case reloadData of
                 Ok loginData ->
@@ -9865,6 +10013,7 @@ updateLoadedFromBackend msg model =
                                     FrontendExtra.loginDataToLocalState
                                         model.startupData
                                         local.localUser.decryptedMessages
+                                        local.localUser.peerToPeer
                                         (FrontendExtra.encryptedBacklog (SeqSet.fromList model.startupData.e2eeKeys) loginData.dmChannels)
                                         model.emojiData
                                         loginData
@@ -9873,6 +10022,15 @@ updateLoadedFromBackend msg model =
                             ( { loggedIn | localState = localState, isReloading = False }
                             , Command.batch
                                 [ GuildColumn.unreadNotificationCount (Local.model localState) |> Ports.setAppBadge
+
+                                -- The files were shared with the connection that just closed.
+                                , SeqDict.toList local.localUser.peerToPeer.shared
+                                    |> List.map
+                                        (\( peerToPeerId, shared ) ->
+                                            SharePeerToPeerFileRequest peerToPeerId shared.sharedFile
+                                                |> Lamdera.sendToBackend
+                                        )
+                                    |> Command.batch
                                 , case local.calls.currentRoom of
                                     -- The backend dropped us from the call when the old connection closed,
                                     -- while the call itself carried on, so it's rejoined under the new connection.
@@ -10796,6 +10954,9 @@ fileEncrypted encrypted fileStatus =
         FileUploaded _ ->
             fileStatus
 
+        FilePeerToPeer _ ->
+            fileStatus
+
         FileError _ _ _ _ _ ->
             fileStatus
 
@@ -10834,7 +10995,8 @@ manyMessagesEncrypted requestId encrypted model loggedIn =
                 (List.map
                     (\( ( threadRoute, content ), encryptedData ) ->
                         ( threadRoute
-                        , SeqDict.values content.attachedFiles
+                        , FileStatus.storedFiles content.attachedFiles
+                            |> SeqDict.values
                             |> List.map .fileHash
                             |> SeqSet.fromList
                         , encryptedData

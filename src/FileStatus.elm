@@ -1,5 +1,6 @@
 module FileStatus exposing
     ( AesPrivateKey(..)
+    , Attachment(..)
     , BackendFileData
     , ContentType(..)
     , ContentTypeType(..)
@@ -16,12 +17,17 @@ module FileStatus exposing
     , Location
     , MeasuredFile(..)
     , Orientation(..)
+    , PeerToPeerFile
+    , PeerToPeerFileState(..)
+    , PeerToPeerId
     , UploadResponse
     , UploadUrlRequest
     , VideoMetadata
     , addFileHash
     , aesPrivateKey
     , aesPrivateKeyToBytes
+    , attachmentSerializeCodec
+    , attachmentToFileStatus
     , contentType
     , contentTypeFromInt
     , contentTypeHeader
@@ -30,7 +36,6 @@ module FileStatus exposing
     , discordStickerUrl
     , domain
     , encryptedThumbnailUrl
-    , fileDataSerializeCodec
     , fileDataThumbnailUrl
     , fileDataUrl
     , fileHash
@@ -48,10 +53,14 @@ module FileStatus exposing
     , measuredFileMetadata
     , measuredFileSerializeCodec
     , onlyUploadedFiles
+    , peerToPeerIdFromString
+    , peerToPeerIdToString
     , pngContent
     , progressToString
+    , readyAttachments
     , secretKeyHeader
     , sizeToString
+    , storedFiles
     , unknownContentType
     , uploadAvatar
     , uploadBackup
@@ -191,9 +200,47 @@ type alias FileDataWithImage =
     }
 
 
+{-| A file that is part of a message. Most are stored on the server, but one too large for
+that stays on the device it was attached from and is sent straight from there to whoever
+downloads it, passing through the server without being kept.
+-}
+type Attachment
+    = Stored FileData
+    | PeerToPeer PeerToPeerFile
+
+
+type alias PeerToPeerFile =
+    { fileName : FileName
+    , fileSize : Int
+    , contentType : ContentType
+    , peerToPeerId : PeerToPeerId
+    }
+
+
+{-| Tells apart the files one user is sharing. It is only unique among that user's files.
+
+OpaqueVariants
+
+-}
+type PeerToPeerId
+    = PeerToPeerId String
+
+
+{-| What can be done with a peer to peer file right now, from where the person looking at it
+stands.
+-}
+type PeerToPeerFileState
+    = PeerToPeerAvailable
+    | PeerToPeerRequested
+    | PeerToPeerUploaderOffline
+    | PeerToPeerSharedFromHere
+    | PeerToPeerNotSharedFromHere
+
+
 type FileStatus
     = FileUploading FileName { sent : Int, size : Int } ContentType IsEncrypted
     | FileUploaded FileData
+    | FilePeerToPeer PeerToPeerFile
     | FileError FileName Int ContentType Http.Error IsEncrypted
 
 
@@ -471,16 +518,136 @@ unknownContentType =
     ContentType 9999
 
 
-fileDataSerializeCodec : Serialize.Codec String FileData
-fileDataSerializeCodec =
-    Serialize.record FileData
+{-| Encrypted messages from before peer to peer files existed hold a stored file's fields and
+nothing else, and nobody but the two people in the conversation can re-encode them, so a peer
+to peer file is written in that same shape. The last field is what tells them apart: a stored
+file says there whether it is encrypted, and a peer to peer file uses a third option there to
+carry what only it has.
+-}
+attachmentSerializeCodec : Serialize.Codec String Attachment
+attachmentSerializeCodec =
+    Serialize.record SerializedAttachment
         |> Serialize.field .fileName FileName.codec
         |> Serialize.field .fileSize Serialize.unsignedInt32
         |> Serialize.field .metadata (Serialize.maybe fileMetadataSerializeCodec)
         |> Serialize.field .contentType contentTypeSerializeCodec
         |> Serialize.field .fileHash fileHashSerializeCodec
-        |> Serialize.field .isEncrypted isEncryptedSerializeCodec
+        |> Serialize.field .storage serializedStorageCodec
         |> Serialize.finishRecord
+        |> Serialize.map fromSerializedAttachment toSerializedAttachment
+
+
+type alias SerializedAttachment =
+    { fileName : FileName
+    , fileSize : Int
+    , metadata : Maybe FileMetadata
+    , contentType : ContentType
+    , fileHash : FileHash
+    , storage : SerializedStorage
+    }
+
+
+type SerializedStorage
+    = SerializedNotEncrypted
+    | SerializedEncrypted AesPrivateKey EncryptedThumbnail
+    | SerializedPeerToPeer PeerToPeerId Int
+
+
+fromSerializedAttachment : SerializedAttachment -> Attachment
+fromSerializedAttachment serialized =
+    case serialized.storage of
+        SerializedNotEncrypted ->
+            Stored
+                { fileName = serialized.fileName
+                , fileSize = serialized.fileSize
+                , metadata = serialized.metadata
+                , contentType = serialized.contentType
+                , fileHash = serialized.fileHash
+                , isEncrypted = IsNotEncrypted
+                }
+
+        SerializedEncrypted key thumbnail ->
+            Stored
+                { fileName = serialized.fileName
+                , fileSize = serialized.fileSize
+                , metadata = serialized.metadata
+                , contentType = serialized.contentType
+                , fileHash = serialized.fileHash
+                , isEncrypted = IsEncrypted key thumbnail
+                }
+
+        SerializedPeerToPeer peerToPeerId fileSize ->
+            PeerToPeer
+                { fileName = serialized.fileName
+                , fileSize = fileSize
+                , contentType = serialized.contentType
+                , peerToPeerId = peerToPeerId
+                }
+
+
+toSerializedAttachment : Attachment -> SerializedAttachment
+toSerializedAttachment attachment =
+    case attachment of
+        Stored fileData ->
+            { fileName = fileData.fileName
+            , fileSize = fileData.fileSize
+            , metadata = fileData.metadata
+            , contentType = fileData.contentType
+            , fileHash = fileData.fileHash
+            , storage =
+                case fileData.isEncrypted of
+                    IsNotEncrypted ->
+                        SerializedNotEncrypted
+
+                    IsEncrypted key thumbnail ->
+                        SerializedEncrypted key thumbnail
+            }
+
+        PeerToPeer peerToPeer ->
+            { fileName = peerToPeer.fileName
+
+            -- Can be more than fits in 32 bits, so the real size is kept with the id.
+            , fileSize = 0
+            , metadata = Nothing
+            , contentType = peerToPeer.contentType
+            , fileHash = FileHash ""
+            , storage = SerializedPeerToPeer peerToPeer.peerToPeerId peerToPeer.fileSize
+            }
+
+
+serializedStorageCodec : Serialize.Codec e SerializedStorage
+serializedStorageCodec =
+    Serialize.customType
+        (\notEncryptedEncoder encryptedEncoder peerToPeerEncoder value ->
+            case value of
+                SerializedNotEncrypted ->
+                    notEncryptedEncoder
+
+                SerializedEncrypted argA argB ->
+                    encryptedEncoder argA argB
+
+                SerializedPeerToPeer argA argB ->
+                    peerToPeerEncoder argA argB
+        )
+        |> Serialize.variant0 SerializedNotEncrypted
+        |> Serialize.variant2 SerializedEncrypted aesPrivateKeySerializeCodec encryptedThumbnailSerializeCodec
+        |> Serialize.variant2 SerializedPeerToPeer peerToPeerIdSerializeCodec Serialize.int
+        |> Serialize.finishCustomType
+
+
+peerToPeerIdFromString : String -> PeerToPeerId
+peerToPeerIdFromString =
+    PeerToPeerId
+
+
+peerToPeerIdToString : PeerToPeerId -> String
+peerToPeerIdToString (PeerToPeerId a) =
+    a
+
+
+peerToPeerIdSerializeCodec : Serialize.Codec e PeerToPeerId
+peerToPeerIdSerializeCodec =
+    Serialize.map PeerToPeerId (\(PeerToPeerId a) -> a) Serialize.string
 
 
 fileHashSerializeCodec : Serialize.Codec e FileHash
@@ -491,22 +658,6 @@ fileHashSerializeCodec =
 contentTypeSerializeCodec : Serialize.Codec e ContentType
 contentTypeSerializeCodec =
     Serialize.map ContentType (\(ContentType a) -> a) Serialize.unsignedInt16
-
-
-isEncryptedSerializeCodec : Serialize.Codec e IsEncrypted
-isEncryptedSerializeCodec =
-    Serialize.customType
-        (\isNotEncryptedEncoder isEncryptedEncoder value ->
-            case value of
-                IsNotEncrypted ->
-                    isNotEncryptedEncoder
-
-                IsEncrypted argA argB ->
-                    isEncryptedEncoder argA argB
-        )
-        |> Serialize.variant0 IsNotEncrypted
-        |> Serialize.variant2 IsEncrypted aesPrivateKeySerializeCodec encryptedThumbnailSerializeCodec
-        |> Serialize.finishCustomType
 
 
 encryptedThumbnailSerializeCodec : Serialize.Codec e EncryptedThumbnail
@@ -1414,6 +1565,9 @@ addFileHash clientMetadata result fileStatus =
         FileUploaded _ ->
             fileStatus
 
+        FilePeerToPeer _ ->
+            fileStatus
+
         FileError _ _ _ _ _ ->
             fileStatus
 
@@ -1442,6 +1596,58 @@ onlyUploadedFiles dict =
                 FileUploaded fileData ->
                     Just fileData
 
+                FilePeerToPeer _ ->
+                    Nothing
+
+                FileError _ _ _ _ _ ->
+                    Nothing
+        )
+        dict
+
+
+attachmentToFileStatus : Attachment -> FileStatus
+attachmentToFileStatus attachment =
+    case attachment of
+        Stored fileData ->
+            FileUploaded fileData
+
+        PeerToPeer peerToPeer ->
+            FilePeerToPeer peerToPeer
+
+
+{-| Discord and Slack can only be sent files the server has.
+-}
+storedFiles : SeqDict (Id FileId) Attachment -> SeqDict (Id FileId) FileData
+storedFiles dict =
+    SeqDict.filterMap
+        (\_ attachment ->
+            case attachment of
+                Stored fileData ->
+                    Just fileData
+
+                PeerToPeer _ ->
+                    Nothing
+        )
+        dict
+
+
+{-| The files that can go out with a message: everything that finished uploading, and every
+file too large to upload, since those stay on this device.
+-}
+readyAttachments : SeqDict (Id FileId) FileStatus -> SeqDict (Id FileId) Attachment
+readyAttachments dict =
+    SeqDict.filterMap
+        (\_ status ->
+            case status of
+                FileUploading _ _ _ _ ->
+                    Nothing
+
+                FileUploaded fileData ->
+                    Just (Stored fileData)
+
+                FilePeerToPeer peerToPeer ->
+                    Just (PeerToPeer peerToPeer)
+
                 FileError _ _ _ _ _ ->
                     Nothing
         )
@@ -1458,6 +1664,9 @@ hasUploadingFile dict =
                         True
 
                     FileUploaded _ ->
+                        False
+
+                    FilePeerToPeer _ ->
                         False
 
                     FileError _ _ _ _ _ ->

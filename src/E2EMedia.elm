@@ -1,4 +1,4 @@
-module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, videoAttachmentTest)
+module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, peerToPeerFileTest, videoAttachmentTest)
 
 import Audio
 import E2EHelper
@@ -794,6 +794,78 @@ imageRowTest imageUploadConfig =
                             |> Test.Html.Query.count (Expect.greaterThan 0)
                     )
                 , admin.snapshotView 100 { name = "Images side by side" }
+                ]
+            )
+        ]
+
+
+peerToPeerFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+peerToPeerFileTest largeFileUploadConfig =
+    E2EHelper.startTest
+        "A file too large to upload is sent from the uploader's device when someone presses it"
+        E2EHelper.startTime
+        largeFileUploadConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.text "P2P"
+                                , Test.Html.Selector.text "Shared from this device while at-chat stays open"
+                                ]
+                    )
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.text "holiday videos.zip"
+                                , Test.Html.Selector.text "P2P"
+                                , Test.Html.Selector.text "Press to download from the uploader's device"
+                                ]
+                    )
+                , user.click 100 (Dom.id "spoiler_1_file_1")
+                , T.checkState
+                    1000
+                    (\data ->
+                        case
+                            List.filter
+                                (\request -> String.contains "/file/p2p/" request.url)
+                                data.httpRequests
+                        of
+                            [ request ] ->
+                                if request.method == "POST" && request.requestedBy == T.RequestedByFrontend admin.clientId then
+                                    Ok ()
+
+                                else
+                                    Err "The file should have been POSTed by the uploader's tab"
+
+                            requests ->
+                                "Expected the uploader's tab to send the file once, but it was sent "
+                                    ++ String.fromInt (List.length requests)
+                                    ++ " times"
+                                    |> Err
+                    )
+                , user.snapshotView 100 { name = "Peer to peer file" }
+
+                -- Once the uploader's tab is gone, so is the file.
+                , T.backendUpdate 100 (Types.UserDisconnected E2EHelper.sessionId0 admin.clientId)
+                , user.click 1000 (Dom.id "spoiler_1_file_1")
+                , user.checkView
+                    1000
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.text "The uploader doesn't have at-chat open with this file right now" ]
+                    )
                 ]
             )
         ]

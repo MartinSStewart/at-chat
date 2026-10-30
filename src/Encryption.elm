@@ -258,6 +258,8 @@ The following is not encrypted:
             , noOp = noOp
             , onPressChannelMention = \_ _ -> noOp
             , onPressCopyCode = \_ -> noOp
+            , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+            , onPressPeerToPeerFile = \_ -> noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]

@@ -22,6 +22,7 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::HTML;
 mod content_types;
+mod peer_to_peer;
 mod video;
 mod websocket;
 mod websocket_relay;
@@ -45,6 +46,7 @@ async fn main() {
             }));
 
             let rooms = websocket::rooms();
+            let transfers = peer_to_peer::transfers();
 
             watch_for_stalls();
 
@@ -93,6 +95,12 @@ async fn main() {
                     "/file/recording-upload-finished",
                     post(recording_upload_finished_endpoint).options(options_endpoint),
                 )
+                .route(
+                    "/file/p2p/{transfer_id}",
+                    get(peer_to_peer::download_endpoint)
+                        .post(peer_to_peer::upload_endpoint)
+                        .options(options_endpoint),
+                )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
@@ -108,6 +116,7 @@ async fn main() {
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(axum::Extension(rooms))
+                .layer(axum::Extension(transfers))
                 .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
@@ -2492,7 +2501,7 @@ fn upload_response(probed: ProbedUpload, hash: String) -> String {
 /// The page these endpoints are called from, and the only origin they answer
 /// for. It cannot be `*` any more: browsers reject a wildcard on a request that
 /// carries credentials, and uploads now rely on the `sid` cookie being sent.
-const fn allowed_origin() -> &'static str {
+pub const fn allowed_origin() -> &'static str {
     if cfg!(debug_assertions) {
         // Lamdera live serves the app from a different port to this server,
         // which makes every request cross-origin during development.

@@ -39,7 +39,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (Attachment, FileData, FileHash, FileId, PeerToPeerId)
 import Game
 import Go
 import GuildName
@@ -63,6 +63,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
+import PeerToPeer
 import PersonName exposing (PersonName)
 import Ports exposing (RegisterPushSubscription(..))
 import Postmark
@@ -489,6 +490,7 @@ updateHelper msg model =
                         , call = NotInCall
                         , remoteCallData = Call.defaultRemoteCallData
                         , currentlyViewing = UserSession.Viewing_None
+                        , peerToPeerFiles = SeqDict.empty
                         }
                         model.connections
             in
@@ -560,6 +562,7 @@ updateHelper msg model =
                                                     , call = data.call
                                                     , remoteCallData = data.remoteCallData
                                                     , currentlyViewing = data.currentlyViewing
+                                                    , peerToPeerFiles = data.peerToPeerFiles
                                                     }
                                                 )
                                             )
@@ -3132,6 +3135,97 @@ staleConnections sessionId connections =
             []
 
 
+canSharePeerToPeerFileIn : Id UserId -> GuildOrDmId -> BackendModel -> Bool
+canSharePeerToPeerFileIn userId guildOrDmId model =
+    case guildOrDmId of
+        GuildOrDmId_Guild { guildId } ->
+            isGuildMember userId guildId model
+
+        GuildOrDmId_Dm { otherUserId } ->
+            NonemptyDict.member otherUserId model.users
+
+
+isGuildMember : Id UserId -> Id GuildId -> BackendModel -> Bool
+isGuildMember userId guildId model =
+    case SeqDict.get guildId model.guilds of
+        Just guild ->
+            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                MembersAndOwner.IsNotMember ->
+                    False
+
+                MembersAndOwner.IsMember ->
+                    True
+
+                MembersAndOwner.IsOwner ->
+                    True
+
+        Nothing ->
+            False
+
+
+{-| The connection sharing the file, if it shared it in the conversation the downloader is
+asking from. A DM is named from each person's side, so the uploader shared it with the
+downloader as the other user.
+-}
+peerToPeerUploaderConnection :
+    Id UserId
+    -> GuildOrDmId
+    -> Id UserId
+    -> PeerToPeerId
+    -> BackendModel
+    -> Maybe ( ClientId, PeerToPeer.SharedFile )
+peerToPeerUploaderConnection downloader guildOrDmId uploader peerToPeerId model =
+    let
+        sharedAs : Maybe GuildOrDmId
+        sharedAs =
+            case guildOrDmId of
+                GuildOrDmId_Guild { guildId } ->
+                    if isGuildMember downloader guildId model then
+                        Just guildOrDmId
+
+                    else
+                        Nothing
+
+                GuildOrDmId_Dm { otherUserId } ->
+                    if otherUserId == uploader then
+                        Just (GuildOrDmId_Dm { otherUserId = downloader })
+
+                    else
+                        Nothing
+    in
+    case sharedAs of
+        Just sharedAs2 ->
+            SeqDict.foldl
+                (\sessionId session found ->
+                    case ( found, session.userId == uploader ) of
+                        ( Nothing, True ) ->
+                            SeqDict.get sessionId model.connections
+                                |> Maybe.map NonemptyDict.toList
+                                |> Maybe.withDefault []
+                                |> List.Extra.findMap
+                                    (\( clientId, connection ) ->
+                                        case SeqDict.get peerToPeerId connection.peerToPeerFiles of
+                                            Just sharedFile ->
+                                                if sharedFile.guildOrDmId == sharedAs2 then
+                                                    Just ( clientId, sharedFile )
+
+                                                else
+                                                    Nothing
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+
+                        _ ->
+                            found
+                )
+                Nothing
+                model.sessions
+
+        Nothing ->
+            Nothing
+
+
 disconnectClient : Time.Posix -> SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
 disconnectClient time sessionId clientId model =
     case ( Pages.Admin.disconnectClient sessionId clientId model.connections, SeqDict.get sessionId model.sessions ) of
@@ -3898,7 +3992,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     case RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits of
                                         Ok sendMessageRateLimits ->
                                             let
-                                                attachedFiles2 : SeqDict (Id FileId) FileData
+                                                attachedFiles2 : SeqDict (Id FileId) Attachment
                                                 attachedFiles2 =
                                                     BackendExtra.validateAttachedFiles model.files attachedFiles
 
@@ -3935,7 +4029,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        attachedFiles2
+                                                        (FileStatus.storedFiles attachedFiles2)
                                                         model.discordStickers
                                                         discordText
                                                         richText
@@ -4001,7 +4095,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                                 Nothing ->
                                                                                     Nothing
                                                                             )
-                                                                            attachedFiles2
+                                                                            (FileStatus.storedFiles attachedFiles2)
                                                                             model.discordStickers
                                                                             discordText
                                                                             richText
@@ -4036,7 +4130,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 data
                                 (\_ discordUser _ dmChannel ->
                                     let
-                                        attachedFiles2 : SeqDict (Id FileId) FileData
+                                        attachedFiles2 : SeqDict (Id FileId) Attachment
                                         attachedFiles2 =
                                             BackendExtra.validateAttachedFiles model.files attachedFiles
                                     in
@@ -4082,7 +4176,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        attachedFiles2
+                                                        (FileStatus.storedFiles attachedFiles2)
                                                         model.discordStickers
                                                         discordText
                                                         richText
@@ -4988,7 +5082,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                     else
                         let
-                            attachedFiles2 : SeqDict (Id FileId) FileData
+                            attachedFiles2 : SeqDict (Id FileId) Attachment
                             attachedFiles2 =
                                 BackendExtra.validateAttachedFiles model.files attachedFiles
                         in
@@ -6524,7 +6618,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         richText =
                                             RichText.fromNonemptyString timezone workspaceUsers channelMentions text
 
-                                        attachedFiles2 : SeqDict (Id FileId) FileData
+                                        attachedFiles2 : SeqDict (Id FileId) Attachment
                                         attachedFiles2 =
                                             BackendExtra.validateAttachedFiles model.files attachedFiles
 
@@ -6549,7 +6643,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             |> SlackSync.slackCustomEmojiText customEmojiNames richText
                                         )
                                         (RichText.toSlack customEmojiNames richText)
-                                        attachedFiles2
+                                        (FileStatus.storedFiles attachedFiles2)
                                         |> Task.attempt (SentSlackMessage time changeId clientId timezone guildOrDmId threadRoute text richText attachedFiles2)
                                     )
 
@@ -8536,6 +8630,72 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                 )
 
+        SharePeerToPeerFileRequest peerToPeerId sharedFile ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    if canSharePeerToPeerFileIn session.userId sharedFile.guildOrDmId model then
+                        ( { model
+                            | connections =
+                                SeqDict.updateIfExists
+                                    sessionId
+                                    (NonemptyDict.updateIfExists
+                                        clientId
+                                        (\connection ->
+                                            if
+                                                SeqDict.member peerToPeerId connection.peerToPeerFiles
+                                                    || (SeqDict.size connection.peerToPeerFiles < PeerToPeer.maxSharedFiles)
+                                            then
+                                                { connection
+                                                    | peerToPeerFiles =
+                                                        SeqDict.insert peerToPeerId sharedFile connection.peerToPeerFiles
+                                                }
+
+                                            else
+                                                connection
+                                        )
+                                    )
+                                    model.connections
+                          }
+                        , Command.none
+                        )
+
+                    else
+                        ( model, Command.none )
+                )
+
+        PeerToPeerDownloadRequest guildOrDmId uploader peerToPeerId ->
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ ->
+                    case peerToPeerUploaderConnection session.userId guildOrDmId uploader peerToPeerId model of
+                        Just ( uploaderClientId, sharedFile ) ->
+                            let
+                                ( model2, transferId ) =
+                                    SecretId.getUniqueId time model
+
+                                url : String
+                                url =
+                                    PeerToPeer.transferUrl time model2.serverSecret transferId sharedFile
+                            in
+                            ( model2
+                            , Command.batch
+                                [ PeerToPeerSendFileRequest peerToPeerId url
+                                    |> Lamdera.sendToFrontend uploaderClientId
+                                , PeerToPeerDownloadResponse uploader peerToPeerId (Just url)
+                                    |> Lamdera.sendToFrontend clientId
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model
+                            , PeerToPeerDownloadResponse uploader peerToPeerId Nothing
+                                |> Lamdera.sendToFrontend clientId
+                            )
+                )
+
         ExportChannelRequest exportChannelId ->
             case exportChannelId of
                 ExportChannel_Guild guildId channelId ->
@@ -9064,7 +9224,7 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                 (\question ->
                                     { question
                                         | attachedFiles =
-                                            BackendExtra.validateAttachedFiles model.files question.attachedFiles
+                                            BackendExtra.validateStoredFiles model.files question.attachedFiles
                                     }
                                 )
                                 setup.questions
@@ -9125,7 +9285,7 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                                 (Just
                                                     { answer
                                                         | attachedFiles =
-                                                            BackendExtra.validateAttachedFiles
+                                                            BackendExtra.validateStoredFiles
                                                                 model.files
                                                                 answer.attachedFiles
                                                     }
@@ -9141,7 +9301,7 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                                 (Just
                                                     { notes
                                                         | attachedFiles =
-                                                            BackendExtra.validateAttachedFiles
+                                                            BackendExtra.validateStoredFiles
                                                                 model.files
                                                                 notes.attachedFiles
                                                     }
@@ -10690,7 +10850,7 @@ sendEditMessage :
     -> Time.Posix
     -> Time.Zone
     -> NonemptyString
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> Viewing_ChannelId
     -> ThreadRouteWithMessage
     -> BackendModel

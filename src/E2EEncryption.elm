@@ -1393,7 +1393,7 @@ encryptedAttachedFiles message =
                 Just bytes ->
                     case stubPlainText bytes of
                         Ok contentAndEmbeds ->
-                            SeqDict.values contentAndEmbeds.attachedFiles |> Just
+                            FileStatus.storedFiles contentAndEmbeds.attachedFiles |> SeqDict.values |> Just
 
                         Err _ ->
                             Nothing

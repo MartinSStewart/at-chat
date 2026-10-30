@@ -68,7 +68,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import Env
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (Attachment, FileHash, FileId)
 import Game
 import Id exposing (ChannelId, ChannelMessageId, GamePublicId, GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
@@ -1288,7 +1288,7 @@ notificationEmailContent :
     -> Maybe FileHash
     -> String
     -> Nonempty (RichText userId channelId)
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> Email.Html.Html
 notificationEmailContent userToString channels senderName senderIcon link content attachedFiles =
     -- A table rather than flexbox since plenty of email clients don't support the latter
@@ -1992,7 +1992,7 @@ broadcastDm :
     -> NonemptyString
     -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
     -> ThreadRouteWithRepliedTo
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> List EmojiOrCustomEmoji
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel

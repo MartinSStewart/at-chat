@@ -4,6 +4,7 @@ import Array
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Env
+import FileStatus
 import Html
 import Html.Attributes
 import RichText
@@ -95,6 +96,8 @@ Backups of the server are generated regularly. These are stored for up to 30 day
             , noOp = noOp
             , onPressChannelMention = \_ _ -> noOp
             , onPressCopyCode = \_ -> noOp
+            , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+            , onPressPeerToPeerFile = \_ -> noOp
             }
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]

@@ -16,7 +16,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
 import Env
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..), IsEncrypted(..))
+import FileStatus exposing (Attachment(..), FileId, FileMetadata(..), IsEncrypted(..))
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
@@ -104,6 +104,8 @@ main =
                     , noOp = ()
                     , onPressChannelMention = \_ _ -> ()
                     , onPressCopyCode = \_ -> ()
+                    , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+                    , onPressPeerToPeerFile = \_ -> ()
                     }
                     Array.empty
                     (Nonempty
@@ -138,6 +140,8 @@ main =
                         , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
                         , NormalText '\n' "Ascii art code block"
                         , CodeBlock (Language (NonemptyString 'a' "scii")) "┌───┐\n│ x │\n└───┘"
+                        , NormalText '\n' "Peer to peer file"
+                        , AttachedFile (Id.fromInt 3)
                         ]
                     )
                     |> Html.div []
@@ -215,6 +219,8 @@ stickersSection =
             , noOp = ()
             , onPressChannelMention = \_ _ -> ()
             , onPressCopyCode = \_ -> ()
+            , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+            , onPressPeerToPeerFile = \_ -> ()
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -243,41 +249,51 @@ stickersSection =
         ]
 
 
-attachments : SeqDict (Id FileId) FileData
+attachments : SeqDict (Id FileId) Attachment
 attachments =
     SeqDict.fromList
         [ ( Id.fromInt 1
-          , { fileName = FileName.fromString "file.json"
-            , fileSize = 10000
-            , metadata = Nothing
-            , contentType = FileStatus.jsonContent
-            , fileHash = FileStatus.fileHash "123"
-            , isEncrypted = IsNotEncrypted
-            }
+          , Stored
+                { fileName = FileName.fromString "file.json"
+                , fileSize = 10000
+                , metadata = Nothing
+                , contentType = FileStatus.jsonContent
+                , fileHash = FileStatus.fileHash "123"
+                , isEncrypted = IsNotEncrypted
+                }
           )
         , ( Id.fromInt 2
-          , { fileName = FileName.fromString "file.json"
-            , fileSize = 1000000
-            , metadata =
-                FileMetadata_Image
-                    { imageSize = Coord.xy 200 300
-                    , orientation = Nothing
-                    , gpsLocation = Nothing
-                    , cameraOwner = Nothing
-                    , exposureTime = Nothing
-                    , fNumber = Nothing
-                    , focalLength = Nothing
-                    , isoSpeedRating = Nothing
-                    , make = Nothing
-                    , model = Nothing
-                    , software = Nothing
-                    , userComment = Nothing
-                    }
-                    |> Just
-            , contentType = FileStatus.pngContent
-            , fileHash = FileStatus.fileHash "123"
-            , isEncrypted = IsNotEncrypted
-            }
+          , Stored
+                { fileName = FileName.fromString "file.json"
+                , fileSize = 1000000
+                , metadata =
+                    FileMetadata_Image
+                        { imageSize = Coord.xy 200 300
+                        , orientation = Nothing
+                        , gpsLocation = Nothing
+                        , cameraOwner = Nothing
+                        , exposureTime = Nothing
+                        , fNumber = Nothing
+                        , focalLength = Nothing
+                        , isoSpeedRating = Nothing
+                        , make = Nothing
+                        , model = Nothing
+                        , software = Nothing
+                        , userComment = Nothing
+                        }
+                        |> Just
+                , contentType = FileStatus.pngContent
+                , fileHash = FileStatus.fileHash "123"
+                , isEncrypted = IsNotEncrypted
+                }
+          )
+        , ( Id.fromInt 3
+          , PeerToPeer
+                { fileName = FileName.fromString "holiday videos.zip"
+                , fileSize = 3 * 1024 * 1024 * 1024
+                , contentType = FileStatus.unknownContentType
+                , peerToPeerId = FileStatus.peerToPeerIdFromString "1"
+                }
           )
         ]
 
@@ -586,6 +602,8 @@ embedExamples whitelistedDomains =
                 , noOp = ()
                 , onPressChannelMention = \_ _ -> ()
                 , onPressCopyCode = \_ -> ()
+                , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+                , onPressPeerToPeerFile = \_ -> ()
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text)

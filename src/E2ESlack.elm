@@ -2162,7 +2162,8 @@ allTestSlackAttachedFiles messageIndex backend =
             |> Maybe.andThen (\channel -> IdArray.get (Id.fromInt messageIndex) channel.messages)
     of
         Just (UserTextMessage data) ->
-            SeqDict.values data.content.attachedFiles
+            FileStatus.storedFiles data.content.attachedFiles
+                |> SeqDict.values
                 |> List.map (\fileData -> ( FileName.toString fileData.fileName, fileData.fileHash ))
 
         _ ->

@@ -104,7 +104,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptFileRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
-import FileStatus exposing (BackendFileData, FileData, FileDataWithImage, FileHash, FileId, FileStatus)
+import FileStatus exposing (Attachment, BackendFileData, FileData, FileDataWithImage, FileHash, FileId, FileStatus, PeerToPeerFile, PeerToPeerId)
 import Game
 import Go
 import GuildName exposing (GuildName)
@@ -131,6 +131,7 @@ import OneOrGreater exposing (OneOrGreater)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
+import PeerToPeer
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, RegisterPushSubscription, SubscribeData)
 import Postmark
@@ -603,6 +604,8 @@ type FrontendMsg_
     | ScrolledToLogSection
     | PressedLink Route
     | SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
+    | SelectedPeerToPeerFileToShareAgain GuildOrDmId PeerToPeerFile File
+    | SentPeerToPeerFile PeerToPeerId (Result Http.Error ())
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) EditChannelForm
@@ -864,6 +867,8 @@ type ToBackend
     | GetPublicGoMatchRequest (SecretId GamePublicId)
     | ExportChannelRequest ExportChannelId
     | ImportChannelRequest (Id GuildId) { fileName : String, json : String }
+    | SharePeerToPeerFileRequest PeerToPeerId PeerToPeer.SharedFile
+    | PeerToPeerDownloadRequest GuildOrDmId (Id UserId) PeerToPeerId
 
 
 type BackendMsg
@@ -878,7 +883,7 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
-    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) FileData) (Result Slack.HttpError ( Slack.Id Slack.MessageId, List ( Slack.Id Slack.FileId, FileData ) ))
+    | SentSlackMessage Time.Posix ChangeId ClientId Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) Attachment) (Result Slack.HttpError ( Slack.Id Slack.MessageId, List ( Slack.Id Slack.FileId, FileData ) ))
     | SlackWebsocketCreatedHandle (Slack.Id Slack.UserId) Websocket.Connection
     | SlackWebsocketClosedByBackend
     | SlackWebsocketMsg (Slack.Id Slack.UserId) (Result ( Websocket.CloseEventCode, String ) String)
@@ -1189,6 +1194,8 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected ClientId
     | ReloadDataResponse (Result () LoginData)
+    | PeerToPeerDownloadResponse (Id UserId) PeerToPeerId (Maybe String)
+    | PeerToPeerSendFileRequest PeerToPeerId String
     | LinkDiscordResponse (Result LinkDiscordFailure ())
     | LinkSlackResponse LinkSlackResult
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
@@ -1250,11 +1257,11 @@ type ServerChange
         , guildOrDmId : GuildOrDmId
         , content : Nonempty (RichText (Id UserId) (Id ChannelId))
         , threadRoute : Message.ThreadRouteWithRepliedTo
-        , attachedFiles : SeqDict (Id FileId) FileData
+        , attachedFiles : SeqDict (Id FileId) Attachment
         , stickers : SeqDict (Id StickerId) StickerData
         , repliedToData : RepliedToData
         }
-    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) FileData) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
+    | Server_Slack_SendMessage Time.Posix SlackGuildOrDmId ThreadRoute (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))) (SeqDict (Id FileId) Attachment) (Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_EditMessage Time.Posix (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)))
     | Server_Slack_DeleteMessage SlackGuildOrDmId ThreadRouteWithMessage
     | Server_Slack_UnlinkUser (Slack.Id Slack.UserId)
@@ -1276,7 +1283,7 @@ type ServerChange
     | Server_Slack_CustomEmojiAdded (Slack.Id Slack.TeamId) (Id CustomEmojiId) CustomEmojiData
     | Server_Slack_AddReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_Slack_RemoveReactionEmoji (Slack.Id Slack.UserId) SlackGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
-    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
+    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) Attachment) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -1309,7 +1316,7 @@ type ServerChange
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
     | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId) (Id ChannelId))) (SeqDict (Id FileId) FileData)
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId) (Id ChannelId))) (SeqDict (Id FileId) Attachment)
     | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
@@ -1405,9 +1412,9 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
-    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
-    | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) Attachment) (List EmojiOrCustomEmoji)
+    | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) Attachment)
+    | Local_Slack_SendMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRoute NonemptyString (SeqDict (Id FileId) Attachment)
     | Local_Slack_SendEditMessage Time.Posix Time.Zone SlackGuildOrDmId ThreadRouteWithMessage NonemptyString
     | Local_Slack_UnlinkUser (Slack.Id Slack.UserId)
     | Local_Slack_ReloadUser (Slack.Id Slack.UserId)
@@ -1424,7 +1431,7 @@ type LocalChange
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
-    | Local_SendEditMessage Time.Posix Time.Zone GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
+    | Local_SendEditMessage Time.Posix Time.Zone GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) Attachment)
     | Local_Discord_SendEditGuildMessage Time.Posix Time.Zone (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
     | Local_Discord_SendEditDmMessage Time.Posix Time.Zone Viewing_DiscordDmId (Id ChannelMessageId) NonemptyString
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage

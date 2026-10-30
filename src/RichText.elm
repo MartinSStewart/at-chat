@@ -73,7 +73,7 @@ import Email.Html.Attributes
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..), VideoMetadata)
+import FileStatus exposing (Attachment(..), FileData, FileId, FileMetadata(..), PeerToPeerFile, PeerToPeerFileState(..), PeerToPeerId, VideoMetadata)
 import Hex
 import Html exposing (Html)
 import Html.Attributes
@@ -1460,7 +1460,7 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users chann
 
 
 type alias EmailConfig userId channelId =
-    { attachedFiles : SeqDict (Id FileId) FileData
+    { attachedFiles : SeqDict (Id FileId) Attachment
     , userToString : userId -> String
     , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     }
@@ -1696,7 +1696,10 @@ emailViewHelper config dropNextLineBreak state nonempty =
 
                 AttachedFile fileId ->
                     case SeqDict.get fileId config.attachedFiles of
-                        Just fileData ->
+                        Just (PeerToPeer peerToPeer) ->
+                            ( True, currentList ++ [ emailPeerToPeerFileView state.spoiler peerToPeer ] )
+
+                        Just (Stored fileData) ->
                             ( True
                             , currentList
                                 ++ [ case fileData.metadata of
@@ -1918,6 +1921,37 @@ emailFileDownloadView isSpoilered fileData =
         )
         [ Email.Html.text (FileName.toString fileData.fileName)
         , Email.Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize)
+        ]
+
+
+{-| Nothing to link to, since a peer to peer file can only be fetched by asking for it in
+at-chat.
+-}
+emailPeerToPeerFileView : Bool -> PeerToPeerFile -> Email.Html.Html
+emailPeerToPeerFileView isSpoilered peerToPeer =
+    Email.Html.div
+        ([ Email.Html.Attributes.style "max-width" "284px"
+         , Email.Html.Attributes.backgroundColor
+            (if isSpoilered then
+                spoilerBackground
+
+             else
+                MyUi.colorToStyle MyUi.background1
+            )
+         , Email.Html.Attributes.borderRadius "4px"
+         , Email.Html.Attributes.border ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+         , Email.Html.Attributes.fontSize "14px"
+         , Email.Html.Attributes.padding "4px 8px 4px 8px"
+         ]
+            ++ (if isSpoilered then
+                    [ Email.Html.Attributes.color "transparent" ]
+
+                else
+                    []
+               )
+        )
+        [ Email.Html.text (FileName.toString peerToPeer.fileName)
+        , Email.Html.text ("\n" ++ FileStatus.sizeToString peerToPeer.fileSize ++ " (P2P)")
         ]
 
 
@@ -3931,6 +3965,8 @@ preview noOp onPressLink onPressChannelMention config nonempty =
         , noOp = noOp
         , onPressChannelMention = onPressChannelMention
         , onPressCopyCode = \_ -> noOp
+        , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+        , onPressPeerToPeerFile = \_ -> noOp
         }
         Array.empty
         0
@@ -3952,7 +3988,7 @@ type alias Config a userId channelId msg =
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
     , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
-    , attachedFiles : SeqDict (Id FileId) FileData
+    , attachedFiles : SeqDict (Id FileId) Attachment
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
@@ -3968,6 +4004,8 @@ type alias Config a userId channelId msg =
     , noOp : msg
     , onPressChannelMention : channelId -> ThreadRoute -> msg
     , onPressCopyCode : String -> msg
+    , peerToPeerFileState : PeerToPeerId -> PeerToPeerFileState
+    , onPressPeerToPeerFile : PeerToPeerFile -> msg
     }
 
 
@@ -3976,7 +4014,7 @@ type alias PreviewConfig a userId channelId =
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
     , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
-    , attachedFiles : SeqDict (Id FileId) FileData
+    , attachedFiles : SeqDict (Id FileId) Attachment
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
     , timezone : Time.Zone
@@ -4218,7 +4256,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
 {-| Images and videos with nothing but spaces between them are grouped so they can be shown side by side.
 -}
 groupMediaRows :
-    SeqDict (Id FileId) FileData
+    SeqDict (Id FileId) Attachment
     -> List (RichText userId channelId)
     -> List (ContentGroup userId channelId)
     -> List (RichText userId channelId)
@@ -4262,7 +4300,7 @@ addOtherContent otherContent groups =
 
 
 takeMediaRow :
-    SeqDict (Id FileId) FileData
+    SeqDict (Id FileId) Attachment
     -> List (RichText userId channelId)
     -> List (RichText userId channelId)
     -> ( List (RichText userId channelId), List (RichText userId channelId) )
@@ -4286,12 +4324,15 @@ takeMediaRow attachedFiles media nodes =
             ( media, nodes )
 
 
-isMedia : SeqDict (Id FileId) FileData -> RichText userId channelId -> Bool
+isMedia : SeqDict (Id FileId) Attachment -> RichText userId channelId -> Bool
 isMedia attachedFiles richText =
     case richText of
         AttachedFile fileId ->
             case SeqDict.get fileId attachedFiles of
-                Just fileData ->
+                Just (PeerToPeer _) ->
+                    False
+
+                Just (Stored fileData) ->
                     case fileData.metadata of
                         Just (FileMetadata_Image _) ->
                             True
@@ -4905,7 +4946,26 @@ viewNodes dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIma
                             ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , case SeqDict.get fileId config.attachedFiles of
-                                Just fileData ->
+                                Just (PeerToPeer peerToPeer) ->
+                                    currentList
+                                        ++ [ peerToPeerFileView
+                                                (case maybePressedSpoiler of
+                                                    Just ( htmlIdPrefix, _ ) ->
+                                                        Dom.idToString htmlIdPrefix
+                                                            ++ "_file_"
+                                                            ++ Id.toString fileId
+                                                            |> Just
+
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                state.spoiler
+                                                (config.peerToPeerFileState peerToPeer.peerToPeerId)
+                                                (config.onPressPeerToPeerFile peerToPeer)
+                                                peerToPeer
+                                           ]
+
+                                Just (Stored fileData) ->
                                     let
                                         maybeHtmlId : Maybe String
                                         maybeHtmlId =
@@ -5710,6 +5770,85 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
             , htmlAttrIf isSpoilered (Html.Attributes.style "opacity" "0")
             ]
             [ Icons.download ]
+        ]
+
+
+{-| Pressing it asks the uploader's device for the file, or for the uploader, picks the file
+again so it can be shared from this device.
+-}
+peerToPeerFileView : Maybe String -> Bool -> PeerToPeerFileState -> msg -> PeerToPeerFile -> Html msg
+peerToPeerFileView maybeHtmlId isSpoilered fileState onPress peerToPeer =
+    Html.div
+        [ case maybeHtmlId of
+            Just htmlId ->
+                Html.Attributes.id htmlId
+
+            Nothing ->
+                Html.Attributes.class ""
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "max-width" "284px"
+        , Html.Attributes.style
+            "background-color"
+            (if isSpoilered then
+                spoilerBackground
+
+             else
+                MyUi.colorToStyle MyUi.background1
+            )
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+        , Html.Attributes.style "font-size" "14px"
+        , Html.Attributes.style "padding" "4px 40px 4px 8px"
+        , Html.Attributes.style "white-space" "pre-wrap"
+        , if isSpoilered then
+            Html.Attributes.style "color" "transparent"
+
+          else
+            Html.Attributes.style "cursor" "pointer"
+        , htmlAttrIf (not isSpoilered) (Html.Events.onClick onPress)
+        ]
+        [ Html.text (FileName.toString peerToPeer.fileName)
+        , Html.text ("\n" ++ FileStatus.sizeToString peerToPeer.fileSize)
+        , Html.div
+            [ Html.Attributes.style "font-size" "12px"
+            , Html.Attributes.style "opacity"
+                (if isSpoilered then
+                    "0"
+
+                 else
+                    "0.8"
+                )
+            ]
+            [ Html.text
+                (case fileState of
+                    PeerToPeerAvailable ->
+                        "Press to download from the uploader's device"
+
+                    PeerToPeerRequested ->
+                        "Asking the uploader's device for it…"
+
+                    PeerToPeerUploaderOffline ->
+                        "The uploader doesn't have at-chat open with this file right now"
+
+                    PeerToPeerSharedFromHere ->
+                        "Shared from this device while at-chat stays open"
+
+                    PeerToPeerNotSharedFromHere ->
+                        "Not shared right now, press to pick the file again"
+                )
+            ]
+        , Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "top" "4px"
+            , Html.Attributes.style "right" "4px"
+            , Html.Attributes.style "font-size" "11px"
+            , Html.Attributes.style "font-weight" "700"
+            , Html.Attributes.style "padding" "1px 4px"
+            , Html.Attributes.style "border-radius" "3px"
+            , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+            , htmlAttrIf isSpoilered (Html.Attributes.style "opacity" "0")
+            ]
+            [ Html.text "P2P" ]
         ]
 
 
