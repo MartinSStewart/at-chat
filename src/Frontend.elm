@@ -9871,7 +9871,17 @@ updateLoadedFromBackend msg model =
                                         |> Local.init
                             in
                             ( { loggedIn | localState = localState, isReloading = False }
-                            , GuildColumn.unreadNotificationCount (Local.model localState) |> Ports.setAppBadge
+                            , Command.batch
+                                [ GuildColumn.unreadNotificationCount (Local.model localState) |> Ports.setAppBadge
+                                , case local.calls.currentRoom of
+                                    -- The backend dropped us from the call when the old connection closed,
+                                    -- while the call itself carried on, so it's rejoined under the new connection.
+                                    Just roomId ->
+                                        Call.startCallCmd roomId local.localUser.session.userId model.clientId loggedIn.voiceChat
+
+                                    Nothing ->
+                                        Command.none
+                                ]
                             )
                         )
                         model
