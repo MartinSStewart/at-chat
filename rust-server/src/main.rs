@@ -2551,6 +2551,26 @@ fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(&Sha224::digest(bytes))
 }
 
+// Storage is the s3fs mount of the bucket, so a read can fail because the bucket didn't
+// answer rather than because the file is gone. Only the second is a 404; anything else
+// is logged and answered with a 503 so a hiccup doesn't look like a lost file.
+fn storage_read_failed(what: &str, hash: &str, error: std::io::Error) -> http::Response<Body> {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("File not found"))
+            .unwrap()
+    } else {
+        println!("Couldn't read {what} {hash} from storage: {error:?}");
+
+        Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .header("Retry-After", "10")
+            .body(Body::from("Couldn't read the file, try again soon"))
+            .unwrap()
+    }
+}
+
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
     if is_valid_hash(&hash) {
         match tokio::fs::read(thumbnail_filepath(&hash)).await {
@@ -2561,10 +2581,7 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .body(Body::from(data))
                 .unwrap(),
-            Result::Err(_) => Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("File not found"))
-                .unwrap(),
+            Result::Err(error) => storage_read_failed("thumbnail", &hash, error),
         }
     } else {
         Response::builder()
@@ -2748,21 +2765,11 @@ async fn get_file_endpoint(
     if is_valid_hash(&hash) {
         let mut opened = match tokio::fs::File::open(filepath(&hash)).await {
             Ok(opened) => opened,
-            Err(_) => {
-                return Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("File not found"))
-                    .unwrap();
-            }
+            Err(error) => return storage_read_failed("file", &hash, error),
         };
         let size: u64 = match opened.metadata().await {
             Ok(metadata) => metadata.len(),
-            Err(_) => {
-                return Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("File not found"))
-                    .unwrap();
-            }
+            Err(error) => return storage_read_failed("file", &hash, error),
         };
         let content_type = match content_type_index.parse::<usize>() {
             Ok(index) => content_types::CONTENT_TYPES.get(index),
@@ -3149,6 +3156,23 @@ mod tests {
         assert!(!is_valid_recording_file_name("VIDEO_a\\b.mp4"));
         assert!(!is_valid_recording_file_name("secret.txt"));
         assert!(!is_valid_recording_file_name("VIDEO_a.txt"));
+    }
+
+    #[test]
+    fn only_a_missing_file_is_a_404() {
+        let missing = storage_read_failed(
+            "file",
+            "someHash",
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+        let bucket_hiccup = storage_read_failed(
+            "file",
+            "someHash",
+            std::io::Error::from(std::io::ErrorKind::TimedOut),
+        );
+        assert_eq!(bucket_hiccup.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]
