@@ -772,7 +772,7 @@ imageRowTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 imageRowTest imageUploadConfig =
     E2EHelper.startTest
-        "Images sent together are shown side by side"
+        "Images sent together are shown side by side and scroll sideways when they don't fit"
         E2EHelper.startTime
         imageUploadConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
@@ -780,15 +780,19 @@ imageRowTest imageUploadConfig =
             (\admin _ ->
                 [ E2EHelper.uploadImageAttachment admin
                 , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
                 , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.checkView
                     0
                     (\html ->
                         Test.Html.Query.findAll
-                            [ Test.Html.Selector.style "flex-wrap" "wrap"
+                            [ Test.Html.Selector.style "overflow-x" "auto"
                             , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_1" ]
-                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_2" ]
+                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_6" ]
                             ]
                             html
                             |> Test.Html.Query.count (Expect.greaterThan 0)

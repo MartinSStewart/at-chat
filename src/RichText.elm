@@ -4235,9 +4235,11 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     , currentList
                         ++ [ Html.div
                                 [ Html.Attributes.style "display" "flex"
-                                , Html.Attributes.style "flex-wrap" "wrap"
                                 , Html.Attributes.style "align-items" "flex-start"
                                 , Html.Attributes.style "gap" "4px"
+                                , Html.Attributes.style "overflow-x" "auto"
+                                , Html.Attributes.style "overflow-y" "hidden"
+                                , keepHorizontalScrollFromDraggingSidebar config.noOp
                                 ]
                                 row
                            ]
@@ -4250,6 +4252,26 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
 
             NoLargeContent ->
                 [ OtherContent nonempty ]
+        )
+
+
+{-| On a phone a sideways swipe drags the channel sidebar, so an element that scrolls sideways keeps its touches to itself while it has something to scroll.
+-}
+keepHorizontalScrollFromDraggingSidebar : msg -> Html.Attribute msg
+keepHorizontalScrollFromDraggingSidebar noOp =
+    Html.Events.stopPropagationOn
+        "touchstart"
+        (Json.Decode.map2
+            (\scrollWidth clientWidth ->
+                if scrollWidth > clientWidth then
+                    Json.Decode.succeed ( noOp, True )
+
+                else
+                    Json.Decode.fail ""
+            )
+            (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
+            (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
+            |> Json.Decode.andThen identity
         )
 
 
@@ -4880,20 +4902,7 @@ viewNodes dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIma
                                              , Html.Attributes.style "border-radius" "4px"
                                              , Html.Attributes.style "white-space" "pre"
                                              , Html.Attributes.style "overflow-x" "auto"
-                                             , Html.Events.stopPropagationOn
-                                                "touchstart"
-                                                (Json.Decode.map2
-                                                    (\scrollWidth clientWidth ->
-                                                        if scrollWidth > clientWidth then
-                                                            Json.Decode.succeed ( config.noOp, True )
-
-                                                        else
-                                                            Json.Decode.fail ""
-                                                    )
-                                                    (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
-                                                    (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
-                                                    |> Json.Decode.andThen identity
-                                                )
+                                             , keepHorizontalScrollFromDraggingSidebar config.noOp
                                              ]
                                                 ++ (if isAsciiArt language then
                                                         [ Html.Attributes.style "font-family" "'ascii', monospace"
