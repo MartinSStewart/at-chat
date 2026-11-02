@@ -5831,16 +5831,16 @@ peerToPeerFileView maybeHtmlId isSpoilered fileState onPress peerToPeer =
             [ Html.text
                 (case fileState of
                     PeerToPeerAvailable ->
-                        "Press to download from the uploader's device"
+                        "Only available while this user is online"
 
                     PeerToPeerRequested ->
-                        "Asking the uploader's device for it…"
+                        "Requesting file..."
 
                     PeerToPeerUploaderOffline ->
                         "The uploader doesn't have at-chat open with this file right now"
 
                     PeerToPeerSharedFromHere ->
-                        "Shared from this device while at-chat stays open"
+                        "This file won't be available after you reload the page"
 
                     PeerToPeerNotSharedFromHere ->
                         "Not shared right now, press to pick the file again"

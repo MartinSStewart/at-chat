@@ -217,10 +217,7 @@ type alias PeerToPeerFile =
     }
 
 
-{-| Tells apart the files one user is sharing. It is only unique among that user's files.
-
-OpaqueVariants
-
+{-| OpaqueVariants. Tells apart the files one user is sharing. It is only unique among that user's files.
 -}
 type PeerToPeerId
     = PeerToPeerId String
