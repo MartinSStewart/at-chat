@@ -5844,6 +5844,9 @@ peerToPeerFileView maybeHtmlId isSpoilered fileState onPress peerToPeer =
 
                     PeerToPeerNotSharedFromHere ->
                         "Not shared right now, press to pick the file again"
+
+                    PeerToPeerPickedDifferentFile ->
+                        "That's a different file from the one you sent, press to pick it again"
                 )
             ]
         , Html.div

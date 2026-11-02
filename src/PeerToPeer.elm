@@ -28,6 +28,7 @@ import FileStatus exposing (PeerToPeerFileState(..), PeerToPeerId)
 import Id exposing (GuildOrDmId, Id, UserId)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Sha256
 import Url
 
@@ -38,6 +39,7 @@ getting on.
 type alias Model =
     { shared : SeqDict PeerToPeerId { file : File, sharedFile : SharedFile }
     , downloads : SeqDict ( Id UserId, PeerToPeerId ) Download
+    , pickedDifferentFile : SeqSet PeerToPeerId
     }
 
 
@@ -59,7 +61,7 @@ type alias SharedFile =
 
 init : Model
 init =
-    { shared = SeqDict.empty, downloads = SeqDict.empty }
+    { shared = SeqDict.empty, downloads = SeqDict.empty, pickedDifferentFile = SeqSet.empty }
 
 
 {-| More than anyone would share at once, while still stopping a connection from filling the
@@ -75,6 +77,9 @@ fileState currentUserId uploader peerToPeerId model =
     if currentUserId == uploader then
         if SeqDict.member peerToPeerId model.shared then
             PeerToPeerSharedFromHere
+
+        else if SeqSet.member peerToPeerId model.pickedDifferentFile then
+            PeerToPeerPickedDifferentFile
 
         else
             PeerToPeerNotSharedFromHere

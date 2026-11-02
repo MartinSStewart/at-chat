@@ -1154,6 +1154,7 @@ sharePeerToPeerFile guildOrDmId peerToPeerFile2 file loggedIn =
                         peerToPeerFile2.peerToPeerId
                         { file = file, sharedFile = sharedFile }
                         peerToPeer.shared
+                , pickedDifferentFile = SeqSet.remove peerToPeerFile2.peerToPeerId peerToPeer.pickedDifferentFile
             }
         )
         loggedIn

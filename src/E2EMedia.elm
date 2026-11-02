@@ -823,7 +823,7 @@ peerToPeerFileTest largeFileUploadConfig =
                         Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
                             |> Test.Html.Query.has
                                 [ Test.Html.Selector.text "P2P"
-                                , Test.Html.Selector.text "Shared from this device while at-chat stays open"
+                                , Test.Html.Selector.text "This file won't be available after you reload the page"
                                 ]
                     )
                 , user.checkView
@@ -833,7 +833,7 @@ peerToPeerFileTest largeFileUploadConfig =
                             |> Test.Html.Query.has
                                 [ Test.Html.Selector.text "holiday videos.zip"
                                 , Test.Html.Selector.text "P2P"
-                                , Test.Html.Selector.text "Press to download from the uploader's device"
+                                , Test.Html.Selector.text "Only available while this user is online"
                                 ]
                     )
                 , user.click 100 (Dom.id "spoiler_1_file_1")
@@ -860,15 +860,88 @@ peerToPeerFileTest largeFileUploadConfig =
                     )
                 , user.snapshotView 100 { name = "Peer to peer file" }
 
-                -- Once the uploader's tab is gone, so is the file.
-                , T.backendUpdate 100 (Types.UserDisconnected E2EHelper.sessionId0 admin.clientId)
-                , user.click 1000 (Dom.id "spoiler_1_file_1")
-                , user.checkView
-                    1000
-                    (\html ->
-                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
-                            |> Test.Html.Query.has
-                                [ Test.Html.Selector.text "The uploader doesn't have at-chat open with this file right now" ]
+                -- A reloaded tab no longer has the file. The old tab's connection is left open,
+                -- as one that closed without the backend hearing about it yet would be.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\reloadedAdmin ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ reloadedAdmin.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , reloadedAdmin.click 100 (Dom.id "guild_openGuild_1")
+                        , reloadedAdmin.click 100 (Dom.id "guild_openChannel_0")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Not shared right now, press to pick the file again" ]
+                            )
+
+                        -- The file picker offers some other file first.
+                        , reloadedAdmin.click 100 (Dom.id "spoiler_1_file_1")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "That's a different file from the one you sent, press to pick it again" ]
+                            )
+                        , reloadedAdmin.click 100 (Dom.id "spoiler_1_file_1")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "This file won't be available after you reload the page" ]
+                            )
+                        , user.click 100 (Dom.id "spoiler_1_file_1")
+                        , T.checkState
+                            1000
+                            (\data ->
+                                case
+                                    List.filter
+                                        (\request -> String.contains "/file/p2p/" request.url)
+                                        data.httpRequests
+                                        |> List.map .requestedBy
+                                of
+                                    [ first, second ] ->
+                                        if
+                                            List.member (T.RequestedByFrontend admin.clientId) [ first, second ]
+                                                && List.member (T.RequestedByFrontend reloadedAdmin.clientId) [ first, second ]
+                                        then
+                                            Ok ()
+
+                                        else
+                                            Err "The file should have been sent by the reloaded tab the second time"
+
+                                    requests ->
+                                        "Expected the file to have been sent twice, but it was sent "
+                                            ++ String.fromInt (List.length requests)
+                                            ++ " times"
+                                            |> Err
+                            )
+
+                        -- Once the tab sharing it is gone, so is the file.
+                        , T.backendUpdate 100 (Types.UserDisconnected E2EHelper.sessionId0 reloadedAdmin.clientId)
+                        , user.click 1000 (Dom.id "spoiler_1_file_1")
+                        , user.checkView
+                            1000
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "The uploader doesn't have at-chat open with this file right now" ]
+                            )
+                        ]
                     )
                 ]
             )

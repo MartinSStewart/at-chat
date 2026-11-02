@@ -1030,7 +1030,20 @@ updateLoaded msg model =
                     model
 
             else
-                ( model, Command.none )
+                FrontendExtra.updateLoggedIn
+                    (\loggedIn ->
+                        ( FrontendExtra.mapPeerToPeer
+                            (\peerToPeer ->
+                                { peerToPeer
+                                    | pickedDifferentFile =
+                                        SeqSet.insert peerToPeerFile.peerToPeerId peerToPeer.pickedDifferentFile
+                                }
+                            )
+                            loggedIn
+                        , Command.none
+                        )
+                    )
+                    model
 
         SentPeerToPeerFile _ _ ->
             ( model, Command.none )
@@ -7201,6 +7214,13 @@ handlePressedPeerToPeerFile anyGuildOrDmId uploader peerToPeerFile model =
                             ( loggedIn, Command.none )
 
                         FileStatus.PeerToPeerNotSharedFromHere ->
+                            ( loggedIn
+                            , Effect.File.Select.file
+                                []
+                                (SelectedPeerToPeerFileToShareAgain guildOrDmId peerToPeerFile)
+                            )
+
+                        FileStatus.PeerToPeerPickedDifferentFile ->
                             ( loggedIn
                             , Effect.File.Select.file
                                 []

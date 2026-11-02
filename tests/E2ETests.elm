@@ -329,7 +329,27 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 E2EHelper.backendApp
                 handleNormalHttpRequests
                 E2EHelper.handlePortToJs
-                handleFileRequest
+                -- Picking the file again to share it after a reload. The first pick is the wrong file.
+                (\{ data } ->
+                    case data.fileUploads of
+                        [] ->
+                            UploadFile
+                                (T.uploadStringFile
+                                    "holiday photos.zip"
+                                    "application/zip"
+                                    (String.repeat (FileStatus.maxUploadSize + 2) "a")
+                                    E2EHelper.startTime
+                                )
+
+                        _ :: _ ->
+                            UploadFile
+                                (T.uploadStringFile
+                                    "holiday videos.zip"
+                                    "application/zip"
+                                    (String.repeat (FileStatus.maxUploadSize + 1) "a")
+                                    E2EHelper.startTime
+                                )
+                )
                 (\_ ->
                     UploadMultipleFiles
                         (T.uploadStringFile

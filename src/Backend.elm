@@ -3145,6 +3145,36 @@ canSharePeerToPeerFileIn userId guildOrDmId model =
             NonemptyDict.member otherUserId model.users
 
 
+{-| Only the connection that shared a file most recently has it. One that shared it before may
+have closed without the backend hearing about it yet, and asking it to send the file would
+leave the downloader waiting on nothing.
+-}
+forgetPeerToPeerFile :
+    Id UserId
+    -> PeerToPeerId
+    -> BackendModel
+    -> SeqDict SessionId (NonemptyDict ClientId ConnectionData)
+forgetPeerToPeerFile userId peerToPeerId model =
+    SeqDict.map
+        (\sessionId clients ->
+            case SeqDict.get sessionId model.sessions of
+                Just session ->
+                    if session.userId == userId then
+                        NonemptyDict.map
+                            (\_ connection ->
+                                { connection | peerToPeerFiles = SeqDict.remove peerToPeerId connection.peerToPeerFiles }
+                            )
+                            clients
+
+                    else
+                        clients
+
+                Nothing ->
+                    clients
+        )
+        model.connections
+
+
 isGuildMember : Id UserId -> Id GuildId -> BackendModel -> Bool
 isGuildMember userId guildId model =
     case SeqDict.get guildId model.guilds of
@@ -8638,25 +8668,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     if canSharePeerToPeerFileIn session.userId sharedFile.guildOrDmId model then
                         ( { model
                             | connections =
-                                SeqDict.updateIfExists
-                                    sessionId
-                                    (NonemptyDict.updateIfExists
-                                        clientId
-                                        (\connection ->
-                                            if
-                                                SeqDict.member peerToPeerId connection.peerToPeerFiles
-                                                    || (SeqDict.size connection.peerToPeerFiles < PeerToPeer.maxSharedFiles)
-                                            then
-                                                { connection
-                                                    | peerToPeerFiles =
-                                                        SeqDict.insert peerToPeerId sharedFile connection.peerToPeerFiles
-                                                }
+                                forgetPeerToPeerFile session.userId peerToPeerId model
+                                    |> SeqDict.updateIfExists
+                                        sessionId
+                                        (NonemptyDict.updateIfExists
+                                            clientId
+                                            (\connection ->
+                                                if SeqDict.size connection.peerToPeerFiles < PeerToPeer.maxSharedFiles then
+                                                    { connection
+                                                        | peerToPeerFiles =
+                                                            SeqDict.insert peerToPeerId sharedFile connection.peerToPeerFiles
+                                                    }
 
-                                            else
-                                                connection
+                                                else
+                                                    connection
+                                            )
                                         )
-                                    )
-                                    model.connections
                           }
                         , Command.none
                         )
