@@ -1,4 +1,4 @@
-module E2EEncryption exposing (fileUploadTest, tests)
+module E2EEncryption exposing (customEmojiInEncryptedMessageTest, fileUploadTest, tests)
 
 {-| End-to-end tests for encrypted DMs: agreeing to encrypt a conversation, working the
 shared key out on each device, and sending a message once one is there.
@@ -17,6 +17,7 @@ import Bytes.Decode
 import Bytes.Encode
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji
 import DmChannel
 import DmChannelId
 import E2EHelper exposing (BackendModel2)
@@ -29,13 +30,14 @@ import FileName
 import FileStatus
 import FrontendExtra
 import Html.Attributes
-import Id exposing (ChannelId, Id, UserId)
+import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
 import IdArray
 import Json.Encode
 import Message exposing (MessageContent)
 import NonemptyDict
 import RichText
 import SeqDict
+import SeqSet
 import Serialize
 import Test.Html.Query
 import Test.Html.Selector
@@ -1191,6 +1193,139 @@ tests config =
 name it was never told, so what it is handed and what the message says about the file are
 both checked.
 -}
+customEmojiInEncryptedMessageTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+customEmojiInEncryptedMessageTest config =
+    let
+        guildEmojiId : Id CustomEmojiId
+        guildEmojiId =
+            Id.fromInt 0
+
+        dmEmojiId : Id CustomEmojiId
+        dmEmojiId =
+            Id.fromInt 1
+
+        userId : Id UserId
+        userId =
+            Id.fromInt 2
+    in
+    E2EHelper.startTest
+        "Get the custom emoji in a message from the message menu, even when the message is encrypted"
+        E2EHelper.startTime
+        { config | backendApp = backendAppWithAdminCustomEmojis [ guildEmojiId, dmEmojiId ] }
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 ("Look " ++ CustomEmoji.idToString guildEmojiId)
+                , openMessageMenu user "guild_message_1"
+                , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
+                , T.checkBackend 100 (checkHasCustomEmojis userId [ guildEmojiId ])
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount user
+                            (\userPrivateKey ->
+                                [ user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
+                                , respondToSharedSecretStored user Broadcast.adminUserId
+                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored admin userId
+                                , T.checkBackend 100 checkDmIsEncrypted
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , user.click 100 (Dom.id "guild_hideMembers")
+                                , writeEncryptedMessage admin 100 ("Secret " ++ CustomEmoji.idToString dmEmojiId)
+                                , respondToMessageDecrypted user
+                                , openMessageMenu user "guild_message_0"
+                                , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
+                                , T.checkBackend 100 (checkHasCustomEmojis userId [ guildEmojiId, dmEmojiId ])
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+backendAppWithAdminCustomEmojis : List (Id CustomEmojiId) -> T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
+backendAppWithAdminCustomEmojis customEmojiIds =
+    let
+        backendApp : T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
+        backendApp =
+            E2EHelper.backendApp
+    in
+    { backendApp
+        | init =
+            Tuple.mapFirst
+                (\(E2EHelper.BackendModel2 model) ->
+                    E2EHelper.BackendModel2
+                        { model
+                            | customEmojis =
+                                List.filterMap
+                                    (\customEmojiId ->
+                                        case CustomEmoji.emojiNameFromString ("emoji" ++ Id.toString customEmojiId) of
+                                            Ok name ->
+                                                Just
+                                                    ( customEmojiId
+                                                    , { url = CustomEmoji.CustomEmojiInternal (FileStatus.fileHash ("emoji" ++ Id.toString customEmojiId)) Nothing
+                                                      , name = name
+                                                      , isAnimated = False
+                                                      }
+                                                    )
+
+                                            Err () ->
+                                                Nothing
+                                    )
+                                    customEmojiIds
+                                    |> SeqDict.fromList
+                            , users =
+                                NonemptyDict.updateIfExists
+                                    Broadcast.adminUserId
+                                    (\admin -> { admin | availableCustomEmojis = SeqSet.fromList customEmojiIds })
+                                    model.users
+                        }
+                )
+                backendApp.init
+    }
+
+
+openMessageMenu :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+openMessageMenu client messageHtmlId =
+    client.custom
+        100
+        (Dom.id messageHtmlId)
+        "contextmenu"
+        (Json.Encode.object
+            [ ( "clientX", Json.Encode.float 50 )
+            , ( "clientY", Json.Encode.float 150 )
+            ]
+        )
+
+
+checkHasCustomEmojis : Id UserId -> List (Id CustomEmojiId) -> BackendModel2 -> Result String ()
+checkHasCustomEmojis userId expected backend =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend backend).users of
+        Just user ->
+            if SeqSet.toList user.availableCustomEmojis == expected then
+                Ok ()
+
+            else
+                Err "The user didn't get the custom emojis in the message"
+
+        Nothing ->
+            Err "User not found"
+
+
 fileUploadTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2

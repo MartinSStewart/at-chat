@@ -15,6 +15,7 @@ import Discord
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Encryption exposing (BytesHash)
 import Env
 import FileStatus
 import Html exposing (Html)
@@ -23,7 +24,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmoji
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import Message exposing (Message(..))
+import Message exposing (Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView
@@ -532,7 +533,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.channelMentions guildOrDmId2 local)
                             local.localUser.decryptedMessages
                             message
-                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds local.localUser.decryptedMessages message
                     , openDm =
                         if isPrivateDm then
                             Nothing
@@ -610,7 +611,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.discordChannelMentions guildOrDmId2 local)
                             SeqDict.empty
                             message
-                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
                     , openDm =
                         case ( isPrivateDm, messageUserId ) of
                             ( False, Just otherUserId ) ->
@@ -680,7 +681,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.slackChannelMentions guildOrDmId2 local)
                             SeqDict.empty
                             message
-                    , messageCustomEmojiIdsList = []
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
                     , openDm = Nothing
                     }
                         |> Just
@@ -1145,8 +1146,11 @@ button isMobile htmlId icon text msg =
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
-messageCustomEmojiIds : Message messageId userId channelId -> List (Id CustomEmojiId)
-messageCustomEmojiIds message =
+messageCustomEmojiIds :
+    SeqDict BytesHash (Result () (MessageContent userId channelId))
+    -> Message messageId userId channelId
+    -> List (Id CustomEmojiId)
+messageCustomEmojiIds decrypted message =
     let
         reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)
         reactionIds reactions =
@@ -1166,7 +1170,15 @@ messageCustomEmojiIds message =
             RichText.customEmojis data.content.content ++ reactionIds data.reactions
 
         EncryptedUserTextMessage data ->
-            reactionIds data.reactions
+            case SeqDict.get (Encryption.hash data.content) decrypted of
+                Just (Ok content) ->
+                    RichText.customEmojis content.content ++ reactionIds data.reactions
+
+                Just (Err ()) ->
+                    reactionIds data.reactions
+
+                Nothing ->
+                    reactionIds data.reactions
 
         UserJoinedMessage _ _ reactions _ ->
             reactionIds reactions

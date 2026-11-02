@@ -442,6 +442,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.channelMentionInThreadPreviewTest normalConfig
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
+    , E2EEncryption.customEmojiInEncryptedMessageTest normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
