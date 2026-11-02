@@ -3688,8 +3688,8 @@ toBackendLog toBackend =
                 Local_SetUserColor _ ->
                     ToBackendLog_Local_SetUserColor
 
-                Local_AddCustomEmojisToUser _ ->
-                    ToBackendLog_Local_AddCustomEmojisToUser
+                Local_AddCustomEmojisAndStickersToUser _ _ ->
+                    ToBackendLog_Local_AddCustomEmojisAndStickersToUser
 
                 Local_VoiceChatChange _ ->
                     ToBackendLog_Local_VoiceChatChange

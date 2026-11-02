@@ -656,7 +656,7 @@ type FrontendMsg_
     | PressedBody
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | MessageMenu_PressedMarkAsUnread AnyGuildOrDmId ThreadRouteWithMessage
-    | MessageMenu_PressedAddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
+    | MessageMenu_PressedAddCustomEmojisAndStickersToUser (SeqSet (Id CustomEmojiId)) (SeqSet (Id StickerId))
     | MessageMenu_PressedOpenDm (Id UserId)
     | MessageMenu_PressedOpenDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ScrolledToMessage
@@ -1465,7 +1465,7 @@ type LocalChange
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_SetUserColor UserColor
-    | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
+    | Local_AddCustomEmojisAndStickersToUser (SeqSet (Id CustomEmojiId)) (SeqSet (Id StickerId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Game GuildOrDmId Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

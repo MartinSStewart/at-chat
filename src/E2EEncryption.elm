@@ -18,6 +18,7 @@ import Bytes.Encode
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji
+import Discord
 import DmChannel
 import DmChannelId
 import E2EHelper exposing (BackendModel2)
@@ -30,7 +31,7 @@ import FileName
 import FileStatus
 import FrontendExtra
 import Html.Attributes
-import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
+import Id exposing (ChannelId, CustomEmojiId, Id, StickerId, UserId)
 import IdArray
 import Json.Encode
 import Message exposing (MessageContent)
@@ -39,6 +40,7 @@ import RichText
 import SeqDict
 import SeqSet
 import Serialize
+import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -1206,21 +1208,25 @@ customEmojiInEncryptedMessageTest config =
         dmEmojiId =
             Id.fromInt 1
 
+        dmStickerId : Id StickerId
+        dmStickerId =
+            Id.fromInt 0
+
         userId : Id UserId
         userId =
             Id.fromInt 2
     in
     E2EHelper.startTest
-        "Get the custom emoji in a message from the message menu, even when the message is encrypted"
+        "Get the custom emojis and stickers in a message from the message menu, even when the message is encrypted"
         E2EHelper.startTime
-        { config | backendApp = backendAppWithAdminCustomEmojis [ guildEmojiId, dmEmojiId ] }
+        { config | backendApp = backendAppWithAdminCustomEmojisAndStickers [ guildEmojiId, dmEmojiId ] [ dmStickerId ] }
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin user ->
                 [ E2EHelper.writeMessage admin 100 ("Look " ++ CustomEmoji.idToString guildEmojiId)
                 , openMessageMenu user "guild_message_1"
                 , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
-                , T.checkBackend 100 (checkHasCustomEmojis userId [ guildEmojiId ])
+                , T.checkBackend 100 (checkHasCustomEmojisAndStickers userId [ guildEmojiId ] [])
                 , E2EHelper.openDm admin 100 "2"
                 , E2EHelper.openDm user 100 "0"
                 , admin.click 100 (Dom.id "guild_showMembers")
@@ -1240,11 +1246,11 @@ customEmojiInEncryptedMessageTest config =
                                 , T.checkBackend 100 checkDmIsEncrypted
                                 , admin.click 100 (Dom.id "guild_hideMembers")
                                 , user.click 100 (Dom.id "guild_hideMembers")
-                                , writeEncryptedMessage admin 100 ("Secret " ++ CustomEmoji.idToString dmEmojiId)
+                                , writeEncryptedMessage admin 100 ("Secret " ++ CustomEmoji.idToString dmEmojiId ++ Sticker.idToString dmStickerId)
                                 , respondToMessageDecrypted user
                                 , openMessageMenu user "guild_message_0"
                                 , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
-                                , T.checkBackend 100 (checkHasCustomEmojis userId [ guildEmojiId, dmEmojiId ])
+                                , T.checkBackend 100 (checkHasCustomEmojisAndStickers userId [ guildEmojiId, dmEmojiId ] [ dmStickerId ])
                                 ]
                             )
                         ]
@@ -1254,8 +1260,11 @@ customEmojiInEncryptedMessageTest config =
         ]
 
 
-backendAppWithAdminCustomEmojis : List (Id CustomEmojiId) -> T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
-backendAppWithAdminCustomEmojis customEmojiIds =
+backendAppWithAdminCustomEmojisAndStickers :
+    List (Id CustomEmojiId)
+    -> List (Id StickerId)
+    -> T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
+backendAppWithAdminCustomEmojisAndStickers customEmojiIds stickerIds =
     let
         backendApp : T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
         backendApp =
@@ -1285,10 +1294,27 @@ backendAppWithAdminCustomEmojis customEmojiIds =
                                     )
                                     customEmojiIds
                                     |> SeqDict.fromList
+                            , stickers =
+                                List.map
+                                    (\stickerId ->
+                                        ( stickerId
+                                        , { url = Sticker.StickerInternal (FileStatus.fileHash ("sticker" ++ Id.toString stickerId)) Nothing
+                                          , name = "sticker" ++ Id.toString stickerId
+                                          , format = Discord.PngFormat
+                                          }
+                                        )
+                                    )
+                                    stickerIds
+                                    |> SeqDict.fromList
                             , users =
                                 NonemptyDict.updateIfExists
                                     Broadcast.adminUserId
-                                    (\admin -> { admin | availableCustomEmojis = SeqSet.fromList customEmojiIds })
+                                    (\admin ->
+                                        { admin
+                                            | availableCustomEmojis = SeqSet.fromList customEmojiIds
+                                            , availableStickers = SeqSet.fromList stickerIds
+                                        }
+                                    )
                                     model.users
                         }
                 )
@@ -1312,15 +1338,18 @@ openMessageMenu client messageHtmlId =
         )
 
 
-checkHasCustomEmojis : Id UserId -> List (Id CustomEmojiId) -> BackendModel2 -> Result String ()
-checkHasCustomEmojis userId expected backend =
+checkHasCustomEmojisAndStickers : Id UserId -> List (Id CustomEmojiId) -> List (Id StickerId) -> BackendModel2 -> Result String ()
+checkHasCustomEmojisAndStickers userId expectedCustomEmojis expectedStickers backend =
     case NonemptyDict.get userId (E2EHelper.unwrapBackend backend).users of
         Just user ->
-            if SeqSet.toList user.availableCustomEmojis == expected then
-                Ok ()
+            if SeqSet.toList user.availableCustomEmojis /= expectedCustomEmojis then
+                Err "The user didn't get the custom emojis in the message"
+
+            else if SeqSet.toList user.availableStickers /= expectedStickers then
+                Err "The user didn't get the stickers in the message"
 
             else
-                Err "The user didn't get the custom emojis in the message"
+                Ok ()
 
         Nothing ->
             Err "User not found"

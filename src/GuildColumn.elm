@@ -1178,7 +1178,7 @@ canChangeUnreadNotificationCount change =
         Local_SetUserColor _ ->
             False
 
-        Local_AddCustomEmojisToUser _ ->
+        Local_AddCustomEmojisAndStickersToUser _ _ ->
             False
 
         Local_VoiceChatChange _ ->

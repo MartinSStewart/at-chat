@@ -372,8 +372,8 @@ pendingChangesText localChange =
         Local_SetUserColor _ ->
             Just "Picked a colour"
 
-        Local_AddCustomEmojisToUser _ ->
-            Just "Add custom emojis to user"
+        Local_AddCustomEmojisAndStickersToUser _ _ ->
+            Just "Add custom emojis and stickers to user"
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
@@ -3207,7 +3207,7 @@ isPressMsg msg =
         MessageMenu_PressedMarkAsUnread _ _ ->
             True
 
-        MessageMenu_PressedAddCustomEmojisToUser _ ->
+        MessageMenu_PressedAddCustomEmojisAndStickersToUser _ _ ->
             True
 
         ScrolledToMessage ->
@@ -5410,7 +5410,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setColor color localUser.user } }
 
-                Local_AddCustomEmojisToUser customEmojiIds ->
+                Local_AddCustomEmojisAndStickersToUser customEmojiIds stickerIds ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -5424,8 +5424,8 @@ changeUpdate localMsg local =
                             { localUser
                                 | user =
                                     { user
-                                        | availableCustomEmojis =
-                                            SeqSet.union (NonemptySet.toSeqSet customEmojiIds) user.availableCustomEmojis
+                                        | availableCustomEmojis = SeqSet.union customEmojiIds user.availableCustomEmojis
+                                        , availableStickers = SeqSet.union stickerIds user.availableStickers
                                     }
                             }
                     }

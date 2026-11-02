@@ -7334,23 +7334,28 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_AddCustomEmojisToUser customEmojiIds ->
+                Local_AddCustomEmojisAndStickersToUser customEmojiIds stickerIds ->
                     BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
                             let
-                                validIds : SeqSet (Id CustomEmojiId)
-                                validIds =
-                                    SeqSet.filter
-                                        (\id -> SeqDict.member id model.customEmojis)
-                                        (NonemptySet.toSeqSet customEmojiIds)
+                                validCustomEmojiIds : SeqSet (Id CustomEmojiId)
+                                validCustomEmojiIds =
+                                    SeqSet.filter (\id -> SeqDict.member id model.customEmojis) customEmojiIds
+
+                                validStickerIds : SeqSet (Id StickerId)
+                                validStickerIds =
+                                    SeqSet.filter (\id -> SeqDict.member id model.stickers) stickerIds
                             in
                             ( { model
                                 | users =
                                     NonemptyDict.insert
                                         session.userId
-                                        { user | availableCustomEmojis = SeqSet.union validIds user.availableCustomEmojis }
+                                        { user
+                                            | availableCustomEmojis = SeqSet.union validCustomEmojiIds user.availableCustomEmojis
+                                            , availableStickers = SeqSet.union validStickerIds user.availableStickers
+                                        }
                                         model.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)

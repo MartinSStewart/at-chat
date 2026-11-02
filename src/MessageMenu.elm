@@ -30,7 +30,6 @@ import MessageInput
 import MessageView
 import MyUi exposing (Copied(..))
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
@@ -466,6 +465,7 @@ type alias MenuItemsData =
     , canReply : Bool
     , text : String
     , messageCustomEmojiIdsList : List (Id CustomEmojiId)
+    , messageStickerIdsList : List (Id StickerId)
     , openDm : Maybe FrontendMsg_
     }
 
@@ -534,6 +534,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             local.localUser.decryptedMessages
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds local.localUser.decryptedMessages message
+                    , messageStickerIdsList = messageStickerIds local.localUser.decryptedMessages message
                     , openDm =
                         if isPrivateDm then
                             Nothing
@@ -612,6 +613,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
+                    , messageStickerIdsList = messageStickerIds SeqDict.empty message
                     , openDm =
                         case ( isPrivateDm, messageUserId ) of
                             ( False, Just otherUserId ) ->
@@ -682,6 +684,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
+                    , messageStickerIdsList = messageStickerIds SeqDict.empty message
                     , openDm = Nothing
                     }
                         |> Just
@@ -800,9 +803,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             Nothing
     in
     case maybeData of
-        Just { canEdit, canDelete, canReply, text, messageCustomEmojiIdsList, openDm } ->
+        Just { canEdit, canDelete, canReply, text, messageCustomEmojiIdsList, messageStickerIdsList, openDm } ->
             let
-                newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
+                newCustomEmojiIds : SeqSet (Id CustomEmojiId)
                 newCustomEmojiIds =
                     List.filter
                         (\id ->
@@ -810,7 +813,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 && not (SeqSet.member id local.localUser.user.availableCustomEmojis)
                         )
                         messageCustomEmojiIdsList
-                        |> NonemptySet.fromList
+                        |> SeqSet.fromList
+
+                newStickerIds : SeqSet (Id StickerId)
+                newStickerIds =
+                    List.filter
+                        (\id ->
+                            SeqDict.member id local.localUser.stickers
+                                && not (SeqSet.member id local.localUser.user.availableStickers)
+                        )
+                        messageStickerIdsList
+                        |> SeqSet.fromList
             in
             [ Ui.row
                 []
@@ -932,18 +945,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
-            , case newCustomEmojiIds of
-                Just newCustomEmojiIds2 ->
-                    button
-                        isMobile
-                        (Dom.id "messageMenu_addCustomEmojis")
-                        Icons.plusIcon
-                        "Get stickers & emojis"
-                        (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
-                        |> ButtonItem
+            , if SeqSet.isEmpty newCustomEmojiIds && SeqSet.isEmpty newStickerIds then
+                NoItem
 
-                Nothing ->
-                    NoItem
+              else
+                button
+                    isMobile
+                    (Dom.id "messageMenu_addCustomEmojis")
+                    Icons.plusIcon
+                    "Get stickers & emojis"
+                    (MessageMenu_PressedAddCustomEmojisAndStickersToUser newCustomEmojiIds newStickerIds)
+                    |> ButtonItem
             , case openDm of
                 Just openDm2 ->
                     button isMobile (Dom.id "messageMenu_openDm") Icons.person "DM this user" openDm2
@@ -1191,6 +1203,39 @@ messageCustomEmojiIds decrypted message =
 
         GameStarted { reactions } ->
             reactionIds reactions
+
+
+messageStickerIds :
+    SeqDict BytesHash (Result () (MessageContent userId channelId))
+    -> Message messageId userId channelId
+    -> List (Id StickerId)
+messageStickerIds decrypted message =
+    case message of
+        UserTextMessage data ->
+            RichText.stickers data.content.content
+
+        EncryptedUserTextMessage data ->
+            case SeqDict.get (Encryption.hash data.content) decrypted of
+                Just (Ok content) ->
+                    RichText.stickers content.content
+
+                Just (Err ()) ->
+                    []
+
+                Nothing ->
+                    []
+
+        UserJoinedMessage _ _ _ _ ->
+            []
+
+        DeletedMessage _ ->
+            []
+
+        CallStarted _ ->
+            []
+
+        GameStarted _ ->
+            []
 
 
 buttonHeight : Bool -> number

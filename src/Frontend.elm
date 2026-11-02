@@ -2147,12 +2147,12 @@ updateLoaded msg model =
                 )
                 model
 
-        MessageMenu_PressedAddCustomEmojisToUser customEmojiIds ->
+        MessageMenu_PressedAddCustomEmojisAndStickersToUser customEmojiIds stickerIds ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Just (Local_AddCustomEmojisToUser customEmojiIds))
+                        (Just (Local_AddCustomEmojisAndStickersToUser customEmojiIds stickerIds))
                         (MessageMenu.close model loggedIn)
                         Command.none
                 )

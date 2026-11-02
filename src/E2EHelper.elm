@@ -160,14 +160,13 @@ import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
-import List.Nonempty exposing (Nonempty(..))
+import List.Nonempty
 import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import LoginForm
 import Message
 import MuteSettings
 import NonemptyDict
-import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -3001,7 +3000,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_VoiceChatChange _ ->
                     True
 
-                Local_AddCustomEmojisToUser _ ->
+                Local_AddCustomEmojisAndStickersToUser _ _ ->
                     False
 
                 Local_Game _ _ ->
@@ -3737,7 +3736,7 @@ allAttackerLocalChanges =
     , Local_SetDomainWhitelist True brokenDomain
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
-    , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
+    , Local_AddCustomEmojisAndStickersToUser (SeqSet.singleton (Id.fromInt 0)) (SeqSet.singleton (Id.fromInt 0))
     , Local_VoiceChatChange (Call.Local_Leave startTime)
     , Local_Game
         (GuildOrDmId_Dm { otherUserId = Broadcast.adminUserId })
