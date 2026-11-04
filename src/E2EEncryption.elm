@@ -1,4 +1,4 @@
-module E2EEncryption exposing (customEmojiInEncryptedMessageTest, fileUploadTest, tests)
+module E2EEncryption exposing (customEmojiInEncryptedMessageTest, fileUploadTest, largeFileTest, tests)
 
 {-| End-to-end tests for encrypted DMs: agreeing to encrypt a conversation, working the
 shared key out on each device, and sending a message once one is there.
@@ -1445,6 +1445,72 @@ fileUploads clientId data =
                 && (request.requestedBy == T.RequestedByFrontend clientId)
         )
         data.httpRequests
+
+
+{-| A file too large to upload would go through the server unencrypted if it were shared from
+the device, so in an encrypted DM it's refused instead.
+-}
+largeFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+largeFileTest config =
+    E2EHelper.startTest
+        "A file too large to upload isn't shared from the device in an end-to-end encrypted DM"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                        , T.checkState
+                            100
+                            (\data ->
+                                if not (List.isEmpty (List.filterMap encryptFileRequest (encryptionPortRequests admin.clientId data))) then
+                                    Err "The file shouldn't have been read out to be encrypted"
+
+                                else if not (List.isEmpty (fileUploads admin.clientId data)) then
+                                    Err "The file shouldn't have been uploaded"
+
+                                else
+                                    case
+                                        SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).connections
+                                            |> Maybe.andThen (NonemptyDict.get admin.clientId)
+                                    of
+                                        Just connection ->
+                                            if SeqDict.isEmpty connection.peerToPeerFiles then
+                                                Ok ()
+
+                                            else
+                                                Err "The file shouldn't be shared from the device"
+
+                                        Nothing ->
+                                            Err "The admin's connection is missing"
+                            )
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "P2P" ])
+                        ]
+                    )
+                ]
+            )
+        ]
 
 
 checkNothingUploadedYet : ClientId -> T.Data FrontendModel BackendModel2 -> Result String ()

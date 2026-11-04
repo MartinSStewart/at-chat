@@ -3510,10 +3510,12 @@ allAttackerToBackendChanges =
         }
     , PeerToPeerDownloadRequest
         (GuildOrDmId_Guild { guildId = legitGuildId, channelId = Id.fromInt 0 })
+        (NoThreadWithMessage (Id.fromInt 1))
         (Id.fromInt 0)
         (FileStatus.peerToPeerIdFromString "1")
     , PeerToPeerDownloadRequest
         (GuildOrDmId_Dm { otherUserId = Id.fromInt 0 })
+        (NoThreadWithMessage (Id.fromInt 1))
         (Id.fromInt 1)
         (FileStatus.peerToPeerIdFromString "1")
     , LogOutRequest sessionId0Hash

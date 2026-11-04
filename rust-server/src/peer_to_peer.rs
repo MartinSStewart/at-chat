@@ -57,14 +57,21 @@ pub struct TransferQuery {
     size: u64,
     expires: u64,
     token: String,
-    name: Option<String>,
+    name: String,
 }
 
-/// Has to match `PeerToPeer.transferToken` on the Elm side.
-fn transfer_token(secret_key: &[u8], transfer_id: &str, size: u64, expires: u64) -> String {
+/// Has to match `PeerToPeer.transferToken` on the Elm side. The name is signed
+/// too, so someone holding a link can't change what the download is saved as.
+fn transfer_token(
+    secret_key: &[u8],
+    transfer_id: &str,
+    size: u64,
+    expires: u64,
+    name: &str,
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(secret_key);
-    hasher.update(format!(":p2p:{transfer_id}:{size}:{expires}").as_bytes());
+    hasher.update(format!(":p2p:{transfer_id}:{size}:{expires}:{name}").as_bytes());
     hasher
         .finalize()
         .iter()
@@ -94,7 +101,13 @@ fn check_transfer(
     if !is_valid_transfer_id(transfer_id) {
         return Err("Invalid transfer");
     }
-    let expected = transfer_token(secret_key, transfer_id, query.size, query.expires);
+    let expected = transfer_token(
+        secret_key,
+        transfer_id,
+        query.size,
+        query.expires,
+        &query.name,
+    );
     if !bool::from(expected.as_bytes().ct_eq(query.token.as_bytes())) {
         return Err("Invalid transfer");
     }
@@ -279,10 +292,7 @@ pub async fn download_endpoint(
         .status(StatusCode::OK)
         .header("Content-Type", "application/octet-stream")
         .header("Content-Length", query.size)
-        .header(
-            "Content-Disposition",
-            content_disposition(query.name.as_deref().unwrap_or("download")),
-        )
+        .header("Content-Disposition", content_disposition(&query.name))
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
         .body(Body::from_stream(body))
@@ -381,7 +391,7 @@ mod tests {
         let expires = now_millis() + 60_000;
         format!(
             "{base}/file/p2p/{transfer_id}?size={size}&expires={expires}&token={}&name=big%20file.bin",
-            transfer_token(b"secret", transfer_id, size, expires)
+            transfer_token(b"secret", transfer_id, size, expires, "big file.bin")
         )
     }
 
@@ -479,7 +489,7 @@ mod tests {
         let base = test_server().await;
         let response = reqwest::Client::new()
             .get(format!(
-                "{base}/file/p2p/abc?size=10&expires=99999999999999&token=00"
+                "{base}/file/p2p/abc?size=10&expires=99999999999999&token=00&name=a.bin"
             ))
             .send()
             .await
@@ -489,10 +499,14 @@ mod tests {
 
     #[test]
     fn token_matches_elm() {
-        // Worked out with Sha256.sha256 "secret:p2p:abc123:1000:2000" in Elm.
+        // The same tokens as in tests/PeerToPeerTests.elm.
         assert_eq!(
-            transfer_token(b"secret", "abc123", 1000, 2000),
-            "9d7e112068d366c09bfe692ab8e4ce3b34144552c1dc31a47b1874c4f4108513"
+            transfer_token(b"secret", "abc123", 1000, 2000, "big file.bin"),
+            "727a34277bfdc8eb734227ac0351af4d0c56bf2d4db4b63412cc9174957f0702"
+        );
+        assert_eq!(
+            transfer_token(b"secret", "abc123", 1000, 2000, "häst 🐴.bin"),
+            "abd6d05d564e7168eb1ced7346ab83eb1bea3b7602db6f2f8af6e78d1d21cc6b"
         );
     }
 
@@ -502,7 +516,18 @@ mod tests {
             size: 1000,
             expires: 2000,
             token: String::from("00"),
-            name: None,
+            name: String::from("a.bin"),
+        };
+        assert!(check_transfer(b"secret", "abc123", &query, 1000).is_err());
+    }
+
+    #[test]
+    fn rejects_a_changed_name() {
+        let query = TransferQuery {
+            size: 1000,
+            expires: 2000,
+            token: transfer_token(b"secret", "abc123", 1000, 2000, "a.bin"),
+            name: String::from("a.exe"),
         };
         assert!(check_transfer(b"secret", "abc123", &query, 1000).is_err());
     }
@@ -512,8 +537,8 @@ mod tests {
         let query = TransferQuery {
             size: 1000,
             expires: 2000,
-            token: transfer_token(b"secret", "abc123", 1000, 2000),
-            name: None,
+            token: transfer_token(b"secret", "abc123", 1000, 2000, "a.bin"),
+            name: String::from("a.bin"),
         };
         assert!(check_transfer(b"secret", "abc123", &query, 1999).is_ok());
         assert!(check_transfer(b"secret", "abc123", &query, 2001).is_err());
@@ -524,8 +549,8 @@ mod tests {
         let query = TransferQuery {
             size: 1000,
             expires: 2000,
-            token: transfer_token(b"secret", "a/b", 1000, 2000),
-            name: None,
+            token: transfer_token(b"secret", "a/b", 1000, 2000, "a.bin"),
+            name: String::from("a.bin"),
         };
         assert!(check_transfer(b"secret", "a/b", &query, 1000).is_err());
     }

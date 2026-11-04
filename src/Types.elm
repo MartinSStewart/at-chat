@@ -521,6 +521,7 @@ type alias BackendModel =
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
+    , peerToPeerRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , sessionRateLimits : RateLimit.SessionRateLimits
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
@@ -868,7 +869,7 @@ type ToBackend
     | ExportChannelRequest ExportChannelId
     | ImportChannelRequest (Id GuildId) { fileName : String, json : String }
     | SharePeerToPeerFileRequest PeerToPeerId PeerToPeer.SharedFile
-    | PeerToPeerDownloadRequest GuildOrDmId (Id UserId) PeerToPeerId
+    | PeerToPeerDownloadRequest GuildOrDmId ThreadRouteWithMessage (Id UserId) PeerToPeerId
 
 
 type BackendMsg

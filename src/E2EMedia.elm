@@ -1,14 +1,17 @@
 module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, peerToPeerFileTest, videoAttachmentTest)
 
 import Audio
+import Broadcast
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
 import Expect
+import Id
 import Json.Decode
 import Json.Encode
 import List.Extra
+import NonemptyDict
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -859,6 +862,39 @@ peerToPeerFileTest largeFileUploadConfig =
                                     |> Err
                     )
                 , user.snapshotView 100 { name = "Peer to peer file" }
+
+                -- Asking for the file from a message it isn't attached to gets nothing.
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).connections
+                                |> Maybe.andThen (NonemptyDict.get admin.clientId)
+                                |> Maybe.map (\connection -> SeqDict.toList connection.peerToPeerFiles)
+                        of
+                            Just [ ( peerToPeerId, sharedFile ) ] ->
+                                [ user.sendToBackend
+                                    100
+                                    (Types.PeerToPeerDownloadRequest
+                                        sharedFile.guildOrDmId
+                                        (Id.NoThreadWithMessage (Id.fromInt 0))
+                                        Broadcast.adminUserId
+                                        peerToPeerId
+                                    )
+                                , T.checkState
+                                    1000
+                                    (\data2 ->
+                                        if List.length (List.filter (\request -> String.contains "/file/p2p/" request.url) data2.httpRequests) == 1 then
+                                            Ok ()
+
+                                        else
+                                            Err "The file shouldn't be sent for a message it isn't attached to"
+                                    )
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "The uploader's tab should be sharing one file") ]
+                    )
 
                 -- A reloaded tab no longer has the file. The old tab's connection is left open,
                 -- as one that closed without the backend hearing about it yet would be.

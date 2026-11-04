@@ -39,6 +39,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
+import FileName
 import FileStatus exposing (Attachment, FileData, FileHash, FileId, PeerToPeerId)
 import Game
 import Go
@@ -85,7 +86,7 @@ import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TextEditor
-import Thread exposing (DiscordBackendThread, SlackBackendThread)
+import Thread exposing (BackendThread, DiscordBackendThread, SlackBackendThread)
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), BackupTransfer(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LinkDiscordFailure(..), LinkSlackResult(..), LinkSlackWorkspaceError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), SlackLinkedUser, SlackUserData(..), ToBackend(..), ToFrontend(..), UploadBackupState)
 import Unsafe
@@ -280,6 +281,7 @@ init =
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
+      , peerToPeerRateLimits = SeqDict.empty
       , sessionRateLimits = RateLimit.sessionRateLimitsInit
       , toBackendLogs = Array.empty
       , backendMsgLogs = Array.empty
@@ -3135,14 +3137,38 @@ staleConnections sessionId connections =
             []
 
 
-canSharePeerToPeerFileIn : Id UserId -> GuildOrDmId -> BackendModel -> Bool
-canSharePeerToPeerFileIn userId guildOrDmId model =
-    case guildOrDmId of
-        GuildOrDmId_Guild { guildId } ->
-            isGuildMember userId guildId model
+canSharePeerToPeerFileIn : Id UserId -> PeerToPeerId -> PeerToPeer.SharedFile -> BackendModel -> Bool
+canSharePeerToPeerFileIn userId peerToPeerId sharedFile model =
+    if
+        (sharedFile.fileSize < 0)
+            || (String.length (FileStatus.peerToPeerIdToString peerToPeerId) > FileStatus.peerToPeerIdMaxLength)
+    then
+        False
 
-        GuildOrDmId_Dm { otherUserId } ->
-            NonemptyDict.member otherUserId model.users
+    else
+        case sharedFile.guildOrDmId of
+            GuildOrDmId_Guild { guildId } ->
+                isGuildMember userId guildId model
+
+            GuildOrDmId_Dm { otherUserId } ->
+                -- The file would go through the server unencrypted, which an encrypted DM promises won't happen.
+                case SeqDict.get (DmChannelId.fromUserIds userId otherUserId) model.dmChannels of
+                    Just dmChannel ->
+                        case dmChannel.e2ee of
+                            DmChannel.E2eeEnabled _ ->
+                                False
+
+                            DmChannel.E2eeDisabled _ ->
+                                True
+
+                            DmChannel.E2eeRequestedBy _ ->
+                                True
+
+                            DmChannel.E2eeDeclinedBy _ ->
+                                True
+
+                    Nothing ->
+                        NonemptyDict.member otherUserId model.users
 
 
 {-| Only the connection that shared a file most recently has it. One that shared it before may
@@ -3193,35 +3219,54 @@ isGuildMember userId guildId model =
             False
 
 
-{-| The connection sharing the file, if it shared it in the conversation the downloader is
-asking from. A DM is named from each person's side, so the uploader shared it with the
-downloader as the other user.
+{-| The connection sharing the file, if the message the downloader pressed is still the
+uploader's and still has the file, and the connection shared it in that conversation. A DM is
+named from each person's side, so the uploader shared it with the downloader as the other user.
+
+Checking the message, rather than only what the uploader's tab says it shares, means a file
+taken out of a draft, deleted or edited away can't be asked for, however its id is guessed.
+
 -}
 peerToPeerUploaderConnection :
     Id UserId
     -> GuildOrDmId
+    -> ThreadRouteWithMessage
     -> Id UserId
     -> PeerToPeerId
     -> BackendModel
     -> Maybe ( ClientId, PeerToPeer.SharedFile )
-peerToPeerUploaderConnection downloader guildOrDmId uploader peerToPeerId model =
+peerToPeerUploaderConnection downloader guildOrDmId threadRoute uploader peerToPeerId model =
     let
         sharedAs : Maybe GuildOrDmId
         sharedAs =
             case guildOrDmId of
-                GuildOrDmId_Guild { guildId } ->
-                    if isGuildMember downloader guildId model then
-                        Just guildOrDmId
+                GuildOrDmId_Guild { guildId, channelId } ->
+                    case SeqDict.get guildId model.guilds |> Maybe.andThen (\guild -> SeqDict.get channelId guild.channels) of
+                        Just channel ->
+                            if
+                                isGuildMember downloader guildId model
+                                    && isGuildMember uploader guildId model
+                                    && hasPeerToPeerFile uploader peerToPeerId threadRoute channel
+                            then
+                                Just guildOrDmId
 
-                    else
-                        Nothing
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
 
                 GuildOrDmId_Dm { otherUserId } ->
-                    if otherUserId == uploader then
-                        Just (GuildOrDmId_Dm { otherUserId = downloader })
+                    case SeqDict.get (DmChannelId.fromUserIds downloader uploader) model.dmChannels of
+                        Just dmChannel ->
+                            if otherUserId == uploader && hasPeerToPeerFile uploader peerToPeerId threadRoute dmChannel then
+                                Just (GuildOrDmId_Dm { otherUserId = downloader })
 
-                    else
-                        Nothing
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
     in
     case sharedAs of
         Just sharedAs2 ->
@@ -3254,6 +3299,73 @@ peerToPeerUploaderConnection downloader guildOrDmId uploader peerToPeerId model 
 
         Nothing ->
             Nothing
+
+
+hasPeerToPeerFile :
+    Id UserId
+    -> PeerToPeerId
+    -> ThreadRouteWithMessage
+    ->
+        { a
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+        }
+    -> Bool
+hasPeerToPeerFile uploader peerToPeerId threadRoute channel =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            case IdArray.get messageId channel.messages of
+                Just message ->
+                    messageHasPeerToPeerFile uploader peerToPeerId message
+
+                Nothing ->
+                    False
+
+        ViewThreadWithMessage threadId messageId ->
+            case SeqDict.get threadId channel.threads of
+                Just thread ->
+                    case IdArray.get messageId thread.messages of
+                        Just message ->
+                            messageHasPeerToPeerFile uploader peerToPeerId message
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
+
+
+messageHasPeerToPeerFile : Id UserId -> PeerToPeerId -> Message messageId (Id UserId) channelId -> Bool
+messageHasPeerToPeerFile uploader peerToPeerId message =
+    case message of
+        UserTextMessage data ->
+            data.createdBy
+                == uploader
+                && List.any
+                    (\attachment ->
+                        case attachment of
+                            FileStatus.PeerToPeer peerToPeer ->
+                                peerToPeer.peerToPeerId == peerToPeerId
+
+                            FileStatus.Stored _ ->
+                                False
+                    )
+                    (SeqDict.values data.content.attachedFiles)
+
+        EncryptedUserTextMessage _ ->
+            False
+
+        UserJoinedMessage _ _ _ _ ->
+            False
+
+        DeletedMessage _ ->
+            False
+
+        CallStarted _ ->
+            False
+
+        GameStarted _ ->
+            False
 
 
 disconnectClient : Time.Posix -> SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
@@ -4024,7 +4136,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             let
                                                 attachedFiles2 : SeqDict (Id FileId) Attachment
                                                 attachedFiles2 =
-                                                    BackendExtra.validateAttachedFiles model.files attachedFiles
+                                                    BackendExtra.validateStoredAttachments model.files attachedFiles
 
                                                 guildMembers : SeqDict (Discord.Id Discord.UserId) { name : PersonName }
                                                 guildMembers =
@@ -4162,7 +4274,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         attachedFiles2 : SeqDict (Id FileId) Attachment
                                         attachedFiles2 =
-                                            BackendExtra.validateAttachedFiles model.files attachedFiles
+                                            BackendExtra.validateStoredAttachments model.files attachedFiles
                                     in
                                     case
                                         ( threadRouteWithMaybeReplyTo
@@ -6650,7 +6762,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         attachedFiles2 : SeqDict (Id FileId) Attachment
                                         attachedFiles2 =
-                                            BackendExtra.validateAttachedFiles model.files attachedFiles
+                                            BackendExtra.validateStoredAttachments model.files attachedFiles
 
                                         customEmojiNames : SeqDict (Id CustomEmojiId) String
                                         customEmojiNames =
@@ -8670,43 +8782,59 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model
                 sessionId
                 (\session _ ->
-                    if canSharePeerToPeerFileIn session.userId sharedFile.guildOrDmId model then
-                        ( { model
-                            | connections =
-                                forgetPeerToPeerFile session.userId peerToPeerId model
-                                    |> SeqDict.updateIfExists
-                                        sessionId
-                                        (NonemptyDict.updateIfExists
-                                            clientId
-                                            (\connection ->
-                                                if SeqDict.size connection.peerToPeerFiles < PeerToPeer.maxSharedFiles then
-                                                    { connection
-                                                        | peerToPeerFiles =
-                                                            SeqDict.insert peerToPeerId sharedFile connection.peerToPeerFiles
-                                                    }
-
-                                                else
-                                                    connection
-                                            )
-                                        )
-                          }
-                        , Command.none
+                    case
+                        ( canSharePeerToPeerFileIn session.userId peerToPeerId sharedFile model
+                        , RateLimit.checkAndUpdateRateLimit time session.userId model.peerToPeerRateLimits
                         )
+                    of
+                        ( True, Ok peerToPeerRateLimits ) ->
+                            ( { model
+                                | peerToPeerRateLimits = peerToPeerRateLimits
+                                , connections =
+                                    forgetPeerToPeerFile session.userId peerToPeerId model
+                                        |> SeqDict.updateIfExists
+                                            sessionId
+                                            (NonemptyDict.updateIfExists
+                                                clientId
+                                                (\connection ->
+                                                    if SeqDict.size connection.peerToPeerFiles < PeerToPeer.maxSharedFiles then
+                                                        { connection
+                                                            | peerToPeerFiles =
+                                                                SeqDict.insert
+                                                                    peerToPeerId
+                                                                    { sharedFile | fileName = FileName.fromString (FileName.toString sharedFile.fileName) }
+                                                                    connection.peerToPeerFiles
+                                                        }
 
-                    else
-                        ( model, Command.none )
+                                                    else
+                                                        connection
+                                                )
+                                            )
+                              }
+                            , Command.none
+                            )
+
+                        ( True, Err () ) ->
+                            ( model, Command.none )
+
+                        ( False, _ ) ->
+                            ( model, Command.none )
                 )
 
-        PeerToPeerDownloadRequest guildOrDmId uploader peerToPeerId ->
+        PeerToPeerDownloadRequest guildOrDmId threadRoute uploader peerToPeerId ->
             BackendExtra.asUser
                 model
                 sessionId
                 (\session _ ->
-                    case peerToPeerUploaderConnection session.userId guildOrDmId uploader peerToPeerId model of
-                        Just ( uploaderClientId, sharedFile ) ->
+                    case
+                        ( peerToPeerUploaderConnection session.userId guildOrDmId threadRoute uploader peerToPeerId model
+                        , RateLimit.checkAndUpdateRateLimit time session.userId model.peerToPeerRateLimits
+                        )
+                    of
+                        ( Just ( uploaderClientId, sharedFile ), Ok peerToPeerRateLimits ) ->
                             let
                                 ( model2, transferId ) =
-                                    SecretId.getUniqueId time model
+                                    SecretId.getUniqueId time { model | peerToPeerRateLimits = peerToPeerRateLimits }
 
                                 url : String
                                 url =
@@ -8721,7 +8849,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ]
                             )
 
-                        Nothing ->
+                        ( Just _, Err () ) ->
+                            ( model
+                            , PeerToPeerDownloadResponse uploader peerToPeerId Nothing
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                        ( Nothing, _ ) ->
                             ( model
                             , PeerToPeerDownloadResponse uploader peerToPeerId Nothing
                                 |> Lamdera.sendToFrontend clientId

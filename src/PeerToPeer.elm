@@ -4,6 +4,7 @@ module PeerToPeer exposing
     , SharedFile
     , fileState
     , init
+    , maxSendsAtOnce
     , maxSharedFiles
     , sendFile
     , transferUrl
@@ -26,10 +27,10 @@ import Effect.Time as Time
 import FileName exposing (FileName)
 import FileStatus exposing (PeerToPeerFileState(..), PeerToPeerId)
 import Id exposing (GuildOrDmId, Id, UserId)
+import SHA256
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sha256
 import Url
 
 
@@ -40,6 +41,7 @@ type alias Model =
     { shared : SeqDict PeerToPeerId { file : File, sharedFile : SharedFile }
     , downloads : SeqDict ( Id UserId, PeerToPeerId ) Download
     , pickedDifferentFile : SeqSet PeerToPeerId
+    , sending : SeqDict PeerToPeerId Int
     }
 
 
@@ -61,7 +63,7 @@ type alias SharedFile =
 
 init : Model
 init =
-    { shared = SeqDict.empty, downloads = SeqDict.empty, pickedDifferentFile = SeqSet.empty }
+    { shared = SeqDict.empty, downloads = SeqDict.empty, pickedDifferentFile = SeqSet.empty, sending = SeqDict.empty }
 
 
 {-| More than anyone would share at once, while still stopping a connection from filling the
@@ -70,6 +72,14 @@ backend's memory.
 maxSharedFiles : Int
 maxSharedFiles =
     1000
+
+
+{-| Each download someone asks for is a whole upload from this device, so this keeps anyone
+from using up the uploader's connection by asking for the same file many times at once.
+-}
+maxSendsAtOnce : Int
+maxSendsAtOnce =
+    2
 
 
 fileState : Id UserId -> Id UserId -> PeerToPeerId -> Model -> PeerToPeerFileState
@@ -114,6 +124,10 @@ transferUrl time serverSecret transferId sharedFile =
         transferId2 : String
         transferId2 =
             SecretId.toString transferId
+
+        name : String
+        name =
+            FileName.toString sharedFile.fileName
     in
     FileStatus.domain
         ++ "/file/p2p/"
@@ -123,16 +137,19 @@ transferUrl time serverSecret transferId sharedFile =
         ++ "&expires="
         ++ expires
         ++ "&token="
-        ++ transferToken serverSecret transferId2 size expires
+        ++ transferToken serverSecret transferId2 size expires name
         ++ "&name="
-        ++ Url.percentEncode (FileName.toString sharedFile.fileName)
+        ++ Url.percentEncode name
 
 
-{-| Has to match `transfer_token` in rust-server/src/peer\_to\_peer.rs.
+{-| Has to match `transfer_token` in rust-server/src/peer\_to\_peer.rs. The name is signed too so
+that someone holding a link can't change what the download gets saved as.
 -}
-transferToken : SecretId ServerSecret -> String -> String -> String -> String
-transferToken serverSecret transferId size expires =
-    Sha256.sha256 (SecretId.toString serverSecret ++ ":p2p:" ++ transferId ++ ":" ++ size ++ ":" ++ expires)
+transferToken : SecretId ServerSecret -> String -> String -> String -> String -> String
+transferToken serverSecret transferId size expires name =
+    -- Sha256.sha256 doesn't hash a name outside ASCII the way Rust does, while this one hashes its UTF-8.
+    SHA256.fromString (SecretId.toString serverSecret ++ ":p2p:" ++ transferId ++ ":" ++ size ++ ":" ++ expires ++ ":" ++ name)
+        |> SHA256.toHex
 
 
 {-| The whole file goes in one request. A browser streams a file body from disk rather than

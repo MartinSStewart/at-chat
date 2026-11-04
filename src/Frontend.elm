@@ -1045,8 +1045,35 @@ updateLoaded msg model =
                     )
                     model
 
-        SentPeerToPeerFile _ _ ->
-            ( model, Command.none )
+        SentPeerToPeerFile peerToPeerId _ ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( FrontendExtra.mapPeerToPeer
+                        (\peerToPeer ->
+                            { peerToPeer
+                                | sending =
+                                    SeqDict.update
+                                        peerToPeerId
+                                        (\maybeCount ->
+                                            case maybeCount of
+                                                Just count ->
+                                                    if count > 1 then
+                                                        Just (count - 1)
+
+                                                    else
+                                                        Nothing
+
+                                                Nothing ->
+                                                    Nothing
+                                        )
+                                        peerToPeer.sending
+                            }
+                        )
+                        loggedIn
+                    , Command.none
+                    )
+                )
+                model
 
         NewChannelFormChanged guildId newChannelForm ->
             FrontendExtra.updateLoggedIn
@@ -3289,7 +3316,7 @@ updateLoaded msg model =
                     copyText text model
 
                 MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
-                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
+                    handlePressedPeerToPeerFile guildOrDmId threadRoute uploader peerToPeerFile model
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -6568,7 +6595,7 @@ updateLoaded msg model =
                     copyText text model
 
                 MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
-                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
+                    handlePressedPeerToPeerFile guildOrDmId (NoThreadWithMessage messageId) uploader peerToPeerFile model
 
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
@@ -6679,7 +6706,7 @@ updateLoaded msg model =
                     copyText text model
 
                 MessageView.MessageView_PressedPeerToPeerFile uploader peerToPeerFile ->
-                    handlePressedPeerToPeerFile guildOrDmId uploader peerToPeerFile model
+                    handlePressedPeerToPeerFile guildOrDmId (ViewThreadWithMessage threadId messageId) uploader peerToPeerFile model
 
         ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn
@@ -7163,11 +7190,12 @@ setScreenShareEnabled time screenShareEnabled loggedIn =
 
 handlePressedPeerToPeerFile :
     AnyGuildOrDmId
+    -> ThreadRouteWithMessage
     -> Id UserId
     -> PeerToPeerFile
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-handlePressedPeerToPeerFile anyGuildOrDmId uploader peerToPeerFile model =
+handlePressedPeerToPeerFile anyGuildOrDmId threadRoute uploader peerToPeerFile model =
     case anyGuildOrDmId of
         GuildOrDmId guildOrDmId ->
             FrontendExtra.updateLoggedIn
@@ -7190,7 +7218,7 @@ handlePressedPeerToPeerFile anyGuildOrDmId uploader peerToPeerFile model =
                                     }
                                 )
                                 loggedIn
-                            , PeerToPeerDownloadRequest guildOrDmId uploader peerToPeerFile.peerToPeerId
+                            , PeerToPeerDownloadRequest guildOrDmId threadRoute uploader peerToPeerFile.peerToPeerId
                                 |> Lamdera.sendToBackend
                             )
                     in
@@ -10007,14 +10035,31 @@ updateLoadedFromBackend msg model =
         PeerToPeerSendFileRequest peerToPeerId url ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( loggedIn
-                    , case SeqDict.get peerToPeerId (Local.model loggedIn.localState).localUser.peerToPeer.shared of
+                    let
+                        peerToPeer : PeerToPeer.Model
+                        peerToPeer =
+                            (Local.model loggedIn.localState).localUser.peerToPeer
+
+                        sending : Int
+                        sending =
+                            SeqDict.get peerToPeerId peerToPeer.sending |> Maybe.withDefault 0
+                    in
+                    case SeqDict.get peerToPeerId peerToPeer.shared of
                         Just shared ->
-                            PeerToPeer.sendFile (SentPeerToPeerFile peerToPeerId) url shared.file
+                            if sending < PeerToPeer.maxSendsAtOnce then
+                                ( FrontendExtra.mapPeerToPeer
+                                    (\peerToPeer2 ->
+                                        { peerToPeer2 | sending = SeqDict.insert peerToPeerId (sending + 1) peerToPeer2.sending }
+                                    )
+                                    loggedIn
+                                , PeerToPeer.sendFile (SentPeerToPeerFile peerToPeerId) url shared.file
+                                )
+
+                            else
+                                ( loggedIn, Command.none )
 
                         Nothing ->
-                            Command.none
-                    )
+                            ( loggedIn, Command.none )
                 )
                 model
 

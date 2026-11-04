@@ -54,6 +54,7 @@ module FileStatus exposing
     , measuredFileSerializeCodec
     , onlyUploadedFiles
     , peerToPeerIdFromString
+    , peerToPeerIdMaxLength
     , peerToPeerIdToString
     , pngContent
     , progressToString
@@ -631,6 +632,13 @@ serializedStorageCodec =
         |> Serialize.variant2 SerializedEncrypted aesPrivateKeySerializeCodec encryptedThumbnailSerializeCodec
         |> Serialize.variant2 SerializedPeerToPeer peerToPeerIdSerializeCodec Serialize.int
         |> Serialize.finishCustomType
+
+
+{-| Far longer than the ids the frontend makes, which are three numbers.
+-}
+peerToPeerIdMaxLength : Int
+peerToPeerIdMaxLength =
+    100
 
 
 peerToPeerIdFromString : String -> PeerToPeerId

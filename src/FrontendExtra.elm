@@ -81,6 +81,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
@@ -1030,11 +1031,20 @@ gotFiles guildOrDmId threadRoute files model =
                                     FilePeerToPeer peerToPeerFile2
 
                                 Nothing ->
-                                    FileUploading
-                                        (File.name file |> FileName.fromString)
-                                        { sent = 0, size = File.size file }
-                                        (File.mime file |> FileStatus.contentType)
-                                        IsNotEncrypted
+                                    if File.size file > FileStatus.maxUploadSize then
+                                        FileError
+                                            (File.name file |> FileName.fromString)
+                                            (File.size file)
+                                            (File.mime file |> FileStatus.contentType)
+                                            (Http.BadStatus 413)
+                                            IsNotEncrypted
+
+                                    else
+                                        FileUploading
+                                            (File.name file |> FileName.fromString)
+                                            { sent = 0, size = File.size file }
+                                            (File.mime file |> FileStatus.contentType)
+                                            IsNotEncrypted
                             )
                         )
                         attached
@@ -1048,7 +1058,11 @@ gotFiles guildOrDmId threadRoute files model =
                                         |> Tuple.mapSecond (\cmd -> cmd :: cmds2)
 
                                 Nothing ->
-                                    ( loggedIn3, startUpload fileId file :: cmds2 )
+                                    if File.size file > FileStatus.maxUploadSize then
+                                        ( loggedIn3, cmds2 )
+
+                                    else
+                                        ( loggedIn3, startUpload fileId file :: cmds2 )
                         )
                         ( loggedIn, [] )
                         attached
@@ -1103,7 +1117,7 @@ peerToPeerFile : Time.Posix -> AnyGuildOrDmId -> Id FileId -> File -> LoggedIn2 
 peerToPeerFile time anyGuildOrDmId fileId file loggedIn =
     case anyGuildOrDmId of
         GuildOrDmId guildOrDmId ->
-            if File.size file > FileStatus.maxUploadSize then
+            if File.size file > FileStatus.maxUploadSize && not (isEncryptedDm guildOrDmId (Local.model loggedIn.localState)) then
                 Just
                     ( guildOrDmId
                     , { fileName = File.name file |> FileName.fromString
@@ -1129,6 +1143,35 @@ peerToPeerFile time anyGuildOrDmId fileId file loggedIn =
 
         SlackGuildOrDmId _ ->
             Nothing
+
+
+{-| A peer to peer file goes through the server unencrypted, so it isn't offered in an
+encrypted DM.
+-}
+isEncryptedDm : GuildOrDmId -> LocalState -> Bool
+isEncryptedDm guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId_Guild _ ->
+            False
+
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    case dmChannel.e2ee of
+                        DmChannel.E2eeEnabled _ ->
+                            True
+
+                        DmChannel.E2eeDisabled _ ->
+                            False
+
+                        DmChannel.E2eeRequestedBy _ ->
+                            False
+
+                        DmChannel.E2eeDeclinedBy _ ->
+                            False
+
+                Nothing ->
+                    False
 
 
 sharePeerToPeerFile :
@@ -1341,25 +1384,43 @@ editMessage_gotFiles guildOrDmId files model =
                                             )
 
                                         Nothing ->
-                                            ( ( fileText3
-                                              , FileStatus.uploadFile
-                                                    (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                                    guildOrDmId
-                                                    fileId
-                                                    file2
-                                                    :: cmds2
-                                              , SeqDict.insert
-                                                    fileId
-                                                    (FileUploading
-                                                        (File.name file2 |> FileName.fromString)
-                                                        { sent = 0, size = File.size file2 }
-                                                        (File.mime file2 |> FileStatus.contentType)
-                                                        IsNotEncrypted
-                                                    )
-                                                    dict3
-                                              )
-                                            , loggedIn3
-                                            )
+                                            if File.size file2 > FileStatus.maxUploadSize then
+                                                ( ( fileText3
+                                                  , cmds2
+                                                  , SeqDict.insert
+                                                        fileId
+                                                        (FileError
+                                                            (File.name file2 |> FileName.fromString)
+                                                            (File.size file2)
+                                                            (File.mime file2 |> FileStatus.contentType)
+                                                            (Http.BadStatus 413)
+                                                            IsNotEncrypted
+                                                        )
+                                                        dict3
+                                                  )
+                                                , loggedIn3
+                                                )
+
+                                            else
+                                                ( ( fileText3
+                                                  , FileStatus.uploadFile
+                                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
+                                                        guildOrDmId
+                                                        fileId
+                                                        file2
+                                                        :: cmds2
+                                                  , SeqDict.insert
+                                                        fileId
+                                                        (FileUploading
+                                                            (File.name file2 |> FileName.fromString)
+                                                            { sent = 0, size = File.size file2 }
+                                                            (File.mime file2 |> FileStatus.contentType)
+                                                            IsNotEncrypted
+                                                        )
+                                                        dict3
+                                                  )
+                                                , loggedIn3
+                                                )
                                 )
                                 ( ( [], [], edit.attachedFiles ), loggedIn )
                                 files

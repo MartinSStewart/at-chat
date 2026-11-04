@@ -67,6 +67,7 @@ module BackendExtra exposing
     , toBackendLog
     , unreadOverviewData
     , validateAttachedFiles
+    , validateStoredAttachments
     , validateStoredFiles
     )
 
@@ -96,7 +97,8 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import Env
-import FileStatus exposing (Attachment(..), BackendFileData, FileData, FileHash, FileId)
+import FileName
+import FileStatus exposing (Attachment(..), BackendFileData, FileData, FileHash, FileId, PeerToPeerFile)
 import Hex
 import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
@@ -1170,8 +1172,44 @@ validateAttachedFiles uploadedFiles dict =
                     Stored fileData ->
                         validateStoredFile uploadedFiles fileData |> Maybe.map Stored
 
+                    PeerToPeer peerToPeer ->
+                        validatePeerToPeerFile peerToPeer |> Maybe.map PeerToPeer
+        )
+        dict
+
+
+{-| The frontend could have sent anything here, so the name gets the limits `FileName.fromString` puts
+on it and the id gets a length limit.
+-}
+validatePeerToPeerFile : PeerToPeerFile -> Maybe PeerToPeerFile
+validatePeerToPeerFile peerToPeer =
+    if
+        (peerToPeer.fileSize < 0)
+            || (String.length (FileStatus.peerToPeerIdToString peerToPeer.peerToPeerId) > FileStatus.peerToPeerIdMaxLength)
+    then
+        Nothing
+
+    else
+        Just { peerToPeer | fileName = FileName.fromString (FileName.toString peerToPeer.fileName) }
+
+
+{-| Discord and Slack can only be sent files the server has, and a peer to peer file kept only in
+at-chat's copy of the message couldn't be downloaded either, since that copy is rebuilt from theirs.
+-}
+validateStoredAttachments : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) Attachment -> SeqDict (Id FileId) Attachment
+validateStoredAttachments uploadedFiles dict =
+    SeqDict.filterMap
+        (\id attachment ->
+            if Id.toInt id < 1 then
+                Nothing
+
+            else
+                case attachment of
+                    Stored fileData ->
+                        validateStoredFile uploadedFiles fileData |> Maybe.map Stored
+
                     PeerToPeer _ ->
-                        Just attachment
+                        Nothing
         )
         dict
 
@@ -3820,7 +3858,7 @@ toBackendLog toBackend =
         SharePeerToPeerFileRequest _ _ ->
             ToBackendLog_SharePeerToPeerFileRequest
 
-        PeerToPeerDownloadRequest _ _ _ ->
+        PeerToPeerDownloadRequest _ _ _ _ ->
             ToBackendLog_PeerToPeerDownloadRequest
 
 
