@@ -1421,9 +1421,14 @@ fn vec_to_headermap(
 const SERVER_BACKUPS_PATH: &str = "./var/lib/atchat/backups/";
 const BUCKET_BACKUPS_PATH: &str = "./var/lib/atchat/storage/backups/";
 
-const BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+// A backup is made every 4 hours and is over 100MB, so a month of them is over 20GB. That's
+// fine in the bucket, but on the server's own disk it crowds out s3fs, which stages every write
+// to the bucket on that disk and starts failing them once less than a tenth of it is free. The
+// server's copies only need to cover the last few days.
+const SERVER_BACKUP_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const BUCKET_BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
-fn remove_old_backups(dir: String) {
+fn remove_old_backups(dir: String, max_age: Duration) {
     let now = SystemTime::now();
 
     match fs::read_dir(&dir) {
@@ -1441,7 +1446,7 @@ fn remove_old_backups(dir: String) {
                                 (true, Ok(time)) => {
                                     let should_delete = match now.duration_since(time) {
                                         Ok(duration) => {
-                                            duration > BACKUP_MAX_AGE
+                                            duration > max_age
                                                 && filename.starts_with("backend-export-")
                                         }
                                         Err(_) => false,
@@ -1499,8 +1504,8 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Body) -> Respo
     // file at a time, and on the bucket each of those is a network round trip. The upload it was
     // holding up has no use for the result, so it runs on its own once the backup is safe.
     tokio::task::spawn_blocking(|| {
-        remove_old_backups(SERVER_BACKUPS_PATH.to_string());
-        remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
+        remove_old_backups(SERVER_BACKUPS_PATH.to_string(), SERVER_BACKUP_MAX_AGE);
+        remove_old_backups(BUCKET_BACKUPS_PATH.to_string(), BUCKET_BACKUP_MAX_AGE);
     });
 
     match written {
