@@ -4081,6 +4081,7 @@ editGuildNameSection guildId guild form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> EditGuildFormChanged guildId { form | name = text }
             , text = form.name
@@ -4225,6 +4226,7 @@ deleteGuildConfirmationInput guildId guildNameString form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> EditGuildFormChanged guildId { form | deleteConfirmation = text }
             , text = form.deleteConfirmation
@@ -12339,6 +12341,7 @@ deleteConfirmationInput channelNameString form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | deleteConfirmation = text }
             , text = form.deleteConfirmation
@@ -12411,6 +12414,7 @@ channelNameInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | name = text }
             , text = form.name
@@ -12443,6 +12447,7 @@ channelDescriptionInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | description = text }
             , text = form.description
@@ -12499,6 +12504,7 @@ guildNameInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | name = text }
             , text = form.name

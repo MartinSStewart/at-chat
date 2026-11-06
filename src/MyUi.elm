@@ -73,6 +73,7 @@ module MyUi exposing
     , monthToInt
     , monthToString
     , newPasswordCopyBox
+    , noAutofill
     , noPointerEvents
     , noShrinking
     , notoSans
@@ -898,6 +899,14 @@ hoverHighlightLayer =
             [ Ui.height Ui.fill, Ui.background hoverHighlight ]
             Ui.none
         )
+
+
+{-| Some iPhones offer to fill in a contact's details above the keyboard for any text input
+that doesn't opt out, which makes no sense for things like a guild name or a search box.
+-}
+noAutofill : Ui.Attribute msg
+noAutofill =
+    Ui.htmlAttribute (Html.Attributes.attribute "autocomplete" "off")
 
 
 noPointerEvents : Ui.Attribute msg
