@@ -207,7 +207,7 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
-import FileStatus exposing (BackendFileData, FileHash)
+import FileStatus exposing (BackendFileData, FileHash, PeerToPeerId)
 import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, SlackGuildOrDmId(..), StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId, Viewing_SlackChannelId, Viewing_SlackDmId)
@@ -224,6 +224,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
+import PeerToPeer
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
@@ -1182,6 +1183,7 @@ type alias ConnectionData =
     , call : CallStatus
     , remoteCallData : Call.RemoteCallData
     , currentlyViewing : UserSession.Viewing
+    , peerToPeerFiles : SeqDict PeerToPeerId PeerToPeer.SharedFile
     }
 
 

@@ -100,6 +100,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
+import PeerToPeer
 import PersonName exposing (PersonName)
 import QRCode
 import Quantity
@@ -4080,6 +4081,7 @@ editGuildNameSection guildId guild form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> EditGuildFormChanged guildId { form | name = text }
             , text = form.name
@@ -4224,6 +4226,7 @@ deleteGuildConfirmationInput guildId guildNameString form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> EditGuildFormChanged guildId { form | deleteConfirmation = text }
             , text = form.deleteConfirmation
@@ -9326,6 +9329,14 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedChannelMention
                         , onPressCopyCode = MessageView_PressedCopyCode
+                        , peerToPeerFileState =
+                            \peerToPeerId ->
+                                PeerToPeer.fileState
+                                    localUser.session.userId
+                                    message2.createdBy
+                                    peerToPeerId
+                                    localUser.peerToPeer
+                        , onPressPeerToPeerFile = MessageView_PressedPeerToPeerFile message2.createdBy
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -9506,6 +9517,8 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                         , noOp = MessageView_NoOp
                         , onPressChannelMention = MessageView_PressedDiscordChannelMention
                         , onPressCopyCode = MessageView_PressedCopyCode
+                        , peerToPeerFileState = \_ -> FileStatus.PeerToPeerUploaderOffline
+                        , onPressPeerToPeerFile = \_ -> MessageView_NoOp
                         }
                         (case localUser.user.embedVisibility of
                             ShowEmbeds ->
@@ -12328,6 +12341,7 @@ deleteConfirmationInput channelNameString form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | deleteConfirmation = text }
             , text = form.deleteConfirmation
@@ -12400,6 +12414,7 @@ channelNameInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | name = text }
             , text = form.name
@@ -12432,6 +12447,7 @@ channelDescriptionInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | description = text }
             , text = form.description
@@ -12488,6 +12504,7 @@ guildNameInput form =
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
+            , MyUi.noAutofill
             ]
             { onChange = \text -> { form | name = text }
             , text = form.name
@@ -14052,6 +14069,8 @@ slackUserTextMessageContent time containerWidth localUser revealedSpoilers chann
                     , noOp = MessageView_NoOp
                     , onPressChannelMention = \_ _ -> MessageView_NoOp
                     , onPressCopyCode = MessageView_PressedCopyCode
+                    , peerToPeerFileState = \_ -> FileStatus.PeerToPeerUploaderOffline
+                    , onPressPeerToPeerFile = \_ -> MessageView_NoOp
                     }
                     (case localUser.user.embedVisibility of
                         ShowEmbeds ->

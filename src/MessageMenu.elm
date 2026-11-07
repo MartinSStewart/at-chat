@@ -15,6 +15,7 @@ import Discord
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Encryption exposing (BytesHash)
 import Env
 import FileStatus
 import Html exposing (Html)
@@ -23,13 +24,12 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmoji
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import Message exposing (Message(..))
+import Message exposing (Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView
 import MyUi exposing (Copied(..))
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
@@ -465,6 +465,7 @@ type alias MenuItemsData =
     , canReply : Bool
     , text : String
     , messageCustomEmojiIdsList : List (Id CustomEmojiId)
+    , messageStickerIdsList : List (Id StickerId)
     , openDm : Maybe FrontendMsg_
     }
 
@@ -532,7 +533,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.channelMentions guildOrDmId2 local)
                             local.localUser.decryptedMessages
                             message
-                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds local.localUser.decryptedMessages message
+                    , messageStickerIdsList = messageStickerIds local.localUser.decryptedMessages message
                     , openDm =
                         if isPrivateDm then
                             Nothing
@@ -610,7 +612,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.discordChannelMentions guildOrDmId2 local)
                             SeqDict.empty
                             message
-                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
+                    , messageStickerIdsList = messageStickerIds SeqDict.empty message
                     , openDm =
                         case ( isPrivateDm, messageUserId ) of
                             ( False, Just otherUserId ) ->
@@ -680,7 +683,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             (LocalState.slackChannelMentions guildOrDmId2 local)
                             SeqDict.empty
                             message
-                    , messageCustomEmojiIdsList = []
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds SeqDict.empty message
+                    , messageStickerIdsList = messageStickerIds SeqDict.empty message
                     , openDm = Nothing
                     }
                         |> Just
@@ -799,9 +803,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             Nothing
     in
     case maybeData of
-        Just { canEdit, canDelete, canReply, text, messageCustomEmojiIdsList, openDm } ->
+        Just { canEdit, canDelete, canReply, text, messageCustomEmojiIdsList, messageStickerIdsList, openDm } ->
             let
-                newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
+                newCustomEmojiIds : SeqSet (Id CustomEmojiId)
                 newCustomEmojiIds =
                     List.filter
                         (\id ->
@@ -809,7 +813,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 && not (SeqSet.member id local.localUser.user.availableCustomEmojis)
                         )
                         messageCustomEmojiIdsList
-                        |> NonemptySet.fromList
+                        |> SeqSet.fromList
+
+                newStickerIds : SeqSet (Id StickerId)
+                newStickerIds =
+                    List.filter
+                        (\id ->
+                            SeqDict.member id local.localUser.stickers
+                                && not (SeqSet.member id local.localUser.user.availableStickers)
+                        )
+                        messageStickerIdsList
+                        |> SeqSet.fromList
             in
             [ Ui.row
                 []
@@ -931,18 +945,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
-            , case newCustomEmojiIds of
-                Just newCustomEmojiIds2 ->
-                    button
-                        isMobile
-                        (Dom.id "messageMenu_addCustomEmojis")
-                        Icons.plusIcon
-                        "Get stickers & emojis"
-                        (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
-                        |> ButtonItem
+            , if SeqSet.isEmpty newCustomEmojiIds && SeqSet.isEmpty newStickerIds then
+                NoItem
 
-                Nothing ->
-                    NoItem
+              else
+                button
+                    isMobile
+                    (Dom.id "messageMenu_addCustomEmojis")
+                    Icons.plusIcon
+                    "Get stickers & emojis"
+                    (MessageMenu_PressedAddCustomEmojisAndStickersToUser newCustomEmojiIds newStickerIds)
+                    |> ButtonItem
             , case openDm of
                 Just openDm2 ->
                     button isMobile (Dom.id "messageMenu_openDm") Icons.person "DM this user" openDm2
@@ -1145,8 +1158,11 @@ button isMobile htmlId icon text msg =
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
-messageCustomEmojiIds : Message messageId userId channelId -> List (Id CustomEmojiId)
-messageCustomEmojiIds message =
+messageCustomEmojiIds :
+    SeqDict BytesHash (Result () (MessageContent userId channelId))
+    -> Message messageId userId channelId
+    -> List (Id CustomEmojiId)
+messageCustomEmojiIds decrypted message =
     let
         reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)
         reactionIds reactions =
@@ -1166,7 +1182,15 @@ messageCustomEmojiIds message =
             RichText.customEmojis data.content.content ++ reactionIds data.reactions
 
         EncryptedUserTextMessage data ->
-            reactionIds data.reactions
+            case SeqDict.get (Encryption.hash data.content) decrypted of
+                Just (Ok content) ->
+                    RichText.customEmojis content.content ++ reactionIds data.reactions
+
+                Just (Err ()) ->
+                    reactionIds data.reactions
+
+                Nothing ->
+                    reactionIds data.reactions
 
         UserJoinedMessage _ _ reactions _ ->
             reactionIds reactions
@@ -1179,6 +1203,39 @@ messageCustomEmojiIds message =
 
         GameStarted { reactions } ->
             reactionIds reactions
+
+
+messageStickerIds :
+    SeqDict BytesHash (Result () (MessageContent userId channelId))
+    -> Message messageId userId channelId
+    -> List (Id StickerId)
+messageStickerIds decrypted message =
+    case message of
+        UserTextMessage data ->
+            RichText.stickers data.content.content
+
+        EncryptedUserTextMessage data ->
+            case SeqDict.get (Encryption.hash data.content) decrypted of
+                Just (Ok content) ->
+                    RichText.stickers content.content
+
+                Just (Err ()) ->
+                    []
+
+                Nothing ->
+                    []
+
+        UserJoinedMessage _ _ _ _ ->
+            []
+
+        DeletedMessage _ ->
+            []
+
+        CallStarted _ ->
+            []
+
+        GameStarted _ ->
+            []
 
 
 buttonHeight : Bool -> number

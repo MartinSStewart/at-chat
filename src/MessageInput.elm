@@ -394,6 +394,9 @@ textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text ri
             , Html.Attributes.style "width" "calc(100% - 18px)"
             , Html.Attributes.style "height" "100%"
             , Dom.idToAttribute channelTextInputId
+
+            -- Otherwise some iPhones offer to fill in a contact's details above the keyboard
+            , Html.Attributes.attribute "autocomplete" "off"
             , Html.Attributes.style "background-color" "transparent"
             , Html.Attributes.style "border" "0"
             , Html.Attributes.style "resize" "none"

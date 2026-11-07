@@ -41,6 +41,7 @@ module FrontendExtra exposing
     , loginDataToLocalState
     , logout
     , mapEncryptionRequests
+    , mapPeerToPeer
     , newPrivateKeyWarning
     , openUserOptionsAndExpandContainer
     , pastedMessageFileName
@@ -52,6 +53,7 @@ module FrontendExtra exposing
     , routeRequest
     , savePrivateKeyTitle
     , setFocus
+    , sharePeerToPeerFile
     , startEncryptingFile
     , storeDecryptedFileKeys
     , updateLoggedIn
@@ -79,6 +81,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
@@ -88,7 +91,7 @@ import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
 import Env
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
+import FileStatus exposing (Attachment, FileHash, FileId, FileStatus(..), IsEncrypted(..), PeerToPeerFile)
 import Game
 import Go
 import GuildColumn
@@ -122,6 +125,7 @@ import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
+import PeerToPeer
 import PersonName
 import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Range exposing (Range)
@@ -369,8 +373,8 @@ pendingChangesText localChange =
         Local_SetUserColor _ ->
             Just "Picked a colour"
 
-        Local_AddCustomEmojisToUser _ ->
-            Just "Add custom emojis to user"
+        Local_AddCustomEmojisAndStickersToUser _ _ ->
+            Just "Add custom emojis and stickers to user"
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
@@ -984,63 +988,102 @@ gotFiles guildOrDmId threadRoute files model =
                                 fileId
                                 file2
 
-                ( fileText, cmds, dict ) =
+                firstFileId : Id FileId
+                firstFileId =
                     case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
                         Just dict2 ->
-                            List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
-                                    let
-                                        id =
-                                            Id.nextId (NonemptyDict.toSeqDict dict3)
-                                    in
-                                    ( fileText2
-                                        ++ [ RichText.attachedFilePrefix
-                                                ++ Id.toString id
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , startUpload id file2 :: cmds2
-                                    , NonemptyDict.insert
-                                        id
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                            IsNotEncrypted
-                                        )
-                                        dict3
-                                    )
-                                )
-                                ( [], [], dict2 )
-                                files
+                            Id.nextId (NonemptyDict.toSeqDict dict2)
 
                         Nothing ->
-                            ( List.indexedMap
-                                (\index _ ->
-                                    RichText.attachedFilePrefix
-                                        ++ Id.toString (Id.fromInt (index + 1))
-                                        ++ RichText.attachedFileSuffix
-                                )
-                                (List.Nonempty.toList files)
-                            , List.indexedMap
-                                (\index file2 -> startUpload (Id.fromInt (index + 1)) file2)
-                                (List.Nonempty.toList files)
-                            , List.Nonempty.indexedMap
-                                (\index file2 ->
-                                    ( Id.fromInt (index + 1)
-                                    , FileUploading
-                                        (File.name file2 |> FileName.fromString)
-                                        { sent = 0, size = File.size file2 }
-                                        (File.mime file2 |> FileStatus.contentType)
-                                        IsNotEncrypted
-                                    )
-                                )
-                                files
-                                |> NonemptyDict.fromNonemptyList
+                            Id.fromInt 1
+
+                attached : List { fileId : Id FileId, file : File, peerToPeer : Maybe ( GuildOrDmId, PeerToPeerFile ) }
+                attached =
+                    List.indexedMap
+                        (\index file2 ->
+                            let
+                                fileId : Id FileId
+                                fileId =
+                                    Id.toInt firstFileId + index |> Id.fromInt
+                            in
+                            { fileId = fileId
+                            , file = file2
+                            , peerToPeer = peerToPeerFile model.time guildOrDmId fileId file2 loggedIn
+                            }
+                        )
+                        (List.Nonempty.toList files)
+
+                fileText : List String
+                fileText =
+                    List.map
+                        (\{ fileId } ->
+                            RichText.attachedFilePrefix ++ Id.toString fileId ++ RichText.attachedFileSuffix
+                        )
+                        attached
+
+                newStatuses : List ( Id FileId, FileStatus )
+                newStatuses =
+                    List.map
+                        (\{ fileId, file, peerToPeer } ->
+                            ( fileId
+                            , case peerToPeer of
+                                Just ( _, peerToPeerFile2 ) ->
+                                    FilePeerToPeer peerToPeerFile2
+
+                                Nothing ->
+                                    if File.size file > FileStatus.maxUploadSize then
+                                        FileError
+                                            (File.name file |> FileName.fromString)
+                                            (File.size file)
+                                            (File.mime file |> FileStatus.contentType)
+                                            (Http.BadStatus 413)
+                                            IsNotEncrypted
+
+                                    else
+                                        FileUploading
+                                            (File.name file |> FileName.fromString)
+                                            { sent = 0, size = File.size file }
+                                            (File.mime file |> FileStatus.contentType)
+                                            IsNotEncrypted
                             )
+                        )
+                        attached
+
+                ( loggedIn2, cmds ) =
+                    List.foldl
+                        (\{ fileId, file, peerToPeer } ( loggedIn3, cmds2 ) ->
+                            case peerToPeer of
+                                Just ( guildOrDmId2, peerToPeerFile2 ) ->
+                                    sharePeerToPeerFile guildOrDmId2 peerToPeerFile2 file loggedIn3
+                                        |> Tuple.mapSecond (\cmd -> cmd :: cmds2)
+
+                                Nothing ->
+                                    if File.size file > FileStatus.maxUploadSize then
+                                        ( loggedIn3, cmds2 )
+
+                                    else
+                                        ( loggedIn3, startUpload fileId file :: cmds2 )
+                        )
+                        ( loggedIn, [] )
+                        attached
             in
-            ( { loggedIn
+            ( { loggedIn2
                 | filesToUpload =
-                    SeqDict.insert ( guildOrDmId, threadRoute ) dict loggedIn.filesToUpload
+                    SeqDict.update
+                        ( guildOrDmId, threadRoute )
+                        (\maybe ->
+                            case maybe of
+                                Just dict2 ->
+                                    List.foldl
+                                        (\( fileId, status ) dict3 -> NonemptyDict.insert fileId status dict3)
+                                        dict2
+                                        newStatuses
+                                        |> Just
+
+                                Nothing ->
+                                    NonemptyDict.fromList newStatuses
+                        )
+                        loggedIn2.filesToUpload
                 , drafts =
                     case String.join " " fileText |> String.Nonempty.fromString of
                         Just fileText2 ->
@@ -1055,15 +1098,128 @@ gotFiles guildOrDmId threadRoute files model =
                                         Nothing ->
                                             Just fileText2
                                 )
-                                loggedIn.drafts
+                                loggedIn2.drafts
 
                         Nothing ->
-                            loggedIn.drafts
+                            loggedIn2.drafts
               }
             , Command.batch cmds
             )
         )
         model
+
+
+{-| A file too large to upload is shared from this device instead, though only in at-chat's
+own conversations for now. Discord and Slack keep their own copy of each message, which a
+peer to peer file wouldn't survive.
+-}
+peerToPeerFile : Time.Posix -> AnyGuildOrDmId -> Id FileId -> File -> LoggedIn2 -> Maybe ( GuildOrDmId, PeerToPeerFile )
+peerToPeerFile time anyGuildOrDmId fileId file loggedIn =
+    case anyGuildOrDmId of
+        GuildOrDmId guildOrDmId ->
+            if File.size file > FileStatus.maxUploadSize && not (isEncryptedDm guildOrDmId (Local.model loggedIn.localState)) then
+                Just
+                    ( guildOrDmId
+                    , { fileName = File.name file |> FileName.fromString
+                      , fileSize = File.size file
+                      , contentType = File.mime file |> FileStatus.contentType
+                      , peerToPeerId =
+                            -- Only has to differ from this user's other files.
+                            [ Time.posixToMillis time
+                            , SeqDict.size (Local.model loggedIn.localState).localUser.peerToPeer.shared
+                            , Id.toInt fileId
+                            ]
+                                |> List.map String.fromInt
+                                |> String.join "-"
+                                |> FileStatus.peerToPeerIdFromString
+                      }
+                    )
+
+            else
+                Nothing
+
+        DiscordGuildOrDmId _ ->
+            Nothing
+
+        SlackGuildOrDmId _ ->
+            Nothing
+
+
+{-| A peer to peer file goes through the server unencrypted, so it isn't offered in an
+encrypted DM.
+-}
+isEncryptedDm : GuildOrDmId -> LocalState -> Bool
+isEncryptedDm guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId_Guild _ ->
+            False
+
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    case dmChannel.e2ee of
+                        DmChannel.E2eeEnabled _ ->
+                            True
+
+                        DmChannel.E2eeDisabled _ ->
+                            False
+
+                        DmChannel.E2eeRequestedBy _ ->
+                            False
+
+                        DmChannel.E2eeDeclinedBy _ ->
+                            False
+
+                Nothing ->
+                    False
+
+
+sharePeerToPeerFile :
+    GuildOrDmId
+    -> PeerToPeerFile
+    -> File
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+sharePeerToPeerFile guildOrDmId peerToPeerFile2 file loggedIn =
+    let
+        sharedFile : PeerToPeer.SharedFile
+        sharedFile =
+            { guildOrDmId = guildOrDmId
+            , fileName = peerToPeerFile2.fileName
+            , fileSize = peerToPeerFile2.fileSize
+            }
+    in
+    ( mapPeerToPeer
+        (\peerToPeer ->
+            { peerToPeer
+                | shared =
+                    SeqDict.insert
+                        peerToPeerFile2.peerToPeerId
+                        { file = file, sharedFile = sharedFile }
+                        peerToPeer.shared
+                , pickedDifferentFile = SeqSet.remove peerToPeerFile2.peerToPeerId peerToPeer.pickedDifferentFile
+            }
+        )
+        loggedIn
+    , SharePeerToPeerFileRequest peerToPeerFile2.peerToPeerId sharedFile |> Lamdera.sendToBackend
+    )
+
+
+mapPeerToPeer : (PeerToPeer.Model -> PeerToPeer.Model) -> LoggedIn2 -> LoggedIn2
+mapPeerToPeer mapFunc loggedIn =
+    { loggedIn
+        | localState =
+            Local.mapModel
+                (\local ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | peerToPeer = mapFunc localUser.peerToPeer } }
+                )
+                loggedIn.localState
+    }
 
 
 {-| Pasted text that is too long to fit in a message is attached as a text file instead of being inserted into the text input.
@@ -1197,41 +1353,79 @@ editMessage_gotFiles guildOrDmId files model =
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just edit ->
                     let
-                        ( fileText, cmds, dict ) =
+                        ( ( fileText, cmds, dict ), loggedIn2 ) =
                             List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                (\file2 ( ( fileText2, cmds2, dict3 ), loggedIn3 ) ->
                                     let
                                         fileId : Id FileId
                                         fileId =
                                             Id.nextId dict3
+
+                                        fileText3 : List String
+                                        fileText3 =
+                                            fileText2
+                                                ++ [ " "
+                                                        ++ RichText.attachedFilePrefix
+                                                        ++ Id.toString fileId
+                                                        ++ RichText.attachedFileSuffix
+                                                   ]
                                     in
-                                    ( fileText2
-                                        ++ [ " "
-                                                ++ RichText.attachedFilePrefix
-                                                ++ Id.toString fileId
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , FileStatus.uploadFile
-                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        guildOrDmId
-                                        fileId
-                                        file2
-                                        :: cmds2
-                                    , SeqDict.insert
-                                        fileId
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                            IsNotEncrypted
-                                        )
-                                        dict3
-                                    )
+                                    case peerToPeerFile model.time (Tuple.first guildOrDmId) fileId file2 loggedIn3 of
+                                        Just ( guildOrDmId2, peerToPeerFile2 ) ->
+                                            let
+                                                ( loggedIn4, cmd ) =
+                                                    sharePeerToPeerFile guildOrDmId2 peerToPeerFile2 file2 loggedIn3
+                                            in
+                                            ( ( fileText3
+                                              , cmd :: cmds2
+                                              , SeqDict.insert fileId (FilePeerToPeer peerToPeerFile2) dict3
+                                              )
+                                            , loggedIn4
+                                            )
+
+                                        Nothing ->
+                                            if File.size file2 > FileStatus.maxUploadSize then
+                                                ( ( fileText3
+                                                  , cmds2
+                                                  , SeqDict.insert
+                                                        fileId
+                                                        (FileError
+                                                            (File.name file2 |> FileName.fromString)
+                                                            (File.size file2)
+                                                            (File.mime file2 |> FileStatus.contentType)
+                                                            (Http.BadStatus 413)
+                                                            IsNotEncrypted
+                                                        )
+                                                        dict3
+                                                  )
+                                                , loggedIn3
+                                                )
+
+                                            else
+                                                ( ( fileText3
+                                                  , FileStatus.uploadFile
+                                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
+                                                        guildOrDmId
+                                                        fileId
+                                                        file2
+                                                        :: cmds2
+                                                  , SeqDict.insert
+                                                        fileId
+                                                        (FileUploading
+                                                            (File.name file2 |> FileName.fromString)
+                                                            { sent = 0, size = File.size file2 }
+                                                            (File.mime file2 |> FileStatus.contentType)
+                                                            IsNotEncrypted
+                                                        )
+                                                        dict3
+                                                  )
+                                                , loggedIn3
+                                                )
                                 )
-                                ( [], [], edit.attachedFiles )
+                                ( ( [], [], edit.attachedFiles ), loggedIn )
                                 files
                     in
-                    ( { loggedIn
+                    ( { loggedIn2
                         | editMessage =
                             SeqDict.insert
                                 guildOrDmId
@@ -1239,7 +1433,7 @@ editMessage_gotFiles guildOrDmId files model =
                                     | text = edit.text ++ String.concat fileText
                                     , attachedFiles = dict
                                 }
-                                loggedIn.editMessage
+                                loggedIn2.editMessage
                       }
                     , Command.batch cmds
                     )
@@ -3074,7 +3268,7 @@ isPressMsg msg =
         MessageMenu_PressedMarkAsUnread _ _ ->
             True
 
-        MessageMenu_PressedAddCustomEmojisToUser _ ->
+        MessageMenu_PressedAddCustomEmojisAndStickersToUser _ _ ->
             True
 
         ScrolledToMessage ->
@@ -3120,6 +3314,12 @@ isPressMsg msg =
             False
 
         SelectedFilesToAttach _ _ _ ->
+            False
+
+        SelectedPeerToPeerFileToShareAgain _ _ _ ->
+            False
+
+        SentPeerToPeerFile _ _ ->
             False
 
         GotFileToEncrypt _ _ _ _ ->
@@ -3557,7 +3757,7 @@ slackSendMessage :
     -> SlackGuildOrDmId
     -> ThreadRoute
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> Maybe (Message ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
     -> LocalState
     -> LocalState
@@ -3651,7 +3851,7 @@ slackAddMessage :
     -> Slack.Id Slack.UserId
     -> ThreadRoute
     -> Nonempty (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     ->
         { a
             | messages : MessageArray ChannelMessageId (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId)
@@ -5271,7 +5471,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setColor color localUser.user } }
 
-                Local_AddCustomEmojisToUser customEmojiIds ->
+                Local_AddCustomEmojisAndStickersToUser customEmojiIds stickerIds ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -5285,8 +5485,8 @@ changeUpdate localMsg local =
                             { localUser
                                 | user =
                                     { user
-                                        | availableCustomEmojis =
-                                            SeqSet.union (NonemptySet.toSeqSet customEmojiIds) user.availableCustomEmojis
+                                        | availableCustomEmojis = SeqSet.union customEmojiIds user.availableCustomEmojis
+                                        , availableStickers = SeqSet.union stickerIds user.availableStickers
                                     }
                             }
                     }
@@ -7972,7 +8172,7 @@ guildSendMessage :
     -> Time.Posix
     -> Id UserId
     -> Nonempty (RichText (Id UserId) (Id ChannelId))
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> LocalState
     -> SeqDict (Id GuildId) FrontendGuild
 guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt userId text attachedFiles local =
@@ -8023,7 +8223,7 @@ discordGuildSendMessage :
     -> Time.Posix
     -> Discord.Id Discord.UserId
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> LocalState
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
 discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt discordUserId text attachedFiles local =
@@ -8544,7 +8744,7 @@ editMessage :
     -> Id UserId
     -> GuildOrDmId
     -> NonemptyString
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> ThreadRouteWithMessage
     -> LocalState
     -> LocalState
@@ -9252,7 +9452,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         (LocalState.channelMentions guildOrDmId2 local)
                                                         message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
+                                                    SeqDict.map (\_ a -> FileStatus.attachmentToFileStatus a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -9331,7 +9531,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         (LocalState.discordChannelMentions guildOrDmId2 local)
                                                         message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
+                                                    SeqDict.map (\_ a -> FileStatus.attachmentToFileStatus a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -9410,7 +9610,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         (LocalState.slackChannelMentions guildOrDmId2 local)
                                                         message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
+                                                    SeqDict.map (\_ a -> FileStatus.attachmentToFileStatus a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -9824,7 +10024,8 @@ storeDecryptedFileKeys decrypted =
             (\result ->
                 case result of
                     Ok messageContent ->
-                        SeqDict.values messageContent.attachedFiles
+                        FileStatus.storedFiles messageContent.attachedFiles
+                            |> SeqDict.values
                             |> List.filterMap FileStatus.fileKey
 
                     Err () ->
@@ -10032,7 +10233,7 @@ loadedInitHelper startupData emojiData loginData loading =
 
         local : LocalState
         local =
-            loginDataToLocalState startupData SeqDict.empty backlog emojiData loginData
+            loginDataToLocalState startupData SeqDict.empty PeerToPeer.init backlog emojiData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -10180,11 +10381,12 @@ loadedInitHelper startupData emojiData loginData loading =
 loginDataToLocalState :
     Ports.StartupData
     -> SeqDict BytesHash (Result () (MessageContent (Id UserId) (Id ChannelId)))
+    -> PeerToPeer.Model
     -> List EncryptedBacklog
     -> Maybe CachedEmojiData
     -> LoginData
     -> LocalState
-loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginData =
+loginDataToLocalState startupData decrypted peerToPeer encryptionBacklog emojiData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -10219,6 +10421,7 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         , emojiData = emojiData
+        , peerToPeer = peerToPeer
         , decryptedMessages =
             List.foldl
                 (\backlog decrypted2 ->

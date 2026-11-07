@@ -8,6 +8,7 @@ import Discord
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..))
+import FileStatus exposing (PeerToPeerFile)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
@@ -63,6 +64,7 @@ type MessageViewMsg
     | MessageView_PressedChannelMention (Id ChannelId) ThreadRoute
     | MessageView_PressedDiscordChannelMention (Discord.Id Discord.ChannelId) ThreadRoute
     | MessageView_PressedCopyCode String
+    | MessageView_PressedPeerToPeerFile (Id UserId) PeerToPeerFile
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -150,6 +152,9 @@ isPressMsg msg =
             True
 
         MessageView_PressedCopyCode _ ->
+            True
+
+        MessageView_PressedPeerToPeerFile _ _ ->
             True
 
 

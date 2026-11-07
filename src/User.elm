@@ -88,6 +88,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (PageId)
+import PeerToPeer
 import PersonName exposing (PersonName)
 import RichText exposing (Domain)
 import SafeJson exposing (SafeJson)
@@ -991,6 +992,9 @@ type alias LocalUser =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
     , decryptedMessages : SeqDict BytesHash (Result () (MessageContent (Id UserId) (Id ChannelId)))
+    , -- Frontend only, like decryptedMessages. The view of every message with a peer to peer
+      -- file depends on it.
+      peerToPeer : PeerToPeer.Model
     }
 
 

@@ -1,4 +1,4 @@
-module E2EEncryption exposing (fileUploadTest, tests)
+module E2EEncryption exposing (customEmojiInEncryptedMessageTest, fileUploadTest, largeFileTest, tests)
 
 {-| End-to-end tests for encrypted DMs: agreeing to encrypt a conversation, working the
 shared key out on each device, and sending a message once one is there.
@@ -17,6 +17,8 @@ import Bytes.Decode
 import Bytes.Encode
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji
+import Discord
 import DmChannel
 import DmChannelId
 import E2EHelper exposing (BackendModel2)
@@ -29,14 +31,16 @@ import FileName
 import FileStatus
 import FrontendExtra
 import Html.Attributes
-import Id exposing (ChannelId, Id, UserId)
+import Id exposing (ChannelId, CustomEmojiId, Id, StickerId, UserId)
 import IdArray
 import Json.Encode
 import Message exposing (MessageContent)
 import NonemptyDict
 import RichText
 import SeqDict
+import SeqSet
 import Serialize
+import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -1191,6 +1195,166 @@ tests config =
 name it was never told, so what it is handed and what the message says about the file are
 both checked.
 -}
+customEmojiInEncryptedMessageTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+customEmojiInEncryptedMessageTest config =
+    let
+        guildEmojiId : Id CustomEmojiId
+        guildEmojiId =
+            Id.fromInt 0
+
+        dmEmojiId : Id CustomEmojiId
+        dmEmojiId =
+            Id.fromInt 1
+
+        dmStickerId : Id StickerId
+        dmStickerId =
+            Id.fromInt 0
+
+        userId : Id UserId
+        userId =
+            Id.fromInt 2
+    in
+    E2EHelper.startTest
+        "Get the custom emojis and stickers in a message from the message menu, even when the message is encrypted"
+        E2EHelper.startTime
+        { config | backendApp = backendAppWithAdminCustomEmojisAndStickers [ guildEmojiId, dmEmojiId ] [ dmStickerId ] }
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 ("Look " ++ CustomEmoji.idToString guildEmojiId)
+                , openMessageMenu user "guild_message_1"
+                , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
+                , T.checkBackend 100 (checkHasCustomEmojisAndStickers userId [ guildEmojiId ] [])
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount user
+                            (\userPrivateKey ->
+                                [ user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
+                                , respondToSharedSecretStored user Broadcast.adminUserId
+                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored admin userId
+                                , T.checkBackend 100 checkDmIsEncrypted
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , user.click 100 (Dom.id "guild_hideMembers")
+                                , writeEncryptedMessage admin 100 ("Secret " ++ CustomEmoji.idToString dmEmojiId ++ Sticker.idToString dmStickerId)
+                                , respondToMessageDecrypted user
+                                , openMessageMenu user "guild_message_0"
+                                , user.click 100 (Dom.id "messageMenu_addCustomEmojis")
+                                , T.checkBackend 100 (checkHasCustomEmojisAndStickers userId [ guildEmojiId, dmEmojiId ] [ dmStickerId ])
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+backendAppWithAdminCustomEmojisAndStickers :
+    List (Id CustomEmojiId)
+    -> List (Id StickerId)
+    -> T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
+backendAppWithAdminCustomEmojisAndStickers customEmojiIds stickerIds =
+    let
+        backendApp : T.BackendApp ToBackend ToFrontend BackendMsg BackendModel2
+        backendApp =
+            E2EHelper.backendApp
+    in
+    { backendApp
+        | init =
+            Tuple.mapFirst
+                (\(E2EHelper.BackendModel2 model) ->
+                    E2EHelper.BackendModel2
+                        { model
+                            | customEmojis =
+                                List.filterMap
+                                    (\customEmojiId ->
+                                        case CustomEmoji.emojiNameFromString ("emoji" ++ Id.toString customEmojiId) of
+                                            Ok name ->
+                                                Just
+                                                    ( customEmojiId
+                                                    , { url = CustomEmoji.CustomEmojiInternal (FileStatus.fileHash ("emoji" ++ Id.toString customEmojiId)) Nothing
+                                                      , name = name
+                                                      , isAnimated = False
+                                                      }
+                                                    )
+
+                                            Err () ->
+                                                Nothing
+                                    )
+                                    customEmojiIds
+                                    |> SeqDict.fromList
+                            , stickers =
+                                List.map
+                                    (\stickerId ->
+                                        ( stickerId
+                                        , { url = Sticker.StickerInternal (FileStatus.fileHash ("sticker" ++ Id.toString stickerId)) Nothing
+                                          , name = "sticker" ++ Id.toString stickerId
+                                          , format = Discord.PngFormat
+                                          }
+                                        )
+                                    )
+                                    stickerIds
+                                    |> SeqDict.fromList
+                            , users =
+                                NonemptyDict.updateIfExists
+                                    Broadcast.adminUserId
+                                    (\admin ->
+                                        { admin
+                                            | availableCustomEmojis = SeqSet.fromList customEmojiIds
+                                            , availableStickers = SeqSet.fromList stickerIds
+                                        }
+                                    )
+                                    model.users
+                        }
+                )
+                backendApp.init
+    }
+
+
+openMessageMenu :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+openMessageMenu client messageHtmlId =
+    client.custom
+        100
+        (Dom.id messageHtmlId)
+        "contextmenu"
+        (Json.Encode.object
+            [ ( "clientX", Json.Encode.float 50 )
+            , ( "clientY", Json.Encode.float 150 )
+            ]
+        )
+
+
+checkHasCustomEmojisAndStickers : Id UserId -> List (Id CustomEmojiId) -> List (Id StickerId) -> BackendModel2 -> Result String ()
+checkHasCustomEmojisAndStickers userId expectedCustomEmojis expectedStickers backend =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend backend).users of
+        Just user ->
+            if SeqSet.toList user.availableCustomEmojis /= expectedCustomEmojis then
+                Err "The user didn't get the custom emojis in the message"
+
+            else if SeqSet.toList user.availableStickers /= expectedStickers then
+                Err "The user didn't get the stickers in the message"
+
+            else
+                Ok ()
+
+        Nothing ->
+            Err "User not found"
+
+
 fileUploadTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1281,6 +1445,72 @@ fileUploads clientId data =
                 && (request.requestedBy == T.RequestedByFrontend clientId)
         )
         data.httpRequests
+
+
+{-| A file too large to upload would go through the server unencrypted if it were shared from
+the device, so in an encrypted DM it's refused instead.
+-}
+largeFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+largeFileTest config =
+    E2EHelper.startTest
+        "A file too large to upload isn't shared from the device in an end-to-end encrypted DM"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                        , T.checkState
+                            100
+                            (\data ->
+                                if not (List.isEmpty (List.filterMap encryptFileRequest (encryptionPortRequests admin.clientId data))) then
+                                    Err "The file shouldn't have been read out to be encrypted"
+
+                                else if not (List.isEmpty (fileUploads admin.clientId data)) then
+                                    Err "The file shouldn't have been uploaded"
+
+                                else
+                                    case
+                                        SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).connections
+                                            |> Maybe.andThen (NonemptyDict.get admin.clientId)
+                                    of
+                                        Just connection ->
+                                            if SeqDict.isEmpty connection.peerToPeerFiles then
+                                                Ok ()
+
+                                            else
+                                                Err "The file shouldn't be shared from the device"
+
+                                        Nothing ->
+                                            Err "The admin's connection is missing"
+                            )
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "P2P" ])
+                        ]
+                    )
+                ]
+            )
+        ]
 
 
 checkNothingUploadedYet : ClientId -> T.Data FrontendModel BackendModel2 -> Result String ()
@@ -1393,7 +1623,7 @@ encryptedAttachedFiles message =
                 Just bytes ->
                     case stubPlainText bytes of
                         Ok contentAndEmbeds ->
-                            SeqDict.values contentAndEmbeds.attachedFiles |> Just
+                            FileStatus.storedFiles contentAndEmbeds.attachedFiles |> SeqDict.values |> Just
 
                         Err _ ->
                             Nothing

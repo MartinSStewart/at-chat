@@ -1,14 +1,17 @@
-module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, videoAttachmentTest)
+module E2EMedia exposing (audioAttachmentTest, imageRowTest, imageViewerTests, peerToPeerFileTest, videoAttachmentTest)
 
 import Audio
+import Broadcast
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
 import Expect
+import Id
 import Json.Decode
 import Json.Encode
 import List.Extra
+import NonemptyDict
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -772,7 +775,7 @@ imageRowTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 imageRowTest imageUploadConfig =
     E2EHelper.startTest
-        "Images sent together are shown side by side"
+        "Images sent together are shown side by side and scroll sideways when they don't fit"
         E2EHelper.startTime
         imageUploadConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
@@ -780,20 +783,202 @@ imageRowTest imageUploadConfig =
             (\admin _ ->
                 [ E2EHelper.uploadImageAttachment admin
                 , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.uploadImageAttachment admin
                 , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.checkView
                     0
                     (\html ->
                         Test.Html.Query.findAll
-                            [ Test.Html.Selector.style "flex-wrap" "wrap"
+                            [ Test.Html.Selector.style "overflow-x" "auto"
                             , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_1" ]
-                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_2" ]
+                            , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_6" ]
                             ]
                             html
                             |> Test.Html.Query.count (Expect.greaterThan 0)
                     )
                 , admin.snapshotView 100 { name = "Images side by side" }
+                ]
+            )
+        ]
+
+
+peerToPeerFileTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+peerToPeerFileTest largeFileUploadConfig =
+    E2EHelper.startTest
+        "A file too large to upload is sent from the uploader's device when someone presses it"
+        E2EHelper.startTime
+        largeFileUploadConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.text "P2P"
+                                , Test.Html.Selector.text "This file won't be available after you reload the page"
+                                ]
+                    )
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.text "holiday videos.zip"
+                                , Test.Html.Selector.text "P2P"
+                                , Test.Html.Selector.text "Only available while this user is online"
+                                ]
+                    )
+                , user.click 100 (Dom.id "spoiler_1_file_1")
+                , T.checkState
+                    1000
+                    (\data ->
+                        case
+                            List.filter
+                                (\request -> String.contains "/file/p2p/" request.url)
+                                data.httpRequests
+                        of
+                            [ request ] ->
+                                if request.method == "POST" && request.requestedBy == T.RequestedByFrontend admin.clientId then
+                                    Ok ()
+
+                                else
+                                    Err "The file should have been POSTed by the uploader's tab"
+
+                            requests ->
+                                "Expected the uploader's tab to send the file once, but it was sent "
+                                    ++ String.fromInt (List.length requests)
+                                    ++ " times"
+                                    |> Err
+                    )
+                , user.snapshotView 100 { name = "Peer to peer file" }
+
+                -- Asking for the file from a message it isn't attached to gets nothing.
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).connections
+                                |> Maybe.andThen (NonemptyDict.get admin.clientId)
+                                |> Maybe.map (\connection -> SeqDict.toList connection.peerToPeerFiles)
+                        of
+                            Just [ ( peerToPeerId, sharedFile ) ] ->
+                                [ user.sendToBackend
+                                    100
+                                    (Types.PeerToPeerDownloadRequest
+                                        sharedFile.guildOrDmId
+                                        (Id.NoThreadWithMessage (Id.fromInt 0))
+                                        Broadcast.adminUserId
+                                        peerToPeerId
+                                    )
+                                , T.checkState
+                                    1000
+                                    (\data2 ->
+                                        if List.length (List.filter (\request -> String.contains "/file/p2p/" request.url) data2.httpRequests) == 1 then
+                                            Ok ()
+
+                                        else
+                                            Err "The file shouldn't be sent for a message it isn't attached to"
+                                    )
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "The uploader's tab should be sharing one file") ]
+                    )
+
+                -- A reloaded tab no longer has the file. The old tab's connection is left open,
+                -- as one that closed without the backend hearing about it yet would be.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\reloadedAdmin ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ reloadedAdmin.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , reloadedAdmin.click 100 (Dom.id "guild_openGuild_1")
+                        , reloadedAdmin.click 100 (Dom.id "guild_openChannel_0")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Not shared right now, press to pick the file again" ]
+                            )
+
+                        -- The file picker offers some other file first.
+                        , reloadedAdmin.click 100 (Dom.id "spoiler_1_file_1")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "That's a different file from the one you sent, press to pick it again" ]
+                            )
+                        , reloadedAdmin.click 100 (Dom.id "spoiler_1_file_1")
+                        , reloadedAdmin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "This file won't be available after you reload the page" ]
+                            )
+                        , user.click 100 (Dom.id "spoiler_1_file_1")
+                        , T.checkState
+                            1000
+                            (\data ->
+                                case
+                                    List.filter
+                                        (\request -> String.contains "/file/p2p/" request.url)
+                                        data.httpRequests
+                                        |> List.map .requestedBy
+                                of
+                                    [ first, second ] ->
+                                        if
+                                            List.member (T.RequestedByFrontend admin.clientId) [ first, second ]
+                                                && List.member (T.RequestedByFrontend reloadedAdmin.clientId) [ first, second ]
+                                        then
+                                            Ok ()
+
+                                        else
+                                            Err "The file should have been sent by the reloaded tab the second time"
+
+                                    requests ->
+                                        "Expected the file to have been sent twice, but it was sent "
+                                            ++ String.fromInt (List.length requests)
+                                            ++ " times"
+                                            |> Err
+                            )
+
+                        -- Once the tab sharing it is gone, so is the file.
+                        , T.backendUpdate 100 (Types.UserDisconnected E2EHelper.sessionId0 reloadedAdmin.clientId)
+                        , user.click 1000 (Dom.id "spoiler_1_file_1")
+                        , user.checkView
+                            1000
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_1_file_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.text "The uploader doesn't have at-chat open with this file right now" ]
+                            )
+                        ]
+                    )
                 ]
             )
         ]

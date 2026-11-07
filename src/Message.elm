@@ -56,7 +56,7 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (Attachment, FileHash, FileId)
 import Id exposing (ChannelId, ChannelMessageId, Id, QuestionId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
@@ -155,7 +155,7 @@ userTextMessageNoEmbeds :
     -> Nonempty (RichText userId channelId)
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> RepliedTo messageId
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> UserTextMessageData messageId userId channelId
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo2 attachedFiles =
     { createdAt = createdAt2
@@ -183,7 +183,7 @@ userTextMessageBackend :
     -> userId
     -> Nonempty (RichText userId channelId)
     -> RepliedTo messageId
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> SeqDict (Id StickerId) StickerData
     ->
         ( UserTextMessageData messageId userId channelId
@@ -257,7 +257,7 @@ userTextMessageFrontend :
     -> userId
     -> Nonempty (RichText userId channelId)
     -> RepliedTo messageId
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) Attachment
     -> Message messageId userId channelId
 userTextMessageFrontend createdAt2 createdBy content repliedTo2 attachedFiles =
     let
@@ -281,7 +281,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo2 attachedFiles =
 
 
 type ChangeAttachments
-    = ChangeAttachments (SeqDict (Id FileId) FileData)
+    = ChangeAttachments (SeqDict (Id FileId) Attachment)
     | DoNotChangeAttachments
 
 
@@ -705,7 +705,7 @@ toEncrypted fileHashes encryptedData message =
 
 
 type alias MessageContent userId channelId =
-    { content : Nonempty (RichText userId channelId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
+    { content : Nonempty (RichText userId channelId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) Attachment }
 
 
 type alias EncryptedUserTextMessageData messageId userId =
@@ -1116,7 +1116,7 @@ contentAndEmbedsCodec =
     Serialize.record MessageContent
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec Id.codec))
         |> Serialize.field .embeds (Serialize.array embedCodec)
-        |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.fileDataSerializeCodec)
+        |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.attachmentSerializeCodec)
         |> Serialize.finishRecord
 
 

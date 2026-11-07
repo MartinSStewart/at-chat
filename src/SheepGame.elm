@@ -76,7 +76,7 @@ import Effect.Http as Http
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
+import FileStatus exposing (Attachment(..), FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
 import Go
 import GuildIcon
 import Html exposing (Html)
@@ -2191,7 +2191,7 @@ contentView time contentWidth localUser isHovered htmlId attachedFiles content =
         , revealedSpoilers = SeqSet.empty
         , users = User.allUsers localUser
         , channels = SeqDict.empty
-        , attachedFiles = attachedFiles
+        , attachedFiles = SeqDict.map (\_ fileData -> Stored fileData) attachedFiles
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
         , emojiData = localUser.emojiData
@@ -2212,6 +2212,8 @@ contentView time contentWidth localUser isHovered htmlId attachedFiles content =
         , noOp = NoOp
         , onPressChannelMention = \_ _ -> NoOp
         , onPressCopyCode = PressedCopyCode
+        , peerToPeerFileState = \_ -> FileStatus.PeerToPeerAvailable
+        , onPressPeerToPeerFile = \_ -> NoOp
         }
         Array.empty
         content
@@ -3917,6 +3919,9 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                     FileStatus.FileUploading _ _ _ _ ->
                         Ui.noAttr
 
+                    FileStatus.FilePeerToPeer _ ->
+                        Ui.noAttr
+
                     FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
                 , Ui.el
@@ -3949,6 +3954,17 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
 
                     FileStatus.FileUploaded _ ->
                         Ui.noAttr
+
+                    FileStatus.FilePeerToPeer _ ->
+                        Ui.el
+                            [ Ui.alignRight
+                            , Ui.Font.size 12
+                            , Ui.Font.bold
+                            , Ui.padding 4
+                            , MyUi.hoverText "Too large to upload, so it's sent straight from this device while at-chat stays open"
+                            ]
+                            (Ui.text "P2P")
+                            |> Ui.inFront
 
                     FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
@@ -4020,6 +4036,17 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     , Ui.Font.color MyUi.font3
                                     ]
                                     (Ui.text "0110\n0001")
+
+                    FileStatus.FilePeerToPeer peerToPeer ->
+                        Ui.el
+                            [ Ui.centerX
+                            , Ui.centerY
+                            , Ui.Font.size 12
+                            , Ui.Font.color MyUi.font3
+                            , Ui.Font.center
+                            , MyUi.prewrap
+                            ]
+                            (Ui.text (FileStatus.sizeToString peerToPeer.fileSize))
 
                     FileStatus.FileError _ _ _ _ _ ->
                         Ui.el

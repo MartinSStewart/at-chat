@@ -22,6 +22,7 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::HTML;
 mod content_types;
+mod peer_to_peer;
 mod video;
 mod websocket;
 mod websocket_relay;
@@ -45,6 +46,7 @@ async fn main() {
             }));
 
             let rooms = websocket::rooms();
+            let transfers = peer_to_peer::transfers();
 
             watch_for_stalls();
 
@@ -93,6 +95,12 @@ async fn main() {
                     "/file/recording-upload-finished",
                     post(recording_upload_finished_endpoint).options(options_endpoint),
                 )
+                .route(
+                    "/file/p2p/{transfer_id}",
+                    get(peer_to_peer::download_endpoint)
+                        .post(peer_to_peer::upload_endpoint)
+                        .options(options_endpoint),
+                )
                 .route("/file/time", get(time_endpoint))
                 .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
@@ -108,6 +116,7 @@ async fn main() {
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(axum::Extension(rooms))
+                .layer(axum::Extension(transfers))
                 .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
@@ -1412,9 +1421,14 @@ fn vec_to_headermap(
 const SERVER_BACKUPS_PATH: &str = "./var/lib/atchat/backups/";
 const BUCKET_BACKUPS_PATH: &str = "./var/lib/atchat/storage/backups/";
 
-const BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+// A backup is made every 4 hours and is over 100MB, so a month of them is over 20GB. That's
+// fine in the bucket, but on the server's own disk it crowds out s3fs, which stages every write
+// to the bucket on that disk and starts failing them once less than a tenth of it is free. The
+// server's copies only need to cover the last few days.
+const SERVER_BACKUP_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const BUCKET_BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
-fn remove_old_backups(dir: String) {
+fn remove_old_backups(dir: String, max_age: Duration) {
     let now = SystemTime::now();
 
     match fs::read_dir(&dir) {
@@ -1432,7 +1446,7 @@ fn remove_old_backups(dir: String) {
                                 (true, Ok(time)) => {
                                     let should_delete = match now.duration_since(time) {
                                         Ok(duration) => {
-                                            duration > BACKUP_MAX_AGE
+                                            duration > max_age
                                                 && filename.starts_with("backend-export-")
                                         }
                                         Err(_) => false,
@@ -1490,8 +1504,8 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Body) -> Respo
     // file at a time, and on the bucket each of those is a network round trip. The upload it was
     // holding up has no use for the result, so it runs on its own once the backup is safe.
     tokio::task::spawn_blocking(|| {
-        remove_old_backups(SERVER_BACKUPS_PATH.to_string());
-        remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
+        remove_old_backups(SERVER_BACKUPS_PATH.to_string(), SERVER_BACKUP_MAX_AGE);
+        remove_old_backups(BUCKET_BACKUPS_PATH.to_string(), BUCKET_BACKUP_MAX_AGE);
     });
 
     match written {
@@ -2492,7 +2506,7 @@ fn upload_response(probed: ProbedUpload, hash: String) -> String {
 /// The page these endpoints are called from, and the only origin they answer
 /// for. It cannot be `*` any more: browsers reject a wildcard on a request that
 /// carries credentials, and uploads now rely on the `sid` cookie being sent.
-const fn allowed_origin() -> &'static str {
+pub const fn allowed_origin() -> &'static str {
     if cfg!(debug_assertions) {
         // Lamdera live serves the app from a different port to this server,
         // which makes every request cross-origin during development.
@@ -2542,6 +2556,26 @@ fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(&Sha224::digest(bytes))
 }
 
+// Storage is the s3fs mount of the bucket, so a read can fail because the bucket didn't
+// answer rather than because the file is gone. Only the second is a 404; anything else
+// is logged and answered with a 503 so a hiccup doesn't look like a lost file.
+fn storage_read_failed(what: &str, hash: &str, error: std::io::Error) -> http::Response<Body> {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("File not found"))
+            .unwrap()
+    } else {
+        println!("Couldn't read {what} {hash} from storage: {error:?}");
+
+        Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .header("Retry-After", "10")
+            .body(Body::from("Couldn't read the file, try again soon"))
+            .unwrap()
+    }
+}
+
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
     if is_valid_hash(&hash) {
         match tokio::fs::read(thumbnail_filepath(&hash)).await {
@@ -2552,10 +2586,7 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
                 .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .body(Body::from(data))
                 .unwrap(),
-            Result::Err(_) => Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("File not found"))
-                .unwrap(),
+            Result::Err(error) => storage_read_failed("thumbnail", &hash, error),
         }
     } else {
         Response::builder()
@@ -2739,21 +2770,11 @@ async fn get_file_endpoint(
     if is_valid_hash(&hash) {
         let mut opened = match tokio::fs::File::open(filepath(&hash)).await {
             Ok(opened) => opened,
-            Err(_) => {
-                return Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("File not found"))
-                    .unwrap();
-            }
+            Err(error) => return storage_read_failed("file", &hash, error),
         };
         let size: u64 = match opened.metadata().await {
             Ok(metadata) => metadata.len(),
-            Err(_) => {
-                return Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("File not found"))
-                    .unwrap();
-            }
+            Err(error) => return storage_read_failed("file", &hash, error),
         };
         let content_type = match content_type_index.parse::<usize>() {
             Ok(index) => content_types::CONTENT_TYPES.get(index),
@@ -3140,6 +3161,23 @@ mod tests {
         assert!(!is_valid_recording_file_name("VIDEO_a\\b.mp4"));
         assert!(!is_valid_recording_file_name("secret.txt"));
         assert!(!is_valid_recording_file_name("VIDEO_a.txt"));
+    }
+
+    #[test]
+    fn only_a_missing_file_is_a_404() {
+        let missing = storage_read_failed(
+            "file",
+            "someHash",
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+        let bucket_hiccup = storage_read_failed(
+            "file",
+            "someHash",
+            std::io::Error::from(std::io::ErrorKind::TimedOut),
+        );
+        assert_eq!(bucket_hiccup.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]

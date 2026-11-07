@@ -1871,9 +1871,12 @@ exports.init = async function init(app) {
     // Settles once every recording that was stopped has its files closed.
     let recordingStopped = Promise.resolve();
 
-    // H.264 High, Main and Baseline at level 5.1, which covers up to 4K, then
-    // VP9 for browsers without an H.264 encoder.
-    const RECORDING_CODECS = ["avc1.640033", "avc1.4d0033", "avc1.420033", "vp09.00.51.08"];
+    // H.264 Baseline at level 5.1, which covers up to 4K, then VP9 for browsers
+    // without an H.264 encoder. Not High or Main: Firefox's encoder uses B-frames
+    // for those, and the MP4 writer has no way to say a frame is shown in a
+    // different order than it's decoded, so the video came out at about half its
+    // frame rate.
+    const RECORDING_CODECS = ["avc1.420033", "vp09.00.51.08"];
 
     // Below this much free space a warning is shown, and below the second the
     // recording on this device stops rather than failing partway through a write.

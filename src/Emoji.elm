@@ -895,6 +895,7 @@ searchInput model skinTone categories columns =
                 , Ui.paddingXY 8 8
                 , Ui.width Ui.fill
                 , Ui.id (Dom.idToString searchInputId)
+                , MyUi.noAutofill
                 , Ui.htmlAttribute
                     (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories columns))
                 ]

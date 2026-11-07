@@ -45,7 +45,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId, IsEncrypted(..))
+import FileStatus exposing (Attachment(..), FileData, FileHash, FileId, IsEncrypted(..))
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, Id, SlackGuildOrDmId(..), ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import List.Extra
@@ -150,12 +150,12 @@ toMessage slackFiles customEmojis message =
     case message.content of
         Slack.TextMessage { text, blocks, files } ->
             let
-                attachedFiles : SeqDict (Id FileId) FileData
+                attachedFiles : SeqDict (Id FileId) Attachment
                 attachedFiles =
                     List.filterMap
                         (\file -> SeqDict.get file.id slackFiles |> Maybe.map (fileData file))
                         files
-                        |> List.indexedMap (\index fileData2 -> ( Id.fromInt (index + 1), fileData2 ))
+                        |> List.indexedMap (\index fileData2 -> ( Id.fromInt (index + 1), Stored fileData2 ))
                         |> SeqDict.fromList
 
                 attachedFileNodes : List (RichText (Slack.Id Slack.UserId) (Slack.Id Slack.ChannelId))

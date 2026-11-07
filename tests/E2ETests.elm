@@ -143,6 +143,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     }
                                 )
 
+                        -- The uploader's tab sending a peer to peer file on.
+                        [ "p2p", _ ] ->
+                            E2EHelper.httpBasic currentRequest.url 200 "Sent"
+
                         -- The backend reads a file back to forward it to Discord
                         [ _, "123123123" ] ->
                             E2EHelper.httpBasic currentRequest.url 200 "åäö"
@@ -317,6 +321,47 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 )
                 E2EHelper.domain
 
+        -- A file one byte over the upload limit, which gets shared peer to peer instead.
+        largeFileUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        largeFileUploadConfig =
+            T.Config
+                Frontend.app_
+                E2EHelper.backendApp
+                handleNormalHttpRequests
+                E2EHelper.handlePortToJs
+                -- Picking the file again to share it after a reload. The first pick is the wrong file.
+                (\{ data } ->
+                    case data.fileUploads of
+                        [] ->
+                            UploadFile
+                                (T.uploadStringFile
+                                    "holiday photos.zip"
+                                    "application/zip"
+                                    (String.repeat (FileStatus.maxUploadSize + 2) "a")
+                                    E2EHelper.startTime
+                                )
+
+                        _ :: _ ->
+                            UploadFile
+                                (T.uploadStringFile
+                                    "holiday videos.zip"
+                                    "application/zip"
+                                    (String.repeat (FileStatus.maxUploadSize + 1) "a")
+                                    E2EHelper.startTime
+                                )
+                )
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadStringFile
+                            "holiday videos.zip"
+                            "application/zip"
+                            (String.repeat (FileStatus.maxUploadSize + 1) "a")
+                            E2EHelper.startTime
+                        )
+                        []
+                )
+                E2EHelper.domain
+
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
         wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -397,10 +442,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.channelMentionInThreadPreviewTest normalConfig
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
+    , E2EEncryption.customEmojiInEncryptedMessageTest normalConfig
+    , E2EEncryption.largeFileTest largeFileUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMisc.codeBlockCopyButtonTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EMedia.imageRowTest imageUploadConfig
+    , E2EMedia.peerToPeerFileTest largeFileUploadConfig
     , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EMisc.hourlyOrphanedFilesTest imageUploadConfig
     , E2EHelper.startTest

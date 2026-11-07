@@ -5490,6 +5490,15 @@ decodeDispatchUserEvent eventName =
             JD.field "d" decodeGuildScheduledEventUserData
                 |> JD.map DispatchUser_GuildScheduledEventUserRemove
 
+        "RELATIONSHIP_ADD" ->
+            JD.succeed DispatchUser_RelationshipAdd
+
+        "RELATIONSHIP_UPDATE" ->
+            JD.succeed DispatchUser_RelationshipUpdate
+
+        "RELATIONSHIP_REMOVE" ->
+            JD.succeed DispatchUser_RelationshipRemove
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5828,6 +5837,9 @@ type OpDispatchUserEvent
     | DispatchUser_GuildScheduledEventUpdate
     | DispatchUser_GuildScheduledEventUserAdd GuildScheduledEventUserData
     | DispatchUser_GuildScheduledEventUserRemove GuildScheduledEventUserData
+    | DispatchUser_RelationshipAdd
+    | DispatchUser_RelationshipUpdate
+    | DispatchUser_RelationshipRemove
 
 
 type alias ContentInventoryInboxStale =
@@ -7206,6 +7218,15 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildScheduledEventUserRemove eventUserData ->
                             ( model, [ UserOutMsg_GuildScheduledEventUserRemove eventUserData ] )
+
+                        DispatchUser_RelationshipAdd ->
+                            ( model, [] )
+
+                        DispatchUser_RelationshipUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_RelationshipRemove ->
+                            ( model, [] )
                     )
                         |> Tuple.mapFirst (setSequenceCounter sequenceCounter)
 
