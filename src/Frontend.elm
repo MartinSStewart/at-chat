@@ -366,6 +366,9 @@ subscriptions _ model =
                                     []
                                     loggedIn.filesToUpload
                                     |> Subscription.batch
+                                , PeerToPeer.subscriptions
+                                    PeerToPeerSendProgress
+                                    (Local.model loggedIn.localState).localUser.peerToPeer
                                 , if FrontendExtra.fileDragOverlayOpacity loggedIn loaded <= 0 then
                                     Subscription.none
 
@@ -1045,7 +1048,7 @@ updateLoaded msg model =
                     )
                     model
 
-        SentPeerToPeerFile peerToPeerId _ ->
+        SentPeerToPeerFile peerToPeerId url _ ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( FrontendExtra.mapPeerToPeer
@@ -1054,14 +1057,19 @@ updateLoaded msg model =
                                 | sending =
                                     SeqDict.update
                                         peerToPeerId
-                                        (\maybeCount ->
-                                            case maybeCount of
-                                                Just count ->
-                                                    if count > 1 then
-                                                        Just (count - 1)
+                                        (\maybeSends ->
+                                            case maybeSends of
+                                                Just sends ->
+                                                    let
+                                                        sends2 : SeqDict String Float
+                                                        sends2 =
+                                                            SeqDict.remove url sends
+                                                    in
+                                                    if SeqDict.isEmpty sends2 then
+                                                        Nothing
 
                                                     else
-                                                        Nothing
+                                                        Just sends2
 
                                                 Nothing ->
                                                     Nothing
@@ -1074,6 +1082,30 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        PeerToPeerSendProgress peerToPeerId url progress ->
+            case progress of
+                Http.Sending sending ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( FrontendExtra.mapPeerToPeer
+                                (\peerToPeer ->
+                                    { peerToPeer
+                                        | sending =
+                                            SeqDict.updateIfExists
+                                                peerToPeerId
+                                                (SeqDict.updateIfExists url (\_ -> Http.fractionSent sending))
+                                                peerToPeer.sending
+                                    }
+                                )
+                                loggedIn
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Http.Receiving _ ->
+                    ( model, Command.none )
 
         NewChannelFormChanged guildId newChannelForm ->
             FrontendExtra.updateLoggedIn
@@ -7241,6 +7273,9 @@ handlePressedPeerToPeerFile anyGuildOrDmId threadRoute uploader peerToPeerFile m
                         FileStatus.PeerToPeerSharedFromHere ->
                             ( loggedIn, Command.none )
 
+                        FileStatus.PeerToPeerSendingFromHere _ _ ->
+                            ( loggedIn, Command.none )
+
                         FileStatus.PeerToPeerNotSharedFromHere ->
                             ( loggedIn
                             , Effect.File.Select.file
@@ -10040,19 +10075,19 @@ updateLoadedFromBackend msg model =
                         peerToPeer =
                             (Local.model loggedIn.localState).localUser.peerToPeer
 
-                        sending : Int
+                        sending : SeqDict String Float
                         sending =
-                            SeqDict.get peerToPeerId peerToPeer.sending |> Maybe.withDefault 0
+                            SeqDict.get peerToPeerId peerToPeer.sending |> Maybe.withDefault SeqDict.empty
                     in
                     case SeqDict.get peerToPeerId peerToPeer.shared of
                         Just shared ->
-                            if sending < PeerToPeer.maxSendsAtOnce then
+                            if SeqDict.size sending < PeerToPeer.maxSendsAtOnce then
                                 ( FrontendExtra.mapPeerToPeer
                                     (\peerToPeer2 ->
-                                        { peerToPeer2 | sending = SeqDict.insert peerToPeerId (sending + 1) peerToPeer2.sending }
+                                        { peerToPeer2 | sending = SeqDict.insert peerToPeerId (SeqDict.insert url 0 sending) peerToPeer2.sending }
                                     )
                                     loggedIn
-                                , PeerToPeer.sendFile (SentPeerToPeerFile peerToPeerId) url shared.file
+                                , PeerToPeer.sendFile (SentPeerToPeerFile peerToPeerId url) url shared.file
                                 )
 
                             else

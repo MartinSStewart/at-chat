@@ -3319,7 +3319,10 @@ isPressMsg msg =
         SelectedPeerToPeerFileToShareAgain _ _ _ ->
             False
 
-        SentPeerToPeerFile _ _ ->
+        SentPeerToPeerFile _ _ _ ->
+            False
+
+        PeerToPeerSendProgress _ _ _ ->
             False
 
         GotFileToEncrypt _ _ _ _ ->

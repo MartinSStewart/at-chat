@@ -606,7 +606,8 @@ type FrontendMsg_
     | PressedLink Route
     | SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | SelectedPeerToPeerFileToShareAgain GuildOrDmId PeerToPeerFile File
-    | SentPeerToPeerFile PeerToPeerId (Result Http.Error ())
+    | SentPeerToPeerFile PeerToPeerId String (Result Http.Error ())
+    | PeerToPeerSendProgress PeerToPeerId String Http.Progress
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) EditChannelForm

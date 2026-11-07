@@ -1506,6 +1506,7 @@ largeFileTest config =
                                             Err "The admin's connection is missing"
                             )
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "P2P" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Too large" ])
                         ]
                     )
                 ]

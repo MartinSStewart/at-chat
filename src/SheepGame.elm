@@ -4048,13 +4048,30 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                             ]
                             (Ui.text (FileStatus.sizeToString peerToPeer.fileSize))
 
-                    FileStatus.FileError _ _ _ _ _ ->
-                        Ui.el
-                            [ Ui.centerX
-                            , Ui.centerY
-                            , Ui.width Ui.shrink
-                            ]
-                            (Ui.html Icons.x)
+                    FileStatus.FileError _ fileSize _ _ _ ->
+                        if fileSize > FileStatus.maxUploadSize then
+                            Ui.el
+                                [ Ui.centerX
+                                , Ui.centerY
+                                , Ui.Font.size 12
+                                , Ui.Font.color MyUi.font3
+                                , Ui.Font.center
+                                , MyUi.prewrap
+                                , MyUi.hoverText
+                                    ("Files over "
+                                        ++ FileStatus.sizeToString FileStatus.maxUploadSize
+                                        ++ " can only be sent from your device in at-chat channels and DMs that aren't end-to-end encrypted"
+                                    )
+                                ]
+                                (Ui.text ("Too large\n" ++ FileStatus.sizeToString fileSize ++ "\nMax " ++ FileStatus.sizeToString FileStatus.maxUploadSize))
+
+                        else
+                            Ui.el
+                                [ Ui.centerX
+                                , Ui.centerY
+                                , Ui.width Ui.shrink
+                                ]
+                                (Ui.html Icons.x)
                 )
         )
         (NonemptyDict.toList filesToUpload2)

@@ -5842,6 +5842,10 @@ peerToPeerFileView maybeHtmlId isSpoilered fileState onPress peerToPeer =
                     PeerToPeerSharedFromHere ->
                         "This file won't be available after you reload the page"
 
+                    PeerToPeerSendingFromHere first rest ->
+                        "Sending… "
+                            ++ String.join ", " (List.map (\fraction -> String.fromInt (round (fraction * 100)) ++ "%") (first :: rest))
+
                     PeerToPeerNotSharedFromHere ->
                         "Not shared right now, press to pick the file again"
 

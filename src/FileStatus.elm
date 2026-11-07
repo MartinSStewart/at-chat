@@ -232,6 +232,7 @@ type PeerToPeerFileState
     | PeerToPeerRequested
     | PeerToPeerUploaderOffline
     | PeerToPeerSharedFromHere
+    | PeerToPeerSendingFromHere Float (List Float)
     | PeerToPeerNotSharedFromHere
     | PeerToPeerPickedDifferentFile
 

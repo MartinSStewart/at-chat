@@ -7,6 +7,7 @@ module PeerToPeer exposing
     , maxSendsAtOnce
     , maxSharedFiles
     , sendFile
+    , subscriptions
     , transferUrl
     )
 
@@ -20,9 +21,10 @@ backend which files it is sharing, and the backend forgets them when the connect
 
 -}
 
-import Effect.Command exposing (Command)
+import Effect.Command exposing (Command, FrontendOnly)
 import Effect.File exposing (File)
 import Effect.Http as Http
+import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
 import FileName exposing (FileName)
 import FileStatus exposing (PeerToPeerFileState(..), PeerToPeerId)
@@ -41,7 +43,7 @@ type alias Model =
     { shared : SeqDict PeerToPeerId { file : File, sharedFile : SharedFile }
     , downloads : SeqDict ( Id UserId, PeerToPeerId ) Download
     , pickedDifferentFile : SeqSet PeerToPeerId
-    , sending : SeqDict PeerToPeerId Int
+    , sending : SeqDict PeerToPeerId (SeqDict String Float)
     }
 
 
@@ -86,7 +88,15 @@ fileState : Id UserId -> Id UserId -> PeerToPeerId -> Model -> PeerToPeerFileSta
 fileState currentUserId uploader peerToPeerId model =
     if currentUserId == uploader then
         if SeqDict.member peerToPeerId model.shared then
-            PeerToPeerSharedFromHere
+            case SeqDict.get peerToPeerId model.sending |> Maybe.map SeqDict.values of
+                Just (first :: rest) ->
+                    PeerToPeerSendingFromHere first rest
+
+                Just [] ->
+                    PeerToPeerSharedFromHere
+
+                Nothing ->
+                    PeerToPeerSharedFromHere
 
         else if SeqSet.member peerToPeerId model.pickedDifferentFile then
             PeerToPeerPickedDifferentFile
@@ -164,5 +174,18 @@ sendFile onResult url file =
         , body = Http.fileBody file
         , expect = Http.expectWhatever onResult
         , timeout = Nothing
-        , tracker = Nothing
+
+        -- Each send has its own url, so it doubles as the name to track it by.
+        , tracker = Just url
         }
+
+
+subscriptions : (PeerToPeerId -> String -> Http.Progress -> msg) -> Model -> Subscription FrontendOnly msg
+subscriptions onProgress model =
+    SeqDict.foldl
+        (\peerToPeerId sends list ->
+            SeqDict.foldl (\url _ list2 -> Http.track url (onProgress peerToPeerId url) :: list2) list sends
+        )
+        []
+        model.sending
+        |> Subscription.batch
