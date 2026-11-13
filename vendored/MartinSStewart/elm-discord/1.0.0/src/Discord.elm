@@ -5425,6 +5425,9 @@ decodeDispatchUserEvent eventName =
         "THREAD_MEMBERS_UPDATE" ->
             JD.succeed DispatchUser_ThreadMembersUpdate
 
+        "THREAD_LIST_SYNC" ->
+            JD.succeed DispatchUser_ThreadListSync
+
         "THREAD_UPDATE" ->
             JD.field "d" decodeChannel |> JD.map DispatchUser_ThreadUpdate
 
@@ -5753,6 +5756,7 @@ type GatewayUserCommand
     | GatewayUser_OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
     | GatewayUser_OpUpdateVoiceState
     | GatewayUser_OpUpdatePresence
+    | GatewayUser_OpBulkGuildSubscribe (List (Id GuildId))
 
 
 type GatewayEvent event
@@ -5820,6 +5824,7 @@ type OpDispatchUserEvent
     | DispatchUser_GenericPushNotificationSent
     | DispatchUser_ReactionNotificationSent
     | DispatchUser_ThreadMembersUpdate
+    | DispatchUser_ThreadListSync
     | DispatchUser_ThreadUpdate Channel
     | DispatchUser_ThreadDelete Channel
     | DispatchUser_CallCreate
@@ -6566,6 +6571,29 @@ encodeUserGatewayCommand gatewayCommand =
         GatewayUser_OpUpdatePresence ->
             JE.object []
 
+        GatewayUser_OpBulkGuildSubscribe guildIds ->
+            -- Subscribing to a guild's threads is how a user account hears about messages in
+            -- threads it hasn't joined. Typing has to be on for large guilds to take a
+            -- subscription at all. <https://docs.discord.food/topics/threads>
+            JE.object
+                [ ( "op", JE.int 37 )
+                , ( "d"
+                  , JE.object
+                        [ ( "subscriptions"
+                          , JE.object
+                                (List.map
+                                    (\guildId ->
+                                        ( idToString guildId
+                                        , JE.object [ ( "typing", JE.bool True ), ( "threads", JE.bool True ) ]
+                                        )
+                                    )
+                                    guildIds
+                                )
+                          )
+                        ]
+                  )
+                ]
+
 
 
 --- Gateway code
@@ -7014,7 +7042,14 @@ handleUserGateway authToken intents response model =
                                         }
                                 , reconnect = { failedAttempts = 0, seed = model.reconnect.seed }
                               }
-                            , [ UserOutMsg_ReadyData readyEvent ]
+                            , [ UserOutMsg_ReadyData readyEvent
+                              , -- A new session starts with no subscriptions, while a resumed one keeps them
+                                -- and gets no READY.
+                                GatewayUser_OpBulkGuildSubscribe (List.map (\guild -> guild.properties.id) readyEvent.guilds)
+                                    |> encodeUserGatewayCommand
+                                    |> JE.encode 0
+                                    |> UserOutMsg_SendWebsocketData connection
+                              ]
                             )
 
                         DispatchUser_ReadySupplementalEvent readySupplementalEvent ->
@@ -7153,6 +7188,9 @@ handleUserGateway authToken intents response model =
                         DispatchUser_ThreadMembersUpdate ->
                             ( model, [] )
 
+                        DispatchUser_ThreadListSync ->
+                            ( model, [] )
+
                         DispatchUser_ThreadUpdate channel ->
                             ( model, [ UserOutMsg_ThreadUpdated channel ] )
 
@@ -7175,7 +7213,14 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_GuildCreate gatewayGuild ->
-                            ( model, [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild ] )
+                            ( model
+                            , [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild
+                              , GatewayUser_OpBulkGuildSubscribe [ gatewayGuild.properties.id ]
+                                    |> encodeUserGatewayCommand
+                                    |> JE.encode 0
+                                    |> UserOutMsg_SendWebsocketData connection
+                              ]
+                            )
 
                         DispatchUser_GuildUpdate guildUpdate ->
                             ( model, [ UserOutMsg_GuildUpdate guildUpdate ] )
