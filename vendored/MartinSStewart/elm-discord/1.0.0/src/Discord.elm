@@ -3061,6 +3061,7 @@ type ChannelType
     | GuildDirectory
     | GuildForum
     | GuildMedia
+    | UnknownChannelType Int
 
 
 type alias Invite =
@@ -4608,7 +4609,7 @@ decodeChannelType =
                     JD.succeed GuildMedia
 
                 _ ->
-                    JD.fail ("Invalid channel type: " ++ String.fromInt value)
+                    JD.succeed (UnknownChannelType value)
         )
         JD.int
 
