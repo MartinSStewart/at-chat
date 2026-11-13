@@ -719,6 +719,9 @@ addDiscordChannel discordChannel =
 
                 Discord.GuildMedia ->
                     False
+
+                Discord.UnknownChannelType _ ->
+                    False
     in
     if isTextChannel then
         { name =
