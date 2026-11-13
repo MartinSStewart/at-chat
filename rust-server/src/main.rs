@@ -1473,12 +1473,19 @@ fn remove_old_backups(dir: String, max_age: Duration) {
 // which on the bucket means a round trip each.
 const BACKUP_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
 
+// s3fs now and then fails to upload a backup with nothing more to say than "Input/output
+// error", while the server's copy of the same body is written without trouble. That copy is
+// whole, so the bucket gets a couple more goes at it, spaced out in case the bucket or s3fs
+// needed a moment. The backend waits up to 30 minutes for an answer, so there is room for this.
+const BUCKET_BACKUP_RETRY_DELAYS: [Duration; 2] =
+    [Duration::from_secs(30), Duration::from_secs(120)];
+
 enum BackupWrite {
     // The body stopped partway, so neither file holds a backup and neither was kept.
     Incomplete(axum::Error),
     // The body arrived in full. Each destination answers for itself, so one of them being
     // unwritable says nothing about the other.
-    Written(std::io::Result<()>, std::io::Result<()>),
+    Written(Result<(), String>, Result<(), String>),
 }
 
 // Taking the body rather than Bytes is what lets the backup go to disk as it arrives: Bytes,
@@ -1492,13 +1499,11 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Body) -> Respo
     let _ = tokio::fs::create_dir(SERVER_BACKUPS_PATH).await;
     let _ = tokio::fs::create_dir(BUCKET_BACKUPS_PATH).await;
 
-    // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
-    let written = write_backup(
-        body,
-        &(String::from(SERVER_BACKUPS_PATH) + &filename),
-        &(String::from(BUCKET_BACKUPS_PATH) + &filename),
-    )
-    .await;
+    let server_path = String::from(SERVER_BACKUPS_PATH) + &filename;
+    let bucket_path = String::from(BUCKET_BACKUPS_PATH) + &filename;
+
+    // Written to both the server's own disk and the bucket to improve the odds that we don't lose all backups
+    let written = write_backup(body, &server_path, &bucket_path).await;
 
     // Clearing out expired backups reads the metadata of every backup still lying around, one
     // file at a time, and on the bucket each of those is a network round trip. The upload it was
@@ -1509,24 +1514,104 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Body) -> Respo
     });
 
     match written {
-        BackupWrite::Written(Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
-        BackupWrite::Written(Err(error), Ok(_)) => response_with_headers(
+        BackupWrite::Written(Ok(()), Ok(())) => response_with_headers(StatusCode::OK, ""),
+        BackupWrite::Written(Err(error), Ok(())) => response_with_headers(
             StatusCode::BAD_REQUEST,
-            format!("First write failed\n{:?}", error),
+            format!("First write failed\n{error}\n{}", server_disk_space()),
         ),
-        BackupWrite::Written(Ok(_), Err(error)) => response_with_headers(
-            StatusCode::BAD_REQUEST,
-            format!("Second write failed\n{:?}", error),
-        ),
+        BackupWrite::Written(Ok(()), Err(error)) => {
+            match retry_bucket_backup(&server_path, &bucket_path, error).await {
+                Ok(()) => response_with_headers(StatusCode::OK, ""),
+                Err(errors) => response_with_headers(
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Second write failed, {} times\n{}\n{}",
+                        errors.len(),
+                        errors.join("\n"),
+                        server_disk_space()
+                    ),
+                ),
+            }
+        }
         BackupWrite::Written(Err(error_a), Err(error_b)) => response_with_headers(
             StatusCode::BAD_REQUEST,
-            format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+            format!(
+                "Both file writes failed\n{error_a}\n{error_b}\n{}",
+                server_disk_space()
+            ),
         ),
         BackupWrite::Incomplete(error) => response_with_headers(
             StatusCode::BAD_REQUEST,
-            format!("The backup didn't arrive in full\n{:?}", error),
+            format!("The backup didn't arrive in full\n{error:?}"),
         ),
     }
+}
+
+// s3fs stages every upload to the bucket on the server's own disk and stops working properly
+// once less than a tenth of that disk is free, so a failed bucket write says how full it was.
+fn server_disk_space() -> String {
+    match rustix::fs::statvfs(SERVER_BACKUPS_PATH) {
+        Ok(stats) => {
+            let free = stats.f_bavail * stats.f_frsize;
+            let total = stats.f_blocks * stats.f_frsize;
+            format!(
+                "Server disk: {:.1}GB free of {:.1}GB",
+                free as f64 / 1e9,
+                total as f64 / 1e9
+            )
+        }
+        Err(error) => format!("Couldn't check the server's disk space: {error:?}"),
+    }
+}
+
+// Each error is kept so the backend's log shows whether the bucket failed the same way every
+// time. A bucket that only takes the backup on a later go doesn't fail the backup, but it does
+// go in the journal so a bucket that keeps needing it shows up somewhere.
+async fn retry_bucket_backup(
+    server_path: &str,
+    bucket_path: &str,
+    first_error: String,
+) -> Result<(), Vec<String>> {
+    let mut errors = vec![first_error];
+
+    for delay in BUCKET_BACKUP_RETRY_DELAYS {
+        tokio::time::sleep(delay).await;
+
+        match copy_backup_to_bucket(server_path, bucket_path).await {
+            Ok(()) => {
+                println!(
+                    "Backup {bucket_path} only reached the bucket on try {}. Earlier errors:\n{}\n{}",
+                    errors.len() + 1,
+                    errors.join("\n"),
+                    server_disk_space()
+                );
+                return Ok(());
+            }
+            Err(error) => errors.push(error),
+        }
+    }
+
+    Err(errors)
+}
+
+async fn copy_backup_to_bucket(server_path: &str, bucket_path: &str) -> Result<(), String> {
+    let partial_path = format!("{bucket_path}.part");
+
+    let source = tokio::fs::File::open(server_path).await;
+    let destination = create_backup_file(&partial_path).await;
+
+    let copied = match (source, destination) {
+        (Ok(mut source2), Ok(mut destination2)) => {
+            match tokio::io::copy(&mut source2, &mut destination2).await {
+                Ok(_) => Ok(destination2),
+                Err(error) => Err(format!("Writing failed\n{error:?}")),
+            }
+        }
+        (Err(error), _) => Err(format!("Reading the server's copy failed\n{error:?}")),
+        (Ok(_), Err(error)) => Err(error),
+    };
+
+    finish_backup_file(copied, &partial_path, bucket_path).await
 }
 
 // Writes the body to both paths as it arrives, under a name that says the file isn't finished
@@ -1538,12 +1623,8 @@ async fn write_backup(body: Body, path_a: &str, path_b: &str) -> BackupWrite {
     let partial_a = format!("{path_a}.part");
     let partial_b = format!("{path_b}.part");
 
-    let mut file_a = tokio::fs::File::create(&partial_a)
-        .await
-        .map(|file| tokio::io::BufWriter::with_capacity(BACKUP_WRITE_BUFFER_BYTES, file));
-    let mut file_b = tokio::fs::File::create(&partial_b)
-        .await
-        .map(|file| tokio::io::BufWriter::with_capacity(BACKUP_WRITE_BUFFER_BYTES, file));
+    let mut file_a = create_backup_file(&partial_a).await;
+    let mut file_b = create_backup_file(&partial_b).await;
 
     let mut chunks = body.into_data_stream();
 
@@ -1569,28 +1650,51 @@ async fn write_backup(body: Body, path_a: &str, path_b: &str) -> BackupWrite {
     )
 }
 
+async fn create_backup_file(path: &str) -> Result<tokio::io::BufWriter<tokio::fs::File>, String> {
+    match tokio::fs::File::create(path).await {
+        Ok(file) => Ok(tokio::io::BufWriter::with_capacity(
+            BACKUP_WRITE_BUFFER_BYTES,
+            file,
+        )),
+        Err(error) => Err(format!("Creating the file failed\n{error:?}")),
+    }
+}
+
 // A file that has already failed to be written stays failed, so the rest of the backup goes to
 // whichever destination is still taking it.
 async fn write_backup_chunk(
-    file: std::io::Result<tokio::io::BufWriter<tokio::fs::File>>,
+    file: Result<tokio::io::BufWriter<tokio::fs::File>, String>,
     chunk: &[u8],
-) -> std::io::Result<tokio::io::BufWriter<tokio::fs::File>> {
+) -> Result<tokio::io::BufWriter<tokio::fs::File>, String> {
     let mut file2 = file?;
-    file2.write_all(chunk).await?;
-    Ok(file2)
+    match file2.write_all(chunk).await {
+        Ok(()) => Ok(file2),
+        Err(error) => Err(format!("Writing failed\n{error:?}")),
+    }
 }
 
+// Each step names itself in the error, since an Input/output error from the bucket on its own
+// doesn't say whether it was the upload or the rename after it that went wrong.
 async fn finish_backup_file(
-    file: std::io::Result<tokio::io::BufWriter<tokio::fs::File>>,
+    file: Result<tokio::io::BufWriter<tokio::fs::File>, String>,
     partial_path: &str,
     path: &str,
-) -> std::io::Result<()> {
+) -> Result<(), String> {
     let result = match file {
         Ok(mut file2) => match file2.flush().await {
-            // Renaming is what publishes the backup, and it only happens once every byte of the
-            // body has been written, so a file under the name the upload asked for is a whole one.
-            Ok(()) => tokio::fs::rename(partial_path, path).await,
-            Err(error) => Err(error),
+            // On the bucket this is when s3fs uploads the file. Without it the upload would
+            // happen inside the rename, or at close where any error is thrown away.
+            Ok(()) => match file2.get_ref().sync_all().await {
+                // Renaming is what publishes the backup, and it only happens once every byte of
+                // the body has been written, so a file under the name the upload asked for is a
+                // whole one.
+                Ok(()) => match tokio::fs::rename(partial_path, path).await {
+                    Ok(()) => Ok(()),
+                    Err(error) => Err(format!("Renaming failed\n{error:?}")),
+                },
+                Err(error) => Err(format!("Uploading (fsync) failed\n{error:?}")),
+            },
+            Err(error) => Err(format!("Writing failed\n{error:?}")),
         },
         Err(error) => Err(error),
     };
@@ -4649,6 +4753,66 @@ mod tests {
         }
 
         remove_test_backup(filename);
+    }
+
+    // When s3fs fails to upload a backup, the bucket is given another go from the server's copy.
+    #[tokio::test]
+    async fn the_servers_backup_can_be_copied_to_the_bucket() {
+        create_storage_dir();
+        let _ = fs::create_dir(SERVER_BACKUPS_PATH);
+        let _ = fs::create_dir(BUCKET_BACKUPS_PATH);
+        let filename = "backend-export-test-copied.bin";
+        remove_test_backup(filename);
+
+        let whole = vec![b'd'; BACKUP_WRITE_BUFFER_BYTES * 2 + 7];
+        let server_path = String::from(SERVER_BACKUPS_PATH) + filename;
+        let bucket_path = String::from(BUCKET_BACKUPS_PATH) + filename;
+        fs::write(&server_path, &whole).expect("failed to write the server's copy");
+
+        assert_eq!(
+            copy_backup_to_bucket(&server_path, &bucket_path).await,
+            Ok(()),
+            "copying the server's backup to the bucket should work"
+        );
+        assert_eq!(
+            fs::read(&bucket_path).ok().as_ref(),
+            Some(&whole),
+            "the bucket's copy should be every byte of the server's"
+        );
+        assert!(
+            !fs::exists(format!("{bucket_path}.part")).unwrap_or(false),
+            "the unfinished name should be gone once the copy is published"
+        );
+
+        remove_test_backup(filename);
+    }
+
+    #[tokio::test]
+    async fn a_failed_copy_to_the_bucket_leaves_nothing_behind() {
+        create_storage_dir();
+        let _ = fs::create_dir(BUCKET_BACKUPS_PATH);
+        let filename = "backend-export-test-missing.bin";
+        remove_test_backup(filename);
+
+        let bucket_path = String::from(BUCKET_BACKUPS_PATH) + filename;
+
+        assert!(
+            copy_backup_to_bucket(
+                &(String::from(SERVER_BACKUPS_PATH) + filename),
+                &bucket_path
+            )
+            .await
+            .is_err(),
+            "copying a server backup that isn't there should fail"
+        );
+        assert!(
+            !fs::exists(&bucket_path).unwrap_or(false),
+            "nothing should be published in the bucket"
+        );
+        assert!(
+            !fs::exists(format!("{bucket_path}.part")).unwrap_or(false),
+            "the unfinished file should have been cleared away"
+        );
     }
 
     // A backup is the entire backend model and grows every day the server is used, so it is the
