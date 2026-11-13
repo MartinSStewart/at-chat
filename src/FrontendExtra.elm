@@ -448,6 +448,15 @@ pendingChangesText localChange =
         Local_SetMuteSlackThread _ _ _ _ _ ->
             Just "Changed thread notifications"
 
+        Local_SetMuteDiscordDm _ _ _ ->
+            Just "Changed DM notifications"
+
+        Local_SetMuteSlackDm _ _ _ ->
+            Just "Changed DM notifications"
+
+        Local_SetMuteSlackDmThread _ _ _ _ ->
+            Just "Changed thread notifications"
+
         Local_RequestE2ee _ ->
             Just "Asked to start end-to-end encryption"
 
@@ -1888,12 +1897,16 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                             Nothing
 
                             SlackGuildOrDmId_Dm { channelId } ->
-                                SeqDict.get channelId local.slackDmChannels
-                                    |> Maybe.andThen
-                                        (\dmChannel ->
-                                            NonemptySet.toList dmChannel.members
-                                                |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
-                                        )
+                                if MuteSettings.hidesWhiteDot (MuteSettings.isSlackDmMuted local.localUser.user.muteSettings channelId threadRoute) then
+                                    Nothing
+
+                                else
+                                    SeqDict.get channelId local.slackDmChannels
+                                        |> Maybe.andThen
+                                            (\dmChannel ->
+                                                NonemptySet.toList dmChannel.members
+                                                    |> List.Extra.find (\userId -> SeqDict.member userId local.localUser.linkedSlackUsers)
+                                            )
             in
             case recipient of
                 Just currentUserId ->
@@ -1988,6 +2001,15 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         |> SeqSet.isEmpty
                         |> not
 
+                isMutedDm : Bool
+                isMutedDm =
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild _ ->
+                            False
+
+                        DiscordGuildOrDmId_Dm { channelId } ->
+                            MuteSettings.hidesWhiteDot (MuteSettings.isDiscordDmMuted local.localUser.user.muteSettings channelId)
+
                 allUsers =
                     LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
@@ -1995,7 +2017,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                 threadRouteWithFriends =
                     Route.threadRouteWithFriends (Id.threadRouteWithoutMaybeMessage threadRouteWithRepliedTo)
             in
-            if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
+            if not model.pageHasFocus && not isMutedDm && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
                     , case model.startupData.notificationPermission of
@@ -3658,6 +3680,15 @@ isPressMsg msg =
             True
 
         PressedMuteSlackThread _ _ _ _ _ ->
+            True
+
+        PressedMuteDiscordDm _ _ _ ->
+            True
+
+        PressedMuteSlackDm _ _ _ ->
+            True
+
+        PressedMuteSlackDmThread _ _ _ _ ->
             True
 
         UnreadOverviewChannelMsg _ _ messageViewMsg ->
@@ -5546,6 +5577,15 @@ changeUpdate localMsg local =
                 Local_SetMuteSlackThread _ teamId channelId threadId isMuted ->
                     setMuteSlackThread teamId channelId threadId isMuted local
 
+                Local_SetMuteDiscordDm _ channelId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteDiscordDm channelId isMuted) local
+
+                Local_SetMuteSlackDm _ channelId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteSlackDm channelId isMuted) local
+
+                Local_SetMuteSlackDmThread _ channelId threadId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteSlackDmThread channelId threadId isMuted) local
+
                 Local_RequestE2ee id ->
                     LocalState.setDmE2ee
                         id
@@ -7419,6 +7459,15 @@ changeUpdate localMsg local =
                 Server_SetMuteSlackThread teamId channelId threadId isMuted ->
                     setMuteSlackThread teamId channelId threadId isMuted local
 
+                Server_SetMuteDiscordDm channelId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteDiscordDm channelId isMuted) local
+
+                Server_SetMuteSlackDm channelId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteSlackDm channelId isMuted) local
+
+                Server_SetMuteSlackDmThread channelId threadId isMuted ->
+                    updateMuteSettings (MuteSettings.setMuteSlackDmThread channelId threadId isMuted) local
+
                 Server_E2eeRequested id requestedBy ->
                     LocalState.setDmE2ee id (DmChannel.E2eeRequestedBy requestedBy) local
 
@@ -7815,6 +7864,20 @@ setMuteSlackThread teamId channelId threadId isMuted local =
                     }
             }
     }
+
+
+updateMuteSettings : (MuteSettings.Model -> MuteSettings.Model) -> LocalState -> LocalState
+updateMuteSettings updateFunc local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local | localUser = { localUser | user = { user | muteSettings = updateFunc user.muteSettings } } }
 
 
 {-| Starting a game leaves a card behind in the conversation it was started from. It is the

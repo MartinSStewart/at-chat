@@ -19,15 +19,21 @@ module MuteSettings exposing
     , isGuildSpecificallyMute
     , isSlackChannelMuted
     , isSlackChannelSpecificallyMuted
+    , isSlackDmMuted
+    , isSlackDmSpecificallyMuted
+    , isSlackDmThreadSpecificallyMuted
     , isSlackThreadSpecificallyMuted
     , isSlackWorkspaceSpecificallyMuted
     , isThreadSpecificallyMuted
     , setMuteChannel
     , setMuteDiscordChannel
+    , setMuteDiscordDm
     , setMuteDiscordGuild
     , setMuteDiscordThread
     , setMuteGuild
     , setMuteSlackChannel
+    , setMuteSlackDm
+    , setMuteSlackDmThread
     , setMuteSlackThread
     , setMuteSlackWorkspace
     , setMuteThread
@@ -50,6 +56,7 @@ type alias Model =
     , mutedDiscordGuilds : SeqDict (Discord.Id Discord.GuildId) MutedDiscordGuild
     , mutedDiscordDms : SeqDict (Discord.Id Discord.PrivateChannelId) IsMuted
     , mutedSlackWorkspaces : SeqDict (Slack.Id Slack.TeamId) MutedSlackWorkspace
+    , mutedSlackDms : SeqDict (Slack.Id Slack.DmChannelId) MutedChannel
     }
 
 
@@ -88,6 +95,7 @@ init =
     , mutedDiscordGuilds = SeqDict.empty
     , mutedDiscordDms = SeqDict.empty
     , mutedSlackWorkspaces = SeqDict.empty
+    , mutedSlackDms = SeqDict.empty
     }
 
 
@@ -240,6 +248,63 @@ setMuteDiscordThread guildId channelId threadId isMuted model =
             }
         )
         model
+
+
+setMuteDiscordDm : Discord.Id Discord.PrivateChannelId -> IsMuted -> Model -> Model
+setMuteDiscordDm channelId isMuted model =
+    { model
+        | mutedDiscordDms =
+            case isMuted of
+                IsNotMuted ->
+                    SeqDict.remove channelId model.mutedDiscordDms
+
+                IsPartiallyMuted ->
+                    SeqDict.insert channelId isMuted model.mutedDiscordDms
+
+                IsFullyMuted ->
+                    SeqDict.insert channelId isMuted model.mutedDiscordDms
+    }
+
+
+setMuteSlackDm : Slack.Id Slack.DmChannelId -> IsMuted -> Model -> Model
+setMuteSlackDm channelId isMuted model =
+    updateMutedSlackDm channelId (\channel -> { channel | mutedChannel = isMuted }) model
+
+
+setMuteSlackDmThread : Slack.Id Slack.DmChannelId -> Id ChannelMessageId -> IsMuted -> Model -> Model
+setMuteSlackDmThread channelId threadId isMuted model =
+    updateMutedSlackDm
+        channelId
+        (\channel ->
+            { channel
+                | mutedThreads =
+                    case isMuted of
+                        IsNotMuted ->
+                            SeqDict.remove threadId channel.mutedThreads
+
+                        IsPartiallyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+
+                        IsFullyMuted ->
+                            SeqDict.insert threadId isMuted channel.mutedThreads
+            }
+        )
+        model
+
+
+updateMutedSlackDm : Slack.Id Slack.DmChannelId -> (MutedChannel -> MutedChannel) -> Model -> Model
+updateMutedSlackDm channelId updateFunc model =
+    { model
+        | mutedSlackDms =
+            SeqDict.update
+                channelId
+                (\maybeChannel ->
+                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqDict.empty } maybeChannel
+                        |> updateFunc
+                        |> Just
+                )
+                model.mutedSlackDms
+    }
 
 
 setMuteSlackChannel : Slack.Id Slack.TeamId -> Slack.Id Slack.ChannelId -> IsMuted -> Model -> Model
@@ -556,6 +621,36 @@ isDiscordChannelMuted model guildId channelId threadRoute =
 
                 Nothing ->
                     guild.mutedGuild
+
+        Nothing ->
+            IsNotMuted
+
+
+isSlackDmMuted : Model -> Slack.Id Slack.DmChannelId -> ThreadRoute -> IsMuted
+isSlackDmMuted model channelId threadRoute =
+    case SeqDict.get channelId model.mutedSlackDms of
+        Just channel ->
+            channelOrThreadMuted threadRoute channel
+
+        Nothing ->
+            IsNotMuted
+
+
+isSlackDmSpecificallyMuted : Model -> Slack.Id Slack.DmChannelId -> IsMuted
+isSlackDmSpecificallyMuted model channelId =
+    case SeqDict.get channelId model.mutedSlackDms of
+        Just channel ->
+            channel.mutedChannel
+
+        Nothing ->
+            IsNotMuted
+
+
+isSlackDmThreadSpecificallyMuted : Model -> Slack.Id Slack.DmChannelId -> Id ChannelMessageId -> IsMuted
+isSlackDmThreadSpecificallyMuted model channelId threadId =
+    case SeqDict.get channelId model.mutedSlackDms of
+        Just channel ->
+            SeqDict.get threadId channel.mutedThreads |> Maybe.withDefault IsNotMuted
 
         Nothing ->
             IsNotMuted

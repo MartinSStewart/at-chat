@@ -1016,9 +1016,43 @@ slackUnreadAndNotificationsTest config =
                         , E2EHelper.hasExactText admin [ "Psst" ]
                         , admin.click 100 (Dom.id "guild_showMembers")
                         , E2EHelper.hasExactText admin [ "Members (2)" ]
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+                                    Just user ->
+                                        case MuteSettings.isSlackDmSpecificallyMuted user.muteSettings (Slack.Id "D09DK3P5RPC") of
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsFullyMuted ->
+                                                Err "Expected the DM to be partially muted, got fully muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the DM to be partially muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        , T.websocketSendString
+                            100
+                            connection
+                            (slackDmEvent { user = "U09DK3NCPMG", ts = "1791640003.000100", text = "Muted psst" })
+                        , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
+                        , T.checkState
+                            100
+                            (\data ->
+                                case shownNotificationUrls admin data of
+                                    [ _, _ ] ->
+                                        Ok ()
+
+                                    urls ->
+                                        Err ("A partially muted DM shouldn't notify, got " ++ String.fromInt (List.length urls) ++ " notifications")
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs

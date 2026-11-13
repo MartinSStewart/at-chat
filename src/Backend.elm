@@ -8114,6 +8114,91 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_SetMuteDiscordDm discordUserId channelId isMuted ->
+                    BackendExtra.asDiscordDmUser
+                        model
+                        sessionId
+                        { currentUserId = discordUserId, channelId = channelId }
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | muteSettings = MuteSettings.setMuteDiscordDm channelId isMuted user.muteSettings }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordDm channelId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteSlackDm slackUserId channelId isMuted ->
+                    BackendExtra.asSlackDmUser
+                        model
+                        sessionId
+                        { currentUserId = slackUserId, channelId = channelId }
+                        (\session _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackDm channelId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackDm channelId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SetMuteSlackDmThread slackUserId channelId threadId isMuted ->
+                    BackendExtra.asSlackDmUser
+                        model
+                        sessionId
+                        { currentUserId = slackUserId, channelId = channelId }
+                        (\session _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackDmThread channelId threadId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackDmThread channelId threadId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_RequestE2ee id ->
                     BackendExtra.asDmUser
                         model

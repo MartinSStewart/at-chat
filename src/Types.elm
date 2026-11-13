@@ -779,6 +779,9 @@ type FrontendMsg_
     | PressedMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
     | PressedMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
     | PressedMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
+    | PressedMuteDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) IsMuted
+    | PressedMuteSlackDm (Slack.Id Slack.UserId) (Slack.Id Slack.DmChannelId) IsMuted
+    | PressedMuteSlackDmThread (Slack.Id Slack.UserId) (Slack.Id Slack.DmChannelId) (Id ChannelMessageId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
@@ -1387,6 +1390,9 @@ type ServerChange
     | Server_SetMuteSlackWorkspace (Slack.Id Slack.TeamId) IsMuted
     | Server_SetMuteSlackChannel (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
     | Server_SetMuteSlackThread (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
+    | Server_SetMuteDiscordDm (Discord.Id Discord.PrivateChannelId) IsMuted
+    | Server_SetMuteSlackDm (Slack.Id Slack.DmChannelId) IsMuted
+    | Server_SetMuteSlackDmThread (Slack.Id Slack.DmChannelId) (Id ChannelMessageId) IsMuted
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
       -- The DM is named from the point of view of whoever is receiving this, so the user
       -- that asked for encryption is named separately.
@@ -1479,6 +1485,9 @@ type LocalChange
     | Local_SetMuteSlackWorkspace (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) IsMuted
     | Local_SetMuteSlackChannel (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) IsMuted
     | Local_SetMuteSlackThread (Slack.Id Slack.UserId) (Slack.Id Slack.TeamId) (Slack.Id Slack.ChannelId) (Id ChannelMessageId) IsMuted
+    | Local_SetMuteDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) IsMuted
+    | Local_SetMuteSlackDm (Slack.Id Slack.UserId) (Slack.Id Slack.DmChannelId) IsMuted
+    | Local_SetMuteSlackDmThread (Slack.Id Slack.UserId) (Slack.Id Slack.DmChannelId) (Id ChannelMessageId) IsMuted
     | Local_RequestE2ee Viewing_DmId
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId

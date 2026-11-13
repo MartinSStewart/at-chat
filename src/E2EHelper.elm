@@ -3036,6 +3036,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteSlackThread _ _ _ _ _ ->
                     True
 
+                Local_SetMuteDiscordDm _ _ _ ->
+                    True
+
+                Local_SetMuteSlackDm _ _ _ ->
+                    True
+
+                Local_SetMuteSlackDmThread _ _ _ _ ->
+                    True
+
                 Local_RequestE2ee _ ->
                     True
 
@@ -3387,6 +3396,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteSlackThread _ _ _ _ ->
                             True
 
+                        Types.Server_SetMuteDiscordDm _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackDm _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackDmThread _ _ _ ->
+                            True
+
                         Types.Server_DiscordAvatarsLoaded _ _ ->
                             True
 
@@ -3666,6 +3684,8 @@ allAttackerLocalChanges =
     , Local_SetMuteSlackWorkspace (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") MuteSettings.IsFullyMuted
     , Local_SetMuteSlackChannel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") MuteSettings.IsFullyMuted
     , Local_SetMuteSlackThread (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") (Id.fromInt 0) MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackDm (Slack.Id "U09DJDQL1A8") (Slack.Id "D09DK3P5RPC") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackDmThread (Slack.Id "U09DJDQL1A8") (Slack.Id "D09DK3P5RPC") (Id.fromInt 0) MuteSettings.IsFullyMuted
     , Local_CurrentlyViewing
         { markMessagesAsViewed = True }
         (ViewSlackChannel
@@ -3774,6 +3794,7 @@ allAttackerLocalChanges =
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( SafeFloat.zero, SafeFloat.zero ))
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsFullyMuted
+    , Local_SetMuteDiscordDm discordUserId discordPrivateChannelId MuteSettings.IsFullyMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsFullyMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequestAsInitiator { otherUserId = Broadcast.adminUserId }

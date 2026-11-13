@@ -6394,6 +6394,39 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMuteDiscordDm discordUserId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordDm discordUserId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackDm slackUserId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackDm slackUserId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackDmThread slackUserId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackDmThread slackUserId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedMarkChannelAsRead guildOrDmId threadRoute ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

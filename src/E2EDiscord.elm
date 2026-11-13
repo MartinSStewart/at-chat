@@ -35,6 +35,7 @@ import MembersAndOwner
 import Message
 import MessageArray
 import MessageInput
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -2636,6 +2637,55 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
                             )
                         , friendLabelHasNoNotificationCircle admin "1472236476401057854" "1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A partially muted Discord DM shows a white dot and no guild column icon"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , admin.click 100 (Dom.id "guild_showMembers")
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+                                    Just user ->
+                                        case MuteSettings.isDiscordDmMuted user.muteSettings discordDmChannelId of
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsFullyMuted ->
+                                                Err "Expected the DM to be partially muted, got fully muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the DM to be partially muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , discordDmMessage connection "Check out this Discord DM!"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
+                            )
+                        , friendLabelHasNotificationCircle admin "1472236476401057854" "1"
                         ]
                     )
                 ]
