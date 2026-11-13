@@ -318,8 +318,28 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                             Nothing ->
                                                 Ui.none
 
-                                    SelectedSlackDmChannel _ ->
-                                        Ui.none
+                                    SelectedSlackDmChannel routeData ->
+                                        case SeqDict.get routeData.channelId local.slackDmChannels of
+                                            Just dmChannel ->
+                                                slackDmChannelSettingsMobile
+                                                    canScroll2
+                                                    local.localUser
+                                                    isThread
+                                                    dmChannel
+                                                    |> Ui.el
+                                                        [ Ui.height Ui.fill
+                                                        , Ui.background MyUi.background3
+                                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                                        , Ui.move
+                                                            { x = Call.memberColumnOffset loggedIn.sidebarMode model
+                                                            , y = 0
+                                                            , z = 0
+                                                            }
+                                                        , Ui.heightMin 0
+                                                        ]
+
+                                            Nothing ->
+                                                Ui.none
 
                                     NoDmChannelSelected ->
                                         Ui.none
@@ -514,8 +534,22 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 Nothing ->
                                     Ui.none
 
-                        ( ( ShowChannelSettings, _ ), SelectedSlackDmChannel _ ) ->
-                            Ui.none
+                        ( ( ShowChannelSettings, isThread ), SelectedSlackDmChannel routeData ) ->
+                            case SeqDict.get routeData.channelId local.slackDmChannels of
+                                Just dmChannel ->
+                                    Ui.Lazy.lazy3
+                                        slackDmChannelSettingsNotMobile
+                                        local.localUser
+                                        isThread
+                                        dmChannel
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            ]
+
+                                Nothing ->
+                                    Ui.none
 
                         ( ( ShowChannelSettings, _ ), NoDmChannelSelected ) ->
                             Ui.none
@@ -1361,6 +1395,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 { currentSlackUserId = currentSlackUserId
                                                 , channelId = channelId
                                                 , threadRoute = NoThreadWithMaybeMessage Nothing
+                                                , showMembersTab = HideChannelSettings
                                                 , channelsVisible = ChannelsHiddenOnMobile
                                                 , overlay = Nothing
                                                 }
@@ -1397,6 +1432,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         { currentSlackUserId = currentSlackUserId
                                                         , channelId = channelId
                                                         , threadRoute = ViewThreadWithMaybeMessage threadId Nothing
+                                                        , showMembersTab = HideChannelSettings
                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                         , overlay = Nothing
                                                         }
@@ -3299,6 +3335,81 @@ discordDmChannelSettingsMobile canScroll2 localUser currentDiscordUserId channel
                     (List.map (discordMemberLabel True localUser currentDiscordUserId) members)
                 ]
             ]
+        ]
+
+
+slackDmChannelSettingsNotMobile : LocalUser -> Bool -> SlackFrontendDmChannel -> Element FrontendMsg_
+slackDmChannelSettingsNotMobile localUser isThread dmChannel =
+    let
+        members : List (Slack.Id Slack.UserId)
+        members =
+            NonemptySet.toList dmChannel.members
+    in
+    memberColumnContainerNotMobile
+        isThread
+        [ Ui.column
+            [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 16 } ]
+            [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")"))
+            , Ui.column
+                [ Ui.height Ui.fill ]
+                (List.map (slackMemberLabel localUser) members)
+            ]
+        ]
+
+
+slackDmChannelSettingsMobile : Bool -> LocalUser -> Bool -> SlackFrontendDmChannel -> Element FrontendMsg_
+slackDmChannelSettingsMobile canScroll2 localUser isThread dmChannel =
+    let
+        members : List (Slack.Id Slack.UserId)
+        members =
+            NonemptySet.toList dmChannel.members
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , if isThread then
+                Ui.text "Thread settings"
+
+              else
+                Ui.text "Channel settings"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (List.map (slackMemberLabel localUser) members)
+                ]
+            ]
+        ]
+
+
+slackMemberLabel : LocalUser -> Slack.Id Slack.UserId -> Element msg
+slackMemberLabel localUser userId =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.paddingXY 8 4
+        , Ui.Font.color MyUi.font3
+        , Ui.clipWithEllipsis
+        ]
+        [ User.profileImage (SeqDict.get userId localUser.slackUsers)
+        , Ui.text (User.toString userId localUser.slackUsers)
         ]
 
 
@@ -14517,6 +14628,7 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
                             { currentSlackUserId = currentUserId
                             , channelId = dmChannelId
                             , threadRoute = ViewThreadWithMaybeMessage threadMessageIndex Nothing
+                            , showMembersTab = HideChannelSettings
                             , channelsVisible = ChannelsHiddenOnMobile
                             , overlay = Nothing
                             }
@@ -14616,6 +14728,7 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         { currentSlackUserId = currentUserId
                         , channelId = dmChannelId
                         , threadRoute = NoThreadWithMaybeMessage Nothing
+                        , showMembersTab = HideChannelSettings
                         , channelsVisible = ChannelsHiddenOnMobile
                         , overlay = Nothing
                         }

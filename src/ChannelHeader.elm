@@ -258,10 +258,19 @@ slackChannel isMobile name guildOrDmIdNoThread route =
                 Ui.row
                     [ Ui.Font.color MyUi.font1, Ui.spacing 5, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     (if isMobile then
-                        [ Ui.text name ]
+                        [ Ui.text name
+                        , Ui.el
+                            [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                            (channelSettingsTab isMobile route |> Maybe.withDefault Ui.none)
+                        ]
 
                      else
-                        [ Ui.text "Chat with ", Ui.text name ]
+                        [ Ui.text "Chat with "
+                        , Ui.text name
+                        , Ui.el
+                            [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                            (channelSettingsTab isMobile route |> Maybe.withDefault Ui.none)
+                        ]
                     )
 
             SlackGuildOrDmId_Workspace _ ->

@@ -3097,6 +3097,7 @@ updateLoaded msg model =
                                     { currentSlackUserId = currentUserId
                                     , channelId = channelId
                                     , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , showMembersTab = HideChannelSettings
                                     , channelsVisible = ChannelsHiddenOnMobile
                                     , overlay = Nothing
                                     }
@@ -8174,8 +8175,8 @@ setShowMembers showMembers model =
         SlackWorkspaceRoute _ ->
             FrontendExtra.routePush model (Route.setShowMembers showMembers model.route)
 
-        SlackDmRoute _ ->
-            ( model, Command.none )
+        SlackDmRoute dmRoute ->
+            FrontendExtra.routePush model (SlackDmRoute { dmRoute | showMembersTab = showMembers })
 
 
 viewImageInfo :

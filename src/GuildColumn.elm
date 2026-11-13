@@ -296,6 +296,7 @@ slackDmGuildIcon route localUser channelId dmChannel =
                             { currentSlackUserId = currentUserId
                             , channelId = channelId
                             , threadRoute = NoThreadWithMaybeMessage Nothing
+                            , showMembersTab = HideChannelSettings
                             , channelsVisible = ChannelsHiddenOnMobile
                             , overlay = Nothing
                             }

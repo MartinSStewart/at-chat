@@ -487,6 +487,7 @@ slackDmResults local channelId dmChannel =
                         { currentSlackUserId = currentUserId
                         , channelId = channelId
                         , threadRoute = threadRoute
+                        , showMembersTab = HideChannelSettings
                         , channelsVisible = ChannelsHiddenOnMobile
                         , overlay = Nothing
                         }

@@ -1014,6 +1014,9 @@ slackUnreadAndNotificationsTest config =
                             )
                         , admin.click 100 (Dom.id "guildsColumn_openSlackDm_D09DK3P5RPC")
                         , E2EHelper.hasExactText admin [ "Psst" ]
+                        , admin.click 100 (Dom.id "guild_showMembers")
+                        , E2EHelper.hasExactText admin [ "Members (2)" ]
+                        , admin.click 100 (Dom.id "guild_hideMembers")
                         , admin.click 100 (Dom.id "guild_openSlackWorkspace_T09DJDQL18U")
                         , hasNotificationCount admin "guildsColumn_openSlackDm_D09DK3P5RPC" Nothing
                         ]

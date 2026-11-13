@@ -1636,6 +1636,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                                         { currentSlackUserId = recipient
                                         , channelId = channelId
                                         , threadRoute = Id.threadRouteWithNoMessage threadRoute
+                                        , showMembersTab = HideChannelSettings
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }

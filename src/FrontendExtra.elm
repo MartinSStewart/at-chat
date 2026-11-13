@@ -1931,6 +1931,7 @@ playNotificationSoundForSlackMessage guildOrDmId threadRoute local content model
                                                             { currentSlackUserId = currentUserId
                                                             , channelId = channelId
                                                             , threadRoute = Id.threadRouteWithNoMessage threadRoute
+                                                            , showMembersTab = HideChannelSettings
                                                             , channelsVisible = ChannelsHiddenOnMobile
                                                             , overlay = Nothing
                                                             }
