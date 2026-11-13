@@ -12521,18 +12521,37 @@ guildNameInput form =
 
 
 fileUploadPreview :
-    (Id FileId -> msg)
-    -> (Id FileId -> msg)
-    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    (Id FileId -> FrontendMsg_)
+    -> (Id FileId -> FrontendMsg_)
+    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> FrontendMsg_)
     -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
-    -> Element msg
+    -> Element FrontendMsg_
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
     Ui.row
         [ Ui.spacing 4
-        , Ui.move { x = 0, y = -SheepGame.fileUploadPreviewSize, z = 0 }
         , Ui.width Ui.shrink
-        , Ui.paddingXY 8 0
+        , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 0 }
+        , MyUi.htmlStyle "position" "absolute"
+        , MyUi.htmlStyle "bottom" "100%"
+        , MyUi.htmlStyle "max-width" "100%"
+        , MyUi.htmlStyle "overflow-x" "auto"
+        , MyUi.htmlStyle "overflow-y" "hidden"
+        , Html.Events.stopPropagationOn
+            "touchstart"
+            (Json.Decode.map2
+                (\scrollWidth clientWidth ->
+                    if scrollWidth > clientWidth then
+                        Json.Decode.succeed ( FrontendNoOp, True )
+
+                    else
+                        Json.Decode.fail ""
+                )
+                (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
+                (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
+                |> Json.Decode.andThen identity
+            )
+            |> Ui.htmlAttribute
         ]
         (SheepGame.fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2)
 
