@@ -3019,7 +3019,7 @@ addMessagesSent messages members =
 
 attachmentsUploadedHelper :
     BackendModel
-    -> { a | attachments : List Discord.Attachment }
+    -> { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
     -> List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
     -> ( SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }, SeqDict DiscordAttachmentId DiscordAttachmentData )
 attachmentsUploadedHelper model message results =
@@ -3029,14 +3029,14 @@ attachmentsUploadedHelper model message results =
             List.filterMap Result.toMaybe results |> SeqDict.fromList
     in
     List.foldl
-        (\attachment ( fileDataDict, discordAttachments ) ->
+        (\( index, attachment ) ( fileDataDict, discordAttachments ) ->
             let
                 attachmentId =
                     DiscordAttachmentId.fromUrl attachment.url
 
                 fileId : Id FileId
                 fileId =
-                    SeqDict.size fileDataDict + 1 |> Id.fromInt
+                    Id.fromInt (index + 1)
             in
             case SeqDict.get attachmentId model.discordAttachments of
                 Just { fileHash, metadata } ->
@@ -3086,7 +3086,7 @@ attachmentsUploadedHelper model message results =
                             ( fileDataDict, discordAttachments )
         )
         ( SeqDict.empty, model.discordAttachments )
-        message.attachments
+        (List.indexedMap Tuple.pair (DiscordSync.attachmentsIncludingForwarded message))
 
 
 recordWebsocketCloseEvent : WebsocketClosedEvent -> BackendModel -> BackendModel

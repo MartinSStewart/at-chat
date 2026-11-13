@@ -7030,9 +7030,14 @@ toSlackInlines customEmojiNames style node =
             [ Slack.RichText_Date { timestamp = TimeInMinutes.toSeconds time, fallback = dateAndTimeToString Time.utc time ++ " UTC" } ]
 
 
+{-| `attachments2` holds the message's own attachments followed by those of each forwarded
+message, numbered by that position (see `DiscordSync.attachmentsIncludingForwarded`).
+`ownAttachmentCount` is how many of them belong to the message itself.
+-}
 fromDiscord :
     String
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
+    -> Int
     -> Discord.OptionalData (List Discord.Embed)
     -> Discord.OptionalData (List Discord.Component)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
@@ -7043,31 +7048,44 @@ fromDiscord :
     -> List (Id StickerId)
     -> Discord.OptionalData (List Discord.MessageSnapshot)
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-fromDiscord text attachments2 embeds components customEmojis2 channels stickers2 messageSnapshots =
+fromDiscord text attachments2 ownAttachmentCount embeds components customEmojis2 channels stickers2 messageSnapshots =
     let
+        attachmentsFrom : Int -> Int -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
+        attachmentsFrom firstFileId count =
+            SeqDict.filter
+                (\fileId _ -> Id.toInt fileId >= firstFileId && Id.toInt fileId < firstFileId + count)
+                attachments2
+
         messageSnapshots3 : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         messageSnapshots3 =
             case messageSnapshots of
                 Discord.Included messageSnapshots2 ->
-                    List.map
-                        (\snapshot ->
-                            fromDiscordHelper
-                                snapshot.content
-                                -- TODO: Handle attachments for message snapshots
-                                SeqDict.empty
-                                (Discord.Included snapshot.embeds)
-                                snapshot.components
-                                -- TODO: Handle stickers for message snapshots
-                                customEmojis2
-                                []
-                                |> BlockQuote NoLeadingLineBreak
+                    List.foldl
+                        (\snapshot ( firstFileId, richTexts ) ->
+                            ( firstFileId + List.length snapshot.attachments
+                            , richTexts
+                                ++ [ fromDiscordHelper
+                                        snapshot.content
+                                        (attachmentsFrom firstFileId (List.length snapshot.attachments))
+                                        (Discord.Included snapshot.embeds)
+                                        snapshot.components
+                                        -- TODO: Handle stickers for message snapshots
+                                        customEmojis2
+                                        []
+                                        |> BlockQuote NoLeadingLineBreak
+                                   ]
+                            )
                         )
+                        ( ownAttachmentCount + 1, [] )
                         messageSnapshots2
+                        |> Tuple.second
 
                 Discord.Missing ->
                     []
     in
-    (fromDiscordHelper text attachments2 embeds components customEmojis2 stickers2 ++ messageSnapshots3)
+    (fromDiscordHelper text (attachmentsFrom 1 ownAttachmentCount) embeds components customEmojis2 stickers2
+        ++ messageSnapshots3
+    )
         |> List.Nonempty.fromList
         |> Maybe.withDefault emptyPlaceholder
         |> mapChannelMention (discordThreadMention channels)

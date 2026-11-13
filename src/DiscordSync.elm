@@ -2,6 +2,7 @@ module DiscordSync exposing
     ( addDiscordChannel
     , addDiscordUserData
     , addUploadResponsesToDiscordAttachments
+    , attachmentsIncludingForwarded
     , attachmentsToFileData
     , closeEventCodeToInt
     , discordUserWebsocketMsg
@@ -261,6 +262,7 @@ handleDiscordDmEditMessage edit attachments model =
                             RichText.fromDiscord
                                 edit.content
                                 attachments
+                                (List.length edit.attachments)
                                 (Included edit.embeds)
                                 edit.components
                                 model.discordCustomEmojis
@@ -413,6 +415,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
             RichText.fromDiscord
                 edit.content
                 attachments
+                (List.length edit.attachments)
                 (Included edit.embeds)
                 edit.components
                 model.discordCustomEmojis
@@ -792,6 +795,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis channels discordS
                 (RichText.fromDiscord
                     message.content
                     attachments
+                    (List.length message.attachments)
                     message.embeds
                     message.components
                     customEmojis
@@ -1002,6 +1006,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                 RichText.fromDiscord
                                     discordMessage.content
                                     attachments
+                                    (List.length discordMessage.attachments)
                                     discordMessage.embeds
                                     discordMessage.components
                                     model.discordCustomEmojis
@@ -1370,6 +1375,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                         RichText.fromDiscord
                                             content
                                             attachments
+                                            (List.length discordMessage.attachments)
                                             discordMessage.embeds
                                             discordMessage.components
                                             model.discordCustomEmojis
@@ -1729,7 +1735,7 @@ addForumPost authentication post guild channel model =
 
         richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
-            RichText.fromDiscord post.name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
+            RichText.fromDiscord post.name SeqDict.empty 0 Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
@@ -1836,7 +1842,7 @@ handleForumPostRenamed thread time model =
                             let
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromDiscord name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
+                                    RichText.fromDiscord name SeqDict.empty 0 Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
                             in
                             case
                                 LocalState.editMessageHelper
@@ -2253,8 +2259,8 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     )
                             in
                             case
-                                ( SeqDict.size attachments == List.length message.attachments
-                                , List.Nonempty.fromList message.attachments
+                                ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded message)
+                                , List.Nonempty.fromList (attachmentsIncludingForwarded message)
                                 )
                             of
                                 ( False, Just nonempty ) ->
@@ -2320,7 +2326,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         _ ->
                                             Command.none
                             in
-                            case ( SeqDict.size attachments == List.length edit.attachments, List.Nonempty.fromList edit.attachments ) of
+                            case
+                                ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded edit)
+                                , List.Nonempty.fromList (attachmentsIncludingForwarded edit)
+                                )
+                            of
                                 ( False, Just nonempty ) ->
                                     ( model2
                                     , Task.perform
@@ -3171,31 +3181,52 @@ loadMessageAttachment secretKey attachment =
         |> Task.onError (\error -> Task.succeed (Err error))
 
 
+{-| A forwarded message keeps its attachments in its snapshots rather than in the message
+itself. They're all stored together on the at-chat message, the message's own first.
+-}
+attachmentsIncludingForwarded :
+    { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
+    -> List Discord.Attachment
+attachmentsIncludingForwarded message =
+    case message.messageSnapshots of
+        Included snapshots ->
+            message.attachments ++ List.concatMap .attachments snapshots
+
+        Missing ->
+            message.attachments
+
+
+{-| The file id is the attachment's position in `attachmentsIncludingForwarded`, counting from
+1, even if an attachment before it failed to load. That's how `RichText.fromDiscord` knows
+which files belong to which forwarded message.
+-}
 messageToFileData :
-    { a | attachments : List Discord.Attachment }
+    { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
 messageToFileData message discordAttachments =
-    List.filterMap
-        (\attachment ->
-            case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
-                Just { fileHash, metadata } ->
-                    { fileData = attachmentsToFileData attachment fileHash metadata
-                    , isSpoilered =
-                        case attachment.flags of
-                            Included flag ->
-                                flag.isSpoiler
+    attachmentsIncludingForwarded message
+        |> List.indexedMap Tuple.pair
+        |> List.filterMap
+            (\( index, attachment ) ->
+                case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
+                    Just { fileHash, metadata } ->
+                        ( Id.fromInt (index + 1)
+                        , { fileData = attachmentsToFileData attachment fileHash metadata
+                          , isSpoilered =
+                                case attachment.flags of
+                                    Included flag ->
+                                        flag.isSpoiler
 
-                            Missing ->
-                                False
-                    }
-                        |> Just
+                                    Missing ->
+                                        False
+                          }
+                        )
+                            |> Just
 
-                Nothing ->
-                    Nothing
-        )
-        message.attachments
-        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+                    Nothing ->
+                        Nothing
+            )
         |> SeqDict.fromList
 
 
@@ -3892,7 +3923,7 @@ uploadAttachmentsForMessages model messages =
                     else
                         Just ( DiscordAttachmentId.fromUrl attachment.url, attachment )
                 )
-                message.attachments
+                (attachmentsIncludingForwarded message)
         )
         messages
         |> SeqDict.fromList

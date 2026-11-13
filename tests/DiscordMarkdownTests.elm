@@ -54,7 +54,7 @@ emojiName =
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty 0 Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing |> List.Nonempty.toList
 
 
 {-| What Discord is sent when someone writes `source` in at-chat.
@@ -269,7 +269,7 @@ expectSurvivesDiscord source =
     in
     case RichText.toDiscord customEmojis SeqDict.empty written of
         Ok sent ->
-            RichText.fromDiscord sent SeqDict.empty Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
+            RichText.fromDiscord sent SeqDict.empty 0 Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                 |> List.Nonempty.toList
                 |> withoutEscapedChars
                 |> Expect.equal (withoutEscapedChars (List.Nonempty.toList written))
@@ -278,7 +278,7 @@ expectSurvivesDiscord source =
                         ++ Debug.toString sent
                         ++ " which at-chat reads as "
                         ++ Debug.toString
-                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
+                            (RichText.fromDiscord sent SeqDict.empty 0 Discord.Missing Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                                 |> List.Nonempty.toList
                             )
                         ++ " instead of "
@@ -370,7 +370,7 @@ joinAdjacentText list =
 
 fromDiscordComponents : String -> List Discord.Component -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordComponents text components =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing (Discord.Included components) customEmojis SeqDict.empty [] Discord.Missing
+    RichText.fromDiscord text SeqDict.empty 0 Discord.Missing (Discord.Included components) customEmojis SeqDict.empty [] Discord.Missing
         |> List.Nonempty.toList
 
 
@@ -626,6 +626,7 @@ fromNonemptyStringTest input expected =
         (\_ ->
             RichText.fromDiscord input
                 SeqDict.empty
+                0
                 Discord.Missing
                 Discord.Missing
                 customEmojis
@@ -715,12 +716,12 @@ discordSpecificTests =
                     |> Expect.equal (Ok "hi <#137748026084163581>")
         , Test.test "thread mention is read as the thread it points at" <|
             \_ ->
-                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty 0 Discord.Missing Discord.Missing customEmojis channelWithThread [] Discord.Missing
                     |> List.Nonempty.toList
                     |> Expect.equal [ ChannelMention channelId (Just (Id.fromInt 5)) ]
         , Test.test "thread mention is sent back to Discord unchanged" <|
             \_ ->
-                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty 0 Discord.Missing Discord.Missing customEmojis channelWithThread [] Discord.Missing
                     |> RichText.toDiscord customEmojis channelWithThread
                     |> Expect.equal (Ok "<#137748026084163599>")
         , Test.test "timestamp with a format hint" <|
