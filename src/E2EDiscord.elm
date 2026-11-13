@@ -1515,6 +1515,41 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Linked Discord account subscribes to its guilds' threads instead of joining them"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ E2EHelper.andThenWebsocket 100
+                    (\_ websocketState ->
+                        [ T.checkState
+                            0
+                            (\_ ->
+                                if
+                                    List.any
+                                        (\sent ->
+                                            String.contains "\"op\":37" sent.data
+                                                && String.contains "\"705745250815311942\":{\"typing\":true,\"threads\":true}" sent.data
+                                        )
+                                        (Array.toList websocketState.dataSent)
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Didn't subscribe to the guild's threads"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
         E2EHelper.startTime
         normalConfig
@@ -1568,7 +1603,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         )
                                         data.httpRequests
                                 of
-                                    [ _ ] ->
+                                    [] ->
                                         [ T.websocketSendString
                                             100
                                             connection
@@ -1585,7 +1620,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ]
 
                                     _ ->
-                                        [ T.checkBackend 100 (\_ -> Err "Didn't join thread") ]
+                                        [ T.checkBackend 100 (\_ -> Err "Joined the thread instead of relying on the guild subscription") ]
                             )
                         ]
                     )
@@ -1695,7 +1730,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         )
                                         data.httpRequests
                                 of
-                                    [ _ ] ->
+                                    [] ->
                                         [ T.websocketSendString
                                             100
                                             connection
@@ -1718,7 +1753,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ]
 
                                     _ ->
-                                        [ T.checkBackend 100 (\_ -> Err "Didn't join thread") ]
+                                        [ T.checkBackend 100 (\_ -> Err "Joined the thread instead of relying on the guild subscription") ]
                             )
                         ]
                     )

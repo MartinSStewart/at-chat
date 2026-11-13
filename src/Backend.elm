@@ -2361,14 +2361,6 @@ updateHelper msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        JoinedDiscordThread guildId result time ->
-            case result of
-                Ok () ->
-                    ( model, Command.none )
-
-                Err error ->
-                    BackendExtra.addLog time (Log.JoinedDiscordThreadFailed guildId error) model
-
         ToBackendCompleted toBackendLog maybeUserId { startTime, endTime } ->
             let
                 count =

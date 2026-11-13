@@ -3462,9 +3462,6 @@ backendMsgLog msg =
         DiscordGotGuildIcon _ _ ->
             BackendMsgLog_DiscordGotGuildIcon
 
-        JoinedDiscordThread _ _ _ ->
-            BackendMsgLog_JoinedDiscordThread
-
         ToBackendCompleted _ _ _ ->
             BackendMsgLog_ToBackendCompleted
 

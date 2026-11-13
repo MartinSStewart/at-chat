@@ -90,6 +90,7 @@ import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
 import Random
 import SafeJson exposing (SafeJson)
+import Set exposing (Set)
 import Task exposing (Task)
 import Time exposing (Posix(..))
 import UInt64 exposing (UInt64)
@@ -5500,6 +5501,9 @@ decodeDispatchUserEvent eventName =
         "RELATIONSHIP_REMOVE" ->
             JD.succeed DispatchUser_RelationshipRemove
 
+        "THREAD_LIST_SYNC" ->
+            JD.succeed DispatchUser_ThreadListSync
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5746,6 +5750,7 @@ type GatewayUserCommand
     | GatewayUser_OpResume UserAuth SessionId SequenceCounter
     | GatewayUser_OpHeatbeat (Maybe SequenceCounter)
     | GatewayUser_OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
+    | GatewayUser_OpGuildSubscriptionsBulk (List (Id GuildId))
     | GatewayUser_OpUpdateVoiceState
     | GatewayUser_OpUpdatePresence
 
@@ -5841,6 +5846,7 @@ type OpDispatchUserEvent
     | DispatchUser_RelationshipAdd
     | DispatchUser_RelationshipUpdate
     | DispatchUser_RelationshipRemove
+    | DispatchUser_ThreadListSync
 
 
 type alias ContentInventoryInboxStale =
@@ -6555,6 +6561,26 @@ encodeUserGatewayCommand gatewayCommand =
         GatewayUser_OpRequestGuildMembers guildIds nonce2 ->
             encodeRequestGuildMembers guildIds nonce2
 
+        GatewayUser_OpGuildSubscriptionsBulk guildIds ->
+            JE.object
+                [ ( "op", JE.int 37 )
+                , ( "d"
+                  , JE.object
+                        [ ( "subscriptions"
+                          , JE.object
+                                (List.map
+                                    (\guildId ->
+                                        ( idToString guildId
+                                        , JE.object [ ( "typing", JE.bool True ), ( "threads", JE.bool True ) ]
+                                        )
+                                    )
+                                    guildIds
+                                )
+                          )
+                        ]
+                  )
+                ]
+
         GatewayUser_OpUpdateVoiceState ->
             JE.object []
 
@@ -6647,6 +6673,7 @@ type alias Model connection =
     , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : String }
     , heartbeatInterval : Maybe Duration
     , reconnect : { failedAttempts : Int, seed : Int }
+    , subscribedGuilds : Set String
     }
 
 
@@ -6659,6 +6686,7 @@ init seed =
     , gatewayState = Nothing
     , heartbeatInterval = Nothing
     , reconnect = { failedAttempts = 0, seed = seed }
+    , subscribedGuilds = Set.empty
     }
 
 
@@ -6955,6 +6983,28 @@ handleGateway authToken intents response model =
             ( model, [] )
 
 
+{-| User accounts only get told about messages in threads they've joined, unless they've
+subscribed to the guild's threads. The official client subscribes when a guild is opened.
+
+Discord doesn't say how big a gateway payload can be, so the guilds are split into small
+batches to stay well clear of any limit.
+
+-}
+subscribeToGuilds : connection -> List (Id GuildId) -> List (UserOutMsg connection)
+subscribeToGuilds connection guildIds =
+    case guildIds of
+        [] ->
+            []
+
+        _ ->
+            UserOutMsg_SendWebsocketData
+                connection
+                (encodeUserGatewayCommand (GatewayUser_OpGuildSubscriptionsBulk (List.take 20 guildIds))
+                    |> JE.encode 0
+                )
+                :: subscribeToGuilds connection (List.drop 20 guildIds)
+
+
 handleUserGateway : UserAuth -> Intents -> String -> Model connection -> ( Model connection, List (UserOutMsg connection) )
 handleUserGateway authToken intents response model =
     case ( model.websocketHandle, JD.decodeString (decodeGatewayEvent decodeDispatchUserEvent) response ) of
@@ -7000,6 +7050,11 @@ handleUserGateway authToken intents response model =
                 OpDispatch sequenceCounter opDispatchEvent ->
                     (case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
+                            let
+                                guildIds : List (Id GuildId)
+                                guildIds =
+                                    List.map (\guild -> guild.properties.id) readyEvent.guilds
+                            in
                             ( { model
                                 | gatewayState =
                                     Just
@@ -7008,8 +7063,9 @@ handleUserGateway authToken intents response model =
                                         , resumeGatewayUrl = readyEvent.resumeGatewayUrl
                                         }
                                 , reconnect = { failedAttempts = 0, seed = model.reconnect.seed }
+                                , subscribedGuilds = List.map idToString guildIds |> Set.fromList
                               }
-                            , [ UserOutMsg_ReadyData readyEvent ]
+                            , UserOutMsg_ReadyData readyEvent :: subscribeToGuilds connection guildIds
                             )
 
                         DispatchUser_ReadySupplementalEvent readySupplementalEvent ->
@@ -7170,7 +7226,21 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_GuildCreate gatewayGuild ->
-                            ( model, [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild ] )
+                            let
+                                guildId : String
+                                guildId =
+                                    idToString gatewayGuild.properties.id
+                            in
+                            if Set.member guildId model.subscribedGuilds then
+                                -- Subscribing to a guild can itself cause a GUILD_CREATE, and
+                                -- subscribing again in response would never end
+                                ( model, [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild ] )
+
+                            else
+                                ( { model | subscribedGuilds = Set.insert guildId model.subscribedGuilds }
+                                , UserOutMsg_JoinedOrCreatedGuild gatewayGuild
+                                    :: subscribeToGuilds connection [ gatewayGuild.properties.id ]
+                                )
 
                         DispatchUser_GuildUpdate guildUpdate ->
                             ( model, [ UserOutMsg_GuildUpdate guildUpdate ] )
@@ -7227,6 +7297,9 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_RelationshipRemove ->
+                            ( model, [] )
+
+                        DispatchUser_ThreadListSync ->
                             ( model, [] )
                     )
                         |> Tuple.mapFirst (setSequenceCounter sequenceCounter)

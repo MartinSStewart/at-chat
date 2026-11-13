@@ -974,7 +974,6 @@ type BackendMsg
             }
         )
     | DiscordGotGuildIcon (Discord.Id Discord.GuildId) (Maybe FileStatus.UploadResponse)
-    | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
     | GotTimeForBackendMsg Time.Posix BackendMsg
     | BackendMsgCompleted BackendMsgLog { startTime : Time.Posix, endTime : Time.Posix }
