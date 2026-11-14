@@ -204,12 +204,49 @@ crontab -e
 0 4 * * * /usr/bin/node /home/USER/at-chat/scripts/backup-downloader/run.js >> /home/USER/at-chat-backup.log 2>&1
 ```
 
+## Comparing two backups
+
+`backup-diff.js` answers "this backup is smaller than the last one, what's gone?". It's
+separate from the daily check above: it takes two exports and prints
+
+1. the size of every part of the model in both, biggest loss first, adding up to the file
+   sizes,
+2. the guilds, Discord guilds and Slack workspaces that were removed, and for the rest, the
+   channels that were removed, got smaller or lost messages,
+3. the same for DM channels of all three kinds,
+4. which users, files, Discord users, Discord attachments, Slack users, Slack files, stickers,
+   custom emojis and deleted guilds were removed, and which got smaller or changed label (a
+   Discord or Slack account that went from linked to not linked shows up there).
+
+An export only decodes with the codecs of the version of at-chat that wrote it, so build the
+tool from the commit that was deployed when both exports were taken:
+
+```
+scripts/backup-downloader/build-backup-diff.sh <deployed commit> [output path]
+```
+
+That checks the commit out into a temporary worktree, compiles `src/BackupDiff.elm` there and
+writes one self-contained `backup-diff.js`, so it can be copied to wherever the backups are
+and run with plain node:
+
+```
+node backup-diff.js backend-export-2026-11-13-22:14:22.bin backend-export-2026-11-14-02:13:38.bin
+```
+
+The report goes to stdout. Progress and the run's peak memory go to stderr. It decodes one
+export at a time the same way the daily check does, keeping only a summary of the first, so
+memory is in proportion to the non-guild part of the model plus the largest single guild
+rather than to the whole backup.
+
 ## Files
 
 | File                            | Purpose                                                   |
 | ------------------------------- | --------------------------------------------------------- |
 | `src/Backup.elm`                | The program.                                              |
 | `src/ExportComparison.elm`      | Compares a channel export against its reference export.   |
+| `src/BackupDiff.elm`            | Compares two whole exports (see "Comparing two backups"). |
+| `backup-diff-runner.js`         | Node host appended to the compiled `BackupDiff.elm`.      |
+| `build-backup-diff.sh`          | Builds `backup-diff.js` from a given commit.              |
 | `run.js`                        | Node host that starts the program and implements its ports.|
 | `systemd/at-chat-backup.service`| One-shot unit that runs the program.                      |
 | `systemd/at-chat-backup.timer`  | Daily trigger for the service.                            |

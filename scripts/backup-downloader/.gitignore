@@ -2,3 +2,5 @@ elm-stuff/
 eco-stuff/
 # Compiled by `npm run backup-downloader`
 BackupElm.js
+# Compiled by build-backup-diff.sh
+backup-diff.js
