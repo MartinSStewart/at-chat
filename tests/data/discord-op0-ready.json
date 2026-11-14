@@ -3202,6 +3202,15 @@
         "data_mode": "full",
         "channels": [
           {
+            "type": 20,
+            "position": 0,
+            "permission_overwrites": [],
+            "parent_id": null,
+            "name": "server-hub",
+            "id": "705745250815311999",
+            "flags": 0
+          },
+          {
             "type": 4,
             "position": 0,
             "permission_overwrites": [],

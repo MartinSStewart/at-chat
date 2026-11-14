@@ -3061,6 +3061,9 @@ type ChannelType
     | GuildDirectory
     | GuildForum
     | GuildMedia
+    | -- Not in Discord's docs yet. A Server Hub is a page of panels the guild's admins arrange
+      -- rather than somewhere messages are sent, and guilds can have one before it's published.
+      GuildServerHub
 
 
 type alias Invite =
@@ -4606,6 +4609,9 @@ decodeChannelType =
 
                 16 ->
                     JD.succeed GuildMedia
+
+                20 ->
+                    JD.succeed GuildServerHub
 
                 _ ->
                     JD.fail ("Invalid channel type: " ++ String.fromInt value)
