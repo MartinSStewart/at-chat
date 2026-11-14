@@ -1828,6 +1828,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     "channel B"
                     E2EHelper.botTestGuild_ChannelB
                     [ "Older channel B message", "Newer channel B message" ]
+                , -- The thread on the older message is loaded without joining it
+                  checkDiscordChannelThreads
+                    "channel B"
+                    E2EHelper.botTestGuild_ChannelB
+                    [ ( 0, [ "Older channel B thread message", "Newer channel B thread message" ] ) ]
                 , checkDiscordChannelAMessages []
                 , T.checkState
                     100
@@ -1855,8 +1860,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         else
                             Err "The author of a loaded message wasn't added to the Discord users"
                     )
-                , -- One request per text channel and DM. Voice channels, categories and forums
-                  -- have no messages to load.
+                , -- One request per text channel, DM and thread. Voice channels, categories and
+                  -- forums have no messages to load.
                   T.checkState
                     100
                     (\data ->
@@ -1892,6 +1897,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     , "222087308516524036"
                                     , "1215077285749858324"
                                     , "1472236476401057854"
+                                    , "1533200000000000001"
                                     ]
                         then
                             Ok ()

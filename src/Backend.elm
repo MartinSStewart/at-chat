@@ -1417,7 +1417,7 @@ updateHelper msg model =
                                 messageAuthors : List Discord.User
                                 messageAuthors =
                                     List.concatMap .messages dmChannels
-                                        ++ List.concat (SeqDict.values channelMessages)
+                                        ++ List.concatMap LocalState.discordChannelReloadMessages (SeqDict.values channelMessages)
                                         |> List.map .author
                                         |> List.Extra.uniqueBy (\author -> Discord.idToString author.id)
 
@@ -2937,13 +2937,13 @@ addDiscordGuildData discordUserId data guild =
     }
 
 
-{-| Fills in the messages loaded for a Discord guild's channels, leaving alone the channels it
-already had.
+{-| Fills in the messages loaded for a Discord guild's channels and their threads, leaving alone
+the channels it already had.
 -}
 addNewChannelMessages :
     BackendModel
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
-    -> SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordChannelReload
     -> SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     -> DiscordBackendGuild
     -> DiscordBackendGuild
@@ -2953,18 +2953,60 @@ addNewChannelMessages model attachments channelMessages existingChannels guild =
             SeqDict.map
                 (\channelId channel ->
                     case ( SeqDict.member channelId existingChannels, SeqDict.get channelId channelMessages ) of
-                        ( False, Just messages ) ->
+                        ( False, Just reload ) ->
                             let
                                 ( messages2, linkedMessageIds ) =
                                     DiscordSync.messagesAndLinks
                                         channel
-                                        (List.reverse messages)
+                                        (List.reverse reload.messages)
                                         model.discordCustomEmojis
                                         guild.channels
                                         model.discordStickers
                                         attachments
+
+                                threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+                                threads =
+                                    List.filterMap
+                                        (\thread ->
+                                            case
+                                                OneToOne.second
+                                                    (Discord.idToUInt64 thread.threadId |> Discord.idFromUInt64)
+                                                    linkedMessageIds
+                                            of
+                                                Just channelMessageIndex ->
+                                                    let
+                                                        initThread : DiscordBackendThread
+                                                        initThread =
+                                                            Thread.discordBackendInit
+
+                                                        ( threadMessages, threadLinkedMessageIds ) =
+                                                            DiscordSync.messagesAndLinks
+                                                                initThread
+                                                                (List.reverse thread.messages)
+                                                                model.discordCustomEmojis
+                                                                guild.channels
+                                                                model.discordStickers
+                                                                attachments
+                                                    in
+                                                    if IdArray.isEmpty threadMessages then
+                                                        Nothing
+
+                                                    else
+                                                        ( channelMessageIndex
+                                                        , { initThread
+                                                            | messages = threadMessages
+                                                            , linkedMessageIds = threadLinkedMessageIds
+                                                          }
+                                                        )
+                                                            |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                        )
+                                        reload.threads
+                                        |> SeqDict.fromList
                             in
-                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds, threads = threads }
 
                         _ ->
                             channel

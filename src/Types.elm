@@ -938,7 +938,7 @@ type BackendMsg
                       , icon : Maybe FileStatus.UploadResponse
                       }
                     )
-            , channelMessages : SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+            , channelMessages : SeqDict (Discord.Id Discord.ChannelId) DiscordChannelReload
             , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
             }
         )

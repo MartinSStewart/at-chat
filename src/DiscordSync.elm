@@ -3713,7 +3713,14 @@ handleReadyData userId authentication readyData model =
 
                                                 else
                                                     getNewChannelMessages model.serverSecret authentication channel.id
-                                                        |> Task.map (Tuple.pair channel.id)
+                                                        |> Task.andThen
+                                                            (\messages ->
+                                                                getNewThreadsForMessages model.serverSecret authentication messages
+                                                                    |> Task.map
+                                                                        (\threads ->
+                                                                            ( channel.id, { messages = messages, threads = threads } )
+                                                                        )
+                                                            )
                                                         |> Just
 
                                             Nothing ->
@@ -3728,7 +3735,9 @@ handleReadyData userId authentication readyData model =
                             (\( dmChannels, channelMessages ) ->
                                 uploadAttachmentsForMessages
                                     model
-                                    (List.concatMap .messages dmChannels ++ List.concatMap Tuple.second channelMessages)
+                                    (List.concatMap .messages dmChannels
+                                        ++ List.concatMap (\( _, reload ) -> LocalState.discordChannelReloadMessages reload) channelMessages
+                                    )
                                     |> Task.map
                                         (\attachments ->
                                             { dmChannels = dmChannels
@@ -3973,6 +3982,40 @@ getThreadsForMessages :
     -> List Discord.Message
     -> Task BackendOnly x (List DiscordThreadReload)
 getThreadsForMessages secretKey authentication messages =
+    threadIdsOfMessages messages
+        |> List.map
+            (\threadId ->
+                getManyMessages
+                    secretKey
+                    authentication
+                    { channelId = threadId, limit = reloadThreadMaxMessages }
+                    |> Task.onError (\_ -> Task.succeed [])
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
+            )
+        |> Task.sequence
+
+
+{-| Loads the most recent messages of the threads hanging off the messages of a channel we
+didn't have before a Discord account's data was loaded. Reading a thread doesn't require
+joining it, so this works for threads the account isn't in.
+-}
+getNewThreadsForMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> List Discord.Message
+    -> Task BackendOnly x (List DiscordThreadReload)
+getNewThreadsForMessages secretKey authentication messages =
+    threadIdsOfMessages messages
+        |> List.map
+            (\threadId ->
+                getNewChannelMessages secretKey authentication threadId
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
+            )
+        |> Task.sequence
+
+
+threadIdsOfMessages : List Discord.Message -> List (Discord.Id Discord.ChannelId)
+threadIdsOfMessages messages =
     List.filterMap
         (\message ->
             case message.flags of
@@ -3989,16 +4032,6 @@ getThreadsForMessages secretKey authentication messages =
         )
         messages
         |> List.Extra.uniqueBy Discord.idToString
-        |> List.map
-            (\threadId ->
-                getManyMessages
-                    secretKey
-                    authentication
-                    { channelId = threadId, limit = reloadThreadMaxMessages }
-                    |> Task.onError (\_ -> Task.succeed [])
-                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
-            )
-        |> Task.sequence
 
 
 {-| Loads everything in a guild forum channel.

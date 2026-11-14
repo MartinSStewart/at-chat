@@ -4026,7 +4026,8 @@ to the backend, which is when a Discord account gets linked. Only channel B and 
 168547048902098944 have any, so the tests that fill channel A themselves start from an empty
 channel. Newest message first, like the real API returns them.
 
-The older channel B message is from someone the ready data doesn't mention.
+The older channel B message is from someone the ready data doesn't mention, and has a thread
+the linked account hasn't joined.
 
 -}
 discordNewChannelHistory : String -> String
@@ -4034,7 +4035,13 @@ discordNewChannelHistory channelId =
     if channelId == botTestGuild_ChannelBString then
         """[
     {"id":"1533200000000000002","channel_id":"1072828591382999151","content":"Newer channel B message","timestamp":"2026-04-03T10:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
-    {"id":"1533200000000000001","channel_id":"1072828591382999151","content":"Older channel B message","timestamp":"2026-04-03T09:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+    {"id":"1533200000000000001","channel_id":"1072828591382999151","content":"Older channel B message","timestamp":"2026-04-03T09:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+]"""
+
+    else if channelId == "1533200000000000001" then
+        """[
+    {"id":"1533200000000000005","channel_id":"1533200000000000001","content":"Newer channel B thread message","timestamp":"2026-04-03T09:20:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}},
+    {"id":"1533200000000000004","channel_id":"1533200000000000001","content":"Older channel B thread message","timestamp":"2026-04-03T09:10:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
 ]"""
 
     else if channelId == "222087308516524036" then
