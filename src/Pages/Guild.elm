@@ -318,8 +318,30 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                             Nothing ->
                                                 Ui.none
 
-                                    SelectedSlackDmChannel _ ->
-                                        Ui.none
+                                    SelectedSlackDmChannel routeData ->
+                                        case SeqDict.get routeData.channelId local.slackDmChannels of
+                                            Just dmChannel ->
+                                                slackDmChannelSettingsMobile
+                                                    canScroll2
+                                                    local.localUser
+                                                    routeData.currentSlackUserId
+                                                    routeData.channelId
+                                                    routeData.threadRoute
+                                                    dmChannel
+                                                    |> Ui.el
+                                                        [ Ui.height Ui.fill
+                                                        , Ui.background MyUi.background3
+                                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                                        , Ui.move
+                                                            { x = Call.memberColumnOffset loggedIn.sidebarMode model
+                                                            , y = 0
+                                                            , z = 0
+                                                            }
+                                                        , Ui.heightMin 0
+                                                        ]
+
+                                            Nothing ->
+                                                Ui.none
 
                                     NoDmChannelSelected ->
                                         Ui.none
@@ -514,8 +536,24 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 Nothing ->
                                     Ui.none
 
-                        ( ( ShowChannelSettings, _ ), SelectedSlackDmChannel _ ) ->
-                            Ui.none
+                        ( ( ShowChannelSettings, _ ), SelectedSlackDmChannel routeData ) ->
+                            case SeqDict.get routeData.channelId local.slackDmChannels of
+                                Just dmChannel ->
+                                    Ui.Lazy.lazy5
+                                        slackDmChannelSettingsNotMobile
+                                        local.localUser
+                                        routeData.currentSlackUserId
+                                        routeData.channelId
+                                        routeData.threadRoute
+                                        dmChannel
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
+                                            ]
+
+                                Nothing ->
+                                    Ui.none
 
                         ( ( ShowChannelSettings, _ ), NoDmChannelSelected ) ->
                             Ui.none
@@ -1201,7 +1239,7 @@ unreadOverviewChannels local allDiscordUsers =
             (\( channelId, dmChannel ) ->
                 case
                     ( GuildColumn.discordDmCurrentUserId local.localUser dmChannel
-                    , MuteSettings.hidesRedDot (MuteSettings.isDiscordDmMuted currentUser.muteSettings channelId)
+                    , MuteSettings.hidesWhiteDot (MuteSettings.isDiscordDmMuted currentUser.muteSettings channelId)
                     )
                 of
                     ( Just currentDiscordUserId, False ) ->
@@ -1352,7 +1390,12 @@ unreadOverviewChannels local allDiscordUsers =
                                     |> List.map (\userId -> User.toString userId local.localUser.slackUsers)
                                     |> String.join ", "
                         in
-                        (unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
+                        ((if MuteSettings.hidesWhiteDot (MuteSettings.isSlackDmMuted currentUser.muteSettings channelId NoThread) then
+                            Nothing
+
+                          else
+                            unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
+                         )
                             |> Maybe.map
                                 (\unread ->
                                     [ { source = Ui.text dmName
@@ -1361,6 +1404,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 { currentSlackUserId = currentSlackUserId
                                                 , channelId = channelId
                                                 , threadRoute = NoThreadWithMaybeMessage Nothing
+                                                , showMembersTab = HideChannelSettings
                                                 , channelsVisible = ChannelsHiddenOnMobile
                                                 , overlay = Nothing
                                                 }
@@ -1376,9 +1420,14 @@ unreadOverviewChannels local allDiscordUsers =
                         )
                             ++ List.filterMap
                                 (\( threadId, thread ) ->
-                                    unreadMessages
-                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
-                                        thread
+                                    (if MuteSettings.hidesWhiteDot (MuteSettings.isSlackDmMuted currentUser.muteSettings channelId (ViewThread threadId)) then
+                                        Nothing
+
+                                     else
+                                        unreadMessages
+                                            (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
+                                            thread
+                                    )
                                         |> Maybe.map
                                             (\unread ->
                                                 { source =
@@ -1397,6 +1446,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         { currentSlackUserId = currentSlackUserId
                                                         , channelId = channelId
                                                         , threadRoute = ViewThreadWithMaybeMessage threadId Nothing
+                                                        , showMembersTab = HideChannelSettings
                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                         , overlay = Nothing
                                                         }
@@ -3251,6 +3301,7 @@ discordDmMemberColumnNotMobile localUser currentDiscordUserId channelId dmChanne
                 [ Ui.height Ui.fill ]
                 (List.map (discordMemberLabel False localUser currentDiscordUserId) members)
             ]
+        , discordDmMuteSettings localUser currentDiscordUserId channelId
         ]
 
 
@@ -3298,7 +3349,134 @@ discordDmChannelSettingsMobile canScroll2 localUser currentDiscordUserId channel
                     [ Ui.height Ui.fill ]
                     (List.map (discordMemberLabel True localUser currentDiscordUserId) members)
                 ]
+            , discordDmMuteSettings localUser currentDiscordUserId channelId
             ]
+        ]
+
+
+discordDmMuteSettings : LocalUser -> Discord.Id Discord.UserId -> Discord.Id Discord.PrivateChannelId -> Element FrontendMsg_
+discordDmMuteSettings localUser currentDiscordUserId channelId =
+    MuteSettings.view
+        (PressedMuteDiscordDm currentDiscordUserId channelId)
+        (MuteSettings.isDiscordDmMuted localUser.user.muteSettings channelId)
+        |> Ui.el [ Ui.Font.color MyUi.font1, Ui.padding 8 ]
+
+
+slackDmChannelSettingsNotMobile :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.DmChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> SlackFrontendDmChannel
+    -> Element FrontendMsg_
+slackDmChannelSettingsNotMobile localUser currentSlackUserId channelId threadRoute dmChannel =
+    let
+        members : List (Slack.Id Slack.UserId)
+        members =
+            NonemptySet.toList dmChannel.members
+    in
+    memberColumnContainerNotMobile
+        (case threadRoute of
+            NoThreadWithMaybeMessage _ ->
+                False
+
+            ViewThreadWithMaybeMessage _ _ ->
+                True
+        )
+        [ Ui.column
+            [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 16 } ]
+            [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")"))
+            , Ui.column
+                [ Ui.height Ui.fill ]
+                (List.map (slackMemberLabel localUser) members)
+            ]
+        , slackDmMuteSettings localUser currentSlackUserId channelId threadRoute
+        ]
+
+
+slackDmChannelSettingsMobile :
+    Bool
+    -> LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.DmChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> SlackFrontendDmChannel
+    -> Element FrontendMsg_
+slackDmChannelSettingsMobile canScroll2 localUser currentSlackUserId channelId threadRoute dmChannel =
+    let
+        members : List (Slack.Id Slack.UserId)
+        members =
+            NonemptySet.toList dmChannel.members
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , case threadRoute of
+                ViewThreadWithMaybeMessage _ _ ->
+                    Ui.text "Thread settings"
+
+                NoThreadWithMaybeMessage _ ->
+                    Ui.text "Channel settings"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (List.map (slackMemberLabel localUser) members)
+                ]
+            , slackDmMuteSettings localUser currentSlackUserId channelId threadRoute
+            ]
+        ]
+
+
+slackDmMuteSettings :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.DmChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Element FrontendMsg_
+slackDmMuteSettings localUser currentSlackUserId channelId threadRoute =
+    (case threadRoute of
+        NoThreadWithMaybeMessage _ ->
+            MuteSettings.view
+                (PressedMuteSlackDm currentSlackUserId channelId)
+                (MuteSettings.isSlackDmSpecificallyMuted localUser.user.muteSettings channelId)
+
+        ViewThreadWithMaybeMessage threadId _ ->
+            MuteSettings.view
+                (PressedMuteSlackDmThread currentSlackUserId channelId threadId)
+                (MuteSettings.isSlackDmThreadSpecificallyMuted localUser.user.muteSettings channelId threadId)
+    )
+        |> Ui.el [ Ui.Font.color MyUi.font1, Ui.padding 8 ]
+
+
+slackMemberLabel : LocalUser -> Slack.Id Slack.UserId -> Element msg
+slackMemberLabel localUser userId =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.paddingXY 8 4
+        , Ui.Font.color MyUi.font3
+        , Ui.clipWithEllipsis
+        ]
+        [ User.profileImage (SeqDict.get userId localUser.slackUsers)
+        , Ui.text (User.toString userId localUser.slackUsers)
         ]
 
 
@@ -12210,12 +12388,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         NoNotification
 
                     else
-                        case GuildColumn.discordDmHasNotifications localUser dmChannelId channel of
-                            Just ( _, count ) ->
-                                NewMessageForUser count
-
-                            Nothing ->
-                                NoNotification
+                        GuildColumn.discordDmNotification localUser currentUserId dmChannelId channel
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
@@ -12521,18 +12694,37 @@ guildNameInput form =
 
 
 fileUploadPreview :
-    (Id FileId -> msg)
-    -> (Id FileId -> msg)
-    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    (Id FileId -> FrontendMsg_)
+    -> (Id FileId -> FrontendMsg_)
+    -> Maybe ({ fileId : Id FileId, removeSpoiler : Bool } -> FrontendMsg_)
     -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
-    -> Element msg
+    -> Element FrontendMsg_
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
     Ui.row
         [ Ui.spacing 4
-        , Ui.move { x = 0, y = -SheepGame.fileUploadPreviewSize, z = 0 }
         , Ui.width Ui.shrink
-        , Ui.paddingXY 8 0
+        , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 0 }
+        , MyUi.htmlStyle "position" "absolute"
+        , MyUi.htmlStyle "bottom" "100%"
+        , MyUi.htmlStyle "max-width" "100%"
+        , MyUi.htmlStyle "overflow-x" "auto"
+        , MyUi.htmlStyle "overflow-y" "hidden"
+        , Html.Events.stopPropagationOn
+            "touchstart"
+            (Json.Decode.map2
+                (\scrollWidth clientWidth ->
+                    if scrollWidth > clientWidth then
+                        Json.Decode.succeed ( FrontendNoOp, True )
+
+                    else
+                        Json.Decode.fail ""
+                )
+                (Json.Decode.at [ "currentTarget", "scrollWidth" ] Json.Decode.int)
+                (Json.Decode.at [ "currentTarget", "clientWidth" ] Json.Decode.int)
+                |> Json.Decode.andThen identity
+            )
+            |> Ui.htmlAttribute
         ]
         (SheepGame.fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2)
 
@@ -14426,7 +14618,7 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
     case List.Extra.find (\userId -> SeqDict.member userId localUser.linkedSlackUsers) (NonemptySet.toList dmChannel.members) of
         Just currentUserId ->
             let
-                threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+                threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
                 threads2 =
                     List.filterMap
                         (\( threadMessageIndex, thread ) ->
@@ -14443,40 +14635,39 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
                                         Nothing ->
                                             False
 
+                                isMuted : IsMuted
+                                isMuted =
+                                    MuteSettings.isSlackDmMuted localUser.user.muteSettings dmChannelId (ViewThread threadMessageIndex)
+
                                 hasNotifications : ChannelNotificationType
                                 hasNotifications =
-                                    -- Every message in a DM is meant for you, so unread ones always get the red count
-                                    case
-                                        GuildColumn.newMessageCount
-                                            (SeqDict.get
-                                                ( SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = dmChannelId })
-                                                , threadMessageIndex
+                                    GuildColumn.dmNotification
+                                        [ ( isMuted
+                                          , GuildColumn.newMessageCount
+                                                (SeqDict.get
+                                                    ( SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = dmChannelId })
+                                                    , threadMessageIndex
+                                                    )
+                                                    localUser.user.lastViewedThreadMessage
                                                 )
-                                                localUser.user.lastViewedThreadMessage
-                                            )
-                                            thread
-                                            |> OneOrGreater.fromInt
-                                    of
-                                        Just unreadCount ->
-                                            NewMessageForUser unreadCount
-
-                                        Nothing ->
-                                            NoNotification
+                                                thread
+                                          )
+                                        ]
                             in
                             if isSelected || hasNotifications /= NoNotification then
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                             else
                                 case MessageArray.last thread.messages of
                                     Just message ->
                                         if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                                         else
                                             Nothing
 
                                     Nothing ->
-                                        Just ( threadMessageIndex, hasNotifications, isSelected )
+                                        Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                         )
                         (SeqDict.toList threads)
 
@@ -14485,11 +14676,11 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
                     List.length threads2
             in
             List.indexedMap
-                (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+                (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
                     channelColumnThreadsHelper
                         isMobile
                         isSelected
-                        IsNotMuted
+                        isMuted
                         hasNotifications
                         index
                         count
@@ -14498,6 +14689,7 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
                             { currentSlackUserId = currentUserId
                             , channelId = dmChannelId
                             , threadRoute = ViewThreadWithMaybeMessage threadMessageIndex Nothing
+                            , showMembersTab = HideChannelSettings
                             , channelsVisible = ChannelsHiddenOnMobile
                             , overlay = Nothing
                             }
@@ -14597,6 +14789,7 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         { currentSlackUserId = currentUserId
                         , channelId = dmChannelId
                         , threadRoute = NoThreadWithMaybeMessage Nothing
+                        , showMembersTab = HideChannelSettings
                         , channelsVisible = ChannelsHiddenOnMobile
                         , overlay = Nothing
                         }
@@ -14621,12 +14814,7 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         NoNotification
 
                        else
-                        case GuildColumn.slackDmHasNotifications localUser dmChannelId channel of
-                            Just ( _, count ) ->
-                                NewMessageForUser count
-
-                            Nothing ->
-                                NoNotification
+                        GuildColumn.slackDmNotification localUser currentUserId dmChannelId channel
                       )
                         |> GuildIcon.slackNotificationView 4 -3 MyUi.background2
                     , Ui.width Ui.shrink

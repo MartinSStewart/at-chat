@@ -1417,7 +1417,7 @@ updateHelper msg model =
                                 messageAuthors : List Discord.User
                                 messageAuthors =
                                     List.concatMap .messages dmChannels
-                                        ++ List.concat (SeqDict.values channelMessages)
+                                        ++ List.concatMap LocalState.discordChannelReloadMessages (SeqDict.values channelMessages)
                                         |> List.map .author
                                         |> List.Extra.uniqueBy (\author -> Discord.idToString author.id)
 
@@ -2361,14 +2361,6 @@ updateHelper msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        JoinedDiscordThread guildId result time ->
-            case result of
-                Ok () ->
-                    ( model, Command.none )
-
-                Err error ->
-                    BackendExtra.addLog time (Log.JoinedDiscordThreadFailed guildId error) model
-
         ToBackendCompleted toBackendLog maybeUserId { startTime, endTime } ->
             let
                 count =
@@ -2945,13 +2937,13 @@ addDiscordGuildData discordUserId data guild =
     }
 
 
-{-| Fills in the messages loaded for a Discord guild's channels, leaving alone the channels it
-already had.
+{-| Fills in the messages loaded for a Discord guild's channels and their threads, leaving alone
+the channels it already had.
 -}
 addNewChannelMessages :
     BackendModel
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
-    -> SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordChannelReload
     -> SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     -> DiscordBackendGuild
     -> DiscordBackendGuild
@@ -2961,18 +2953,60 @@ addNewChannelMessages model attachments channelMessages existingChannels guild =
             SeqDict.map
                 (\channelId channel ->
                     case ( SeqDict.member channelId existingChannels, SeqDict.get channelId channelMessages ) of
-                        ( False, Just messages ) ->
+                        ( False, Just reload ) ->
                             let
                                 ( messages2, linkedMessageIds ) =
                                     DiscordSync.messagesAndLinks
                                         channel
-                                        (List.reverse messages)
+                                        (List.reverse reload.messages)
                                         model.discordCustomEmojis
                                         guild.channels
                                         model.discordStickers
                                         attachments
+
+                                threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+                                threads =
+                                    List.filterMap
+                                        (\thread ->
+                                            case
+                                                OneToOne.second
+                                                    (Discord.idToUInt64 thread.threadId |> Discord.idFromUInt64)
+                                                    linkedMessageIds
+                                            of
+                                                Just channelMessageIndex ->
+                                                    let
+                                                        initThread : DiscordBackendThread
+                                                        initThread =
+                                                            Thread.discordBackendInit
+
+                                                        ( threadMessages, threadLinkedMessageIds ) =
+                                                            DiscordSync.messagesAndLinks
+                                                                initThread
+                                                                (List.reverse thread.messages)
+                                                                model.discordCustomEmojis
+                                                                guild.channels
+                                                                model.discordStickers
+                                                                attachments
+                                                    in
+                                                    if IdArray.isEmpty threadMessages then
+                                                        Nothing
+
+                                                    else
+                                                        ( channelMessageIndex
+                                                        , { initThread
+                                                            | messages = threadMessages
+                                                            , linkedMessageIds = threadLinkedMessageIds
+                                                          }
+                                                        )
+                                                            |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                        )
+                                        reload.threads
+                                        |> SeqDict.fromList
                             in
-                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds, threads = threads }
 
                         _ ->
                             channel
@@ -3019,7 +3053,7 @@ addMessagesSent messages members =
 
 attachmentsUploadedHelper :
     BackendModel
-    -> { a | attachments : List Discord.Attachment }
+    -> { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
     -> List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
     -> ( SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }, SeqDict DiscordAttachmentId DiscordAttachmentData )
 attachmentsUploadedHelper model message results =
@@ -3029,14 +3063,14 @@ attachmentsUploadedHelper model message results =
             List.filterMap Result.toMaybe results |> SeqDict.fromList
     in
     List.foldl
-        (\attachment ( fileDataDict, discordAttachments ) ->
+        (\( index, attachment ) ( fileDataDict, discordAttachments ) ->
             let
                 attachmentId =
                     DiscordAttachmentId.fromUrl attachment.url
 
                 fileId : Id FileId
                 fileId =
-                    SeqDict.size fileDataDict + 1 |> Id.fromInt
+                    Id.fromInt (index + 1)
             in
             case SeqDict.get attachmentId model.discordAttachments of
                 Just { fileHash, metadata } ->
@@ -3086,7 +3120,7 @@ attachmentsUploadedHelper model message results =
                             ( fileDataDict, discordAttachments )
         )
         ( SeqDict.empty, model.discordAttachments )
-        message.attachments
+        (List.indexedMap Tuple.pair (DiscordSync.attachmentsIncludingForwarded message))
 
 
 recordWebsocketCloseEvent : WebsocketClosedEvent -> BackendModel -> BackendModel
@@ -8106,6 +8140,91 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             Nothing
                                             session.userId
                                             (Server_SetMuteSlackThread teamId channelId threadId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SetMuteDiscordDm discordUserId channelId isMuted ->
+                    BackendExtra.asDiscordDmUser
+                        model
+                        sessionId
+                        { currentUserId = discordUserId, channelId = channelId }
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | muteSettings = MuteSettings.setMuteDiscordDm channelId isMuted user.muteSettings }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordDm channelId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteSlackDm slackUserId channelId isMuted ->
+                    BackendExtra.asSlackDmUser
+                        model
+                        sessionId
+                        { currentUserId = slackUserId, channelId = channelId }
+                        (\session _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackDm channelId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackDm channelId isMuted |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Nothing ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SetMuteSlackDmThread slackUserId channelId threadId isMuted ->
+                    BackendExtra.asSlackDmUser
+                        model
+                        sessionId
+                        { currentUserId = slackUserId, channelId = channelId }
+                        (\session _ _ ->
+                            case NonemptyDict.get session.userId model.users of
+                                Just user ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | muteSettings = MuteSettings.setMuteSlackDmThread channelId threadId isMuted user.muteSettings }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            session.userId
+                                            (Server_SetMuteSlackDmThread channelId threadId isMuted |> ServerChange)
                                             model
                                         ]
                                     )

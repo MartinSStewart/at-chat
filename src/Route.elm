@@ -114,6 +114,7 @@ type alias SlackDmRouteData =
     { currentSlackUserId : Slack.Id Slack.UserId
     , channelId : Slack.Id Slack.DmChannelId
     , threadRoute : ThreadRouteWithMaybeMessage
+    , showMembersTab : ShowChannelSettings
     , channelsVisible : ChannelsVisibleOnMobile
     , overlay : Maybe Overlay
     }
@@ -485,6 +486,7 @@ decode url =
                 { currentSlackUserId = Slack.Id userId
                 , channelId = Slack.Id channelId
                 , threadRoute = slackThreadRouteFromPath rest
+                , showMembersTab = showMembers
                 , channelsVisible = channelsVisible
                 , overlay = overlay
                 }
@@ -749,8 +751,8 @@ toShowMembersTabVisible { sidebarMode } route =
                 SlackChannel_WorkspaceSettingsRoute ->
                     ( HideChannelSettings, False )
 
-        SlackDmRoute _ ->
-            ( HideChannelSettings, False )
+        SlackDmRoute routeData ->
+            ( helper routeData.showMembersTab, slackIsThread routeData.threadRoute )
 
         AiChatRoute ->
             ( HideChannelSettings, False )
@@ -822,8 +824,8 @@ toShowMembersTab route =
                 SlackChannel_WorkspaceSettingsRoute ->
                     ( HideChannelSettings, False )
 
-        SlackDmRoute _ ->
-            ( HideChannelSettings, False )
+        SlackDmRoute routeData ->
+            ( routeData.showMembersTab, slackIsThread routeData.threadRoute )
 
         AiChatRoute ->
             ( HideChannelSettings, False )
@@ -926,6 +928,9 @@ setShowMembers showMembers route =
 
                 SlackChannel_WorkspaceSettingsRoute ->
                     route
+
+        SlackDmRoute routeData ->
+            SlackDmRoute { routeData | showMembersTab = showMembers }
 
         _ ->
             route
@@ -1293,10 +1298,10 @@ encode route =
                             , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                             )
 
-                SlackDmRoute { currentSlackUserId, channelId, threadRoute, channelsVisible, overlay } ->
+                SlackDmRoute { currentSlackUserId, channelId, threadRoute, showMembersTab, channelsVisible, overlay } ->
                     ( [ "sd", Slack.idToString currentSlackUserId, Slack.idToString channelId ]
                         ++ slackThreadRouteToPath threadRoute
-                    , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
+                    , encodeShowMembers showMembersTab ++ encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                     )
 
                 TextEditorRoute ->

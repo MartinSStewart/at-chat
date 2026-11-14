@@ -77,6 +77,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), ThreadRouteWithRepliedTo(..), UserTextMessageData)
+import MuteSettings
 import MyUi
 import NonemptyDict
 import NonemptySet
@@ -1398,6 +1399,15 @@ discordDmNotification :
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordDmNotification time channelId senderId senderName senderIcon text message model =
     let
+        isMuted : Id UserId -> Bool
+        isMuted userId =
+            case NonemptyDict.get userId model.users of
+                Just user ->
+                    MuteSettings.hidesWhiteDot (MuteSettings.isDiscordDmMuted user.muteSettings channelId)
+
+                Nothing ->
+                    False
+
         usersToNotify : SeqDict (Id UserId) (Discord.Id Discord.UserId)
         usersToNotify =
             case SeqDict.get channelId model.discordDmChannels of
@@ -1412,7 +1422,10 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                                 else
                                     case SeqDict.get member model.discordUsers of
                                         Just (FullData discordUser) ->
-                                            if isViewingDiscordDm channelId discordUser.linkedTo model then
+                                            if
+                                                isViewingDiscordDm channelId discordUser.linkedTo model
+                                                    || isMuted discordUser.linkedTo
+                                            then
                                                 Nothing
 
                                             else
@@ -1518,6 +1531,20 @@ slackMessageNotification time guildOrDmId threadRoute message model =
         viewers =
             usersViewingSlackConversation guildOrDmId threadRoute model |> List.map Tuple.first
 
+        isMutedDm : Id UserId -> Bool
+        isMutedDm userId =
+            case guildOrDmId of
+                SlackGuildOrDmId_Workspace _ ->
+                    False
+
+                SlackGuildOrDmId_Dm { channelId } ->
+                    case NonemptyDict.get userId model.users of
+                        Just user ->
+                            MuteSettings.hidesWhiteDot (MuteSettings.isSlackDmMuted user.muteSettings channelId threadRoute)
+
+                        Nothing ->
+                            False
+
         recipients : List (Slack.Id Slack.UserId)
         recipients =
             case guildOrDmId of
@@ -1607,6 +1634,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                         (recipient == author)
                             || (Just linkedUser.linkedTo == authorLinkedTo)
                             || List.member linkedUser.linkedTo viewers
+                            || isMutedDm linkedUser.linkedTo
                     then
                         ( sessions, cmds )
 
@@ -1636,6 +1664,7 @@ slackMessageNotification time guildOrDmId threadRoute message model =
                                         { currentSlackUserId = recipient
                                         , channelId = channelId
                                         , threadRoute = Id.threadRouteWithNoMessage threadRoute
+                                        , showMembersTab = HideChannelSettings
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }

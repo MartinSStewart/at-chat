@@ -2,16 +2,17 @@ module GuildColumn exposing
     ( canChangeUnreadNotificationCount
     , channelOrThreadHasNotifications
     , discordDmCurrentUserId
-    , discordDmHasNotifications
+    , discordDmNotification
     , discordGuildCurrentUserId
     , discordGuildRoute
+    , dmNotification
     , elLinkButton
     , guildColumnLazy
     , guildRoute
     , newMessageCount
     , rowLinkButton
     , slackDmCurrentUserId
-    , slackDmHasNotifications
+    , slackDmNotification
     , slackWorkspaceCurrentUserId
     , slackWorkspaceRoute
     , unreadNotificationCount
@@ -296,6 +297,7 @@ slackDmGuildIcon route localUser channelId dmChannel =
                             { currentSlackUserId = currentUserId
                             , channelId = channelId
                             , threadRoute = NoThreadWithMaybeMessage Nothing
+                            , showMembersTab = HideChannelSettings
                             , channelsVisible = ChannelsHiddenOnMobile
                             , overlay = Nothing
                             }
@@ -330,15 +332,84 @@ slackDmHasNotifications :
 slackDmHasNotifications localUser channelId dmChannel =
     case slackDmCurrentUserId localUser dmChannel of
         Just currentUserId ->
-            channelNewMessageCount
-                (SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                localUser.user
-                dmChannel
-                |> OneOrGreater.fromInt
-                |> Maybe.map (Tuple.pair currentUserId)
+            case slackDmNotification localUser currentUserId channelId dmChannel of
+                NewMessageForUser count ->
+                    Just ( currentUserId, count )
+
+                NewMessage _ ->
+                    Nothing
+
+                NoNotification ->
+                    Nothing
 
         Nothing ->
             Nothing
+
+
+{-| Every unread message in a DM is for the user, so it shows as red. Partially muting the DM or
+one of its threads turns its messages into a white dot instead, and fully muting it hides them.
+-}
+slackDmNotification :
+    LocalUser
+    -> Slack.Id Slack.UserId
+    -> Slack.Id Slack.DmChannelId
+    -> SlackFrontendDmChannel
+    -> ChannelNotificationType
+slackDmNotification localUser currentUserId channelId dmChannel =
+    let
+        guildOrDmId : AnyGuildOrDmId
+        guildOrDmId =
+            SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId })
+
+        muteSettings : MuteSettings.Model
+        muteSettings =
+            localUser.user.muteSettings
+    in
+    SeqDict.foldl
+        (\threadId thread counts ->
+            ( MuteSettings.isSlackDmMuted muteSettings channelId (ViewThread threadId)
+            , newMessageCount (SeqDict.get ( guildOrDmId, threadId ) localUser.user.lastViewedThreadMessage) thread
+            )
+                :: counts
+        )
+        [ ( MuteSettings.isSlackDmMuted muteSettings channelId NoThread
+          , newMessageCount (SeqDict.get guildOrDmId localUser.user.lastViewedMessage) dmChannel
+          )
+        ]
+        dmChannel.threads
+        |> dmNotification
+
+
+dmNotification : List ( IsMuted, Int ) -> ChannelNotificationType
+dmNotification counts =
+    let
+        { red, white } =
+            List.foldl
+                (\( isMuted, count ) total ->
+                    case isMuted of
+                        IsNotMuted ->
+                            { total | red = total.red + count }
+
+                        IsPartiallyMuted ->
+                            { total | white = total.white + count }
+
+                        IsFullyMuted ->
+                            total
+                )
+                { red = 0, white = 0 }
+                counts
+    in
+    case OneOrGreater.fromInt red of
+        Just red2 ->
+            NewMessageForUser red2
+
+        Nothing ->
+            case OneOrGreater.fromInt white of
+                Just white2 ->
+                    NewMessage white2
+
+                Nothing ->
+                    NoNotification
 
 
 {-| Find the linked Slack user that is a member of this Slack DM channel (i.e. "us").
@@ -626,17 +697,40 @@ discordDmHasNotifications :
 discordDmHasNotifications localUser channelId dmChannel =
     case discordDmCurrentUserId localUser dmChannel of
         Just currentUserId ->
-            newMessageCount
+            case discordDmNotification localUser currentUserId channelId dmChannel of
+                NewMessageForUser count ->
+                    Just ( currentUserId, count )
+
+                NewMessage _ ->
+                    Nothing
+
+                NoNotification ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+{-| Every unread message in a DM is for the user, so it shows as red. Partially muting the DM
+turns that into a white dot instead, and fully muting it hides it.
+-}
+discordDmNotification :
+    LocalUser
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordFrontendDmChannel
+    -> ChannelNotificationType
+discordDmNotification localUser currentUserId channelId dmChannel =
+    dmNotification
+        [ ( MuteSettings.isDiscordDmMuted localUser.user.muteSettings channelId
+          , newMessageCount
                 (SeqDict.get
                     (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
                     localUser.user.lastViewedMessage
                 )
                 dmChannel
-                |> OneOrGreater.fromInt
-                |> Maybe.map (Tuple.pair currentUserId)
-
-        Nothing ->
-            Nothing
+          )
+        ]
 
 
 {-| Find the linked Discord user that is a member of this Discord DM channel (i.e. "us").
@@ -1220,6 +1314,15 @@ canChangeUnreadNotificationCount change =
             True
 
         Local_SetMuteSlackThread _ _ _ _ _ ->
+            True
+
+        Local_SetMuteDiscordDm _ _ _ ->
+            True
+
+        Local_SetMuteSlackDm _ _ _ ->
+            True
+
+        Local_SetMuteSlackDmThread _ _ _ _ ->
             True
 
         Local_RequestE2ee _ ->

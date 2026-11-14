@@ -26,7 +26,6 @@ module SheepGame exposing
     , clampSavedQuestions
     , emptyQuestionError
     , fileUploadPreview
-    , fileUploadPreviewSize
     , gameView
     , gameViewId
     , initGame

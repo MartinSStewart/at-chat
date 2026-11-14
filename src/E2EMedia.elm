@@ -775,7 +775,7 @@ imageRowTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 imageRowTest imageUploadConfig =
     E2EHelper.startTest
-        "Images sent together are shown side by side and scroll sideways when they don't fit"
+        "Images sent together are shown side by side and wrap onto more lines when they don't fit"
         E2EHelper.startTime
         imageUploadConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
@@ -793,14 +793,14 @@ imageRowTest imageUploadConfig =
                     0
                     (\html ->
                         Test.Html.Query.findAll
-                            [ Test.Html.Selector.style "overflow-x" "auto"
+                            [ Test.Html.Selector.style "flex-wrap" "wrap"
                             , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_1" ]
                             , Test.Html.Selector.containing [ Test.Html.Selector.id "spoiler_1_image_6" ]
                             ]
                             html
                             |> Test.Html.Query.count (Expect.greaterThan 0)
                     )
-                , admin.snapshotView 100 { name = "Images side by side" }
+                , E2EHelper.tallSnapshot admin 100 { name = "Images side by side" }
                 ]
             )
         ]

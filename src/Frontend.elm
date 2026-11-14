@@ -3097,6 +3097,7 @@ updateLoaded msg model =
                                     { currentSlackUserId = currentUserId
                                     , channelId = channelId
                                     , threadRoute = ViewThreadWithMaybeMessage messageId Nothing
+                                    , showMembersTab = HideChannelSettings
                                     , channelsVisible = ChannelsHiddenOnMobile
                                     , overlay = Nothing
                                     }
@@ -6393,6 +6394,39 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMuteDiscordDm discordUserId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordDm discordUserId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackDm slackUserId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackDm slackUserId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteSlackDmThread slackUserId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteSlackDmThread slackUserId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedMarkChannelAsRead guildOrDmId threadRoute ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -8174,8 +8208,8 @@ setShowMembers showMembers model =
         SlackWorkspaceRoute _ ->
             FrontendExtra.routePush model (Route.setShowMembers showMembers model.route)
 
-        SlackDmRoute _ ->
-            ( model, Command.none )
+        SlackDmRoute dmRoute ->
+            FrontendExtra.routePush model (SlackDmRoute { dmRoute | showMembersTab = showMembers })
 
 
 viewImageInfo :

@@ -3036,6 +3036,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteSlackThread _ _ _ _ _ ->
                     True
 
+                Local_SetMuteDiscordDm _ _ _ ->
+                    True
+
+                Local_SetMuteSlackDm _ _ _ ->
+                    True
+
+                Local_SetMuteSlackDmThread _ _ _ _ ->
+                    True
+
                 Local_RequestE2ee _ ->
                     True
 
@@ -3387,6 +3396,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteSlackThread _ _ _ _ ->
                             True
 
+                        Types.Server_SetMuteDiscordDm _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackDm _ _ ->
+                            True
+
+                        Types.Server_SetMuteSlackDmThread _ _ _ ->
+                            True
+
                         Types.Server_DiscordAvatarsLoaded _ _ ->
                             True
 
@@ -3666,6 +3684,8 @@ allAttackerLocalChanges =
     , Local_SetMuteSlackWorkspace (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") MuteSettings.IsFullyMuted
     , Local_SetMuteSlackChannel (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") MuteSettings.IsFullyMuted
     , Local_SetMuteSlackThread (Slack.Id "U09DJDQL1A8") (Slack.Id "T09DJDQL18U") (Slack.Id "C09DJDQSWLU") (Id.fromInt 0) MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackDm (Slack.Id "U09DJDQL1A8") (Slack.Id "D09DK3P5RPC") MuteSettings.IsFullyMuted
+    , Local_SetMuteSlackDmThread (Slack.Id "U09DJDQL1A8") (Slack.Id "D09DK3P5RPC") (Id.fromInt 0) MuteSettings.IsFullyMuted
     , Local_CurrentlyViewing
         { markMessagesAsViewed = True }
         (ViewSlackChannel
@@ -3774,6 +3794,7 @@ allAttackerLocalChanges =
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( SafeFloat.zero, SafeFloat.zero ))
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsFullyMuted
+    , Local_SetMuteDiscordDm discordUserId discordPrivateChannelId MuteSettings.IsFullyMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsFullyMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequestAsInitiator { otherUserId = Broadcast.adminUserId }
@@ -4005,7 +4026,8 @@ to the backend, which is when a Discord account gets linked. Only channel B and 
 168547048902098944 have any, so the tests that fill channel A themselves start from an empty
 channel. Newest message first, like the real API returns them.
 
-The older channel B message is from someone the ready data doesn't mention.
+The older channel B message is from someone the ready data doesn't mention, and has a thread
+the linked account hasn't joined.
 
 -}
 discordNewChannelHistory : String -> String
@@ -4013,7 +4035,13 @@ discordNewChannelHistory channelId =
     if channelId == botTestGuild_ChannelBString then
         """[
     {"id":"1533200000000000002","channel_id":"1072828591382999151","content":"Newer channel B message","timestamp":"2026-04-03T10:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
-    {"id":"1533200000000000001","channel_id":"1072828591382999151","content":"Older channel B message","timestamp":"2026-04-03T09:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+    {"id":"1533200000000000001","channel_id":"1072828591382999151","content":"Older channel B message","timestamp":"2026-04-03T09:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+]"""
+
+    else if channelId == "1533200000000000001" then
+        """[
+    {"id":"1533200000000000005","channel_id":"1533200000000000001","content":"Newer channel B thread message","timestamp":"2026-04-03T09:20:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}},
+    {"id":"1533200000000000004","channel_id":"1533200000000000001","content":"Older channel B thread message","timestamp":"2026-04-03T09:10:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
 ]"""
 
     else if channelId == "222087308516524036" then

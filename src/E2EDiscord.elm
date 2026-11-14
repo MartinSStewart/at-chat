@@ -35,6 +35,7 @@ import MembersAndOwner
 import Message
 import MessageArray
 import MessageInput
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -1107,6 +1108,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3293,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-17T16:14:03.131000+00:00","pinned":false,"nonce":"1494732679017398272","message_snapshots":[{"message":{"type":0,"timestamp":"2026-04-17T11:22:04.856000+00:00","mentions":[],"flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"attachments":[{"width":2160,"url":"https://cdn.discordapp.com/attachments/123/321/IMG_1234.jpg?ex=123&is=321&hm=123&","size":517431,"proxy_url":"https://media.discordapp.net/attachments/123/321/1234.jpg?ex=123&is=321&hm=123&","placeholder_version":1,"placeholder":"WlkKDgSql6d2d3d4d4B4gZqYrHCJCGc=","id":"1494732685631946782","height":2461,"filename":"IMG_7203.jpg","content_type":"image/jpeg","content_scan_version":4}]}}],"message_reference":{"type":1,"message_id":"1494659209021751327","channel_id":"1472236476401057854"},"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":["476506921260810240","734405273103499264","743849378363605082","840010386958581770","776291214478802964","840041852852895765","1030137708531687514"],"premium_since":null,"pending":false,"nick":"cute technology","mute":false,"joined_at":"2018-08-07T17:00:17.616000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1494732685992530114","flags":16384,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"capysuit","public_flags":0,"primary_guild":null,"id":"339560235050205185","global_name":"gio","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7d2709668c67727f98ba40ff62611e78"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , admin.checkView 1000 (Test.Html.Query.hasNot [ Test.Html.Selector.text "empty" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_0_image_1" ])
                         ]
                     )
                 ]
@@ -1513,6 +1515,41 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Linked Discord account subscribes to its guilds' threads instead of joining them"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ E2EHelper.andThenWebsocket 100
+                    (\_ websocketState ->
+                        [ T.checkState
+                            0
+                            (\_ ->
+                                if
+                                    List.any
+                                        (\sent ->
+                                            String.contains "\"op\":37" sent.data
+                                                && String.contains "\"705745250815311942\":{\"typing\":true,\"threads\":true}" sent.data
+                                        )
+                                        (Array.toList websocketState.dataSent)
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Didn't subscribe to the guild's threads"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
         E2EHelper.startTime
         normalConfig
@@ -1566,7 +1603,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         )
                                         data.httpRequests
                                 of
-                                    [ _ ] ->
+                                    [] ->
                                         [ T.websocketSendString
                                             100
                                             connection
@@ -1583,7 +1620,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ]
 
                                     _ ->
-                                        [ T.checkBackend 100 (\_ -> Err "Didn't join thread") ]
+                                        [ T.checkBackend 100 (\_ -> Err "Joined the thread instead of relying on the guild subscription") ]
                             )
                         ]
                     )
@@ -1693,7 +1730,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         )
                                         data.httpRequests
                                 of
-                                    [ _ ] ->
+                                    [] ->
                                         [ T.websocketSendString
                                             100
                                             connection
@@ -1716,7 +1753,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ]
 
                                     _ ->
-                                        [ T.checkBackend 100 (\_ -> Err "Didn't join thread") ]
+                                        [ T.checkBackend 100 (\_ -> Err "Joined the thread instead of relying on the guild subscription") ]
                             )
                         ]
                     )
@@ -1791,6 +1828,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     "channel B"
                     E2EHelper.botTestGuild_ChannelB
                     [ "Older channel B message", "Newer channel B message" ]
+                , -- The thread on the older message is loaded without joining it
+                  checkDiscordChannelThreads
+                    "channel B"
+                    E2EHelper.botTestGuild_ChannelB
+                    [ ( 0, [ "Older channel B thread message", "Newer channel B thread message" ] ) ]
                 , checkDiscordChannelAMessages []
                 , T.checkState
                     100
@@ -1818,8 +1860,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         else
                             Err "The author of a loaded message wasn't added to the Discord users"
                     )
-                , -- One request per text channel and DM. Voice channels, categories and forums
-                  -- have no messages to load.
+                , -- One request per text channel, DM and thread. Voice channels, categories and
+                  -- forums have no messages to load.
                   T.checkState
                     100
                     (\data ->
@@ -1855,6 +1897,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     , "222087308516524036"
                                     , "1215077285749858324"
                                     , "1472236476401057854"
+                                    , "1533200000000000001"
                                     ]
                         then
                             Ok ()
@@ -2635,6 +2678,55 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
                             )
                         , friendLabelHasNoNotificationCircle admin "1472236476401057854" "1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A partially muted Discord DM shows a white dot and no guild column icon"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , admin.click 100 (Dom.id "guild_showMembers")
+                        , admin.keyUp 100 (Dom.id "guild_muteChannel") "ArrowDown" []
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                case NonemptyDict.get E2EHelper.defaultAdminId (E2EHelper.unwrapBackend backend).users of
+                                    Just user ->
+                                        case MuteSettings.isDiscordDmMuted user.muteSettings discordDmChannelId of
+                                            MuteSettings.IsPartiallyMuted ->
+                                                Ok ()
+
+                                            MuteSettings.IsFullyMuted ->
+                                                Err "Expected the DM to be partially muted, got fully muted"
+
+                                            MuteSettings.IsNotMuted ->
+                                                Err "Expected the DM to be partially muted, got not muted"
+
+                                    Nothing ->
+                                        Err "Admin not found"
+                            )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , discordDmMessage connection "Check out this Discord DM!"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
+                            )
+                        , friendLabelHasNotificationCircle admin "1472236476401057854" "1"
                         ]
                     )
                 ]

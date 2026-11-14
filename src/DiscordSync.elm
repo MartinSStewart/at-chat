@@ -2,6 +2,7 @@ module DiscordSync exposing
     ( addDiscordChannel
     , addDiscordUserData
     , addUploadResponsesToDiscordAttachments
+    , attachmentsIncludingForwarded
     , attachmentsToFileData
     , closeEventCodeToInt
     , discordUserWebsocketMsg
@@ -261,6 +262,7 @@ handleDiscordDmEditMessage edit attachments model =
                             RichText.fromDiscord
                                 edit.content
                                 attachments
+                                (List.length edit.attachments)
                                 (Included edit.embeds)
                                 edit.components
                                 model.discordCustomEmojis
@@ -413,6 +415,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
             RichText.fromDiscord
                 edit.content
                 attachments
+                (List.length edit.attachments)
                 (Included edit.embeds)
                 edit.components
                 model.discordCustomEmojis
@@ -719,6 +722,9 @@ addDiscordChannel discordChannel =
 
                 Discord.GuildMedia ->
                     False
+
+                Discord.UnknownChannelType _ ->
+                    False
     in
     if isTextChannel then
         { name =
@@ -789,6 +795,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis channels discordS
                 (RichText.fromDiscord
                     message.content
                     attachments
+                    (List.length message.attachments)
                     message.embeds
                     message.components
                     customEmojis
@@ -959,20 +966,6 @@ nonemptyTaskSequence nonempty =
     Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
 
 
-joinThread :
-    SecretId ServerSecret
-    -> Discord.UserAuth
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.MessageId
-    -> Command BackendOnly toMsg BackendMsg
-joinThread secretKey authentication guildId threadId =
-    Discord.joinThreadPayload (Discord.userToken authentication) threadId
-        |> http secretKey
-        |> taskResult
-        |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
-        |> Task.perform identity
-
-
 handleCreateMessage :
     String
     -> Discord.Message
@@ -999,6 +992,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                 RichText.fromDiscord
                                     discordMessage.content
                                     attachments
+                                    (List.length discordMessage.attachments)
                                     discordMessage.embeds
                                     discordMessage.components
                                     model.discordCustomEmojis
@@ -1367,6 +1361,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                         RichText.fromDiscord
                                             content
                                             attachments
+                                            (List.length discordMessage.attachments)
                                             discordMessage.embeds
                                             discordMessage.components
                                             model.discordCustomEmojis
@@ -1674,15 +1669,14 @@ Discord sends this event for threads the user is added to as well as for threads
 just created, so a post we already have is left alone.
 
 -}
-handleForumPostCreated : Discord.UserAuth -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleForumPostCreated authentication thread model =
+handleForumPostCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostCreated thread model =
     case ( thread.guildId, thread.parentId, thread.name ) of
         ( Included guildId, Included (Just forumId), Included name ) ->
             case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
                 ( Included ownerId, Just ( guild, channel ) ) ->
                     if channel.isForum then
                         addForumPost
-                            authentication
                             { guildId = guildId
                             , forumId = forumId
                             , threadId = thread.id
@@ -1706,19 +1700,17 @@ handleForumPostCreated authentication thread model =
 
 
 addForumPost :
-    Discord.UserAuth
-    ->
-        { guildId : Discord.Id Discord.GuildId
-        , forumId : Discord.Id Discord.ChannelId
-        , threadId : Discord.Id Discord.ChannelId
-        , name : String
-        , ownerId : Discord.Id Discord.UserId
-        }
+    { guildId : Discord.Id Discord.GuildId
+    , forumId : Discord.Id Discord.ChannelId
+    , threadId : Discord.Id Discord.ChannelId
+    , name : String
+    , ownerId : Discord.Id Discord.UserId
+    }
     -> DiscordBackendGuild
     -> DiscordBackendChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addForumPost authentication post guild channel model =
+addForumPost post guild channel model =
     let
         createdAt : Time.Posix
         createdAt =
@@ -1726,7 +1718,7 @@ addForumPost authentication post guild channel model =
 
         richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
-            RichText.fromDiscord post.name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
+            RichText.fromDiscord post.name SeqDict.empty 0 Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
@@ -1781,14 +1773,6 @@ addForumPost authentication post guild channel model =
                         |> ServerChange
                     )
                     model2
-
-                -- The post's text and the replies to it are written in the thread, and we
-                -- only get told about messages in a thread we're a member of
-                , joinThread
-                    model2.serverSecret
-                    authentication
-                    post.guildId
-                    (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
                 , Command.batch notificationCmds
                 ]
             )
@@ -1833,7 +1817,7 @@ handleForumPostRenamed thread time model =
                             let
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromDiscord name SeqDict.empty Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
+                                    RichText.fromDiscord name SeqDict.empty 0 Missing Missing model.discordCustomEmojis SeqDict.empty [] Missing
                             in
                             case
                                 LocalState.editMessageHelper
@@ -2137,19 +2121,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments =
                                     messageToFileData message model2.discordAttachments
 
-                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
-                                joinThreadCmd =
-                                    case ( message.guildId, message.flags ) of
-                                        ( Included guildId, Included flags ) ->
-                                            if flags.hasThread then
-                                                joinThread model2.serverSecret userData.auth guildId message.id
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
                                 ( model3, stickerCmds ) =
                                     case message.stickerItems of
                                         Included stickers ->
@@ -2250,14 +2221,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     )
                             in
                             case
-                                ( SeqDict.size attachments == List.length message.attachments
-                                , List.Nonempty.fromList message.attachments
+                                ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded message)
+                                , List.Nonempty.fromList (attachmentsIncludingForwarded message)
                                 )
                             of
                                 ( False, Just nonempty ) ->
                                     ( model4
-                                    , joinThreadCmd
-                                        :: stickerCmds
+                                    , stickerCmds
                                         :: customEmojiCmds
                                         :: Task.perform
                                             (DiscordMessageCreate_AttachmentsUploaded message)
@@ -2281,8 +2251,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                 model4
                                     in
                                     ( model5
-                                    , joinThreadCmd
-                                        :: stickerCmds
+                                    , stickerCmds
                                         :: customEmojiCmds
                                         :: cmd2
                                         :: cmds
@@ -2307,23 +2276,17 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                                 attachments =
                                     messageToFileData edit model2.discordAttachments
-
-                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
-                                joinThreadCmd =
-                                    case ( edit.guildId, edit.flags.hasThread ) of
-                                        ( Included guildId, True ) ->
-                                            joinThread model2.serverSecret userData.auth guildId edit.id
-
-                                        _ ->
-                                            Command.none
                             in
-                            case ( SeqDict.size attachments == List.length edit.attachments, List.Nonempty.fromList edit.attachments ) of
+                            case
+                                ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded edit)
+                                , List.Nonempty.fromList (attachmentsIncludingForwarded edit)
+                                )
+                            of
                                 ( False, Just nonempty ) ->
                                     ( model2
                                     , Task.perform
                                         (DiscordMessageUpdate_AttachmentsUploaded edit)
                                         (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model2.serverSecret) nonempty))
-                                        :: joinThreadCmd
                                         :: cmds
                                     )
 
@@ -2332,7 +2295,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         ( model3, cmd2 ) =
                                             handleEditMessage edit attachments model2
                                     in
-                                    ( model3, cmd2 :: joinThreadCmd :: cmds )
+                                    ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
@@ -2359,7 +2322,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread thread ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleForumPostCreated userData.auth thread model2
+                                    handleForumPostCreated thread model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2652,8 +2615,40 @@ handleJoinOrCreateGuild :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
-    ( { model | discordGuilds = addDiscordGuild model.discordStickers model.discordCustomEmojis [] gatewayGuild model.discordGuilds }
-    , getDiscordGuildData model.serverSecret gatewayGuild
+    let
+        discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+        discordGuilds =
+            addDiscordGuild model.discordStickers model.discordCustomEmojis [] gatewayGuild model.discordGuilds
+    in
+    case SeqDict.get gatewayGuild.properties.id model.discordGuilds of
+        Just guild ->
+            -- Subscribing to a guild's threads can make Discord send the guild again. That isn't
+            -- a join, so loading it as one would mark everything in it as read.
+            case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                IsMember ->
+                    ( { model | discordGuilds = discordGuilds }, Command.none )
+
+                IsOwner ->
+                    ( { model | discordGuilds = discordGuilds }, Command.none )
+
+                IsNotMember ->
+                    ( { model | discordGuilds = discordGuilds }
+                    , loadJoinedOrCreatedGuildData model.serverSecret discordUserId gatewayGuild
+                    )
+
+        Nothing ->
+            ( { model | discordGuilds = discordGuilds }
+            , loadJoinedOrCreatedGuildData model.serverSecret discordUserId gatewayGuild
+            )
+
+
+loadJoinedOrCreatedGuildData :
+    SecretId ServerSecret
+    -> Discord.Id Discord.UserId
+    -> Discord.GatewayGuild
+    -> Command BackendOnly ToFrontend BackendMsg
+loadJoinedOrCreatedGuildData secretKey discordUserId gatewayGuild =
+    getDiscordGuildData secretKey gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
         |> Task.andThen (\result -> Task.map (Tuple.pair result) Time.now)
@@ -2665,7 +2660,6 @@ handleJoinOrCreateGuild discordUserId gatewayGuild model =
                     time
                     result
             )
-    )
 
 
 handleChannelUpdated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -3168,31 +3162,52 @@ loadMessageAttachment secretKey attachment =
         |> Task.onError (\error -> Task.succeed (Err error))
 
 
+{-| A forwarded message keeps its attachments in its snapshots rather than in the message
+itself. They're all stored together on the at-chat message, the message's own first.
+-}
+attachmentsIncludingForwarded :
+    { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
+    -> List Discord.Attachment
+attachmentsIncludingForwarded message =
+    case message.messageSnapshots of
+        Included snapshots ->
+            message.attachments ++ List.concatMap .attachments snapshots
+
+        Missing ->
+            message.attachments
+
+
+{-| The file id is the attachment's position in `attachmentsIncludingForwarded`, counting from
+1, even if an attachment before it failed to load. That's how `RichText.fromDiscord` knows
+which files belong to which forwarded message.
+-}
 messageToFileData :
-    { a | attachments : List Discord.Attachment }
+    { a | attachments : List Discord.Attachment, messageSnapshots : OptionalData (List Discord.MessageSnapshot) }
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
 messageToFileData message discordAttachments =
-    List.filterMap
-        (\attachment ->
-            case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
-                Just { fileHash, metadata } ->
-                    { fileData = attachmentsToFileData attachment fileHash metadata
-                    , isSpoilered =
-                        case attachment.flags of
-                            Included flag ->
-                                flag.isSpoiler
+    attachmentsIncludingForwarded message
+        |> List.indexedMap Tuple.pair
+        |> List.filterMap
+            (\( index, attachment ) ->
+                case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
+                    Just { fileHash, metadata } ->
+                        ( Id.fromInt (index + 1)
+                        , { fileData = attachmentsToFileData attachment fileHash metadata
+                          , isSpoilered =
+                                case attachment.flags of
+                                    Included flag ->
+                                        flag.isSpoiler
 
-                            Missing ->
-                                False
-                    }
-                        |> Just
+                                    Missing ->
+                                        False
+                          }
+                        )
+                            |> Just
 
-                Nothing ->
-                    Nothing
-        )
-        message.attachments
-        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+                    Nothing ->
+                        Nothing
+            )
         |> SeqDict.fromList
 
 
@@ -3698,7 +3713,14 @@ handleReadyData userId authentication readyData model =
 
                                                 else
                                                     getNewChannelMessages model.serverSecret authentication channel.id
-                                                        |> Task.map (Tuple.pair channel.id)
+                                                        |> Task.andThen
+                                                            (\messages ->
+                                                                getNewThreadsForMessages model.serverSecret authentication messages
+                                                                    |> Task.map
+                                                                        (\threads ->
+                                                                            ( channel.id, { messages = messages, threads = threads } )
+                                                                        )
+                                                            )
                                                         |> Just
 
                                             Nothing ->
@@ -3713,7 +3735,9 @@ handleReadyData userId authentication readyData model =
                             (\( dmChannels, channelMessages ) ->
                                 uploadAttachmentsForMessages
                                     model
-                                    (List.concatMap .messages dmChannels ++ List.concatMap Tuple.second channelMessages)
+                                    (List.concatMap .messages dmChannels
+                                        ++ List.concatMap (\( _, reload ) -> LocalState.discordChannelReloadMessages reload) channelMessages
+                                    )
                                     |> Task.map
                                         (\attachments ->
                                             { dmChannels = dmChannels
@@ -3889,7 +3913,7 @@ uploadAttachmentsForMessages model messages =
                     else
                         Just ( DiscordAttachmentId.fromUrl attachment.url, attachment )
                 )
-                message.attachments
+                (attachmentsIncludingForwarded message)
         )
         messages
         |> SeqDict.fromList
@@ -3958,6 +3982,40 @@ getThreadsForMessages :
     -> List Discord.Message
     -> Task BackendOnly x (List DiscordThreadReload)
 getThreadsForMessages secretKey authentication messages =
+    threadIdsOfMessages messages
+        |> List.map
+            (\threadId ->
+                getManyMessages
+                    secretKey
+                    authentication
+                    { channelId = threadId, limit = reloadThreadMaxMessages }
+                    |> Task.onError (\_ -> Task.succeed [])
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
+            )
+        |> Task.sequence
+
+
+{-| Loads the most recent messages of the threads hanging off the messages of a channel we
+didn't have before a Discord account's data was loaded. Reading a thread doesn't require
+joining it, so this works for threads the account isn't in.
+-}
+getNewThreadsForMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> List Discord.Message
+    -> Task BackendOnly x (List DiscordThreadReload)
+getNewThreadsForMessages secretKey authentication messages =
+    threadIdsOfMessages messages
+        |> List.map
+            (\threadId ->
+                getNewChannelMessages secretKey authentication threadId
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
+            )
+        |> Task.sequence
+
+
+threadIdsOfMessages : List Discord.Message -> List (Discord.Id Discord.ChannelId)
+threadIdsOfMessages messages =
     List.filterMap
         (\message ->
             case message.flags of
@@ -3974,16 +4032,6 @@ getThreadsForMessages secretKey authentication messages =
         )
         messages
         |> List.Extra.uniqueBy Discord.idToString
-        |> List.map
-            (\threadId ->
-                getManyMessages
-                    secretKey
-                    authentication
-                    { channelId = threadId, limit = reloadThreadMaxMessages }
-                    |> Task.onError (\_ -> Task.succeed [])
-                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
-            )
-        |> Task.sequence
 
 
 {-| Loads everything in a guild forum channel.

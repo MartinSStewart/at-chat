@@ -80,7 +80,6 @@ type BackendMsgLog
     | BackendMsgLog_DiscordGotDmMessageEmbed
     | BackendMsgLog_DiscordGotDataForJoinedOrCreatedGuild
     | BackendMsgLog_DiscordGotGuildIcon
-    | BackendMsgLog_JoinedDiscordThread
     | BackendMsgLog_ToBackendCompleted
     | BackendMsgLog_GotDiscordReadyDataStickers
     | BackendMsgLog_GotDiscordMessageStickers
@@ -310,9 +309,6 @@ backendMsgLogToString log =
 
         BackendMsgLog_DiscordGotGuildIcon ->
             "DiscordGotGuildIcon"
-
-        BackendMsgLog_JoinedDiscordThread ->
-            "JoinedDiscordThread"
 
         BackendMsgLog_ToBackendCompleted ->
             "ToBackendCompleted"

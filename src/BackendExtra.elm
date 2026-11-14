@@ -3462,9 +3462,6 @@ backendMsgLog msg =
         DiscordGotGuildIcon _ _ ->
             BackendMsgLog_DiscordGotGuildIcon
 
-        JoinedDiscordThread _ _ _ ->
-            BackendMsgLog_JoinedDiscordThread
-
         ToBackendCompleted _ _ _ ->
             BackendMsgLog_ToBackendCompleted
 
@@ -3767,6 +3764,15 @@ toBackendLog toBackend =
 
                 Local_SetMuteSlackThread _ _ _ _ _ ->
                     ToBackendLog_Local_SetMuteSlackThread
+
+                Local_SetMuteDiscordDm _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordDm
+
+                Local_SetMuteSlackDm _ _ _ ->
+                    ToBackendLog_Local_SetMuteSlackDm
+
+                Local_SetMuteSlackDmThread _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteSlackDmThread
 
                 Local_RequestE2ee _ ->
                     ToBackendLog_Local_RequestE2ee
