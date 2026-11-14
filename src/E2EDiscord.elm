@@ -116,6 +116,11 @@ checkDmVisibleMessageCount admin isExpected data =
         )
 
 
+channelMadeWhileAwayId : Discord.Id Discord.ChannelId
+channelMadeWhileAwayId =
+    Unsafe.uint64 "1533300000000000001" |> Discord.idFromUInt64
+
+
 leftGuildId : Discord.Id Discord.GuildId
 leftGuildId =
     Unsafe.uint64 "213136010802888706" |> Discord.idFromUInt64
@@ -315,87 +320,176 @@ checkDiscordGuild admin expected data =
         )
 
 
+{-| Changes the `d` object of a READY event.
+-}
+editReadyData :
+    (List ( String, Json.Decode.Value ) -> Result String (List ( String, Json.Encode.Value )))
+    -> String
+    -> Result String String
+editReadyData edit ready =
+    case Json.Decode.decodeString (Json.Decode.keyValuePairs Json.Decode.value) ready of
+        Ok top ->
+            case List.Extra.find (\( key, _ ) -> key == "d") top of
+                Just ( _, dValue ) ->
+                    case Json.Decode.decodeValue (Json.Decode.keyValuePairs Json.Decode.value) dValue of
+                        Ok d ->
+                            case edit d of
+                                Ok d2 ->
+                                    List.map
+                                        (\( key, value ) ->
+                                            if key == "d" then
+                                                ( key, Json.Encode.object d2 )
+
+                                            else
+                                                ( key, value )
+                                        )
+                                        top
+                                        |> Json.Encode.object
+                                        |> Json.Encode.encode 0
+                                        |> Ok
+
+                                Err error ->
+                                    Err error
+
+                        Err error ->
+                            Err (Json.Decode.errorToString error)
+
+                Nothing ->
+                    Err "READY has no d field"
+
+        Err error ->
+            Err (Json.Decode.errorToString error)
+
+
+readyGuildId : Json.Decode.Value -> Maybe String
+readyGuildId guild =
+    Json.Decode.decodeValue (Json.Decode.at [ "properties", "id" ] Json.Decode.string) guild |> Result.toMaybe
+
+
 {-| The READY event with a guild taken out, as though the account left it while the gateway was
 disconnected. `merged_members` holds the account's member data in the same order as `guilds`, so
 the guild's entry there is taken out too.
 -}
 readyWithoutGuild : String -> String -> Result String String
 readyWithoutGuild guildId ready =
-    let
-        decoder :
-            Json.Decode.Decoder
-                { top : List ( String, Json.Decode.Value )
-                , d : List ( String, Json.Decode.Value )
-                , guilds : List ( String, Json.Decode.Value )
-                , mergedMembers : List Json.Decode.Value
-                }
-        decoder =
-            Json.Decode.map4
-                (\top d guilds mergedMembers -> { top = top, d = d, guilds = guilds, mergedMembers = mergedMembers })
-                (Json.Decode.keyValuePairs Json.Decode.value)
-                (Json.Decode.field "d" (Json.Decode.keyValuePairs Json.Decode.value))
-                (Json.Decode.at
-                    [ "d", "guilds" ]
-                    (Json.Decode.list
-                        (Json.Decode.map2
-                            Tuple.pair
-                            (Json.Decode.at [ "properties", "id" ] Json.Decode.string)
-                            Json.Decode.value
-                        )
-                    )
+    editReadyData
+        (\d ->
+            case
+                ( Json.Decode.decodeValue (Json.Decode.list Json.Decode.value) (fieldOrNull "guilds" d)
+                , Json.Decode.decodeValue (Json.Decode.list Json.Decode.value) (fieldOrNull "merged_members" d)
                 )
-                (Json.Decode.at [ "d", "merged_members" ] (Json.Decode.list Json.Decode.value))
-    in
-    case Json.Decode.decodeString decoder ready of
-        Ok { top, d, guilds, mergedMembers } ->
-            let
-                kept : List ( Json.Decode.Value, Json.Decode.Value )
-                kept =
-                    List.map2 Tuple.pair guilds mergedMembers
-                        |> List.filterMap
-                            (\( ( id, guild ), member ) ->
-                                if id == guildId then
-                                    Nothing
+            of
+                ( Ok guilds, Ok mergedMembers ) ->
+                    let
+                        kept : List ( Json.Decode.Value, Json.Decode.Value )
+                        kept =
+                            List.map2 Tuple.pair guilds mergedMembers
+                                |> List.filter (\( guild, _ ) -> readyGuildId guild /= Just guildId)
+                    in
+                    if List.length kept == List.length guilds then
+                        Err ("READY has no guild with the id " ++ guildId)
 
-                                else
-                                    Just ( guild, member )
+                    else
+                        List.map
+                            (\( key, value ) ->
+                                case key of
+                                    "guilds" ->
+                                        ( key, Json.Encode.list Tuple.first kept )
+
+                                    "merged_members" ->
+                                        ( key, Json.Encode.list Tuple.second kept )
+
+                                    _ ->
+                                        ( key, value )
                             )
+                            d
+                            |> Ok
 
-                d2 : List ( String, Json.Encode.Value )
-                d2 =
-                    List.map
-                        (\( key, value ) ->
-                            case key of
-                                "guilds" ->
-                                    ( key, Json.Encode.list Tuple.first kept )
+                _ ->
+                    Err "READY's guilds or merged_members couldn't be read"
+        )
+        ready
 
-                                "merged_members" ->
-                                    ( key, Json.Encode.list Tuple.second kept )
 
-                                _ ->
-                                    ( key, value )
-                        )
-                        d
-            in
-            if List.length kept == List.length guilds then
-                Err ("READY has no guild with the id " ++ guildId)
+{-| The READY event with more items in one of a guild's lists, such as `channels` or `threads`, as
+though they were created while the gateway was disconnected.
+-}
+readyWithGuildListItems : String -> String -> List String -> String -> Result String String
+readyWithGuildListItems guildId listField items ready =
+    case Json.Decode.decodeString (Json.Decode.list Json.Decode.value) ("[" ++ String.join "," items ++ "]") of
+        Ok newItems ->
+            editReadyData
+                (\d ->
+                    case Json.Decode.decodeValue (Json.Decode.list Json.Decode.value) (fieldOrNull "guilds" d) of
+                        Ok guilds ->
+                            List.map
+                                (\( key, value ) ->
+                                    if key == "guilds" then
+                                        ( key
+                                        , Json.Encode.list
+                                            (\guild ->
+                                                if readyGuildId guild == Just guildId then
+                                                    case Json.Decode.decodeValue (Json.Decode.keyValuePairs Json.Decode.value) guild of
+                                                        Ok fields ->
+                                                            List.map
+                                                                (\( key2, value2 ) ->
+                                                                    if key2 == listField then
+                                                                        case Json.Decode.decodeValue (Json.Decode.list Json.Decode.value) value2 of
+                                                                            Ok existingItems ->
+                                                                                ( key2, Json.Encode.list identity (existingItems ++ newItems) )
 
-            else
-                List.map
-                    (\( key, value ) ->
-                        if key == "d" then
-                            ( key, Json.Encode.object d2 )
+                                                                            Err _ ->
+                                                                                ( key2, value2 )
 
-                        else
-                            ( key, value )
-                    )
-                    top
-                    |> Json.Encode.object
-                    |> Json.Encode.encode 0
-                    |> Ok
+                                                                    else
+                                                                        ( key2, value2 )
+                                                                )
+                                                                fields
+                                                                |> Json.Encode.object
+
+                                                        Err _ ->
+                                                            guild
+
+                                                else
+                                                    guild
+                                            )
+                                            guilds
+                                        )
+
+                                    else
+                                        ( key, value )
+                                )
+                                d
+                                |> Ok
+
+                        Err error ->
+                            Err (Json.Decode.errorToString error)
+                )
+                ready
 
         Err error ->
             Err (Json.Decode.errorToString error)
+
+
+fieldOrNull : String -> List ( String, Json.Decode.Value ) -> Json.Decode.Value
+fieldOrNull field fields =
+    case List.Extra.find (\( key, _ ) -> key == field) fields of
+        Just ( _, value ) ->
+            value
+
+        Nothing ->
+            Json.Encode.null
+
+
+{-| An active thread in channel B as READY lists it.
+-}
+channelBThread : String -> String -> String
+channelBThread threadId lastMessageId =
+    """{"type":11,"id":\""""
+        ++ threadId
+        ++ """","guild_id":"705745250815311942","parent_id":"1072828591382999151","owner_id":"161098476632014848","name":"Thread","last_message_id":\""""
+        ++ lastMessageId
+        ++ """","flags":0,"rate_limit_per_user":0,"member_count":1,"message_count":1,"total_message_sent":1,"member_ids_preview":[],"thread_metadata":{"locked":false,"create_timestamp":"2026-04-03T09:05:00.000000+00:00","auto_archive_duration":4320,"archived":false,"archive_timestamp":"2026-04-03T09:05:00.000000+00:00"}}"""
 
 
 {-| Checks which Discord guilds the admin's frontend can see and which ones the backend
@@ -3817,6 +3911,102 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
                 , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
                 , T.checkState 100 (checkDiscordGuilds admin { frontend = [ "Bot Test" ], backend = [ "Bot Test" ] })
+                , T.checkState 100 checkNoDiscordParseErrors
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Messages sent while the gateway couldn't resume are caught up on the next READY"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ checkDiscordChannelMessages
+                            "channel B"
+                            E2EHelper.botTestGuild_ChannelB
+                            [ "Older channel B message", "Newer channel B message" ]
+                        , T.websocketSendString 100 connection """{"t":null,"s":null,"op":9,"d":false}"""
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        -- Channel B and the DM with kess have newer messages than we do, the thread
+                        -- on the older channel B message has a new reply, and a new message in
+                        -- channel B has had a thread started on it. Channel B was also renamed and
+                        -- a channel was made.
+                        case
+                            discordOp0Ready
+                                |> String.replace "1482032121324372184" "1533200000000000012"
+                                |> String.replace "222087309351321612" "1533200000000000014"
+                                |> String.replace "\"name\": \"channel-b\"" "\"name\": \"channel-b-renamed\""
+                                |> readyWithGuildListItems
+                                    "705745250815311942"
+                                    "threads"
+                                    [ channelBThread "1533200000000000001" "1533200000000000013"
+                                    , channelBThread "1533200000000000012" "1533200000000000015"
+                                    ]
+                                |> Result.andThen
+                                    (readyWithGuildListItems
+                                        "705745250815311942"
+                                        "channels"
+                                        [ """{"type":0,"id":"1533300000000000001","name":"made-while-away","parent_id":"705745250815311945","position":5,"permission_overwrites":[],"topic":null,"rate_limit_per_user":0,"flags":0,"last_message_id":"1533300000000000002"}""" ]
+                                    )
+                        of
+                            Ok ready ->
+                                [ T.websocketSendString 100 connection ready
+                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                ]
+
+                            Err error ->
+                                [ T.checkState 0 (\_ -> Err error) ]
+                    )
+                , checkDiscordChannelMessages
+                    "channel B"
+                    E2EHelper.botTestGuild_ChannelB
+                    [ "Older channel B message", "Newer channel B message", "Sent while away", "Thread started while away" ]
+                , checkDiscordChannelThreads
+                    "channel B"
+                    E2EHelper.botTestGuild_ChannelB
+                    [ ( 0, [ "Older channel B thread message", "Newer channel B thread message", "Thread reply while away" ] )
+                    , ( 3, [ "In the thread started while away" ] )
+                    ]
+                , T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get kessDmChannelId (E2EHelper.unwrapBackend data.backend).discordDmChannels of
+                            Just dmChannel ->
+                                case IdArray.toList dmChannel.messages |> List.map (discordMessageToString data.backend) of
+                                    [ "Old DM message", "DM sent while away" ] ->
+                                        Ok ()
+
+                                    actual ->
+                                        Err ("Expected the DM to have caught up but it contains " ++ messagesToDebugString actual)
+
+                            Nothing ->
+                                Err "The DM is missing from the backend"
+                    )
+                , checkDiscordChannelMessages
+                    "the channel made while away"
+                    channelMadeWhileAwayId
+                    [ "First message in the channel made while away" ]
+                , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "channel-b-renamed" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "made-while-away" ])
+                , admin.click 100 (Dom.id "guild_openChannel_1072828591382999151")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Sent while away" ])
                 , T.checkState 100 checkNoDiscordParseErrors
                 ]
             )

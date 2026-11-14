@@ -978,6 +978,7 @@ type BackendMsg
     | GotTimeForBackendMsg Time.Posix BackendMsg
     | BackendMsgCompleted BackendMsgLog { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordCatchUpMessages (List Discord.Message) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotSlackCustomEmojis (Slack.Id Slack.TeamId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix

@@ -82,6 +82,7 @@ type BackendMsgLog
     | BackendMsgLog_DiscordGotGuildIcon
     | BackendMsgLog_ToBackendCompleted
     | BackendMsgLog_GotDiscordReadyDataStickers
+    | BackendMsgLog_GotDiscordCatchUpMessages
     | BackendMsgLog_GotDiscordMessageStickers
     | BackendMsgLog_GotDiscordReadyDataCustomEmojis
     | BackendMsgLog_GotSlackCustomEmojis
@@ -315,6 +316,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_GotDiscordReadyDataStickers ->
             "GotDiscordReadyDataStickers"
+
+        BackendMsgLog_GotDiscordCatchUpMessages ->
+            "GotDiscordCatchUpMessages"
 
         BackendMsgLog_GotDiscordMessageStickers ->
             "GotDiscordMessageStickers"
