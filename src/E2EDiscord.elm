@@ -2159,6 +2159,39 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord bulk reaction add"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ reloadDiscordChannelA admin (ChangeId 0)
+                        , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            ("{\"t\":\"MESSAGE_REACTION_ADD_MANY\",\"s\":239,\"op\":0,\"d\":{\"reactions\":[{\"users\":[\"161098476632014848\",\""
+                                ++ reactingUserId 1
+                                ++ "\"],\"emoji\":{\"name\":\"💯\",\"id\":null}},{\"users\":[\""
+                                ++ reactingUserId 2
+                                ++ "\"],\"emoji\":{\"name\":\"🎉\",\"id\":null}}],\"message_id\":\"1533000000000000001\",\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\"}}"
+                            )
+                        , checkDiscordChannelAMessages
+                            [ "Old message 💯×2 🎉×1", "Stand-alone thread", "Hello from history" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord guild typing indicator"
         E2EHelper.startTime
         normalConfig
