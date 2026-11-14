@@ -2337,9 +2337,6 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
             ( "DELETE", [ "discord.com", "api", "v9", "channels", _, "messages", _, "reactions", _, "@me" ] ) ->
                 StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
 
-            ( "PUT", [ "discord.com", "api", "v9", "channels", _, "thread-members", "@me" ] ) ->
-                StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
-
             _ ->
                 let
                     _ =

@@ -45,7 +45,6 @@ type Log
     | FailedToParseDiscordWebsocket (Maybe String) String
     | FailedToGetDataForJoinedOrCreatedDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) Discord.HttpError
     | FailedToReloadDiscordGuild (Discord.Id Discord.GuildId) Discord.HttpError
-    | JoinedDiscordThreadFailed (Discord.Id Discord.GuildId) Discord.HttpError
     | EmptyDiscordMessage String
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
     | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
@@ -127,9 +126,6 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToReloadDiscordGuild _ _ ->
-            Nothing
-
-        JoinedDiscordThreadFailed _ _ ->
             Nothing
 
         EmptyDiscordMessage _ ->
@@ -505,14 +501,6 @@ logContent onPressCopy emojiData customEmojis log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Reloading Discord guild failed"
-                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
-                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
-                ]
-
-        JoinedDiscordThreadFailed guildId httpError ->
-            Ui.column
-                [ Ui.spacing 4 ]
-                [ tag errorTag "Joining Discord thread failed"
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]

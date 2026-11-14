@@ -719,6 +719,9 @@ addDiscordChannel discordChannel =
 
                 Discord.GuildMedia ->
                     False
+
+                Discord.GuildServerHub ->
+                    False
     in
     if isTextChannel then
         { name =
@@ -957,20 +960,6 @@ taskResult task =
 nonemptyTaskSequence : Nonempty (Task restriction x a) -> Task restriction x (Nonempty a)
 nonemptyTaskSequence nonempty =
     Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
-
-
-joinThread :
-    SecretId ServerSecret
-    -> Discord.UserAuth
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.MessageId
-    -> Command BackendOnly toMsg BackendMsg
-joinThread secretKey authentication guildId threadId =
-    Discord.joinThreadPayload (Discord.userToken authentication) threadId
-        |> http secretKey
-        |> taskResult
-        |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
-        |> Task.perform identity
 
 
 handleCreateMessage :
@@ -1674,15 +1663,14 @@ Discord sends this event for threads the user is added to as well as for threads
 just created, so a post we already have is left alone.
 
 -}
-handleForumPostCreated : Discord.UserAuth -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleForumPostCreated authentication thread model =
+handleForumPostCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostCreated thread model =
     case ( thread.guildId, thread.parentId, thread.name ) of
         ( Included guildId, Included (Just forumId), Included name ) ->
             case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
                 ( Included ownerId, Just ( guild, channel ) ) ->
                     if channel.isForum then
                         addForumPost
-                            authentication
                             { guildId = guildId
                             , forumId = forumId
                             , threadId = thread.id
@@ -1706,19 +1694,17 @@ handleForumPostCreated authentication thread model =
 
 
 addForumPost :
-    Discord.UserAuth
-    ->
-        { guildId : Discord.Id Discord.GuildId
-        , forumId : Discord.Id Discord.ChannelId
-        , threadId : Discord.Id Discord.ChannelId
-        , name : String
-        , ownerId : Discord.Id Discord.UserId
-        }
+    { guildId : Discord.Id Discord.GuildId
+    , forumId : Discord.Id Discord.ChannelId
+    , threadId : Discord.Id Discord.ChannelId
+    , name : String
+    , ownerId : Discord.Id Discord.UserId
+    }
     -> DiscordBackendGuild
     -> DiscordBackendChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addForumPost authentication post guild channel model =
+addForumPost post guild channel model =
     let
         createdAt : Time.Posix
         createdAt =
@@ -1781,14 +1767,6 @@ addForumPost authentication post guild channel model =
                         |> ServerChange
                     )
                     model2
-
-                -- The post's text and the replies to it are written in the thread, and we
-                -- only get told about messages in a thread we're a member of
-                , joinThread
-                    model2.serverSecret
-                    authentication
-                    post.guildId
-                    (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
                 , Command.batch notificationCmds
                 ]
             )
@@ -2137,19 +2115,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments =
                                     messageToFileData message model2.discordAttachments
 
-                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
-                                joinThreadCmd =
-                                    case ( message.guildId, message.flags ) of
-                                        ( Included guildId, Included flags ) ->
-                                            if flags.hasThread then
-                                                joinThread model2.serverSecret userData.auth guildId message.id
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
                                 ( model3, stickerCmds ) =
                                     case message.stickerItems of
                                         Included stickers ->
@@ -2256,8 +2221,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             of
                                 ( False, Just nonempty ) ->
                                     ( model4
-                                    , joinThreadCmd
-                                        :: stickerCmds
+                                    , stickerCmds
                                         :: customEmojiCmds
                                         :: Task.perform
                                             (DiscordMessageCreate_AttachmentsUploaded message)
@@ -2281,8 +2245,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                 model4
                                     in
                                     ( model5
-                                    , joinThreadCmd
-                                        :: stickerCmds
+                                    , stickerCmds
                                         :: customEmojiCmds
                                         :: cmd2
                                         :: cmds
@@ -2307,15 +2270,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                                 attachments =
                                     messageToFileData edit model2.discordAttachments
-
-                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
-                                joinThreadCmd =
-                                    case ( edit.guildId, edit.flags.hasThread ) of
-                                        ( Included guildId, True ) ->
-                                            joinThread model2.serverSecret userData.auth guildId edit.id
-
-                                        _ ->
-                                            Command.none
                             in
                             case ( SeqDict.size attachments == List.length edit.attachments, List.Nonempty.fromList edit.attachments ) of
                                 ( False, Just nonempty ) ->
@@ -2323,7 +2277,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     , Task.perform
                                         (DiscordMessageUpdate_AttachmentsUploaded edit)
                                         (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model2.serverSecret) nonempty))
-                                        :: joinThreadCmd
                                         :: cmds
                                     )
 
@@ -2332,7 +2285,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         ( model3, cmd2 ) =
                                             handleEditMessage edit attachments model2
                                     in
-                                    ( model3, cmd2 :: joinThreadCmd :: cmds )
+                                    ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
@@ -2359,7 +2312,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread thread ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleForumPostCreated userData.auth thread model2
+                                    handleForumPostCreated thread model2
                             in
                             ( model3, cmd2 :: cmds )
 
