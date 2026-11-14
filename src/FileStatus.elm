@@ -19,7 +19,7 @@ module FileStatus exposing
     , Orientation(..)
     , PeerToPeerFile
     , PeerToPeerFileState(..)
-    , PeerToPeerId
+    , PeerToPeerId(..)
     , UploadResponse
     , UploadUrlRequest
     , VideoMetadata
