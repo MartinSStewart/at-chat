@@ -116,6 +116,11 @@ checkDmVisibleMessageCount admin isExpected data =
         )
 
 
+leftGuildId : Discord.Id Discord.GuildId
+leftGuildId =
+    Unsafe.uint64 "213136010802888706" |> Discord.idFromUInt64
+
+
 checkGuildVisibleMessageCountGuildId : Discord.Id Discord.GuildId
 checkGuildVisibleMessageCountGuildId =
     Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
@@ -308,6 +313,89 @@ checkDiscordGuild admin expected data =
                 Nothing ->
                     Err "The bot test guild is missing from the frontend"
         )
+
+
+{-| The READY event with a guild taken out, as though the account left it while the gateway was
+disconnected. `merged_members` holds the account's member data in the same order as `guilds`, so
+the guild's entry there is taken out too.
+-}
+readyWithoutGuild : String -> String -> Result String String
+readyWithoutGuild guildId ready =
+    let
+        decoder :
+            Json.Decode.Decoder
+                { top : List ( String, Json.Decode.Value )
+                , d : List ( String, Json.Decode.Value )
+                , guilds : List ( String, Json.Decode.Value )
+                , mergedMembers : List Json.Decode.Value
+                }
+        decoder =
+            Json.Decode.map4
+                (\top d guilds mergedMembers -> { top = top, d = d, guilds = guilds, mergedMembers = mergedMembers })
+                (Json.Decode.keyValuePairs Json.Decode.value)
+                (Json.Decode.field "d" (Json.Decode.keyValuePairs Json.Decode.value))
+                (Json.Decode.at
+                    [ "d", "guilds" ]
+                    (Json.Decode.list
+                        (Json.Decode.map2
+                            Tuple.pair
+                            (Json.Decode.at [ "properties", "id" ] Json.Decode.string)
+                            Json.Decode.value
+                        )
+                    )
+                )
+                (Json.Decode.at [ "d", "merged_members" ] (Json.Decode.list Json.Decode.value))
+    in
+    case Json.Decode.decodeString decoder ready of
+        Ok { top, d, guilds, mergedMembers } ->
+            let
+                kept : List ( Json.Decode.Value, Json.Decode.Value )
+                kept =
+                    List.map2 Tuple.pair guilds mergedMembers
+                        |> List.filterMap
+                            (\( ( id, guild ), member ) ->
+                                if id == guildId then
+                                    Nothing
+
+                                else
+                                    Just ( guild, member )
+                            )
+
+                d2 : List ( String, Json.Encode.Value )
+                d2 =
+                    List.map
+                        (\( key, value ) ->
+                            case key of
+                                "guilds" ->
+                                    ( key, Json.Encode.list Tuple.first kept )
+
+                                "merged_members" ->
+                                    ( key, Json.Encode.list Tuple.second kept )
+
+                                _ ->
+                                    ( key, value )
+                        )
+                        d
+            in
+            if List.length kept == List.length guilds then
+                Err ("READY has no guild with the id " ++ guildId)
+
+            else
+                List.map
+                    (\( key, value ) ->
+                        if key == "d" then
+                            ( key, Json.Encode.object d2 )
+
+                        else
+                            ( key, value )
+                    )
+                    top
+                    |> Json.Encode.object
+                    |> Json.Encode.encode 0
+                    |> Ok
+
+        Err error ->
+            Err (Json.Decode.errorToString error)
 
 
 {-| Checks which Discord guilds the admin's frontend can see and which ones the backend
@@ -3632,6 +3720,71 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , T.checkState 100 checkNoDiscordParseErrors
                         ]
                     )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A guild left while the gateway couldn't resume is dropped on the next READY"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.checkState
+                            100
+                            (checkDiscordGuilds admin { frontend = [ "test", "Bot Test" ], backend = [ "test", "Bot Test" ] })
+                        , T.websocketSendString 100 connection """{"t":null,"s":null,"op":9,"d":false}"""
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        case readyWithoutGuild "213136010802888706" discordOp0Ready of
+                            Ok ready ->
+                                [ T.websocketSendString 100 connection ready
+                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                ]
+
+                            Err error ->
+                                [ T.checkState 0 (\_ -> Err error) ]
+                    )
+                , -- The guild is kept, with history, until HourlyUpdate sees nobody linked is left in it
+                  T.checkState
+                    1000
+                    (checkDiscordGuilds admin { frontend = [ "Bot Test" ], backend = [ "test", "Bot Test" ] })
+                , T.checkBackend
+                    0
+                    (\backend ->
+                        case SeqDict.get leftGuildId (E2EHelper.unwrapBackend backend).discordGuilds of
+                            Just guild ->
+                                case MembersAndOwner.isMember E2EHelper.currentDiscordUserId guild.membersAndOwner of
+                                    MembersAndOwner.IsNotMember ->
+                                        Ok ()
+
+                                    MembersAndOwner.IsMember ->
+                                        Err "The linked account should no longer be a member of the guild it left"
+
+                                    MembersAndOwner.IsOwner ->
+                                        Err "The linked account shouldn't be the owner of the guild it left"
+
+                            Nothing ->
+                                Err "The guild should be kept until HourlyUpdate"
+                    )
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+                , T.checkState 100 (checkDiscordGuilds admin { frontend = [ "Bot Test" ], backend = [ "Bot Test" ] })
+                , T.checkState 100 checkNoDiscordParseErrors
                 ]
             )
         ]

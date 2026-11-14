@@ -2377,10 +2377,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
-                                ( model3, cmd2 ) =
-                                    handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model2
+                                ( model3, leftGuildsCmd ) =
+                                    removeFromGuildsMissingFromReady discordUserId readyData.guilds model2
+
+                                ( model4, readyCmd ) =
+                                    handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model3
                             in
-                            ( model3, cmd2 :: cmds )
+                            ( model4, leftGuildsCmd :: readyCmd :: cmds )
 
                         Discord.UserOutMsg_SupplementalReadyData readySupplementalData ->
                             let
@@ -2816,6 +2819,58 @@ handleLeftOrDeletedGuild discordUserId guildId model =
 
         Nothing ->
             ( model, Command.none )
+
+
+{-| READY lists every guild the account is in, so a guild it was a member of that isn't listed was
+left, or the account was removed from it, while we couldn't resume the gateway session.
+
+Only the membership is removed. If that leaves nobody linked who can see the guild, HourlyUpdate
+deletes it after its usual grace period. A guild the account owns is left alone, since READY can't
+tell us whether it was deleted or handed to someone else first.
+
+-}
+removeFromGuildsMissingFromReady :
+    Discord.Id Discord.UserId
+    -> List Discord.GatewayGuild
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+removeFromGuildsMissingFromReady discordUserId readyGuilds model =
+    let
+        readyGuildIds : SeqSet (Discord.Id Discord.GuildId)
+        readyGuildIds =
+            List.map (\guild -> guild.properties.id) readyGuilds |> SeqSet.fromList
+    in
+    SeqDict.foldl
+        (\guildId guild ( model2, cmds ) ->
+            if SeqSet.member guildId readyGuildIds then
+                ( model2, cmds )
+
+            else
+                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                    IsMember ->
+                        ( { model2
+                            | discordGuilds =
+                                SeqDict.insert
+                                    guildId
+                                    { guild | membersAndOwner = MembersAndOwner.removeMember discordUserId guild.membersAndOwner }
+                                    model2.discordGuilds
+                          }
+                        , Broadcast.toDiscordGuild
+                            guildId
+                            (Server_DiscordGuildLeftOrDeleted discordUserId guildId |> ServerChange)
+                            model2
+                            :: cmds
+                        )
+
+                    IsOwner ->
+                        ( model2, cmds )
+
+                    IsNotMember ->
+                        ( model2, cmds )
+        )
+        ( model, [] )
+        model.discordGuilds
+        |> Tuple.mapSecond Command.batch
 
 
 hasLinkedDiscordUser :
