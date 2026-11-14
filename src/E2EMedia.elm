@@ -800,7 +800,7 @@ imageRowTest imageUploadConfig =
                             html
                             |> Test.Html.Query.count (Expect.greaterThan 0)
                     )
-                , admin.snapshotView 100 { name = "Images side by side" }
+                , E2EHelper.tallSnapshot admin 100 { name = "Images side by side" }
                 ]
             )
         ]
