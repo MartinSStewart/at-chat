@@ -98,7 +98,8 @@ messagesAndLinks slackFiles customEmojis messages =
     )
 
 
-{-| A conversation built from its history, newest first as Slack gives it.
+{-| A conversation built from its history, newest first as Slack gives it. Replies that were also
+sent to the channel are in the history too, but they're left to their thread.
 -}
 conversationFromHistory :
     SeqDict (Slack.Id Slack.FileId) SlackFileData
@@ -112,7 +113,18 @@ conversationFromHistory :
 conversationFromHistory slackFiles customEmojis history =
     let
         ( messages, linkedMessageIds ) =
-            messagesAndLinks slackFiles customEmojis (List.reverse history.messages)
+            List.filter
+                (\message ->
+                    case message.inThread of
+                        Slack.NotAReply ->
+                            True
+
+                        Slack.ReplyTo _ ->
+                            False
+                )
+                history.messages
+                |> List.reverse
+                |> messagesAndLinks slackFiles customEmojis
     in
     { messages = messages
     , linkedMessageIds = linkedMessageIds
@@ -356,9 +368,6 @@ handleSlackWebsocketEvent linkedUser event model =
 
                                     Slack.ReplyTo slackParentId ->
                                         parentId slackParentId
-
-                                    Slack.BroadcastReplyTo slackParentId ->
-                                        NoThread :: parentId slackParentId
                         in
                         List.foldl
                             (\threadRoute ( model2, cmds ) ->

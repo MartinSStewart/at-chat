@@ -619,12 +619,11 @@ type alias Reaction =
 
 
 {-| A thread's parent isn't in it, only its replies are. A reply that was also sent to the channel
-shows up in both.
+counts as a reply, so it only shows up in the thread.
 -}
 type InThread
     = NotAReply
     | ReplyTo (Id MessageId)
-    | BroadcastReplyTo (Id MessageId)
 
 
 {-| A conversation's newest messages, and the replies of each of them that has a thread.
@@ -1355,9 +1354,6 @@ decodeMessage =
                                 Just threadTs ->
                                     if threadTs == ts then
                                         NotAReply
-
-                                    else if subtype == "thread_broadcast" then
-                                        BroadcastReplyTo (Id threadTs)
 
                                     else
                                         ReplyTo (Id threadTs)
