@@ -4007,6 +4007,27 @@ discordChannelHistory channelId =
     {"id":"1533096050000000000","channel_id":"1533000000000000001","content":"","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":21,"flags":0,"message_reference":{"type":0,"message_id":"1533000000000000001","guild_id":"705745250815311942","channel_id":"1072828564317159465"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
 ]"""
 
+    else if channelId == botTestGuild_ChannelBString then
+        -- What was sent while the gateway couldn't resume, as far back as the newest message we
+        -- already have
+        """[
+    {"id":"1533200000000000012","channel_id":"1072828591382999151","content":"Thread started while away","timestamp":"2026-04-03T10:20:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533200000000000011","channel_id":"1072828591382999151","content":"Sent while away","timestamp":"2026-04-03T10:10:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533200000000000002","channel_id":"1072828591382999151","content":"Newer channel B message","timestamp":"2026-04-03T10:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533200000000000001" then
+        """[
+    {"id":"1533200000000000013","channel_id":"1533200000000000001","content":"Thread reply while away","timestamp":"2026-04-03T10:15:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533200000000000005","channel_id":"1533200000000000001","content":"Newer channel B thread message","timestamp":"2026-04-03T09:20:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+]"""
+
+    else if channelId == "222087308516524036" then
+        """[
+    {"id":"1533200000000000014","channel_id":"222087308516524036","content":"DM sent while away","timestamp":"2026-04-03T11:30:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"kess","public_flags":0,"id":"168547048902098944","global_name":"Kess","discriminator":"0","avatar":"3e00277cfa8d0a40e05c8cda1b0dffd9"}},
+    {"id":"1533200000000000003","channel_id":"222087308516524036","content":"Old DM message","timestamp":"2026-04-03T11:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"kess","public_flags":0,"id":"168547048902098944","global_name":"Kess","discriminator":"0","avatar":"3e00277cfa8d0a40e05c8cda1b0dffd9"}}
+]"""
+
     else if channelId == "1533000000000000002" then
         """[
     {"id":"1533096200000000000","channel_id":"1533000000000000002","content":"Message in stand-alone thread","timestamp":"2026-03-26T12:10:40.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
@@ -4042,6 +4063,18 @@ discordNewChannelHistory channelId =
         """[
     {"id":"1533200000000000005","channel_id":"1533200000000000001","content":"Newer channel B thread message","timestamp":"2026-04-03T09:20:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}},
     {"id":"1533200000000000004","channel_id":"1533200000000000001","content":"Older channel B thread message","timestamp":"2026-04-03T09:10:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+]"""
+
+    else if channelId == "1533300000000000001" then
+        -- A channel made while the gateway couldn't resume
+        """[
+    {"id":"1533300000000000002","channel_id":"1533300000000000001","content":"First message in the channel made while away","timestamp":"2026-04-03T10:30:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533200000000000012" then
+        -- A thread started while the gateway couldn't resume
+        """[
+    {"id":"1533200000000000015","channel_id":"1533200000000000012","content":"In the thread started while away","timestamp":"2026-04-03T10:25:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
 ]"""
 
     else if channelId == "222087308516524036" then

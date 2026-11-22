@@ -2384,6 +2384,9 @@ updateHelper msg model =
             , Command.none
             )
 
+        GotDiscordCatchUpMessages messages attachments ->
+            DiscordSync.handleCatchUpMessages messages attachments model
+
         GotDiscordReadyDataStickers userId results time ->
             let
                 ( errors, stickers, newStickers ) =

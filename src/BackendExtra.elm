@@ -3468,6 +3468,9 @@ backendMsgLog msg =
         GotDiscordReadyDataStickers _ _ _ ->
             BackendMsgLog_GotDiscordReadyDataStickers
 
+        GotDiscordCatchUpMessages _ _ ->
+            BackendMsgLog_GotDiscordCatchUpMessages
+
         GotDiscordMessageStickers _ _ _ ->
             BackendMsgLog_GotDiscordMessageStickers
 

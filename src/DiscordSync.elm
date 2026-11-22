@@ -11,6 +11,7 @@ module DiscordSync exposing
     , getManyMessages
     , getThreadsForMessages
     , getUserAvatars
+    , handleCatchUpMessages
     , handleCreateMessage
     , handleEditMessage
     , handleForumPostRenamed
@@ -964,6 +965,141 @@ taskResult task =
 nonemptyTaskSequence : Nonempty (Task restriction x a) -> Task restriction x (Nonempty a)
 nonemptyTaskSequence nonempty =
     Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
+
+
+{-| A message Discord told us about, either live or while catching up after a READY.
+-}
+handleUserCreatedMessage :
+    String
+    -> Discord.Message
+    -> BackendModel
+    -> ( BackendModel, List (Command BackendOnly ToFrontend BackendMsg) )
+handleUserCreatedMessage websocketJson message model2 =
+    let
+        attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
+        attachments =
+            messageToFileData message model2.discordAttachments
+
+        ( model3, stickerCmds ) =
+            case message.stickerItems of
+                Included stickers ->
+                    let
+                        stickerData =
+                            handleStickers
+                                model2.serverSecret
+                                (List.map
+                                    (\sticker ->
+                                        { id = sticker.id
+                                        , -- Assume that these are all custom stickers since we very likely have loaded all of the built-in stickers
+                                          stickerType = Discord.GuildSticker
+                                        , formatType = sticker.formatType
+                                        , name = sticker.name
+                                        }
+                                    )
+                                    stickers
+                                )
+                                { tasks = []
+                                , stickers = model2.stickers
+                                , discordStickers = model2.discordStickers
+                                }
+                    in
+                    ( { model2
+                        | stickers = stickerData.stickers
+                        , discordStickers = stickerData.discordStickers
+                      }
+                    , Task.sequence stickerData.tasks
+                        |> Task.andThen
+                            (\stickers2 ->
+                                Task.map
+                                    (GotDiscordMessageStickers
+                                        (case message.guildId of
+                                            Included guildId ->
+                                                MessageFromGuildOrDm_Guild guildId
+
+                                            Missing ->
+                                                Discord.idToUInt64 message.channelId
+                                                    |> Discord.idFromUInt64
+                                                    |> MessageFromGuildOrDm_Dm
+                                        )
+                                        stickers2
+                                    )
+                                    Time.now
+                            )
+                        |> Task.perform identity
+                    )
+
+                Missing ->
+                    ( model2, Command.none )
+
+        ( model4, customEmojiCmds ) =
+            let
+                customEmojisInMessage : List DiscordCustomEmojiIdAndName
+                customEmojisInMessage =
+                    RichText.customEmojisFromDiscord message.content
+
+                customEmojiData =
+                    handleCustomEmojis
+                        model3.serverSecret
+                        (customEmojisInMessage
+                            ++ (case message.reactions of
+                                    Included reactions ->
+                                        emojiDataToEmojiIdAndName (List.map .emoji reactions)
+
+                                    Missing ->
+                                        []
+                               )
+                        )
+                        { tasks = []
+                        , customEmojis = model3.customEmojis
+                        , discordCustomEmojis = model3.discordCustomEmojis
+                        }
+            in
+            ( { model3
+                | customEmojis = customEmojiData.customEmojis
+                , discordCustomEmojis = customEmojiData.discordCustomEmojis
+              }
+            , Task.sequence customEmojiData.tasks
+                |> Task.andThen
+                    (\customEmojis2 ->
+                        Task.map
+                            (GotDiscordMessageCustomEmojis
+                                (case message.guildId of
+                                    Included guildId ->
+                                        MessageFromGuildOrDm_Guild guildId
+
+                                    Missing ->
+                                        Discord.idToUInt64 message.channelId
+                                            |> Discord.idFromUInt64
+                                            |> MessageFromGuildOrDm_Dm
+                                )
+                                customEmojis2
+                            )
+                            Time.now
+                    )
+                |> Task.perform identity
+            )
+    in
+    case
+        ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded message)
+        , List.Nonempty.fromList (attachmentsIncludingForwarded message)
+        )
+    of
+        ( False, Just nonempty ) ->
+            ( model4
+            , [ stickerCmds
+              , customEmojiCmds
+              , Task.perform
+                    (DiscordMessageCreate_AttachmentsUploaded message)
+                    (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model4.serverSecret) nonempty))
+              ]
+            )
+
+        _ ->
+            let
+                ( model5, cmd2 ) =
+                    handleCreateMessage websocketJson message attachments model4
+            in
+            ( model5, [ stickerCmds, customEmojiCmds, cmd2 ] )
 
 
 handleCreateMessage :
@@ -2117,145 +2253,19 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
-                                attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
-                                attachments =
-                                    messageToFileData message model2.discordAttachments
+                                ( model3, messageCmds ) =
+                                    handleUserCreatedMessage
+                                        (case discordMsg of
+                                            Discord.GotWebsocketData data ->
+                                                data
 
-                                ( model3, stickerCmds ) =
-                                    case message.stickerItems of
-                                        Included stickers ->
-                                            let
-                                                stickerData =
-                                                    handleStickers
-                                                        model2.serverSecret
-                                                        (List.map
-                                                            (\sticker ->
-                                                                { id = sticker.id
-                                                                , -- Assume that these are all custom stickers since we very likely have loaded all of the built-in stickers
-                                                                  stickerType = Discord.GuildSticker
-                                                                , formatType = sticker.formatType
-                                                                , name = sticker.name
-                                                                }
-                                                            )
-                                                            stickers
-                                                        )
-                                                        { tasks = []
-                                                        , stickers = model2.stickers
-                                                        , discordStickers = model2.discordStickers
-                                                        }
-                                            in
-                                            ( { model2
-                                                | stickers = stickerData.stickers
-                                                , discordStickers = stickerData.discordStickers
-                                              }
-                                            , Task.sequence stickerData.tasks
-                                                |> Task.andThen
-                                                    (\stickers2 ->
-                                                        Task.map
-                                                            (GotDiscordMessageStickers
-                                                                (case message.guildId of
-                                                                    Included guildId ->
-                                                                        MessageFromGuildOrDm_Guild guildId
-
-                                                                    Missing ->
-                                                                        Discord.idToUInt64 message.channelId
-                                                                            |> Discord.idFromUInt64
-                                                                            |> MessageFromGuildOrDm_Dm
-                                                                )
-                                                                stickers2
-                                                            )
-                                                            Time.now
-                                                    )
-                                                |> Task.perform identity
-                                            )
-
-                                        Missing ->
-                                            ( model2, Command.none )
-
-                                ( model4, customEmojiCmds ) =
-                                    let
-                                        customEmojisInMessage : List DiscordCustomEmojiIdAndName
-                                        customEmojisInMessage =
-                                            RichText.customEmojisFromDiscord message.content
-
-                                        customEmojiData =
-                                            handleCustomEmojis
-                                                model3.serverSecret
-                                                (customEmojisInMessage
-                                                    ++ (case message.reactions of
-                                                            Included reactions ->
-                                                                emojiDataToEmojiIdAndName (List.map .emoji reactions)
-
-                                                            Missing ->
-                                                                []
-                                                       )
-                                                )
-                                                { tasks = []
-                                                , customEmojis = model3.customEmojis
-                                                , discordCustomEmojis = model3.discordCustomEmojis
-                                                }
-                                    in
-                                    ( { model3
-                                        | customEmojis = customEmojiData.customEmojis
-                                        , discordCustomEmojis = customEmojiData.discordCustomEmojis
-                                      }
-                                    , Task.sequence customEmojiData.tasks
-                                        |> Task.andThen
-                                            (\customEmojis2 ->
-                                                Task.map
-                                                    (GotDiscordMessageCustomEmojis
-                                                        (case message.guildId of
-                                                            Included guildId ->
-                                                                MessageFromGuildOrDm_Guild guildId
-
-                                                            Missing ->
-                                                                Discord.idToUInt64 message.channelId
-                                                                    |> Discord.idFromUInt64
-                                                                    |> MessageFromGuildOrDm_Dm
-                                                        )
-                                                        customEmojis2
-                                                    )
-                                                    Time.now
-                                            )
-                                        |> Task.perform identity
-                                    )
+                                            Discord.WebsocketClosed data ->
+                                                data.reason
+                                        )
+                                        message
+                                        model2
                             in
-                            case
-                                ( SeqDict.size attachments == List.length (attachmentsIncludingForwarded message)
-                                , List.Nonempty.fromList (attachmentsIncludingForwarded message)
-                                )
-                            of
-                                ( False, Just nonempty ) ->
-                                    ( model4
-                                    , stickerCmds
-                                        :: customEmojiCmds
-                                        :: Task.perform
-                                            (DiscordMessageCreate_AttachmentsUploaded message)
-                                            (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model4.serverSecret) nonempty))
-                                        :: cmds
-                                    )
-
-                                _ ->
-                                    let
-                                        ( model5, cmd2 ) =
-                                            handleCreateMessage
-                                                (case discordMsg of
-                                                    Discord.GotWebsocketData data ->
-                                                        data
-
-                                                    Discord.WebsocketClosed data ->
-                                                        data.reason
-                                                )
-                                                message
-                                                attachments
-                                                model4
-                                    in
-                                    ( model5
-                                    , stickerCmds
-                                        :: customEmojiCmds
-                                        :: cmd2
-                                        :: cmds
-                                    )
+                            ( model3, messageCmds ++ cmds )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -2376,11 +2386,44 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_ReadyData readyData ->
-                            let
-                                ( model3, cmd2 ) =
-                                    handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model2
-                            in
-                            ( model3, cmd2 :: cmds )
+                            if readyData.user.id == discordUserId then
+                                let
+                                    ( model3, leftGuildsCmd ) =
+                                        removeFromGuildsMissingFromReady discordUserId readyData.guilds model2
+
+                                    catchUpCmd : Command BackendOnly ToFrontend BackendMsg
+                                    catchUpCmd =
+                                        if userData.markEverythingAsViewedOnceLoaded then
+                                            -- Just linked, so there's nothing to catch up on
+                                            Command.none
+
+                                        else
+                                            -- Before syncChannelsFromReady so it can tell which channels are new
+                                            catchUpAfterReady discordUserId (Discord.userToken userData.auth) readyData model3
+
+                                    ( model4, channelsCmd ) =
+                                        syncChannelsFromReady discordUserId readyData.guilds model3
+
+                                    ( model5, readyCmd ) =
+                                        handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model4
+                                in
+                                ( model5
+                                , leftGuildsCmd
+                                    :: channelsCmd
+                                    :: catchUpCmd
+                                    :: readyCmd
+                                    :: cmds
+                                )
+
+                            else
+                                -- Not this account's READY, so it says nothing about what this account
+                                -- missed. Effect.Test hands what's sent on one websocket to the
+                                -- listeners of all of them, which is how this happens in the tests.
+                                let
+                                    ( model3, readyCmd ) =
+                                        handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model2
+                                in
+                                ( model3, readyCmd :: cmds )
 
                         Discord.UserOutMsg_SupplementalReadyData readySupplementalData ->
                             let
@@ -2816,6 +2859,492 @@ handleLeftOrDeletedGuild discordUserId guildId model =
 
         Nothing ->
             ( model, Command.none )
+
+
+{-| READY lists every guild the account is in, so a guild it was a member of that isn't listed was
+left, or the account was removed from it, while we couldn't resume the gateway session.
+
+Only the membership is removed. If that leaves nobody linked who can see the guild, HourlyUpdate
+deletes it after its usual grace period. A guild the account owns is left alone, since READY can't
+tell us whether it was deleted or handed to someone else first.
+
+-}
+removeFromGuildsMissingFromReady :
+    Discord.Id Discord.UserId
+    -> List Discord.GatewayGuild
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+removeFromGuildsMissingFromReady discordUserId readyGuilds model =
+    let
+        readyGuildIds : SeqSet (Discord.Id Discord.GuildId)
+        readyGuildIds =
+            List.map (\guild -> guild.properties.id) readyGuilds |> SeqSet.fromList
+    in
+    SeqDict.foldl
+        (\guildId guild ( model2, cmds ) ->
+            if SeqSet.member guildId readyGuildIds then
+                ( model2, cmds )
+
+            else
+                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                    IsMember ->
+                        ( { model2
+                            | discordGuilds =
+                                SeqDict.insert
+                                    guildId
+                                    { guild | membersAndOwner = MembersAndOwner.removeMember discordUserId guild.membersAndOwner }
+                                    model2.discordGuilds
+                          }
+                        , Broadcast.toDiscordGuild
+                            guildId
+                            (Server_DiscordGuildLeftOrDeleted discordUserId guildId |> ServerChange)
+                            model2
+                            :: cmds
+                        )
+
+                    IsOwner ->
+                        ( model2, cmds )
+
+                    IsNotMember ->
+                        ( model2, cmds )
+        )
+        ( model, [] )
+        model.discordGuilds
+        |> Tuple.mapSecond Command.batch
+
+
+{-| Brings the channels of guilds we already had up to date with READY, for when the gateway
+couldn't resume and the CHANNEL\_CREATE and CHANNEL\_UPDATE events in between were lost. A guild
+READY only sent the changes of is skipped, since its channel list isn't complete.
+
+Channels missing from READY aren't deleted. That would throw away their history on the strength of
+something not being there, so it's left to a CHANNEL\_DELETE.
+
+-}
+syncChannelsFromReady :
+    Discord.Id Discord.UserId
+    -> List Discord.GatewayGuild
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+syncChannelsFromReady discordUserId readyGuilds model =
+    List.foldl
+        (\readyGuild ( model2, cmds ) ->
+            case ( readyGuild.dataMode, SeqDict.get readyGuild.properties.id model2.discordGuilds ) of
+                ( "full", Just guild ) ->
+                    List.foldl
+                        (\readyChannel ( model3, cmds2 ) ->
+                            let
+                                channel : Discord.Channel
+                                channel =
+                                    { readyChannel | guildId = Included readyGuild.properties.id }
+                            in
+                            case ( addDiscordChannel channel, SeqDict.get channel.id guild.channels ) of
+                                ( Just _, Just existingChannel ) ->
+                                    let
+                                        ( updatedModel, cmd ) =
+                                            handleChannelUpdated channel model3
+                                    in
+                                    case LocalState.getDiscordGuildAndChannel readyGuild.properties.id channel.id updatedModel of
+                                        Just ( _, updatedChannel ) ->
+                                            if
+                                                (updatedChannel.name == existingChannel.name)
+                                                    && (updatedChannel.description == existingChannel.description)
+                                                    && (updatedChannel.permissionOverwrites == existingChannel.permissionOverwrites)
+                                            then
+                                                ( model3, cmds2 )
+
+                                            else
+                                                ( updatedModel, cmd :: cmds2 )
+
+                                        Nothing ->
+                                            ( model3, cmds2 )
+
+                                ( Just _, Nothing ) ->
+                                    let
+                                        ( model4, cmd ) =
+                                            handleChannelCreated discordUserId channel model3
+                                    in
+                                    ( model4, cmd :: cmds2 )
+
+                                ( Nothing, _ ) ->
+                                    ( model3, cmds2 )
+                        )
+                        ( model2, cmds )
+                        readyGuild.channels
+
+                _ ->
+                    ( model2, cmds )
+        )
+        ( model, [] )
+        readyGuilds
+        |> Tuple.mapSecond Command.batch
+
+
+{-| Where to look for messages sent while the gateway couldn't resume, and the newest message
+we already have there.
+-}
+type alias CatchUpTarget =
+    { channelId : Discord.Id Discord.ChannelId
+    , guildId : Maybe (Discord.Id Discord.GuildId)
+    , since : Maybe (Discord.Id Discord.MessageId)
+    }
+
+
+{-| READY says what the newest message in each channel, active thread and DM is. Wherever that's
+newer than the newest one we have, the messages in between are fetched and then added as though
+they had just arrived (see `handleCatchUpMessages`), so they're broadcast and notified about the
+same way they would have been had the session resumed.
+
+Guilds and DMs that are new to us aren't included, since `handleReadyData` loads those. This needs
+the model from before `syncChannelsFromReady` to tell which channels are new.
+
+-}
+catchUpAfterReady :
+    Discord.Id Discord.UserId
+    -> Discord.Authentication
+    -> Discord.ReadyData
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+catchUpAfterReady discordUserId authentication readyData model =
+    let
+        guildTargets : List CatchUpTarget
+        guildTargets =
+            List.concatMap
+                (\readyGuild ->
+                    case SeqDict.get readyGuild.properties.id model.discordGuilds of
+                        Just guild ->
+                            List.filterMap
+                                (\readyChannel ->
+                                    case ( SeqDict.get readyChannel.id guild.channels, addDiscordChannel readyChannel ) of
+                                        ( Just channel, _ ) ->
+                                            -- A channel we have no messages for at all was never loaded for
+                                            -- this guild, so everything in it would count as new
+                                            case latestLinkedMessageId channel.linkedMessageIds of
+                                                Just latest ->
+                                                    if channel.isForum || not (LocalState.canViewDiscordChannel readyGuild.properties.id channel guild discordUserId) then
+                                                        Nothing
+
+                                                    else
+                                                        catchUpTarget readyChannel.id (Just readyGuild.properties.id) (Just latest) readyChannel.lastMessageId
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        ( Nothing, Just newChannel ) ->
+                                            -- Created while we were away, so `syncChannelsFromReady` adds it
+                                            if newChannel.isForum || not (LocalState.canViewDiscordChannel readyGuild.properties.id newChannel guild discordUserId) then
+                                                Nothing
+
+                                            else
+                                                catchUpTarget readyChannel.id (Just readyGuild.properties.id) Nothing readyChannel.lastMessageId
+
+                                        ( Nothing, Nothing ) ->
+                                            Nothing
+                                )
+                                readyGuild.channels
+
+                        Nothing ->
+                            []
+                )
+                readyData.guilds
+
+        threadTargets : List CatchUpTarget
+        threadTargets =
+            List.concatMap
+                (\readyGuild ->
+                    case SeqDict.get readyGuild.properties.id model.discordGuilds of
+                        Just guild ->
+                            List.filterMap
+                                (\thread ->
+                                    case thread.parentId of
+                                        Included (Just parentId) ->
+                                            case ( SeqDict.get parentId guild.channels, List.Extra.find (\readyChannel -> readyChannel.id == parentId) readyGuild.channels ) of
+                                                ( Just channel, _ ) ->
+                                                    if LocalState.canViewDiscordChannel readyGuild.properties.id channel guild discordUserId then
+                                                        catchUpThreadTarget readyGuild.properties.id channel thread
+
+                                                    else
+                                                        Nothing
+
+                                                ( Nothing, Just readyChannel ) ->
+                                                    case addDiscordChannel readyChannel of
+                                                        Just newChannel ->
+                                                            if LocalState.canViewDiscordChannel readyGuild.properties.id newChannel guild discordUserId then
+                                                                catchUpTarget thread.id (Just readyGuild.properties.id) Nothing thread.lastMessageId
+
+                                                            else
+                                                                Nothing
+
+                                                        Nothing ->
+                                                            Nothing
+
+                                                ( Nothing, Nothing ) ->
+                                                    Nothing
+
+                                        Included Nothing ->
+                                            Nothing
+
+                                        Missing ->
+                                            Nothing
+                                )
+                                readyGuild.threads
+
+                        Nothing ->
+                            []
+                )
+                readyData.guilds
+
+        dmTargets : List CatchUpTarget
+        dmTargets =
+            case readyData.privateChannels of
+                Included privateChannels ->
+                    List.filterMap
+                        (\privateChannel ->
+                            case SeqDict.get privateChannel.id model.discordDmChannels of
+                                Just dmChannel ->
+                                    case latestLinkedMessageId dmChannel.linkedMessageIds of
+                                        Just latest ->
+                                            catchUpTarget
+                                                (Discord.idToUInt64 privateChannel.id |> Discord.idFromUInt64)
+                                                Nothing
+                                                (Just latest)
+                                                (Included privateChannel.lastMessageId)
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        privateChannels
+
+                Missing ->
+                    []
+    in
+    case guildTargets ++ threadTargets ++ dmTargets of
+        [] ->
+            Command.none
+
+        targets ->
+            -- Threads come after the channels they hang off of so that a thread started while we
+            -- were away finds the message it was started from.
+            List.map
+                (\target ->
+                    getMessagesSince model.serverSecret authentication target.channelId target.since
+                        |> Task.map
+                            (\messages ->
+                                case target.guildId of
+                                    Just guildId ->
+                                        -- Messages fetched over REST don't say which guild they're in
+                                        List.map (\message -> { message | guildId = Included guildId }) messages
+
+                                    Nothing ->
+                                        messages
+                            )
+                )
+                targets
+                |> Task.sequence
+                |> Task.andThen
+                    (\messages ->
+                        let
+                            messages2 : List Discord.Message
+                            messages2 =
+                                List.concat messages
+                        in
+                        uploadAttachmentsForMessages model messages2
+                            |> Task.map (GotDiscordCatchUpMessages messages2)
+                    )
+                |> Task.perform identity
+
+
+catchUpTarget :
+    Discord.Id Discord.ChannelId
+    -> Maybe (Discord.Id Discord.GuildId)
+    -> Maybe (Discord.Id Discord.MessageId)
+    -> OptionalData (Maybe (Discord.Id Discord.MessageId))
+    -> Maybe CatchUpTarget
+catchUpTarget channelId guildId since lastMessageId =
+    case lastMessageId of
+        Included (Just lastMessageId2) ->
+            if isNewerMessageId lastMessageId2 since then
+                Just { channelId = channelId, guildId = guildId, since = since }
+
+            else
+                Nothing
+
+        Included Nothing ->
+            Nothing
+
+        Missing ->
+            Nothing
+
+
+{-| A thread hanging off a message we have, or off a message newer than all of the ones we have
+in its channel (so one sent while we were away), is caught up on. A thread whose starting message
+we don't have would only have its messages thrown away.
+-}
+catchUpThreadTarget :
+    Discord.Id Discord.GuildId
+    -> DiscordBackendChannel
+    -> Discord.Channel
+    -> Maybe CatchUpTarget
+catchUpThreadTarget guildId channel thread =
+    let
+        threadMessageId : Discord.Id Discord.MessageId
+        threadMessageId =
+            Discord.idToUInt64 thread.id |> Discord.idFromUInt64
+    in
+    case OneToOne.second threadMessageId channel.linkedMessageIds of
+        Just channelMessageIndex ->
+            catchUpTarget
+                thread.id
+                (Just guildId)
+                (case SeqDict.get channelMessageIndex channel.threads of
+                    Just existingThread ->
+                        latestLinkedMessageId existingThread.linkedMessageIds
+
+                    Nothing ->
+                        Nothing
+                )
+                thread.lastMessageId
+
+        Nothing ->
+            case latestLinkedMessageId channel.linkedMessageIds of
+                Just latest ->
+                    if not channel.isForum && isNewerMessageId threadMessageId (Just latest) then
+                        catchUpTarget thread.id (Just guildId) Nothing thread.lastMessageId
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+
+
+isNewerMessageId : Discord.Id Discord.MessageId -> Maybe (Discord.Id Discord.MessageId) -> Bool
+isNewerMessageId messageId maybeLatest =
+    case maybeLatest of
+        Just latest ->
+            UInt64.compare (Discord.idToUInt64 messageId) (Discord.idToUInt64 latest) == GT
+
+        Nothing ->
+            True
+
+
+latestLinkedMessageId : OneToOne (Discord.Id Discord.MessageId) b -> Maybe (Discord.Id Discord.MessageId)
+latestLinkedMessageId linkedMessageIds =
+    List.foldl
+        (\( messageId, _ ) maybeLatest ->
+            if isNewerMessageId messageId maybeLatest then
+                Just messageId
+
+            else
+                maybeLatest
+        )
+        Nothing
+        (OneToOne.toList linkedMessageIds)
+
+
+{-| The messages in a channel newer than `since`, oldest first. Without a `since` it's the same
+number of messages a channel that's new to us starts out with. Only the newest
+`catchUpMaxMessages` are fetched, so a very long gap leaves a hole before them.
+-}
+getMessagesSince :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Maybe (Discord.Id Discord.MessageId)
+    -> Task BackendOnly x (List Discord.Message)
+getMessagesSince secretKey authentication channelId maybeSince =
+    case maybeSince of
+        Just since ->
+            getMessagesSinceHelper secretKey authentication channelId since Discord.MostRecent []
+                |> Task.map List.reverse
+                |> Task.onError (\_ -> Task.succeed [])
+
+        Nothing ->
+            getNewChannelMessages secretKey authentication channelId
+                |> Task.map List.reverse
+
+
+getMessagesSinceHelper :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Discord.Id Discord.MessageId
+    -> Discord.MessagesRelativeTo
+    -> List Discord.Message
+    -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getMessagesSinceHelper secretKey authentication channelId since relativeTo fetched =
+    Discord.getMessagesPayload authentication { channelId = channelId, limit = 100, relativeTo = relativeTo }
+        |> http secretKey
+        |> retryWhenRateLimited
+        |> Task.andThen
+            (\messages ->
+                let
+                    newer : List Discord.Message
+                    newer =
+                        List.filter (\message -> isNewerMessageId message.id (Just since)) messages
+
+                    fetched2 : List Discord.Message
+                    fetched2 =
+                        fetched ++ newer
+                in
+                case List.Extra.last messages of
+                    Just oldest ->
+                        if List.length newer == 100 && List.length fetched2 < catchUpMaxMessages then
+                            getMessagesSinceHelper secretKey authentication channelId since (Discord.Before oldest.id) fetched2
+
+                        else
+                            Task.succeed fetched2
+
+                    Nothing ->
+                        Task.succeed fetched2
+            )
+
+
+catchUpMaxMessages : Int
+catchUpMaxMessages =
+    1000
+
+
+{-| Adds the messages `catchUpAfterReady` fetched, in the order it fetched them, the same way
+messages that arrive over the gateway are added. Any we got in the meantime are skipped.
+-}
+handleCatchUpMessages :
+    List Discord.Message
+    -> List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleCatchUpMessages messages attachments model =
+    let
+        authors : List Discord.PartialUser
+        authors =
+            List.map (\message -> Discord.userToPartialUser message.author) messages
+                |> List.Extra.uniqueBy (\author -> Discord.idToString author.id)
+
+        avatarsCmd : Command BackendOnly ToFrontend BackendMsg
+        avatarsCmd =
+            getUserAvatars model.serverSecret model.discordUsers authors
+
+        model2 : BackendModel
+        model2 =
+            { model
+                | discordAttachments = addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+                , discordUsers = List.foldl addDiscordUserData model.discordUsers authors
+            }
+    in
+    List.foldl
+        (\message ( model3, cmds ) ->
+            let
+                ( model4, messageCmds ) =
+                    handleUserCreatedMessage "" message model3
+            in
+            ( model4, messageCmds ++ cmds )
+        )
+        ( model2, [ avatarsCmd ] )
+        messages
+        |> Tuple.mapSecond Command.batch
 
 
 hasLinkedDiscordUser :

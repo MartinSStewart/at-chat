@@ -1698,6 +1698,19 @@ allTestSlackThreadMessageCount backend =
         |> Maybe.withDefault 0
 
 
+allTestSlackChannelHasMessage : Slack.Id Slack.MessageId -> E2EHelper.BackendModel2 -> Bool
+allTestSlackChannelHasMessage slackMessageId backend =
+    case
+        SeqDict.get (Slack.Id "T09DJDQL18U") (E2EHelper.unwrapBackend backend).slackWorkspaces
+            |> Maybe.andThen (\workspace -> SeqDict.get (Slack.Id "C09DJDQSWLU") workspace.channels)
+    of
+        Just channel ->
+            OneToOne.memberFirst slackMessageId channel.linkedMessageIds
+
+        Nothing ->
+            False
+
+
 slackThreadsTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -1826,6 +1839,21 @@ slackThreadsTest config =
                             connection
                             """{"type":"message","subtype":"message_deleted","previous_message":{"user":"U09DK3NCPMG","type":"message","ts":"1791640001.000100","thread_ts":"1791638760.000100","text":"Edited reply"},"channel":"C09DJDQSWLU","hidden":true,"deleted_ts":"1791640001.000100","event_ts":"1791640020.000400","ts":"1791640020.000400"}"""
                         , E2EHelper.hasNotExactText admin [ "Edited reply" ]
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","subtype":"thread_broadcast","channel":"C09DJDQSWLU","text":"Also sent to the channel","user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640030.000100","ts":"1791640030.000100","thread_ts":"1791638760.000100"}"""
+                        , E2EHelper.hasExactText admin [ "Also sent to the channel" ]
+                        , hasNotificationCount admin "guild_openSlackChannel_C09DJDQSWLU" Nothing
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if allTestSlackChannelHasMessage (Slack.Id "1791640030.000100") backend then
+                                    Err "A reply that was also sent to the channel should only be added to its thread"
+
+                                else
+                                    Ok ()
+                            )
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs

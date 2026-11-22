@@ -5345,6 +5345,9 @@ decodeDispatchUserEvent eventName =
         "MESSAGE_REACTION_ADD" ->
             JD.field "d" decodeReactionAdd |> JD.map DispatchUser_MessageReactionAdd
 
+        "MESSAGE_REACTION_ADD_MANY" ->
+            JD.field "d" decodeReactionAddMany |> JD.map DispatchUser_MessageReactionAddMany
+
         "MESSAGE_REACTION_REMOVE" ->
             JD.field "d" decodeReactionRemove |> JD.map DispatchUser_MessageReactionRemove
 
@@ -5796,6 +5799,7 @@ type OpDispatchUserEvent
     | DispatchUser_GuildMemberUpdateEvent GuildMemberUpdate
     | DispatchUser_ThreadCreatedOrUserAddedToThreadEvent Channel
     | DispatchUser_MessageReactionAdd ReactionAdd
+    | DispatchUser_MessageReactionAddMany (List ReactionAdd)
     | DispatchUser_MessageReactionRemove ReactionRemove
     | DispatchUser_MessageReactionRemoveAll ReactionRemoveAll
     | DispatchUser_MessageReactionRemoveEmoji ReactionRemoveEmoji
@@ -5958,6 +5962,48 @@ decodeReactionAdd =
         |> JD.andMap (decodeOptionalData "message_author_id" decodeId)
         |> JD.andMap (JD.field "burst" JD.bool)
         |> JD.andMap (decodeOptionalData "burst_colors" (JD.list JD.string))
+
+
+{-| User accounts get MESSAGE\_REACTION\_ADD\_MANY instead of one MESSAGE\_REACTION\_ADD per
+reaction when several people react to a message in quick succession. It only has the ids of
+the people who reacted, so it's turned into the same reactions MESSAGE\_REACTION\_ADD would
+have given with everything else left out.
+-}
+decodeReactionAddMany : JD.Decoder (List ReactionAdd)
+decodeReactionAddMany =
+    JD.map4
+        (\reactions channelId messageId guildId ->
+            List.concatMap
+                (\( userIds, emoji ) ->
+                    List.map
+                        (\userId ->
+                            { userId = userId
+                            , channelId = channelId
+                            , messageId = messageId
+                            , guildId = guildId
+                            , member = Missing
+                            , emoji = emoji
+                            , messageAuthorId = Missing
+                            , burst = False
+                            , burstColors = Missing
+                            }
+                        )
+                        userIds
+                )
+                reactions
+        )
+        (JD.field
+            "reactions"
+            (JD.list
+                (JD.map2 Tuple.pair
+                    (JD.field "users" (JD.list decodeId))
+                    (JD.field "emoji" decodeEmoji)
+                )
+            )
+        )
+        (JD.field "channel_id" decodeId)
+        (JD.field "message_id" decodeId)
+        (decodeOptionalData "guild_id" decodeId)
 
 
 type alias ReactionRemove =
@@ -7126,6 +7172,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_MessageReactionAdd reactionAdd ->
                             ( model, [ UserOutMsg_UserAddedReaction reactionAdd ] )
+
+                        DispatchUser_MessageReactionAddMany reactionAdds ->
+                            ( model, List.map UserOutMsg_UserAddedReaction reactionAdds )
 
                         DispatchUser_MessageReactionRemove reactionRemove ->
                             ( model, [ UserOutMsg_UserRemovedReaction reactionRemove ] )

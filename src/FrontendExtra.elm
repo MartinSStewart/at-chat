@@ -873,11 +873,56 @@ canDropFiles isMobile currentUserId route =
         PublicGoMatchRoute _ ->
             Nothing
 
-        SlackWorkspaceRoute _ ->
-            Nothing
+        SlackWorkspaceRoute routeData ->
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-        SlackDmRoute _ ->
-            Nothing
+            else
+                case routeData.channelRoute of
+                    SlackChannel_ChannelRoute channelId threadRoute _ ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case threadRoute of
+                                    NoThreadWithMaybeMessage _ ->
+                                        NoThread
+
+                                    ViewThreadWithMaybeMessage threadId _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper
+                            (SlackGuildOrDmId
+                                (SlackGuildOrDmId_Workspace
+                                    { currentUserId = routeData.currentSlackUserId, teamId = routeData.teamId, channelId = channelId }
+                                )
+                            )
+                            threadRoute2
+                            |> Just
+
+                    SlackChannel_WorkspaceSettingsRoute ->
+                        Nothing
+
+        SlackDmRoute routeData ->
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
+
+            else
+                let
+                    threadRoute2 : ThreadRoute
+                    threadRoute2 =
+                        case routeData.threadRoute of
+                            NoThreadWithMaybeMessage _ ->
+                                NoThread
+
+                            ViewThreadWithMaybeMessage threadId _ ->
+                                ViewThread threadId
+                in
+                canDropFileHelper
+                    (SlackGuildOrDmId
+                        (SlackGuildOrDmId_Dm { currentUserId = routeData.currentSlackUserId, channelId = routeData.channelId })
+                    )
+                    threadRoute2
+                    |> Just
 
 
 canDropFileHelper :
