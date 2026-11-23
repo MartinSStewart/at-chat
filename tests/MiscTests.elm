@@ -34,6 +34,7 @@ import OneOrGreater
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import PersonName
 import RichText exposing (RichText(..))
+import SafeJson
 import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
@@ -509,6 +510,83 @@ discordBadRequestTests =
         ]
 
 
+discordVoiceStateUpdateBatchTest : Test
+discordVoiceStateUpdateBatchTest =
+    Test.test "Each voice state in a VOICE_STATE_UPDATE_BATCH is handled like its own VOICE_STATE_UPDATE" <|
+        \_ ->
+            let
+                voiceState : String -> String
+                voiceState userId =
+                    """{
+                        "member": {
+                            "user": {
+                                "username": "someone",
+                                "public_flags": 0,
+                                "primary_guild": { "tag": null, "identity_guild_id": null, "identity_enabled": false, "badge": null },
+                                "id": \"""" ++ userId ++ """",
+                                "global_name": "someone",
+                                "display_name_styles": null,
+                                "display_name": "someone",
+                                "discriminator": "0",
+                                "collectibles": null,
+                                "bot": false,
+                                "avatar_decoration_data": null,
+                                "avatar": null
+                            },
+                            "roles": [ "300" ],
+                            "premium_since": null,
+                            "pending": false,
+                            "nick": null,
+                            "mute": false,
+                            "joined_at": "2026-11-20T02:05:29.824000+00:00",
+                            "flags": 10,
+                            "deaf": false,
+                            "communication_disabled_until": null,
+                            "banner": null,
+                            "avatar": null
+                        },
+                        "user_id": \"""" ++ userId ++ """",
+                        "suppress": false,
+                        "session_id": "733f593f64a4156c8e489a0a3581bd69",
+                        "self_video": false,
+                        "self_mute": true,
+                        "self_deaf": false,
+                        "request_to_speak_timestamp": null,
+                        "mute": false,
+                        "guild_id": "100",
+                        "discoverable": true,
+                        "deaf": false,
+                        "connected_at": 1795444409,
+                        "channel_id": "200"
+                    }"""
+
+                model : Discord.Model ()
+                model =
+                    Discord.init 0
+            in
+            Discord.handleUserGateway
+                { token = "", userAgent = "", xSuperProperties = SafeJson.JsonNull }
+                Discord.noIntents
+                ("""{ "t": "VOICE_STATE_UPDATE_BATCH", "s": 1401, "op": 0, "d": { "voice_states": [ """
+                    ++ voiceState "400"
+                    ++ ", "
+                    ++ voiceState "401"
+                    ++ " ] } }"
+                )
+                { model | websocketHandle = Just () }
+                |> Tuple.second
+                |> List.map
+                    (\outMsg ->
+                        case outMsg of
+                            Discord.UserOutMsg_VoiceStateUpdate voiceStateUpdate ->
+                                Just (Discord.idToString voiceStateUpdate.userId)
+
+                            _ ->
+                                Nothing
+                    )
+                |> Expect.equal [ Just "400", Just "401" ]
+
+
 tests : Test
 tests =
     Test.describe
@@ -522,6 +600,7 @@ tests =
         , sessionExpiryTests
         , threadMentionOnBackendTest
         , discordBadRequestTests
+        , discordVoiceStateUpdateBatchTest
         , Test.fuzz messageViewFuzzer "Round trip message view encoding" <|
             \input ->
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
