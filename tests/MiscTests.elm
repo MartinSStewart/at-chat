@@ -4,6 +4,7 @@ import Array
 import Backend
 import BackendMsgLog exposing (BackendMsgLog(..))
 import Bytes.Encode
+import ChannelDescription
 import ChannelName
 import Coord
 import CssPixels exposing (CssPixels)
@@ -13,28 +14,38 @@ import DiscordSync
 import Duration
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import FileName
 import FileStatus
 import Fuzz
 import GuildColumn
+import GuildIcon
+import GuildName
 import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import LocalState
+import MembersAndOwner
 import Message exposing (Message(..), RepliedTo(..))
 import MessageArray
+import OneOrGreater
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
+import PersonName
 import RichText exposing (RichText(..))
 import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
+import Thread
 import Types exposing (BackendModel, BackendMsg(..))
+import UInt64
+import Unsafe
 import User
 import UserAgent
 import UserSession
+import VisibleMessages
 import X25519
 
 
@@ -401,6 +412,72 @@ newMessageCountTests =
         ]
 
 
+discordMentionInDeletedThreadTest : Test
+discordMentionInDeletedThreadTest =
+    Test.test "A Discord mention in a forum post that has since been deleted doesn't notify" <|
+        \_ ->
+            let
+                discordId : Int -> Discord.Id idType
+                discordId int =
+                    Discord.idFromUInt64 (UInt64.fromInt int)
+
+                guildId : Discord.Id Discord.GuildId
+                guildId =
+                    discordId 1
+
+                forumId : Discord.Id Discord.ChannelId
+                forumId =
+                    discordId 2
+
+                currentUserId : Discord.Id Discord.UserId
+                currentUserId =
+                    discordId 3
+
+                user : User.FrontendCurrentUser
+                user =
+                    User.init (Time.millisToPosix 0) (PersonName.fromStringLossy "User") (User.UserHasEmail discordMentionTestEmail) False
+                        |> User.addDiscordDirectMention guildId forumId (Id.ViewThread (Id.fromInt 0))
+                        |> User.addDiscordDirectMention guildId forumId (Id.ViewThread (Id.fromInt 1))
+                        |> User.backendToFrontendCurrent discordMentionTestEmail
+
+                guild : SeqDict.SeqDict (Id Id.ChannelMessageId) Thread.DiscordFrontendThread -> LocalState.DiscordFrontendGuild
+                guild threads =
+                    { name = GuildName.fromStringLossy "Rex"
+                    , icon = Nothing
+                    , channels =
+                        SeqDict.singleton
+                            forumId
+                            { name = ChannelName.fromStringLossy "feedback"
+                            , description = ChannelDescription.empty
+                            , isForum = True
+                            , messages = MessageArray.fromArray 2 (Id.fromInt 0) Array.empty
+                            , visibleMessages = VisibleMessages.init False 2
+                            , threads = threads
+                            , dateDividerDrawings = SeqDict.empty
+                            , permissionOverwrites = []
+                            }
+                    , membersAndOwner = MembersAndOwner.init SeqDict.empty currentUserId
+                    , stickers = SeqSet.empty
+                    , customEmojis = SeqSet.empty
+                    , roles = SeqDict.empty
+                    , lastTypedAt = SeqDict.empty
+                    }
+            in
+            [ guild (SeqDict.fromList [ ( Id.fromInt 0, Thread.frontendInit ), ( Id.fromInt 1, Thread.frontendInit ) ])
+            , guild (SeqDict.singleton (Id.fromInt 1) Thread.frontendInit)
+            ]
+                |> List.map (GuildColumn.discordGuildHasNotifications currentUserId user guildId)
+                |> Expect.equal
+                    [ GuildIcon.NewMessageForUser (OneOrGreater.fromInt 2 |> Maybe.withDefault OneOrGreater.one)
+                    , GuildIcon.NewMessageForUser OneOrGreater.one
+                    ]
+
+
+discordMentionTestEmail : EmailAddress
+discordMentionTestEmail =
+    Unsafe.emailAddress "a@a.com"
+
+
 discordBadRequestTests : Test
 discordBadRequestTests =
     let
@@ -438,6 +515,7 @@ tests =
         "Misc tests"
         [ redactPrivateKeysTests
         , newMessageCountTests
+        , discordMentionInDeletedThreadTest
         , attachmentUrlTests
         , uploadedFileMetadataTests
         , backendMsgLogTests
