@@ -2933,6 +2933,7 @@ addDiscordGuildData discordUserId data guild =
     , membersAndOwner =
         MembersAndOwner.addMember discordUserId { joinedAt = Nothing, roles = SeqSet.empty } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
+    , nicknames = guild.nicknames
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
     , roles = Pages.Admin.rolesToDict data.guild.roles
@@ -4181,7 +4182,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
-                                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) text
+                                                    RichText.fromNonemptyString
+                                                        timezone
+                                                        (LocalState.withDiscordNicknames guild.nicknames guildMembers)
+                                                        (LocalState.guildChannelNames timezone guildMembers guild.channels)
+                                                        text
                                             in
                                             case
                                                 ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
@@ -5371,7 +5376,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) newContent
+                                    RichText.fromNonemptyString
+                                        timezone
+                                        (LocalState.withDiscordNicknames guild.nicknames guildMembers)
+                                        (LocalState.guildChannelNames timezone guildMembers guild.channels)
+                                        newContent
                             in
                             case
                                 ( RichText.toDiscord model.discordCustomEmojis guild.channels richText

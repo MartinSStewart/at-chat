@@ -513,6 +513,7 @@ previewDiscordGuilds time =
                     { joinedAt = Just time, roles = SeqSet.empty }
                 )
                 previewOtherDiscordUserId
+        , nicknames = SeqDict.empty
         , stickers = SeqSet.empty
         , customEmojis = SeqSet.empty
         , roles = SeqDict.empty

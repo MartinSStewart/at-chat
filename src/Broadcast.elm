@@ -82,7 +82,7 @@ import MyUi
 import NonemptyDict
 import NonemptySet
 import OneToOne exposing (OneToOne)
-import PersonName
+import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import Postmark
 import RichText exposing (RichText)
@@ -737,6 +737,15 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                 Nothing ->
                     SeqDict.empty
 
+        nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
+        nicknames =
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    guild.nicknames
+
+                Nothing ->
+                    SeqDict.empty
+
         senderData : Maybe DiscordUserData
         senderData =
             SeqDict.get sender model.discordUsers
@@ -801,7 +810,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 discordUser.linkedTo
                                 (case senderData of
                                     Just user ->
-                                        DiscordUserData.username user
+                                        DiscordUserData.nameIn nicknames user
 
                                     Nothing ->
                                         User.missingName
@@ -810,7 +819,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 (\userId3 ->
                                     case SeqDict.get userId3 model.discordUsers of
                                         Just user3 ->
-                                            DiscordUserData.username user3
+                                            DiscordUserData.nameIn nicknames user3
 
                                         Nothing ->
                                             User.missingName
@@ -820,7 +829,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     UserTextMessage message2 ->
                                         RichText.toStringWithGetter
                                             Time.utc
-                                            DiscordUserData.username
+                                            (DiscordUserData.nameIn nicknames)
                                             True
                                             model.discordUsers
                                             channels

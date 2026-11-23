@@ -1779,6 +1779,7 @@ discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild =
     , icon = guild.icon
     , channels = channels
     , membersAndOwner = guild.membersAndOwner
+    , nicknames = guild.nicknames
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
     , roles = guild.roles

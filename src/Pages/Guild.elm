@@ -10,7 +10,7 @@ module Pages.Guild exposing
     , chatWithText
     , confirmLeaveGuildText
     , conversationContainerId
-    , decodeDiscordMessageViewWithReply
+    , decodeDiscordMessageView
     , decodeMessageIndex
     , decodeMessageView
     , deleteGuildText
@@ -18,7 +18,7 @@ module Pages.Guild exposing
     , dropdownButtonId
     , e2eeSectionIsExpanded
     , editingText
-    , encodeDiscordMessageViewWithReply
+    , encodeDiscordMessageView
     , encodeMessageIndex
     , encodeMessageView
     , friendLabel
@@ -118,6 +118,7 @@ import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendTh
 import Time
 import Touch
 import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelError(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import UInt64
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -830,7 +831,13 @@ unreadOverviewNotMobile local loggedIn model =
                                                         loggedIn
                                                     )
                                                     currentDiscordUserId
-                                                    allDiscordUsers
+                                                    (case unread.guildOrDmId of
+                                                        DiscordGuildOrDmId guildOrDmId ->
+                                                            LocalState.discordUsersIn guildOrDmId local
+
+                                                        _ ->
+                                                            allDiscordUsers
+                                                    )
                                                     (case unread.guildOrDmId of
                                                         GuildOrDmId _ ->
                                                             SeqDict.empty
@@ -871,7 +878,13 @@ unreadOverviewNotMobile local loggedIn model =
                                                         (ViewThreadWithMessage threadId messageId)
                                                         loggedIn
                                                     )
-                                                    allDiscordUsers
+                                                    (case unread.guildOrDmId of
+                                                        DiscordGuildOrDmId guildOrDmId ->
+                                                            LocalState.discordUsersIn guildOrDmId local
+
+                                                        _ ->
+                                                            allDiscordUsers
+                                                    )
                                                     (case unread.guildOrDmId of
                                                         GuildOrDmId _ ->
                                                             SeqDict.empty
@@ -3736,7 +3749,7 @@ discordChannelView routeData guild loggedIn local model =
                                         ++ " / "
                                         ++ threadPreviewText
                                             local.localUser.timezone
-                                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                            (LocalState.withDiscordNicknames guild.nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers))
                                             (LocalState.discordChannelMentions
                                                 (DiscordGuildOrDmId_Guild
                                                     { currentUserId = routeData.currentDiscordUserId
@@ -4954,6 +4967,10 @@ discordConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
+        nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
+        nicknames =
+            LocalState.discordNicknamesIn guildOrDmIdNoThread local
+
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread )
@@ -5077,7 +5094,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         highlight
                                         messageHover2
                                         currentDiscordUserId
-                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                        (LocalState.discordUsersIn guildOrDmIdNoThread local)
                                         channels
                                         local.localUser
                                         maybeRepliedTo2
@@ -5089,7 +5106,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 else
                                     let
                                         allUsers =
-                                            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+                                            LocalState.discordUsersIn guildOrDmIdNoThread local
 
                                         editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
                                         editRichText =
@@ -5125,26 +5142,30 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     Nothing ->
                                         case ( maybeRepliedTo2, Message.mentionsChannel message || repliedToMentionsChannel maybeRepliedTo2 ) of
                                             ( Nothing, False ) ->
-                                                Ui.Lazy.lazy6
+                                                Ui.Lazy.lazy5
                                                     discordMessageViewNotThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                    (encodeDiscordMessageView
+                                                        (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                        (encodeMessageIndex index (Id.fromInt 0))
+                                                        currentDiscordUserId
+                                                    )
                                                     revealedSpoilers
-                                                    currentDiscordUserId
                                                     local.localUser
-                                                    index
+                                                    nicknames
                                                     message
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             ( Nothing, True ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarterWithChannelMention
-                                                    (encodeDiscordMessageViewWithReply
+                                                    (encodeDiscordMessageView
                                                         (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                         (encodeMessageIndex index (Id.fromInt 0))
+                                                        currentDiscordUserId
                                                     )
                                                     revealedSpoilers
-                                                    currentDiscordUserId
                                                     local.localUser
+                                                    nicknames
                                                     message
                                                     (case guildOrDmIdNoThread of
                                                         DiscordGuildOrDmId_Guild { guildId } ->
@@ -5163,13 +5184,14 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                             ( Just (RepliedToView_Message replyMessageIndex repliedToMessage), False ) ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarterWithReply
-                                                    (encodeDiscordMessageViewWithReply
+                                                    (encodeDiscordMessageView
                                                         (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                         (encodeMessageIndex index replyMessageIndex)
+                                                        currentDiscordUserId
                                                     )
                                                     revealedSpoilers
-                                                    currentDiscordUserId
                                                     local.localUser
+                                                    nicknames
                                                     message
                                                     repliedToMessage
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -5184,7 +5206,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                    (LocalState.discordUsersIn guildOrDmIdNoThread local)
                                                     (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
@@ -5201,6 +5223,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     revealedSpoilers
                                                     currentDiscordUserId
                                                     local.localUser
+                                                    nicknames
                                                     index
                                                     thread
                                                     message
@@ -5216,7 +5239,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                    (LocalState.discordUsersIn guildOrDmIdNoThread local)
                                                     (LocalState.discordChannelMentions guildOrDmIdNoThread local)
                                                     local.localUser
                                                     maybeRepliedTo2
@@ -5588,6 +5611,10 @@ discordThreadConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
+        nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
+        nicknames =
+            LocalState.discordNicknamesIn guildOrDmIdNoThread local
+
         channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
@@ -5706,7 +5733,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         revealedSpoilers
                                         highlight
                                         messageHover2
-                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                        (LocalState.discordUsersIn guildOrDmIdNoThread local)
                                         channels
                                         currentDiscordUserId
                                         local.localUser
@@ -5718,7 +5745,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                 else
                                     let
                                         allUsers =
-                                            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+                                            LocalState.discordUsersIn guildOrDmIdNoThread local
 
                                         editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
                                         editRichText =
@@ -5752,13 +5779,16 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             Nothing ->
                                 case ( maybeRepliedTo2, Message.mentionsChannel message ) of
                                     ( Nothing, False ) ->
-                                        Ui.Lazy.lazy6
+                                        Ui.Lazy.lazy5
                                             discordThreadMessageViewLazy
-                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                            (encodeDiscordMessageView
+                                                (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                (encodeMessageIndex index (Id.fromInt 0))
+                                                currentDiscordUserId
+                                            )
                                             revealedSpoilers
-                                            currentDiscordUserId
                                             local.localUser
-                                            index
+                                            nicknames
                                             message
                                             |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
@@ -5770,7 +5800,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             revealedSpoilers
                                             highlight
                                             messageHover2
-                                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                            (LocalState.discordUsersIn guildOrDmIdNoThread local)
                                             channels
                                             currentDiscordUserId
                                             local.localUser
@@ -6030,25 +6060,38 @@ decodeMessageIndex packed =
     }
 
 
-{-| A Discord reply's lazy view also takes the current Discord user, one argument more than
-`Ui.Lazy` goes up to, and the Int `encodeMessageView` packs has no bits left for the message
-indices. `Ui.Lazy` compares strings by value just like Ints, so the two travel as one string.
+{-| Discord's lazy message views take the guild's nicknames on top of what the other message
+views take, more arguments than `Ui.Lazy` goes up to, and the Int `encodeMessageView` packs has no
+bits left for the message indices. `Ui.Lazy` compares strings by value just like Ints, so the view
+data, the message indices and the current Discord user travel as one string.
 -}
-encodeDiscordMessageViewWithReply : Int -> Int -> String
-encodeDiscordMessageViewWithReply data messageIndexAndReplyMessageIndex =
-    String.fromInt data ++ " " ++ String.fromInt messageIndexAndReplyMessageIndex
+encodeDiscordMessageView : Int -> Int -> Discord.Id Discord.UserId -> String
+encodeDiscordMessageView data messageIndexAndReplyMessageIndex currentDiscordUserId =
+    String.fromInt data
+        ++ " "
+        ++ String.fromInt messageIndexAndReplyMessageIndex
+        ++ " "
+        ++ Discord.idToString currentDiscordUserId
 
 
-decodeDiscordMessageViewWithReply : String -> { data : Int, messageIndexAndReplyMessageIndex : Int }
-decodeDiscordMessageViewWithReply packed =
+decodeDiscordMessageView :
+    String
+    -> { data : Int, messageIndexAndReplyMessageIndex : Int, currentDiscordUserId : Discord.Id Discord.UserId }
+decodeDiscordMessageView packed =
     case String.split " " packed of
-        [ data, messageIndexAndReplyMessageIndex ] ->
+        [ data, messageIndexAndReplyMessageIndex, currentDiscordUserId ] ->
             { data = String.toInt data |> Maybe.withDefault 0
             , messageIndexAndReplyMessageIndex = String.toInt messageIndexAndReplyMessageIndex |> Maybe.withDefault 0
+            , currentDiscordUserId =
+                Discord.idFromString currentDiscordUserId
+                    |> Maybe.withDefault (Discord.idFromUInt64 (UInt64.fromInt 0))
             }
 
         _ ->
-            { data = 0, messageIndexAndReplyMessageIndex = 0 }
+            { data = 0
+            , messageIndexAndReplyMessageIndex = 0
+            , currentDiscordUserId = Discord.idFromUInt64 (UInt64.fromInt 0)
+            }
 
 
 encodeFriendsColumn : Bool -> Int -> Int
@@ -6724,7 +6767,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+            LocalState.discordUsersIn guildOrDmIdNoThread local
 
         replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
@@ -6868,7 +6911,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         )
                         local.localUser
                         loggedIn
-                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                        (LocalState.discordUsersIn guildOrDmIdNoThread local)
                         channels
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
@@ -7208,7 +7251,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+            LocalState.discordUsersIn guildOrDmIdNoThread local
 
         replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
@@ -7355,7 +7398,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 )
                 local.localUser
                 loggedIn
-                (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                (LocalState.discordUsersIn guildOrDmIdNoThread local)
                 channels
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers (ViewThread threadId) (LocalState.discordTypingIn guildOrDmIdNoThread local) currentDiscordUserId model
@@ -7539,7 +7582,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                     if edit.messageIndex == threadMessageIndex then
                         let
                             allUsers =
-                                LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+                                LocalState.discordUsersIn discordGuildOrDmId local
 
                             editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
                             editRichText =
@@ -7580,7 +7623,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             NoHighlight
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                             currentUserId
-                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            (LocalState.discordUsersIn discordGuildOrDmId local)
                             channels
                             local.localUser
                             Nothing
@@ -7599,7 +7642,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                         NoHighlight
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                         currentUserId
-                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                        (LocalState.discordUsersIn discordGuildOrDmId local)
                         channels
                         local.localUser
                         Nothing
@@ -8079,17 +8122,22 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
 
 
 discordMessageViewNotThreadStarter :
-    Int
+    String
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> Discord.Id Discord.UserId
     -> LocalUser
-    -> Int
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
+discordMessageViewNotThreadStarter packed revealedSpoilers localUser nicknames message =
     let
+        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
+            decodeDiscordMessageView packed
+
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
+
+        { messageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
     in
     --Ui.el
     --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
@@ -8108,7 +8156,7 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         highlight
         isHovered
         currentDiscordUserId
-        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.withDiscordNicknames nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers))
         SeqDict.empty
         localUser
         Nothing
@@ -8120,15 +8168,15 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
 discordMessageViewNotThreadStarterWithReply :
     String
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> Discord.Id Discord.UserId
     -> LocalUser
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message replyMessage =
+discordMessageViewNotThreadStarterWithReply packed revealedSpoilers localUser nicknames message replyMessage =
     let
-        { data, messageIndexAndReplyMessageIndex } =
-            decodeDiscordMessageViewWithReply dataAndMessageIndex
+        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
+            decodeDiscordMessageView packed
 
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8145,7 +8193,7 @@ discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers
         highlight
         isHovered
         currentDiscordUserId
-        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.withDiscordNicknames nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers))
         SeqDict.empty
         localUser
         (Just (RepliedToView_Message (Id.fromInt replyMessageIndex) replyMessage))
@@ -8157,15 +8205,15 @@ discordMessageViewNotThreadStarterWithReply dataAndMessageIndex revealedSpoilers
 discordMessageViewNotThreadStarterWithChannelMention :
     String
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> Discord.Id Discord.UserId
     -> LocalUser
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     -> Element MessageViewMsg
-discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex revealedSpoilers currentDiscordUserId localUser message guildChannels =
+discordMessageViewNotThreadStarterWithChannelMention packed revealedSpoilers localUser nicknames message guildChannels =
     let
-        { data, messageIndexAndReplyMessageIndex } =
-            decodeDiscordMessageViewWithReply dataAndMessageIndex
+        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
+            decodeDiscordMessageView packed
 
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8182,7 +8230,7 @@ discordMessageViewNotThreadStarterWithChannelMention dataAndMessageIndex reveale
         highlight
         isHovered
         currentDiscordUserId
-        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.withDiscordNicknames nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers))
         (LocalState.discordGuildChannelMentions localUser guildChannels)
         localUser
         Nothing
@@ -8196,11 +8244,12 @@ discordMessageViewThreadStarter :
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> Discord.Id Discord.UserId
     -> LocalUser
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
     -> Int
     -> DiscordFrontendThread
     -> Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
+discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser nicknames messageIndex thread message =
     let
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -8214,7 +8263,7 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
         highlight
         isHovered
         currentDiscordUserId
-        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.withDiscordNicknames nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers))
         SeqDict.empty
         localUser
         Nothing
@@ -8253,17 +8302,22 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
 
 
 discordThreadMessageViewLazy :
-    Int
+    String
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
-    -> Discord.Id Discord.UserId
     -> LocalUser
-    -> Int
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
     -> Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> Element MessageViewMsg
-discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
+discordThreadMessageViewLazy packed revealedSpoilers localUser nicknames message =
     let
+        { data, messageIndexAndReplyMessageIndex, currentDiscordUserId } =
+            decodeDiscordMessageView packed
+
         { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
+
+        { messageIndex } =
+            decodeMessageIndex messageIndexAndReplyMessageIndex
     in
     discordThreadMessageView
         time
@@ -8272,7 +8326,7 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
         revealedSpoilers
         highlight
         isHovered
-        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+        (LocalState.withDiscordNicknames nicknames (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers))
         SeqDict.empty
         currentDiscordUserId
         localUser
