@@ -5403,6 +5403,10 @@ decodeDispatchUserEvent eventName =
         "VOICE_STATE_UPDATE" ->
             JD.field "d" decodeVoiceStateUpdate |> JD.map DispatchUser_VoiceStateUpdate
 
+        "VOICE_STATE_UPDATE_BATCH" ->
+            JD.at [ "d", "voice_states" ] (JD.list decodeVoiceStateUpdate)
+                |> JD.map DispatchUser_VoiceStateUpdateBatch
+
         "VOICE_CHANNEL_START_TIME_UPDATE" ->
             JD.succeed DispatchUser_VoiceChannelStartTimeUpdate
 
@@ -5817,6 +5821,7 @@ type OpDispatchUserEvent
     | DispatchUser_UserSettingsProtoUpdate
     | DispatchUser_ContentInventoryInboxStale ContentInventoryInboxStale
     | DispatchUser_VoiceStateUpdate VoiceStateUpdate
+    | DispatchUser_VoiceStateUpdateBatch (List VoiceStateUpdate)
     | DispatchUser_VoiceChannelStartTimeUpdate
     | DispatchUser_VoiceChannelStatusUpdate
     | DispatchUser_GuildAuditLogEntryCreate
@@ -7231,6 +7236,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_VoiceStateUpdate voiceStateUpdate ->
                             ( model, [ UserOutMsg_VoiceStateUpdate voiceStateUpdate ] )
+
+                        DispatchUser_VoiceStateUpdateBatch voiceStateUpdates ->
+                            ( model, List.map UserOutMsg_VoiceStateUpdate voiceStateUpdates )
 
                         DispatchUser_VoiceChannelStartTimeUpdate ->
                             ( model, [] )
