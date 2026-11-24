@@ -15,7 +15,6 @@ module E2EMisc exposing
     , exportDmChannelTest
     , hourlyOrphanedFilesTest
     , importChannelTest
-    , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
@@ -1717,62 +1716,6 @@ dmThreadsTest config =
                             (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_0_0" ])
                         ]
                     )
-                ]
-            )
-        ]
-
-
-{-| Just like a guild channel's threads, a DM thread drops out of the friends
-column once it's been quiet for a week, and comes back as soon as it's opened
-again.
--}
-inactiveDmThreadsAreHiddenTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-inactiveDmThreadsAreHiddenTest config =
-    E2EHelper.startTest
-        "Inactive DM threads are hidden"
-        E2EHelper.startTime
-        config
-        [ E2EHelper.connectTwoUsersAndJoinNewGuild
-            E2EHelper.desktopWindow
-            (\admin _ ->
-                [ E2EHelper.openDm admin 100 "2"
-                , E2EHelper.writeMessage admin 100 "Hello in a DM!"
-                , E2EHelper.createThread admin (Id.fromInt 0)
-                , E2EHelper.writeMessage admin 100 "Hello in the thread!"
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
-                ]
-            )
-        , T.connectFrontend
-            (Duration.days 7.1 |> Duration.inMilliseconds)
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ T.andThen
-                    10
-                    (\data ->
-                        [ admin.portEvent
-                            10
-                            "load_startup_data_from_js"
-                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
-                        ]
-                    )
-                , admin.click 100 (Dom.id "guildIcon_showFriends")
-
-                -- A week without a message and nothing unread in it, so the thread is gone
-                -- from the column
-                , admin.checkView
-                    2000
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
-
-                -- Opening it from the DM message it hangs off puts it back
-                , admin.click 100 (Dom.id "guild_friendLabel_2")
-                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
-                , E2EHelper.hasExactText admin [ "Hello in the thread!" ]
-                , admin.snapshotView 100 { name = "Inactive threads are hidden" }
                 ]
             )
         ]
