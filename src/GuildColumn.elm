@@ -4,6 +4,7 @@ module GuildColumn exposing
     , discordDmCurrentUserId
     , discordDmNotification
     , discordGuildCurrentUserId
+    , discordGuildHasNotifications
     , discordGuildRoute
     , dmNotification
     , elLinkButton
@@ -1404,18 +1405,37 @@ unmutedDirectMentions currentUser guildId maybeDirectMentions =
 
 {-| Mentions in fully muted Discord channels and threads don't count, the same way their messages
 don't.
+
+Neither do mentions in channels and threads the guild no longer has. A mention is only
+cleared by opening where it was written, so one left behind in a deleted forum post, a
+deleted channel, or a channel the user can no longer see would otherwise stay forever.
+
 -}
 unmutedDiscordDirectMentions :
     FrontendCurrentUser
     -> Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
     -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> Maybe OneOrGreater
-unmutedDiscordDirectMentions currentUser guildId maybeDirectMentions =
+unmutedDiscordDirectMentions currentUser guildId guild maybeDirectMentions =
     case maybeDirectMentions of
         Just directMentions ->
             SeqDict.foldl
                 (\( channelId, threadRoute ) count total ->
                     if MuteSettings.hidesRedDot (MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId threadRoute) then
+                        total
+
+                    else if
+                        case ( SeqDict.get channelId guild.channels, threadRoute ) of
+                            ( Just _, NoThread ) ->
+                                False
+
+                            ( Just channel, ViewThread threadId ) ->
+                                not (SeqDict.member threadId channel.threads)
+
+                            ( Nothing, _ ) ->
+                                True
+                    then
                         total
 
                     else
@@ -1453,7 +1473,7 @@ discordGuildHasNotifications currentDiscordUserId currentUser guildId guild =
         NoNotification
 
     else
-        case unmutedDiscordDirectMentions currentUser guildId (SeqDict.get guildId currentUser.discordDirectMentions) of
+        case unmutedDiscordDirectMentions currentUser guildId guild (SeqDict.get guildId currentUser.discordDirectMentions) of
             Just count ->
                 NewMessageForUser count
 
