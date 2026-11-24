@@ -5,6 +5,7 @@ module DiscordUserData exposing
     , DiscordUserLoadingData(..)
     , NeedsAuthAgainData
     , icon
+    , nameIn
     , names
     , username
     )
@@ -71,6 +72,32 @@ username discordUser =
 
         NeedsAuthAgain data ->
             data.user.username
+
+
+{-| What a Discord user goes by in a guild: the nickname they set for themselves there, or
+their username if they didn't.
+-}
+nameIn : SeqDict (Discord.Id Discord.UserId) PersonName -> DiscordUserData -> String
+nameIn nicknames discordUser =
+    let
+        userId : Discord.Id Discord.UserId
+        userId =
+            case discordUser of
+                BasicData data ->
+                    data.user.id
+
+                FullData data ->
+                    data.user.id
+
+                NeedsAuthAgain data ->
+                    data.user.id
+    in
+    case SeqDict.get userId nicknames of
+        Just nickname ->
+            PersonName.toString nickname
+
+        Nothing ->
+            username discordUser
 
 
 icon : DiscordUserData -> Maybe FileHash

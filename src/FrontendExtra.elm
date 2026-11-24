@@ -7326,12 +7326,31 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_UpdateDiscordMembers guildId members ->
+                Server_UpdateDiscordMembers guildId members nicknames ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (\guild -> { guild | membersAndOwner = members })
+                                (\guild -> { guild | membersAndOwner = members, nicknames = nicknames })
+                                local.discordGuilds
+                    }
+
+                Server_DiscordGuildMemberNickname guildId userId maybeNickname ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild ->
+                                    { guild
+                                        | nicknames =
+                                            case maybeNickname of
+                                                Just nickname ->
+                                                    SeqDict.insert userId nickname guild.nicknames
+
+                                                Nothing ->
+                                                    SeqDict.remove userId guild.nicknames
+                                    }
+                                )
                                 local.discordGuilds
                     }
 

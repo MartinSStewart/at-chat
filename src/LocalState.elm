@@ -106,8 +106,10 @@ module LocalState exposing
     , discordGuildChannelMentions
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
+    , discordNicknamesIn
     , discordTopicToDescription
     , discordTypingIn
+    , discordUsersIn
     , dmForgetEditTyping
     , dmMemberIsEditTypingBackend
     , dmMemberIsEditTypingFrontend
@@ -187,6 +189,7 @@ module LocalState exposing
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
+    , withDiscordNicknames
     )
 
 import Array exposing (Array)
@@ -243,7 +246,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
-import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, PreviouslyLastViewedMessage(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -308,6 +311,7 @@ type alias DiscordBackendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
+    , nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
@@ -332,6 +336,7 @@ type alias DiscordFrontendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
+    , nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
@@ -700,6 +705,42 @@ discordChannelMentions guildOrDmId local =
 
         DiscordGuildOrDmId_Dm _ ->
             SeqDict.empty
+
+
+{-| Everyone in a Discord guild or DM, named the way they are named there. In a guild that is
+the nickname someone set for themselves in that guild, if they have one.
+-}
+discordUsersIn : DiscordGuildOrDmId -> LocalState -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+discordUsersIn guildOrDmId local =
+    withDiscordNicknames
+        (discordNicknamesIn guildOrDmId local)
+        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+
+
+discordNicknamesIn : DiscordGuildOrDmId -> LocalState -> SeqDict (Discord.Id Discord.UserId) PersonName
+discordNicknamesIn guildOrDmId local =
+    case guildOrDmId of
+        DiscordGuildOrDmId_Guild { guildId } ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    guild.nicknames
+
+                Nothing ->
+                    SeqDict.empty
+
+        DiscordGuildOrDmId_Dm _ ->
+            SeqDict.empty
+
+
+withDiscordNicknames :
+    SeqDict (Discord.Id Discord.UserId) PersonName
+    -> SeqDict (Discord.Id Discord.UserId) { a | name : PersonName }
+    -> SeqDict (Discord.Id Discord.UserId) { a | name : PersonName }
+withDiscordNicknames nicknames users =
+    SeqDict.foldl
+        (\userId nickname users2 -> SeqDict.updateIfExists userId (\user -> { user | name = nickname }) users2)
+        users
+        nicknames
 
 
 threadMentionName :

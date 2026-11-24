@@ -32,6 +32,7 @@ import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Types exposing (BackendModel, BackendMsg(..))
+import UInt64
 import User
 import UserAgent
 import UserSession
@@ -476,19 +477,25 @@ tests =
                 (Fuzz.intRange 0 (2 ^ 26 - 1))
                 (Fuzz.intRange 0 (2 ^ 26 - 1))
             )
-            "Round trip Discord reply view encoding"
+            "Round trip Discord message view encoding"
           <|
             \( input, messageIndex, replyMessageIndex ) ->
-                Pages.Guild.encodeDiscordMessageViewWithReply
+                Pages.Guild.encodeDiscordMessageView
                     (Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time)
                     (Pages.Guild.encodeMessageIndex messageIndex (Id.fromInt replyMessageIndex))
-                    |> Pages.Guild.decodeDiscordMessageViewWithReply
+                    (Discord.idFromUInt64 (UInt64.fromInt 1234567890123))
+                    |> Pages.Guild.decodeDiscordMessageView
                     |> (\decoded ->
                             ( Pages.Guild.decodeMessageView decoded.data
                             , Pages.Guild.decodeMessageIndex decoded.messageIndexAndReplyMessageIndex
+                            , decoded.currentDiscordUserId
                             )
                        )
-                    |> Expect.equal ( input, { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex } )
+                    |> Expect.equal
+                        ( input
+                        , { messageIndex = messageIndex, replyMessageIndex = replyMessageIndex }
+                        , Discord.idFromUInt64 (UInt64.fromInt 1234567890123)
+                        )
         , Test.test "Discord thread name is left as is when it's short enough" <|
             \_ ->
                 DiscordSync.threadName "Hello world!"

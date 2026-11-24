@@ -203,6 +203,7 @@ discordGuildWithChannels channelIds =
     , icon = Nothing
     , channels = List.map (\channelId -> ( discordId channelId, discordChannel )) channelIds |> SeqDict.fromList
     , membersAndOwner = MembersAndOwner.init SeqDict.empty (discordId 0)
+    , nicknames = SeqDict.empty
     , stickers = SeqSet.empty
     , customEmojis = SeqSet.empty
     , roles = SeqDict.empty

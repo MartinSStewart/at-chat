@@ -63,7 +63,7 @@ import Message exposing (ChangeAttachments(..), Message(..), RepliedTo(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pages.Admin
-import PersonName
+import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId, ServerSecret)
@@ -2526,7 +2526,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_GuildMemberAddEvent guildId guildMember ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleGuildMemberUpdate guildId guildMember model2
+                                    handleGuildMemberUpdate guildId (Included guildMember.nickname) guildMember model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2540,6 +2540,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                 { guild
                                                     | membersAndOwner =
                                                         MembersAndOwner.removeMember userId guild.membersAndOwner
+                                                    , nicknames = SeqDict.remove userId guild.nicknames
                                                 }
                                                 model2.discordGuilds
                                     }
@@ -2552,7 +2553,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_GuildMemberUpdateEvent guildMemberUpdate ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleGuildMemberUpdate guildMemberUpdate.guildId guildMemberUpdate model2
+                                    handleGuildMemberUpdate guildMemberUpdate.guildId guildMemberUpdate.nickname guildMemberUpdate model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2561,7 +2562,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 ( model3, cmd2 ) =
                                     case ( voiceStateUpdate.guildId, voiceStateUpdate.member ) of
                                         ( Included (Just guildId), Included member ) ->
-                                            handleGuildMemberUpdate guildId member model2
+                                            handleGuildMemberUpdate guildId (Included member.nickname) member model2
 
                                         _ ->
                                             ( model2, Command.none )
@@ -3546,35 +3547,84 @@ handleGuildEmojisUpdate userId emojisUpdate model =
             ( model, Command.none )
 
 
+{-| Discord leaves the nickname out of some member updates, in which case it stays as it was.
+-}
 handleGuildMemberUpdate :
     Discord.Id Discord.GuildId
+    -> OptionalData (Maybe String)
     -> { b | user : Discord.User, joinedAt : Time.Posix, roles : List (Discord.Id Discord.RoleId) }
     -> BackendModel
-    -> ( BackendModel, Command restriction toMsg BackendMsg )
-handleGuildMemberUpdate guildId guildMember model2 =
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleGuildMemberUpdate guildId maybeNickname guildMember model2 =
     case SeqDict.get guildId model2.discordGuilds of
         Just guild ->
-            ( { model2
-                | discordUsers = addDiscordUserData (Discord.userToPartialUser guildMember.user) model2.discordUsers
-                , discordGuilds =
-                    SeqDict.insert
+            let
+                nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
+                nicknames =
+                    case maybeNickname of
+                        Included nickname ->
+                            setNickname guildMember.user.id nickname guild.nicknames
+
+                        Missing ->
+                            guild.nicknames
+
+                modelWithMember : BackendModel
+                modelWithMember =
+                    { model2
+                        | discordUsers = addDiscordUserData (Discord.userToPartialUser guildMember.user) model2.discordUsers
+                        , discordGuilds =
+                            SeqDict.insert
+                                guildId
+                                { guild
+                                    | membersAndOwner =
+                                        MembersAndOwner.addOrUpdateMember
+                                            guildMember.user.id
+                                            { joinedAt = Just guildMember.joinedAt
+                                            , roles = SeqSet.fromList guildMember.roles
+                                            }
+                                            guild.membersAndOwner
+                                    , nicknames = nicknames
+                                }
+                                model2.discordGuilds
+                    }
+            in
+            ( modelWithMember
+            , Command.batch
+                [ getUserAvatars model2.serverSecret model2.discordUsers [ guildMember.user ]
+                , if SeqDict.get guildMember.user.id nicknames == SeqDict.get guildMember.user.id guild.nicknames then
+                    Command.none
+
+                  else
+                    Broadcast.toDiscordGuild
                         guildId
-                        { guild
-                            | membersAndOwner =
-                                MembersAndOwner.addOrUpdateMember
-                                    guildMember.user.id
-                                    { joinedAt = Just guildMember.joinedAt
-                                    , roles = SeqSet.fromList guildMember.roles
-                                    }
-                                    guild.membersAndOwner
-                        }
-                        model2.discordGuilds
-              }
-            , getUserAvatars model2.serverSecret model2.discordUsers [ guildMember.user ]
+                        (Server_DiscordGuildMemberNickname guildId guildMember.user.id (SeqDict.get guildMember.user.id nicknames)
+                            |> ServerChange
+                        )
+                        modelWithMember
+                ]
             )
 
         Nothing ->
             ( model2, Command.none )
+
+
+{-| `Nothing` means the member has no nickname in the guild and goes by their username there.
+-}
+setNickname :
+    Discord.Id Discord.UserId
+    -> Maybe String
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
+    -> SeqDict (Discord.Id Discord.UserId) PersonName
+setNickname userId maybeNickname nicknames =
+    case Maybe.map String.trim maybeNickname of
+        Just "" ->
+            SeqDict.remove userId nicknames
+
+        Just nickname ->
+            SeqDict.insert userId (PersonName.fromStringLossy nickname) nicknames
+
+        Nothing ->
+            SeqDict.remove userId nicknames
 
 
 handleTypingStarted : Discord.TypingStart -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
@@ -3942,8 +3992,8 @@ handleReadySupplementalData data model =
                 case SeqDict.get guildId model2.discordGuilds of
                     Just guild ->
                         let
-                            mergedMembers2 : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
-                            mergedMembers2 =
+                            updatedMembers : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
+                            updatedMembers =
                                 List.foldl
                                     (\mergedMember state ->
                                         MembersAndOwner.addOrUpdateMember
@@ -3956,20 +4006,27 @@ handleReadySupplementalData data model =
                                     guild.membersAndOwner
                                     mergedMembers
 
+                            nicknames : SeqDict (Discord.Id Discord.UserId) PersonName
+                            nicknames =
+                                List.foldl
+                                    (\mergedMember state -> setNickname mergedMember.userId mergedMember.nick state)
+                                    guild.nicknames
+                                    mergedMembers
+
                             model3 : BackendModel
                             model3 =
                                 { model2
                                     | discordGuilds =
                                         SeqDict.insert
                                             guildId
-                                            { guild | membersAndOwner = mergedMembers2 }
+                                            { guild | membersAndOwner = updatedMembers, nicknames = nicknames }
                                             model2.discordGuilds
                                 }
                         in
                         ( model3
                         , Broadcast.toDiscordGuild
                             guildId
-                            (Server_UpdateDiscordMembers guildId mergedMembers2 |> ServerChange)
+                            (Server_UpdateDiscordMembers guildId updatedMembers nicknames |> ServerChange)
                             model3
                             :: cmds
                         )
@@ -4355,6 +4412,11 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 )
                                 existingGuild.membersAndOwner
                                 members
+                        , nicknames =
+                            List.foldl
+                                (\member nicknames -> setNickname member.userId member.nick nicknames)
+                                existingGuild.nicknames
+                                members
                         , stickers =
                             List.filterMap
                                 (\sticker -> OneToOne.second sticker.id existingStickers)
@@ -4397,6 +4459,11 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 |> SeqDict.fromList
                             )
                             guild.properties.ownerId
+                    , nicknames =
+                        List.foldl
+                            (\member nicknames -> setNickname member.userId member.nick nicknames)
+                            SeqDict.empty
+                            members
                     , stickers =
                         List.filterMap
                             (\sticker -> OneToOne.second sticker.id existingStickers)
@@ -4917,6 +4984,11 @@ handleListGuildMembersResponse chunkData model =
                                         guildMembers
                                 )
                                 guild.membersAndOwner
+                                chunkData.members
+                        , nicknames =
+                            List.foldl
+                                (\member nicknames -> setNickname member.user.id member.nickname nicknames)
+                                guild.nicknames
                                 chunkData.members
                     }
                 )
