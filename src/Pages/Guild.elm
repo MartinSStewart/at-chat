@@ -14858,7 +14858,16 @@ slackFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         NoNotification
 
                        else
-                        GuildColumn.slackDmNotification localUser currentUserId dmChannelId channel
+                        GuildColumn.dmNotification
+                            [ ( MuteSettings.isSlackDmMuted localUser.user.muteSettings dmChannelId NoThread
+                              , GuildColumn.newMessageCount
+                                    (SeqDict.get
+                                        (SlackGuildOrDmId (SlackGuildOrDmId_Dm { currentUserId = currentUserId, channelId = dmChannelId }))
+                                        localUser.user.lastViewedMessage
+                                    )
+                                    channel
+                              )
+                            ]
                       )
                         |> GuildIcon.slackNotificationView 4 -3 MyUi.background2
                     , Ui.width Ui.shrink

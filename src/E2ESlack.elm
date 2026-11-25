@@ -1854,6 +1854,13 @@ slackThreadsTest config =
                                 else
                                     Ok ()
                             )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , T.websocketSendString
+                            100
+                            connection
+                            """{"type":"message","channel":"D09DK3P5RPC","text":"Reply in a DM thread","user":"U09DK3NCPMG","team":"T09DJDQL18U","event_ts":"1791640040.000100","ts":"1791640040.000100","thread_ts":"1757115193.688809","parent_user_id":"U09DK3NCPMG"}"""
+                        , hasNotificationCount admin "guild_viewSlackDmThread_D09DK3P5RPC_0" (Just "1")
+                        , hasNotificationCount admin "guild_slackFriendLabel_D09DK3P5RPC" Nothing
                         ]
                     )
                 , E2EHelper.checkNoErrorLogs
