@@ -120,7 +120,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (CallRecordingFile, CallRecordingZip, Message, MessageContent)
+import Message exposing (CallRecordingFile, CallRecordingZip, ChangeAttachments, Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -1321,8 +1321,8 @@ type ServerChange
     | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId) (Id ChannelId))) (SeqDict (Id FileId) Attachment)
-    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
-    | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
+    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ChangeAttachments
+    | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ChangeAttachments
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
