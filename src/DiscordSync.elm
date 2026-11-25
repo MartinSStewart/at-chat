@@ -2474,7 +2474,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                     MembersAndOwner.addOrUpdateMember
                                                                                         participant.userId
                                                                                         { joinedAt = Just member.joinedAt
-                                                                                        , roles = SeqSet.empty
+                                                                                        , roles = SeqSet.fromList member.roles
                                                                                         }
                                                                                         guild2.membersAndOwner
                                                                               }

@@ -3556,6 +3556,58 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Joining a Discord activity keeps the roles that let you see private channels"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                let
+                    adminCanView : Bool -> { a | backend : E2EHelper.BackendModel2 } -> Result String ()
+                    adminCanView expected data =
+                        case SeqDict.get testGuildId (E2EHelper.unwrapBackend data.backend).discordGuilds of
+                            Just guild ->
+                                case SeqDict.get roleOnlyChannelId guild.channels of
+                                    Just channel ->
+                                        if LocalState.canViewDiscordChannel testGuildId channel guild E2EHelper.currentDiscordUserId == expected then
+                                            Ok ()
+
+                                        else if expected then
+                                            Err "The admin has the role that's allowed to view the channel but can't view it"
+
+                                        else
+                                            Err "The admin can view a channel only the mod role may view without having that role"
+
+                                    Nothing ->
+                                        Err "The backend doesn't have the mod-only channel"
+
+                            Nothing ->
+                                Err "The backend doesn't have the test guild"
+                in
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection roleOnlyChannelCreateEvent ]
+                    )
+                , T.checkState 100 (adminCanView False)
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminGetsModRoleEvent ]
+                    )
+                , T.checkState 100 (adminCanView True)
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminJoinsActivityEvent ]
+                    )
+                , T.checkState 100 (adminCanView True)
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord channel deleted via CHANNEL_DELETE disappears"
         E2EHelper.startTime
         normalConfig
@@ -5303,3 +5355,34 @@ secondDiscordUserAuth =
             E2EHelper.discordUserAuth
     in
     { auth | token = E2EHelper.secondDiscordToken }
+
+
+{-| A guild in the READY fixture that the admin's Discord account is a plain member of, with no
+roles. Its id doubles as the @everyone role's id.
+-}
+testGuildId : Discord.Id Discord.GuildId
+testGuildId =
+    Unsafe.uint64 "213136010802888706" |> Discord.idFromUInt64
+
+
+roleOnlyChannelId : Discord.Id Discord.ChannelId
+roleOnlyChannelId =
+    Unsafe.uint64 "1500000000000000779" |> Discord.idFromUInt64
+
+
+{-| @everyone is denied View Channel (1024) and the guild's "mod" role (213849605593497601) is
+allowed it.
+-}
+roleOnlyChannelCreateEvent : String
+roleOnlyChannelCreateEvent =
+    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"mods-only","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"},{"id":"213849605593497601","type":0,"allow":"1024","deny":"0"}]}}"""
+
+
+adminGetsModRoleEvent : String
+adminGetsModRoleEvent =
+    """{"t":"GUILD_MEMBER_UPDATE","s":91,"op":0,"d":{"guild_id":"213136010802888706","roles":["213849605593497601"],"user":{"id":"184437096813953035","username":"at0232","discriminator":"0","avatar":null},"nick":null,"joined_at":"2020-01-01T00:00:00.000000+00:00"}}"""
+
+
+adminJoinsActivityEvent : String
+adminJoinsActivityEvent =
+    """{"t":"EMBEDDED_ACTIVITY_UPDATE_V2","s":92,"op":0,"d":{"participants":[{"user_id":"184437096813953035","member":{"user":{"id":"184437096813953035","username":"at0232","discriminator":"0","avatar":null},"nick":null,"roles":["213849605593497601"],"joined_at":"2020-01-01T00:00:00.000000+00:00","deaf":false,"mute":false}}],"location":{"guild_id":"213136010802888706","channel_id":"1500000000000000780"}}}"""
