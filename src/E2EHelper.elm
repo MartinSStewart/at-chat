@@ -3216,10 +3216,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SendEditMessage _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordSendEditGuildMessage _ _ _ _ _ _ ->
+                        Types.Server_DiscordSendEditGuildMessage _ _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordSendEditDmMessage _ _ _ _ ->
+                        Types.Server_DiscordSendEditDmMessage _ _ _ _ _ ->
                             True
 
                         Types.Server_MemberEditTyping _ _ _ _ ->

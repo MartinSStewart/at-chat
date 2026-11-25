@@ -6468,7 +6468,7 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
-                Server_DiscordSendEditGuildMessage time editedBy guildId channelId threadRoute newContent ->
+                Server_DiscordSendEditGuildMessage time editedBy guildId channelId threadRoute newContent attachedFiles ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -6480,7 +6480,7 @@ changeUpdate localMsg local =
                                                 time
                                                 editedBy
                                                 newContent
-                                                DoNotChangeAttachments
+                                                attachedFiles
                                                 threadRoute
                                                 channel
                                                 |> Result.withDefault channel
@@ -6491,7 +6491,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordSendEditDmMessage time data messageId newContent ->
+                Server_DiscordSendEditDmMessage time data messageId newContent attachedFiles ->
                     { local
                         | discordDmChannels =
                             SeqDict.updateIfExists
@@ -6501,7 +6501,7 @@ changeUpdate localMsg local =
                                         time
                                         data.currentUserId
                                         newContent
-                                        DoNotChangeAttachments
+                                        attachedFiles
                                         messageId
                                         { dmChannel
                                             | lastTypedAt =

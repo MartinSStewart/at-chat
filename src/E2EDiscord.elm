@@ -554,6 +554,26 @@ checkNoDiscordParseErrors data =
             Err ("The backend failed to parse a Discord websocket message: " ++ String.join ", " errors)
 
 
+checkNoEmptyDiscordMessageLogs : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNoEmptyDiscordMessageLogs data =
+    if
+        List.any
+            (\{ log } ->
+                case log of
+                    Log.EmptyDiscordMessage _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            (Array.toList (E2EHelper.unwrapBackend data.backend).logs)
+    then
+        Err "The backend logged a Discord message as having no content"
+
+    else
+        Ok ()
+
+
 boolToString : Bool -> String
 boolToString bool =
     if bool then
@@ -1002,6 +1022,57 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Test.Html.Query.find [ Test.Html.Selector.id "spoiler_0_0" ] html
                                     |> Test.Html.Query.hasNot [ Test.Html.Selector.tag "img" ]
                             )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Slash command reply that the bot is still thinking about gets its content and image later"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3,"op":0,"d":{"webhook_id":"1194052233084534954","type":20,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"nonce":"1500000000000000000","mentions":[],"mention_roles":[],"mention_everyone":false,"interaction_metadata":{"user":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"type":2,"name":"draw","id":"1500000000000000002","command_type":1,"authorizing_integration_owners":{"0":"705745250815311942"}},"id":"1500000000000000001","flags":128,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"Drawceratops","public_flags":0,"primary_guild":null,"id":"1194052233084534954","global_name":null,"discriminator":"8861","bot":true,"avatar":"4648ec3e38263a4224727942a8aefde6"},"attachments":[],"application_id":"1194052233084534954","guild_id":"705745250815311942"}}"""
+                        , T.checkState 100 checkNoEmptyDiscordMessageLogs
+                        , T.websocketSendString 1000 connection """{"t":"MESSAGE_UPDATE","s":4,"op":0,"d":{"webhook_id":"1194052233084534954","type":20,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000001","flags":0,"embeds":[],"edited_timestamp":"2026-04-29T00:00:05.000000+00:00","content":"Here is your drawing","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"Drawceratops","public_flags":0,"primary_guild":null,"id":"1194052233084534954","global_name":null,"discriminator":"8861","bot":true,"avatar":"4648ec3e38263a4224727942a8aefde6"},"attachments":[{"width":80,"url":"https://cdn.discordapp.com/attachments/1072828564317159465/1500000000000000003/drawing.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","size":492063,"proxy_url":"https://media.discordapp.net/attachments/1072828564317159465/1500000000000000003/drawing.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","original_content_type":"image/png","id":"1500000000000000003","height":80,"flags":0,"filename":"drawing.png","content_type":"image/png"}],"application_id":"1194052233084534954","guild_id":"705745250815311942"}}"""
+                        , checkDiscordChannelAMessages [ "Here is your drawing🖼️" ]
+                        , T.checkState
+                            100
+                            (\data ->
+                                withAdminLocalState admin
+                                    data
+                                    (\local ->
+                                        case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
+                                            Just ( _, channel ) ->
+                                                case MessageArray.last channel.messages of
+                                                    Just (Message.UserTextMessage message) ->
+                                                        if SeqDict.size message.content.attachedFiles == 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err
+                                                                ("Expected the bot's reply to have 1 attached file on the frontend but it has "
+                                                                    ++ String.fromInt (SeqDict.size message.content.attachedFiles)
+                                                                )
+
+                                                    _ ->
+                                                        Err "The frontend's copy of the bot's reply is missing"
+
+                                            Nothing ->
+                                                Err "The Discord guild channel is missing from the frontend"
+                                    )
+                            )
+                        , T.checkState 100 checkNoEmptyDiscordMessageLogs
                         ]
                     )
                 ]
