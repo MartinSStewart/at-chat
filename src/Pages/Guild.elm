@@ -11267,6 +11267,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                             Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
+                |> mostRecentThreads threads
 
         count =
             List.length threads2
@@ -11356,6 +11357,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser channels
                             Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
+                |> mostRecentThreads threads
 
         count =
             List.length threads2
@@ -11380,6 +11382,45 @@ channelColumnThreads isMobile now channelRoute directMentions localUser channels
         )
         threads2
         |> Ui.column []
+
+
+maxVisibleThreads : Int
+maxVisibleThreads =
+    5
+
+
+{-| Keeps the threads with the most recent messages, up to maxVisibleThreads, with the selected
+thread always one of them. They stay in the order they were given in.
+-}
+mostRecentThreads :
+    SeqDict (Id ChannelMessageId) { a | messages : MessageArray ThreadMessageId userId channelId }
+    -> List ( Id ChannelMessageId, b, Bool )
+    -> List ( Id ChannelMessageId, b, Bool )
+mostRecentThreads threads visibleThreads =
+    List.indexedMap Tuple.pair visibleThreads
+        |> List.sortBy
+            (\( _, ( threadMessageIndex, _, isSelected ) ) ->
+                ( if isSelected then
+                    0
+
+                  else
+                    1
+                , case SeqDict.get threadMessageIndex threads of
+                    Just thread ->
+                        case MessageArray.last thread.messages of
+                            Just message ->
+                                -(Time.posixToMillis (Message.createdAt message))
+
+                            Nothing ->
+                                0
+
+                    Nothing ->
+                        0
+                )
+            )
+        |> List.take maxVisibleThreads
+        |> List.sortBy Tuple.first
+        |> List.map Tuple.second
 
 
 channelColumnThreadsHelper :
@@ -11505,6 +11546,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                             Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
+                |> mostRecentThreads threads
 
         count : Int
         count =
@@ -14506,6 +14548,7 @@ slackChannelColumnThreads isMobile now routeData directMentions localUser channe
                                 Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
+                |> mostRecentThreads threads
 
         count : Int
         count =
@@ -14670,6 +14713,7 @@ slackDmColumnThreads isMobile now threadRoute localUser dmChannelId dmChannel th
                                         Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                         )
                         (SeqDict.toList threads)
+                        |> mostRecentThreads threads
 
                 count : Int
                 count =
