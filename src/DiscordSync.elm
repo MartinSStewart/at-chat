@@ -2603,7 +2603,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ChannelUpdated channel ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleChannelUpdated channel model2
+                                    handleChannelUpdated discordUserId channel model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2730,74 +2730,159 @@ loadJoinedOrCreatedGuildData secretKey discordUserId gatewayGuild =
             )
 
 
-handleChannelUpdated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleChannelUpdated channel model =
+handleChannelUpdated :
+    Discord.Id Discord.UserId
+    -> Discord.Channel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelUpdated discordUserId channel model =
     case channel.guildId of
         Missing ->
             ( model, Command.none )
 
         Included guildId ->
+            if Discord.channelIsObfuscated channel then
+                handleObfuscatedChannel discordUserId guildId channel.id model
+
+            else
+                handleChannelUpdatedHelper guildId channel model
+
+
+handleChannelUpdatedHelper :
+    Discord.Id Discord.GuildId
+    -> Discord.Channel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelUpdatedHelper guildId channel model =
+    let
+        model2 : BackendModel
+        model2 =
+            { model
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild ->
+                            { guild
+                                | channels =
+                                    SeqDict.updateIfExists
+                                        channel.id
+                                        (\existingChannel ->
+                                            { existingChannel
+                                                | name =
+                                                    case channel.name of
+                                                        Included (Just name) ->
+                                                            ChannelName.fromStringLossy name
+
+                                                        _ ->
+                                                            existingChannel.name
+                                                , description =
+                                                    LocalState.discordTopicToDescription
+                                                        channel.topic
+                                                        existingChannel.description
+                                                , permissionOverwrites =
+                                                    case channel.permissionOverwrites of
+                                                        Missing ->
+                                                            existingChannel.permissionOverwrites
+
+                                                        Included permissions ->
+                                                            permissions
+                                            }
+                                        )
+                                        guild.channels
+                            }
+                        )
+                        model.discordGuilds
+            }
+
+        newOverwrites : List Discord.Overwrite
+        newOverwrites =
+            case
+                SeqDict.get guildId model2.discordGuilds
+                    |> Maybe.andThen (\guild -> SeqDict.get channel.id guild.channels)
+            of
+                Just updatedChannel ->
+                    updatedChannel.permissionOverwrites
+
+                Nothing ->
+                    []
+    in
+    ( model2
+      -- Broadcast against the updated model so recipients are resolved with the
+      -- new overwrites: users who just lost access are excluded.
+    , Broadcast.toDiscordGuildChannel
+        guildId
+        channel.id
+        (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic newOverwrites |> ServerChange)
+        model2
+    )
+
+
+{-| Discord sends an account a placeholder for a guild channel it can't view (see
+`Discord.channelIsObfuscated`). Other linked accounts may still see the channel, so the placeholder's
+name, topic and permission overwrites must not replace the real ones we have. All it tells us is
+that this account can't view the channel, so it gets a member overwrite denying View Channel. Once
+the account can view the channel again, Discord sends a CHANNEL\_UPDATE with the real overwrites,
+which replaces this one.
+
+A channel we don't have yet is left to `handleChannelCreated`, since a later CHANNEL\_UPDATE can
+only fill in a channel we already hold.
+
+-}
+handleObfuscatedChannel :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleObfuscatedChannel discordUserId guildId channelId model =
+    case LocalState.getDiscordGuildAndChannel guildId channelId model of
+        Just ( guild, channel ) ->
             let
-                model2 : BackendModel
-                model2 =
-                    { model
-                        | discordGuilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (\guild ->
-                                    { guild
-                                        | channels =
-                                            SeqDict.updateIfExists
-                                                channel.id
-                                                (\existingChannel ->
-                                                    { existingChannel
-                                                        | name =
-                                                            case channel.name of
-                                                                Included (Just name) ->
-                                                                    ChannelName.fromStringLossy name
-
-                                                                _ ->
-                                                                    existingChannel.name
-                                                        , description =
-                                                            LocalState.discordTopicToDescription
-                                                                channel.topic
-                                                                existingChannel.description
-                                                        , permissionOverwrites =
-                                                            case channel.permissionOverwrites of
-                                                                Missing ->
-                                                                    existingChannel.permissionOverwrites
-
-                                                                Included permissions ->
-                                                                    permissions
-                                                    }
-                                                )
-                                                guild.channels
-                                    }
-                                )
-                                model.discordGuilds
-                    }
+                noPermissions : Discord.Permissions
+                noPermissions =
+                    Discord.noPermissions
 
                 newOverwrites : List Discord.Overwrite
                 newOverwrites =
-                    case
-                        SeqDict.get guildId model2.discordGuilds
-                            |> Maybe.andThen (\guild -> SeqDict.get channel.id guild.channels)
-                    of
-                        Just updatedChannel ->
-                            updatedChannel.permissionOverwrites
-
-                        Nothing ->
-                            []
+                    { id = Discord.RoleOrUserId_UserId discordUserId
+                    , allow = noPermissions
+                    , deny = { noPermissions | viewChannel = True }
+                    }
+                        :: List.filter
+                            (\overwrite -> overwrite.id /= Discord.RoleOrUserId_UserId discordUserId)
+                            channel.permissionOverwrites
             in
-            ( model2
-              -- Broadcast against the updated model so recipients are resolved with the
-              -- new overwrites: users who just lost access are excluded.
-            , Broadcast.toDiscordGuildChannel
-                guildId
-                channel.id
-                (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic newOverwrites |> ServerChange)
-                model2
-            )
+            if newOverwrites == channel.permissionOverwrites then
+                ( model, Command.none )
+
+            else
+                let
+                    model2 : BackendModel
+                    model2 =
+                        { model
+                            | discordGuilds =
+                                SeqDict.insert
+                                    guildId
+                                    { guild
+                                        | channels =
+                                            SeqDict.insert
+                                                channelId
+                                                { channel | permissionOverwrites = newOverwrites }
+                                                guild.channels
+                                    }
+                                    model.discordGuilds
+                        }
+                in
+                ( model2
+                , Broadcast.toDiscordGuildChannel
+                    guildId
+                    channelId
+                    (Server_DiscordUpdateChannel guildId channelId Missing Missing newOverwrites |> ServerChange)
+                    model2
+                )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 {-| A DM getting closed in Discord also comes through as a CHANNEL\_DELETE, but that only hides it
@@ -2967,7 +3052,7 @@ syncChannelsFromReady discordUserId readyGuilds model =
                                 ( Just _, Just existingChannel ) ->
                                     let
                                         ( updatedModel, cmd ) =
-                                            handleChannelUpdated channel model3
+                                            handleChannelUpdated discordUserId channel model3
                                     in
                                     case LocalState.getDiscordGuildAndChannel readyGuild.properties.id channel.id updatedModel of
                                         Just ( _, updatedChannel ) ->
@@ -3046,7 +3131,11 @@ catchUpAfterReady discordUserId authentication readyData model =
                                             -- this guild, so everything in it would count as new
                                             case latestLinkedMessageId channel.linkedMessageIds of
                                                 Just latest ->
-                                                    if channel.isForum || not (LocalState.canViewDiscordChannel readyGuild.properties.id channel guild discordUserId) then
+                                                    if
+                                                        channel.isForum
+                                                            || Discord.channelIsObfuscated readyChannel
+                                                            || not (LocalState.canViewDiscordChannel readyGuild.properties.id channel guild discordUserId)
+                                                    then
                                                         Nothing
 
                                                     else
@@ -3888,72 +3977,85 @@ handleChannelCreated discordUserId channel model =
                     ( model, Command.none )
 
         Included guildId ->
-            let
-                name : ChannelName
-                name =
-                    case channel.name of
-                        Included (Just name2) ->
-                            ChannelName.fromStringLossy name2
+            if Discord.channelIsObfuscated channel && LocalState.getDiscordGuildAndChannel guildId channel.id model /= Nothing then
+                handleObfuscatedChannel discordUserId guildId channel.id model
 
-                        _ ->
-                            ChannelName.fromStringLossy "New channel"
+            else
+                handleChannelCreatedHelper guildId channel model
 
-                overwrites : List Discord.Overwrite
-                overwrites =
-                    case channel.permissionOverwrites of
-                        Missing ->
-                            []
 
-                        Included permissions ->
-                            permissions
+handleChannelCreatedHelper :
+    Discord.Id Discord.GuildId
+    -> Discord.Channel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreatedHelper guildId channel model =
+    let
+        name : ChannelName
+        name =
+            case channel.name of
+                Included (Just name2) ->
+                    ChannelName.fromStringLossy name2
 
-                isForum : Bool
-                isForum =
-                    channel.type_ == Discord.GuildForum
+                _ ->
+                    ChannelName.fromStringLossy "New channel"
 
-                model2 : BackendModel
-                model2 =
-                    { model
-                        | discordGuilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (\guild ->
-                                    { guild
-                                        | channels =
-                                            SeqDict.update
-                                                channel.id
-                                                (\maybeChannel ->
-                                                    case maybeChannel of
-                                                        Just existingChannel ->
-                                                            Just
-                                                                { existingChannel
-                                                                    | name = name
-                                                                    , description =
-                                                                        LocalState.discordTopicToDescription
-                                                                            channel.topic
-                                                                            existingChannel.description
-                                                                    , isForum = isForum
-                                                                    , permissionOverwrites = overwrites
-                                                                }
+        overwrites : List Discord.Overwrite
+        overwrites =
+            case channel.permissionOverwrites of
+                Missing ->
+                    []
 
-                                                        Nothing ->
-                                                            addDiscordChannel channel
-                                                )
-                                                guild.channels
-                                    }
-                                )
-                                model.discordGuilds
-                    }
-            in
-            ( model2
-              -- Broadcast against the updated model so the newly created channel is found
-              -- and delivered to exactly the members who are allowed to view it.
-            , Broadcast.toDiscordGuildChannel
-                guildId
-                channel.id
-                (Server_DiscordChannelCreated guildId channel.id isForum name channel.topic overwrites |> ServerChange)
-                model2
-            )
+                Included permissions ->
+                    permissions
+
+        isForum : Bool
+        isForum =
+            channel.type_ == Discord.GuildForum
+
+        model2 : BackendModel
+        model2 =
+            { model
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild ->
+                            { guild
+                                | channels =
+                                    SeqDict.update
+                                        channel.id
+                                        (\maybeChannel ->
+                                            case maybeChannel of
+                                                Just existingChannel ->
+                                                    Just
+                                                        { existingChannel
+                                                            | name = name
+                                                            , description =
+                                                                LocalState.discordTopicToDescription
+                                                                    channel.topic
+                                                                    existingChannel.description
+                                                            , isForum = isForum
+                                                            , permissionOverwrites = overwrites
+                                                        }
+
+                                                Nothing ->
+                                                    addDiscordChannel channel
+                                        )
+                                        guild.channels
+                            }
+                        )
+                        model.discordGuilds
+            }
+    in
+    ( model2
+      -- Broadcast against the updated model so the newly created channel is found
+      -- and delivered to exactly the members who are allowed to view it.
+    , Broadcast.toDiscordGuildChannel
+        guildId
+        channel.id
+        (Server_DiscordChannelCreated guildId channel.id isForum name channel.topic overwrites |> ServerChange)
+        model2
+    )
 
 
 handleReadySupplementalData :
