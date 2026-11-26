@@ -3,7 +3,9 @@ module E2EDiscord exposing (discordTests)
 import Array
 import Audio
 import Backend
+import ChannelDescription
 import ChannelHeader
+import ChannelName
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
@@ -3679,6 +3681,95 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "A Discord channel hidden from one account keeps its name for the accounts that can see it"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminGetsModRoleEvent
+                        , T.websocketSendString 100 connection otherUserGetsModRoleEvent
+                        , T.websocketSendString 100 connection roleOnlyChannelCreateEvent
+                        ]
+                    )
+                , T.checkState 100 (checkRoleOnlyChannel { adminCanView = True, otherModCanView = True })
+                , -- The admin's account loses access, so Discord sends it a placeholder for the channel
+                  E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection (roleOnlyChannelObfuscatedEvent "CHANNEL_UPDATE" 93) ]
+                    )
+                , T.checkState 100 (checkRoleOnlyChannel { adminCanView = False, otherModCanView = True })
+                , -- A placeholder CHANNEL_CREATE for a channel we have is treated the same way
+                  E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection (roleOnlyChannelObfuscatedEvent "CHANNEL_CREATE" 94) ]
+                    )
+                , T.checkState 100 (checkRoleOnlyChannel { adminCanView = False, otherModCanView = True })
+                , -- Access comes back, and Discord sends the whole channel again
+                  E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection roleOnlyChannelRegainedEvent ]
+                    )
+                , T.checkState 100 (checkRoleOnlyChannel { adminCanView = True, otherModCanView = True })
+                , T.checkState 100 checkNoDiscordParseErrors
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A Discord channel hidden from the account in READY keeps its name for the accounts that can see it"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminGetsModRoleEvent
+                        , T.websocketSendString 100 connection otherUserGetsModRoleEvent
+                        , T.websocketSendString 100 connection roleOnlyChannelCreateEvent
+                        , T.websocketSendString 100 connection """{"t":null,"s":null,"op":9,"d":false}"""
+                        ]
+                    )
+                , E2EHelper.andThenWebsocket
+                    E2EHelper.gatewayReconnectDelay
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        case
+                            readyWithGuildListItems
+                                "213136010802888706"
+                                "channels"
+                                [ roleOnlyChannelObfuscatedJson ]
+                                discordOp0Ready
+                        of
+                            Ok ready ->
+                                [ T.websocketSendString 100 connection ready
+                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                ]
+
+                            Err error ->
+                                [ T.checkState 0 (\_ -> Err error) ]
+                    )
+                , T.checkState 1000 (checkRoleOnlyChannel { adminCanView = False, otherModCanView = True })
+                , T.checkState 100 checkNoDiscordParseErrors
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord channel deleted via CHANNEL_DELETE disappears"
         E2EHelper.startTime
         normalConfig
@@ -5446,7 +5537,66 @@ allowed it.
 -}
 roleOnlyChannelCreateEvent : String
 roleOnlyChannelCreateEvent =
-    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"mods-only","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"},{"id":"213849605593497601","type":0,"allow":"1024","deny":"0"}]}}"""
+    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"mods-only","position":10,"topic":"Only for mods","parent_id":null,"nsfw":false,"last_message_id":null,"flags":0,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"},{"id":"213849605593497601","type":0,"allow":"1024","deny":"0"}]}}"""
+
+
+roleOnlyChannelRegainedEvent : String
+roleOnlyChannelRegainedEvent =
+    """{"t":"CHANNEL_UPDATE","s":95,"op":0,"d":{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"mods-only","position":10,"topic":"Only for mods","parent_id":null,"nsfw":false,"last_message_id":null,"flags":0,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"},{"id":"213849605593497601","type":0,"allow":"1024","deny":"0"}]}}"""
+
+
+{-| What Discord sends an account in place of a channel it can't view: the CHANNEL\_OBFUSCATED flag
+(1 << 17) is set, the name and topic are both _**hidden**_ and the only permission overwrite denies
+@everyone View Channel.
+-}
+roleOnlyChannelObfuscatedJson : String
+roleOnlyChannelObfuscatedJson =
+    """{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"___hidden___","position":10,"topic":"___hidden___","parent_id":null,"nsfw":false,"last_message_id":null,"flags":131072,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"}]}"""
+
+
+roleOnlyChannelObfuscatedEvent : String -> Int -> String
+roleOnlyChannelObfuscatedEvent eventName sequence =
+    "{\"t\":\"" ++ eventName ++ "\",\"s\":" ++ String.fromInt sequence ++ ",\"op\":0,\"d\":" ++ roleOnlyChannelObfuscatedJson ++ "}"
+
+
+{-| Someone else in the test guild who has the mod role. Their account isn't linked, but the backend
+works out what they may view the same way.
+-}
+otherUserGetsModRoleEvent : String
+otherUserGetsModRoleEvent =
+    """{"t":"GUILD_MEMBER_UPDATE","s":92,"op":0,"d":{"guild_id":"213136010802888706","roles":["213849605593497601"],"user":{"id":"555555555555555555","username":"other_mod","discriminator":"0","avatar":null},"nick":null,"joined_at":"2020-01-01T00:00:00.000000+00:00"}}"""
+
+
+checkRoleOnlyChannel : { adminCanView : Bool, otherModCanView : Bool } -> { a | backend : E2EHelper.BackendModel2 } -> Result String ()
+checkRoleOnlyChannel expected data =
+    case SeqDict.get testGuildId (E2EHelper.unwrapBackend data.backend).discordGuilds of
+        Just guild ->
+            case SeqDict.get roleOnlyChannelId guild.channels of
+                Just channel ->
+                    let
+                        actual : { adminCanView : Bool, otherModCanView : Bool }
+                        actual =
+                            { adminCanView = LocalState.canViewDiscordChannel testGuildId channel guild E2EHelper.currentDiscordUserId
+                            , otherModCanView = LocalState.canViewDiscordChannel testGuildId channel guild E2EHelper.secondDiscordUserId
+                            }
+                    in
+                    if ChannelName.toString channel.name /= "mods-only" then
+                        Err ("The channel's name should still be mods-only but it's " ++ ChannelName.toString channel.name)
+
+                    else if ChannelDescription.toString channel.description /= "Only for mods" then
+                        Err ("The channel's description should still be \"Only for mods\" but it's " ++ ChannelDescription.toString channel.description)
+
+                    else if actual /= expected then
+                        Err ("Expected " ++ Debug.toString expected ++ " but got " ++ Debug.toString actual)
+
+                    else
+                        Ok ()
+
+                Nothing ->
+                    Err "The backend doesn't have the mod-only channel"
+
+        Nothing ->
+            Err "The backend doesn't have the test guild"
 
 
 adminGetsModRoleEvent : String
