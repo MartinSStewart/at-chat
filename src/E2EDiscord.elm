@@ -5546,12 +5546,12 @@ roleOnlyChannelRegainedEvent =
 
 
 {-| What Discord sends an account in place of a channel it can't view: the CHANNEL\_OBFUSCATED flag
-(1 << 17) is set, the name and topic are blanked out and the only permission overwrite denies
+(1 << 17) is set, the name and topic are both _**hidden**_ and the only permission overwrite denies
 @everyone View Channel.
 -}
 roleOnlyChannelObfuscatedJson : String
 roleOnlyChannelObfuscatedJson =
-    """{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"___hidden___","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"flags":131072,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"}]}"""
+    """{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"___hidden___","position":10,"topic":"___hidden___","parent_id":null,"nsfw":false,"last_message_id":null,"flags":131072,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"}]}"""
 
 
 roleOnlyChannelObfuscatedEvent : String -> Int -> String

@@ -2861,9 +2861,13 @@ type alias Channel =
 
 
 {-| Discord sends a placeholder for guild channels the account receiving it can't view. Only id,
-type, position and parent\_id are real. The permission overwrites are replaced with one that denies
-@everyone View Channel, and the name and topic can't be relied on. Only the gateway does this; the
-HTTP API leaves such channels out instead.
+type, position and parent\_id are real. The name and topic are both `___hidden___` and the permission
+overwrites are replaced with one that denies @everyone View Channel. User accounts get these even
+without the CHANNEL\_OBFUSCATION gateway capability. Only the gateway does this; the HTTP API leaves
+such channels out instead.
+
+<https://docs.discord.food/resources/channel#channel-flags>
+
 -}
 channelIsObfuscated : Channel -> Bool
 channelIsObfuscated channel =
