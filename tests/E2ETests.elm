@@ -501,6 +501,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2ESlack.slackEditMessageTest normalConfig
     , E2ESlack.orphanedSlackWorkspacesTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
+    , E2EMisc.onlyFiveThreadsAreShownTest normalConfig
     , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.notificationClickOpensConversationTest normalConfig
     , E2EMisc.notifyAdminsTest normalConfig

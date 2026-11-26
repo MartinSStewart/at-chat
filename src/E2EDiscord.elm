@@ -554,6 +554,26 @@ checkNoDiscordParseErrors data =
             Err ("The backend failed to parse a Discord websocket message: " ++ String.join ", " errors)
 
 
+checkNoEmptyDiscordMessageLogs : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNoEmptyDiscordMessageLogs data =
+    if
+        List.any
+            (\{ log } ->
+                case log of
+                    Log.EmptyDiscordMessage _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+            (Array.toList (E2EHelper.unwrapBackend data.backend).logs)
+    then
+        Err "The backend logged a Discord message as having no content"
+
+    else
+        Ok ()
+
+
 boolToString : Bool -> String
 boolToString bool =
     if bool then
@@ -1002,6 +1022,57 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Test.Html.Query.find [ Test.Html.Selector.id "spoiler_0_0" ] html
                                     |> Test.Html.Query.hasNot [ Test.Html.Selector.tag "img" ]
                             )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Slash command reply that the bot is still thinking about gets its content and image later"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3,"op":0,"d":{"webhook_id":"1194052233084534954","type":20,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"nonce":"1500000000000000000","mentions":[],"mention_roles":[],"mention_everyone":false,"interaction_metadata":{"user":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"type":2,"name":"draw","id":"1500000000000000002","command_type":1,"authorizing_integration_owners":{"0":"705745250815311942"}},"id":"1500000000000000001","flags":128,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"Drawceratops","public_flags":0,"primary_guild":null,"id":"1194052233084534954","global_name":null,"discriminator":"8861","bot":true,"avatar":"4648ec3e38263a4224727942a8aefde6"},"attachments":[],"application_id":"1194052233084534954","guild_id":"705745250815311942"}}"""
+                        , T.checkState 100 checkNoEmptyDiscordMessageLogs
+                        , T.websocketSendString 1000 connection """{"t":"MESSAGE_UPDATE","s":4,"op":0,"d":{"webhook_id":"1194052233084534954","type":20,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000001","flags":0,"embeds":[],"edited_timestamp":"2026-04-29T00:00:05.000000+00:00","content":"Here is your drawing","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"Drawceratops","public_flags":0,"primary_guild":null,"id":"1194052233084534954","global_name":null,"discriminator":"8861","bot":true,"avatar":"4648ec3e38263a4224727942a8aefde6"},"attachments":[{"width":80,"url":"https://cdn.discordapp.com/attachments/1072828564317159465/1500000000000000003/drawing.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","size":492063,"proxy_url":"https://media.discordapp.net/attachments/1072828564317159465/1500000000000000003/drawing.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","original_content_type":"image/png","id":"1500000000000000003","height":80,"flags":0,"filename":"drawing.png","content_type":"image/png"}],"application_id":"1194052233084534954","guild_id":"705745250815311942"}}"""
+                        , checkDiscordChannelAMessages [ "Here is your drawing🖼️" ]
+                        , T.checkState
+                            100
+                            (\data ->
+                                withAdminLocalState admin
+                                    data
+                                    (\local ->
+                                        case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
+                                            Just ( _, channel ) ->
+                                                case MessageArray.last channel.messages of
+                                                    Just (Message.UserTextMessage message) ->
+                                                        if SeqDict.size message.content.attachedFiles == 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err
+                                                                ("Expected the bot's reply to have 1 attached file on the frontend but it has "
+                                                                    ++ String.fromInt (SeqDict.size message.content.attachedFiles)
+                                                                )
+
+                                                    _ ->
+                                                        Err "The frontend's copy of the bot's reply is missing"
+
+                                            Nothing ->
+                                                Err "The Discord guild channel is missing from the frontend"
+                                    )
+                            )
+                        , T.checkState 100 checkNoEmptyDiscordMessageLogs
                         ]
                     )
                 ]
@@ -3556,6 +3627,58 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Joining a Discord activity keeps the roles that let you see private channels"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                let
+                    adminCanView : Bool -> { a | backend : E2EHelper.BackendModel2 } -> Result String ()
+                    adminCanView expected data =
+                        case SeqDict.get testGuildId (E2EHelper.unwrapBackend data.backend).discordGuilds of
+                            Just guild ->
+                                case SeqDict.get roleOnlyChannelId guild.channels of
+                                    Just channel ->
+                                        if LocalState.canViewDiscordChannel testGuildId channel guild E2EHelper.currentDiscordUserId == expected then
+                                            Ok ()
+
+                                        else if expected then
+                                            Err "The admin has the role that's allowed to view the channel but can't view it"
+
+                                        else
+                                            Err "The admin can view a channel only the mod role may view without having that role"
+
+                                    Nothing ->
+                                        Err "The backend doesn't have the mod-only channel"
+
+                            Nothing ->
+                                Err "The backend doesn't have the test guild"
+                in
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection roleOnlyChannelCreateEvent ]
+                    )
+                , T.checkState 100 (adminCanView False)
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminGetsModRoleEvent ]
+                    )
+                , T.checkState 100 (adminCanView True)
+                , E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection adminJoinsActivityEvent ]
+                    )
+                , T.checkState 100 (adminCanView True)
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord channel deleted via CHANNEL_DELETE disappears"
         E2EHelper.startTime
         normalConfig
@@ -5303,3 +5426,34 @@ secondDiscordUserAuth =
             E2EHelper.discordUserAuth
     in
     { auth | token = E2EHelper.secondDiscordToken }
+
+
+{-| A guild in the READY fixture that the admin's Discord account is a plain member of, with no
+roles. Its id doubles as the @everyone role's id.
+-}
+testGuildId : Discord.Id Discord.GuildId
+testGuildId =
+    Unsafe.uint64 "213136010802888706" |> Discord.idFromUInt64
+
+
+roleOnlyChannelId : Discord.Id Discord.ChannelId
+roleOnlyChannelId =
+    Unsafe.uint64 "1500000000000000779" |> Discord.idFromUInt64
+
+
+{-| @everyone is denied View Channel (1024) and the guild's "mod" role (213849605593497601) is
+allowed it.
+-}
+roleOnlyChannelCreateEvent : String
+roleOnlyChannelCreateEvent =
+    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000779","type":0,"guild_id":"213136010802888706","name":"mods-only","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"213136010802888706","type":0,"allow":"0","deny":"1024"},{"id":"213849605593497601","type":0,"allow":"1024","deny":"0"}]}}"""
+
+
+adminGetsModRoleEvent : String
+adminGetsModRoleEvent =
+    """{"t":"GUILD_MEMBER_UPDATE","s":91,"op":0,"d":{"guild_id":"213136010802888706","roles":["213849605593497601"],"user":{"id":"184437096813953035","username":"at0232","discriminator":"0","avatar":null},"nick":null,"joined_at":"2020-01-01T00:00:00.000000+00:00"}}"""
+
+
+adminJoinsActivityEvent : String
+adminJoinsActivityEvent =
+    """{"t":"EMBEDDED_ACTIVITY_UPDATE_V2","s":92,"op":0,"d":{"participants":[{"user_id":"184437096813953035","member":{"user":{"id":"184437096813953035","username":"at0232","discriminator":"0","avatar":null},"nick":null,"roles":["213849605593497601"],"joined_at":"2020-01-01T00:00:00.000000+00:00","deaf":false,"mute":false}}],"location":{"guild_id":"213136010802888706","channel_id":"1500000000000000780"}}}"""

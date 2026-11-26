@@ -278,13 +278,17 @@ handleDiscordDmEditMessage edit attachments model =
                                             stickers
                                 )
                                 edit.messageSnapshots
+
+                        attachments2 : ChangeAttachments
+                        attachments2 =
+                            ChangeAttachments (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
                     in
                     case
                         LocalState.editMessageHelperNoThread
                             edit.timestamp
                             edit.author.id
                             richText
-                            DoNotChangeAttachments
+                            attachments2
                             messageIndex
                             channel
                     of
@@ -300,6 +304,7 @@ handleDiscordDmEditMessage edit attachments model =
                                     { currentUserId = edit.author.id, channelId = channelId }
                                     messageIndex
                                     richText
+                                    attachments2
                                     |> ServerChange
                                 )
                                 model
@@ -429,6 +434,10 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                         List.filterMap (\sticker -> OneToOne.second sticker.id model.discordStickers) stickers
                 )
                 edit.messageSnapshots
+
+        attachments2 : ChangeAttachments
+        attachments2 =
+            ChangeAttachments (SeqDict.map (\_ attachment -> Stored attachment.fileData) attachments)
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -439,7 +448,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                             edit.timestamp
                             edit.author.id
                             richText
-                            DoNotChangeAttachments
+                            attachments2
                             (NoThreadWithMessage messageIndex)
                             channel
                     of
@@ -461,6 +470,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                     edit.channelId
                                     (NoThreadWithMessage messageIndex)
                                     richText
+                                    attachments2
                                     |> ServerChange
                                 )
                                 model
@@ -505,7 +515,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                             edit.timestamp
                             edit.author.id
                             richText
-                            DoNotChangeAttachments
+                            attachments2
                             (ViewThreadWithMessage threadId messageIndex)
                             channel
                     of
@@ -527,6 +537,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                     channelId
                                     (ViewThreadWithMessage threadId messageIndex)
                                     richText
+                                    attachments2
                                     |> ServerChange
                                 )
                                 model
@@ -1102,6 +1113,19 @@ handleUserCreatedMessage websocketJson message model2 =
             ( model5, [ stickerCmds, customEmojiCmds, cmd2 ] )
 
 
+{-| A bot that takes a while to answer a slash command first posts an empty message while it's
+"thinking". Its answer replaces that message's content later on with a MESSAGE\_UPDATE.
+-}
+isWaitingForBotReply : Discord.Message -> Bool
+isWaitingForBotReply discordMessage =
+    case discordMessage.flags of
+        Included flags ->
+            flags.loading
+
+        Missing ->
+            False
+
+
 handleCreateMessage :
     String
     -> Discord.Message
@@ -1192,7 +1216,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                             model
 
                                     ( model2, logCmd ) =
-                                        if richText == RichText.emptyPlaceholder then
+                                        if richText == RichText.emptyPlaceholder && not (isWaitingForBotReply discordMessage) then
                                             BackendExtra.addLog
                                                 discordMessage.timestamp
                                                 (Log.EmptyDiscordMessage websocketJson)
@@ -1629,7 +1653,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                     Ok ( ( ( sessions, notificationCmds ), channel4 ), embedCmds, stickers ) ->
                                         let
                                             ( model2, logCmd ) =
-                                                if richText == RichText.emptyPlaceholder then
+                                                if richText == RichText.emptyPlaceholder && not (isWaitingForBotReply discordMessage) then
                                                     BackendExtra.addLog
                                                         discordMessage.timestamp
                                                         (Log.EmptyDiscordMessage websocketJson)
@@ -1987,6 +2011,7 @@ handleForumPostRenamed thread time model =
                                             forumId
                                             (NoThreadWithMessage messageId)
                                             richText
+                                            DoNotChangeAttachments
                                             |> ServerChange
                                         )
                                         model2
@@ -2474,7 +2499,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                     MembersAndOwner.addOrUpdateMember
                                                                                         participant.userId
                                                                                         { joinedAt = Just member.joinedAt
-                                                                                        , roles = SeqSet.empty
+                                                                                        , roles = SeqSet.fromList member.roles
                                                                                         }
                                                                                         guild2.membersAndOwner
                                                                               }

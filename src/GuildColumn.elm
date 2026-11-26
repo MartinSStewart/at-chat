@@ -13,7 +13,6 @@ module GuildColumn exposing
     , newMessageCount
     , rowLinkButton
     , slackDmCurrentUserId
-    , slackDmNotification
     , slackWorkspaceCurrentUserId
     , slackWorkspaceRoute
     , unreadNotificationCount

@@ -25,6 +25,7 @@ module E2EMisc exposing
     , noTimestampSuggestionTest
     , notificationClickOpensConversationTest
     , notifyAdminsTest
+    , onlyFiveThreadsAreShownTest
     , openLastViewedGuildOnStartupTest
     , orphanedFilesTest
     , profileImageOpensDm
@@ -1353,6 +1354,57 @@ inactiveThreadsAreHiddenTest config =
                 , E2EHelper.writeMessage admin 100 "Hello again from thread!"
                 , admin.navigateBack 100
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                ]
+            )
+        ]
+
+
+onlyFiveThreadsAreShownTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+onlyFiveThreadsAreShownTest config =
+    let
+        threadIsShown : Bool -> Int -> Test.Html.Query.Single FrontendMsg -> Expect.Expectation
+        threadIsShown isShown threadId =
+            if isShown then
+                Test.Html.Query.has [ Test.Html.Selector.id ("guild_viewThread_0_" ++ String.fromInt threadId) ]
+
+            else
+                Test.Html.Query.hasNot [ Test.Html.Selector.id ("guild_viewThread_0_" ++ String.fromInt threadId) ]
+    in
+    T.start
+        "Only the five most recently active threads are shown"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , List.range 0 5
+                    |> List.map
+                        (\index ->
+                            T.group
+                                [ admin.click 100 (Dom.id "guild_openChannel_0")
+                                , E2EHelper.writeMessage admin 1000 ("Message " ++ String.fromInt index)
+                                , E2EHelper.createThread admin (Id.fromInt index)
+                                , E2EHelper.writeMessage admin 1000 ("Thread " ++ String.fromInt index)
+                                ]
+                        )
+                    |> T.group
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , List.range 1 5 |> List.map (\index -> admin.checkView 100 (threadIsShown True index)) |> T.group
+                , admin.checkView 100 (threadIsShown False 0)
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , admin.checkView 100 (threadIsShown True 0)
+                , admin.checkView 100 (threadIsShown False 1)
+                , E2EHelper.writeMessage admin 1000 "Thread 0 again"
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , admin.checkView 100 (threadIsShown True 0)
+                , admin.checkView 100 (threadIsShown False 1)
+                , List.range 2 5 |> List.map (\index -> admin.checkView 100 (threadIsShown True index)) |> T.group
                 ]
             )
         ]

@@ -5418,6 +5418,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 channelId
                                                 threadRoute
                                                 richText
+                                                DoNotChangeAttachments
                                                 |> ServerChange
                                             )
                                             model
@@ -5497,6 +5498,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 dmData
                                                 messageId
                                                 richText
+                                                DoNotChangeAttachments
                                                 |> ServerChange
                                             )
                                             model
