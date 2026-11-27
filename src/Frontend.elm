@@ -98,7 +98,7 @@ import TextEditor
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication
-import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LinkDiscordFailure(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PendingEncryptedMessage, PublicGoMatch(..), RepliedToData(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -3875,13 +3875,6 @@ updateLoaded msg model =
                                 )
                             of
                                 ( Just pending, [ cipherText, notification ] ) ->
-                                    let
-                                        draft : ( AnyGuildOrDmId, ThreadRoute )
-                                        draft =
-                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
-                                            , Message.threadRouteWithoutRepliedTo pending.threadRoute
-                                            )
-                                    in
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (Local_SendEncryptedMessage
@@ -3901,11 +3894,7 @@ updateLoaded msg model =
                                             [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
                                             (FrontendExtra.mapEncryptionRequests
                                                 (forgetEncryptManyRequest requestId)
-                                                { loggedIn
-                                                    | drafts = SeqDict.remove draft loggedIn.drafts
-                                                    , replyTo = SeqDict.remove draft loggedIn.replyTo
-                                                    , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
-                                                }
+                                                loggedIn
                                             )
                                         )
                                         (Command.batch
@@ -3922,7 +3911,13 @@ updateLoaded msg model =
                         Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
                             ( FrontendExtra.mapEncryptionRequests
                                 (forgetEncryptManyRequest requestId)
-                                { loggedIn | e2eeError = Just error }
+                                (case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages of
+                                    Just pending ->
+                                        restoreUnsentMessage pending { loggedIn | e2eeError = Just error }
+
+                                    Nothing ->
+                                        { loggedIn | e2eeError = Just error }
+                                )
                             , Command.none
                             )
 
@@ -5055,6 +5050,7 @@ updateLoaded msg model =
                                                 startEncryptingMessage
                                                     dmId
                                                     threadRoute
+                                                    draft
                                                     { content =
                                                         RichText.fromNonemptyString
                                                             local.localUser.timezone
@@ -11588,13 +11584,49 @@ startEncryptingEdit id threadRoute contentAndEmbeds loggedIn =
     )
 
 
+{-| Puts a message that couldn't be encrypted back in the message input, unless something
+new has been written there in the meantime.
+-}
+restoreUnsentMessage : PendingEncryptedMessage -> LoggedIn2 -> LoggedIn2
+restoreUnsentMessage pending loggedIn =
+    let
+        guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+        guildOrDmId =
+            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
+            , Message.threadRouteWithoutRepliedTo pending.threadRoute
+            )
+    in
+    if SeqDict.member guildOrDmId loggedIn.drafts || SeqDict.member guildOrDmId loggedIn.filesToUpload then
+        loggedIn
+
+    else
+        { loggedIn
+            | drafts = SeqDict.insert guildOrDmId pending.draft loggedIn.drafts
+            , replyTo =
+                case pending.replyTo of
+                    Just replyTo ->
+                        SeqDict.insert guildOrDmId replyTo loggedIn.replyTo
+
+                    Nothing ->
+                        loggedIn.replyTo
+            , filesToUpload =
+                case pending.filesToUpload of
+                    Just filesToUpload ->
+                        SeqDict.insert guildOrDmId filesToUpload loggedIn.filesToUpload
+
+                    Nothing ->
+                        loggedIn.filesToUpload
+        }
+
+
 startEncryptingMessage :
     Viewing_DmId
     -> ThreadRoute
+    -> NonemptyString
     -> MessageContent (Id UserId) (Id ChannelId)
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
+startEncryptingMessage id threadRoute draft contentAndEmbeds loggedIn =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -11615,11 +11647,19 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
                         , threadRoute =
                             sendMessageThreadRoute guildOrDmId threadRoute loggedIn
                         , contentAndEmbeds = contentAndEmbeds
+                        , draft = draft
+                        , replyTo = SeqDict.get guildOrDmId loggedIn.replyTo
+                        , filesToUpload = SeqDict.get guildOrDmId loggedIn.filesToUpload
                         }
                         requests.pendingEncryptedMessages
             }
         )
-        { loggedIn | e2eeError = Nothing }
+        { loggedIn
+            | e2eeError = Nothing
+            , drafts = SeqDict.remove guildOrDmId loggedIn.drafts
+            , replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo
+            , filesToUpload = SeqDict.remove guildOrDmId loggedIn.filesToUpload
+        }
     , Encryption.encryptMessageAndNotification
         loggedIn.encryptionRequests.nextEncryptManyRequestId
         id

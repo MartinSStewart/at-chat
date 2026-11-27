@@ -335,7 +335,12 @@ tests config =
                                 -- browser first, and what reaches the server is what came
                                 -- back rather than what was typed.
                                 , admin.click 100 (Dom.id "guild_hideMembers")
-                                , E2EHelper.writeMessage admin 100 "Hello in secret"
+                                , admin.input 100 (Dom.id "channel_textinput") "Hello in secret"
+                                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+
+                                -- The input empties on the first press, before the browser has
+                                -- finished encrypting, so pressing again sends nothing more.
+                                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
 
                                 -- The line the recipient's push notification will show is
@@ -344,9 +349,10 @@ tests config =
                                 , T.checkState 100 (checkNotificationHandedOver admin "Hello in secret")
                                 , respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
+                                , T.checkBackend 100 (checkEncryptedMessageCount 1)
 
                                 -- Without a key on this device the message is not sent,
-                                -- and the draft is left alone so nothing is lost.
+                                -- and the draft is put back so nothing is lost.
                                 , E2EHelper.writeMessage admin 100 "This one cannot go"
                                 , respondToEncryptionPortWithMissingKey admin
                                 , T.checkBackend 100 (checkEncryptedMessageCount 1)

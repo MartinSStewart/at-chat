@@ -326,10 +326,17 @@ type alias EncryptionRequests =
     }
 
 
+{-| The message input is cleared as soon as send is pressed, before the browser has
+encrypted anything, so that pressing it again can't send the message a second time. What
+was in the input is kept here so it can be put back if encrypting fails.
+-}
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : Message.ThreadRouteWithRepliedTo
     , contentAndEmbeds : MessageContent (Id UserId) (Id ChannelId)
+    , draft : NonemptyString
+    , replyTo : Maybe (Message.RepliedTo ChannelMessageId)
+    , filesToUpload : Maybe (NonemptyDict (Id FileId) FileStatus)
     }
 
 
